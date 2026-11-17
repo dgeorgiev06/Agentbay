@@ -1,36 +1,16 @@
-import { createHash } from "node:crypto";
-import { type Answer, errorLine, failed, granted, manifestOf, refused } from "../answers.ts";
-import type {
-  ChildProcesses,
-  Clock,
-  FileInspector,
-  FileSystem,
-  Http,
-  ProcessOutput,
-  Processes,
-  ThrowawayFolders,
-} from "../ports.ts";
+import { type Answer, failed, manifestOf } from "../answers.ts";
+import type { ChildProcesses, Clock, FileInspector, FileSystem, Http, Processes, ThrowawayFolders } from "../ports.ts";
 import type { ActionCaller, Effect, EventSink, Json, ModeGrants, Permissions, StepPlace } from "../contracts.ts";
 import { DatabaseProcess } from "./database-process.ts";
-import {
-  type ActionAt,
-  askedSentence,
-  type CommandOperation,
-  describedOperation,
-  commandRefusal,
-  effectRefusal,
-  type BrokerOperation,
-  type SpendAmounts,
-} from "./effect-rule.ts";
-import { checkPath } from "./file-access.ts";
+import type { ActionAt, SpendAmounts } from "./effect-rule.ts";
 import { databaseEntries, type DatabaseOperationName } from "./database-operations.ts";
-import { dataFolder, fileEntries, type FileOperationName } from "./file-operations.ts";
+import { fileEntries, type FileOperationName } from "./file-operations.ts";
 import { httpEntries, type HttpOperationName } from "./http-operations.ts";
 import { otherEntries, type OtherOperationName } from "./other-operations.ts";
-import { isInsideOrEqual, pathIn, shownPath, type Layout } from "../layout.ts";
+import { commandEntries, type CommandOperationName } from "./command-operations.ts";
+import type { Layout } from "../layout.ts";
 import type { SecretStore } from "../secrets.ts";
 import type { Entries, Step, StepLimits } from "./rule.ts";
-import type { CommandOutput, CommandRan, CommandRequest } from "../sdk.ts";
 
 export type BrokerLimits = StepLimits & {
   readonly databaseMilliseconds: number;
@@ -76,7 +56,8 @@ function noCaller(stepKey: string): ActionCaller {
     });
 }
 
-type EntryName = FileOperationName | DatabaseOperationName | OtherOperationName | HttpOperationName;
+type EntryName =
+  FileOperationName | DatabaseOperationName | OtherOperationName | HttpOperationName | CommandOperationName;
 
 export class Broker {
   readonly #options: BrokerOptions;
@@ -94,7 +75,13 @@ export class Broker {
     this.#effects = options.permissions.actionEffects;
     this.#limits = { ...defaultBrokerLimits, ...options.limits };
     const step = this.#step();
-    this.entries = { ...fileEntries(step), ...databaseEntries(step), ...otherEntries(step), ...httpEntries(step) };
+    this.entries = {
+      ...fileEntries(step),
+      ...databaseEntries(step),
+      ...otherEntries(step),
+      ...httpEntries(step),
+      ...commandEntries(step),
+    };
   }
 
   #step(): Step {
@@ -111,6 +98,8 @@ export class Broker {
         secrets: options.secrets,
         clock: options.clock,
         http: options.http,
+        processes: options.processes,
+        commandSearchPath: options.commandSearchPath,
         childProcesses: options.childProcesses,
         limits: this.#limits,
         record: (kind, detail) => this.#append(kind, detail),
@@ -130,25 +119,6 @@ export class Broker {
     };
   }
 
-  runCommand(request: CommandRequest): Promise<Answer<CommandRan>> {
-    const operation = { kind: "commands.run" as const, command: request.command, folder: request.folder };
-    return this.#guarded(operation, async () => {
-      const unlisted = commandRefusal(operation, this.#grants.commands, this.#at);
-      if (unlisted !== undefined) {
-        return refused(unlisted);
-      }
-      const milliseconds = this.#commandMilliseconds(operation, request.timeLimitSeconds);
-      if (!milliseconds.ok) {
-        return milliseconds;
-      }
-      const folder = await this.#commandFolder(operation);
-      if (!folder.ok) {
-        return folder;
-      }
-      return this.#ranCommand(request, folder.value, milliseconds.value);
-    });
-  }
-
   spent(): SpendAmounts {
     return { ...this.#spent };
   }
@@ -157,109 +127,9 @@ export class Broker {
     return this.#settle(answer);
   }
 
-  get #asking(): string {
-    return `The step ${this.#options.place.stepKey} asked`;
-  }
-
   get #at(): ActionAt {
     const place = this.#options.place;
     return { stepKey: place.stepKey, action: place.action, manifest: manifestOf(this.#grants) };
-  }
-
-  async #guarded<T>(operation: BrokerOperation, body: () => Promise<Answer<T>>): Promise<Answer<T>> {
-    const refusal = effectRefusal(operation, this.#effects, this.#at);
-    const recorded = operation.kind === "commands.run" ? { command: operation.command, folder: operation.folder } : {};
-    try {
-      return await this.#settle(refusal === undefined ? await body() : refused(refusal), recorded);
-    } catch (error) {
-      const doing = describedOperation(operation);
-      return this.#settle(failed(`The step ${this.#at.stepKey} could not ${doing}: ${errorLine(error)}`));
-    }
-  }
-
-  #commandMilliseconds(operation: CommandOperation, seconds: number): Answer<number> {
-    if (Number.isFinite(seconds) && seconds > 0) {
-      return granted(Math.min(seconds * 1000, this.#limits.commandMilliseconds));
-    }
-    return refused({
-      resource: "commands",
-      asked: `${askedSentence(operation, this.#at)} with a time limit of ${String(seconds)} seconds`,
-      declared: "a command's time limit is a number of seconds above 0",
-      change: "Give timeLimitSeconds as a number above 0 in the call to context.commands.run.",
-    });
-  }
-
-  async #commandFolder(operation: CommandOperation): Promise<Answer<string>> {
-    const { layout, inspector } = this.#options;
-    const permitted = [layout.project];
-    const check = await checkPath(inspector, { layout, path: operation.folder, permitted, purpose: "read" });
-    const asked = askedSentence(operation, this.#at);
-    const change =
-      'Give a folder of the project in the call to context.commands.run, such as "."; no manifest line allows another.';
-    if (check.status !== "allowed") {
-      return refused({
-        resource: "commands",
-        asked,
-        declared: "a command runs only in a folder inside the project",
-        change,
-      });
-    }
-    const real = await inspector.realPath(check.path);
-    if (real === undefined) {
-      return failed(`The folder ${shownPath(layout, check.path)} does not exist.`);
-    }
-    const data = pathIn(layout, "project", dataFolder);
-    const realData = (await inspector.realPath(data)) ?? data;
-    if (isInsideOrEqual(check.path, data) || isInsideOrEqual(real, realData)) {
-      const declared = "a command never runs inside the kernel's state folder .agentbay/";
-      return refused({ resource: "commands", asked, declared, change });
-    }
-    return granted(real);
-  }
-
-  async #ranCommand(request: CommandRequest, folder: string, milliseconds: number): Promise<Answer<CommandRan>> {
-    const { command, input } = request;
-    const [program, ...rest] = command;
-    if (program === undefined) {
-      return failed("The command is empty.");
-    }
-    const clock = this.#options.clock;
-    const startedAt = clock.now().getTime();
-    const result = await this.#options.processes.run({
-      command: program,
-      arguments: rest,
-      directory: folder,
-      environment: { PATH: this.#options.commandSearchPath },
-      timeoutMilliseconds: milliseconds,
-      ...(input === undefined ? {} : { input }),
-    });
-    const took = clock.now().getTime() - startedAt;
-    await this.#append("command", {
-      step: this.#options.place.stepKey,
-      command,
-      folder: shownPath(this.#options.layout, folder),
-      end: result.end,
-      milliseconds: took,
-      ...(input === undefined ? {} : { inputHash: createHash("sha256").update(input, "utf8").digest("hex") }),
-      stdoutHash: result.stdout.hash,
-      stderrHash: result.stderr.hash,
-    });
-    if (result.end.how === "not-started") {
-      return failed(`The command ${JSON.stringify(command)} could not start: ${result.end.reason}`);
-    }
-    return granted({
-      end: result.end,
-      milliseconds: took,
-      stdout: this.#shownOutput(result.stdout),
-      stderr: this.#shownOutput(result.stderr),
-    });
-  }
-
-  #shownOutput(output: ProcessOutput): CommandOutput {
-    const limit = this.#limits.commandOutputCharacters;
-    const scrubbed = this.#options.secrets.redact(output.text);
-    const cut = output.characters > output.text.length || scrubbed.length > limit;
-    return { text: scrubbed.slice(-limit), cut };
   }
 
   close(): void {

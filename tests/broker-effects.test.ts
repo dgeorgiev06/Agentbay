@@ -342,8 +342,9 @@ const brokerMethods: Readonly<Record<string, MethodRow>> = {
     needs: [],
     usesPorts: false,
   },
-  runCommand: {
-    call: (broker) => broker.runCommand({ command: ["node", "--version"], folder: ".", timeLimitSeconds: 30 }),
+  "commands.run": {
+    call: (broker) =>
+      broker.entries["commands.run"]({ command: ["node", "--version"], folder: ".", timeLimitSeconds: 30 }),
     needs: everyEffect,
     usesPorts: true,
   },

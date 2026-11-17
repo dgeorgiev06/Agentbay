@@ -22,7 +22,7 @@ import {
   writeProjectFile,
 } from "./broker-fixture.ts";
 
-type Moved = keyof Broker["entries"] | "commands.run";
+type Moved = keyof Broker["entries"];
 
 type Asking = {
   readonly ask: (broker: Broker) => Promise<Answer<Json>>;
@@ -709,13 +709,13 @@ const proofs: Proofs = {
   "commands.run": {
     withoutEffect: [
       {
-        ask: (broker) => broker.runCommand({ command: nodeVersion, folder: ".", timeLimitSeconds: 30 }),
+        ask: (broker) => broker.entries["commands.run"]({ command: nodeVersion, folder: ".", timeLimitSeconds: 30 }),
         effects: [],
         change: commandNeeds("read"),
         detail: { command: nodeVersion, folder: "." },
       },
       {
-        ask: (broker) => broker.runCommand({ command: nodeVersion, folder: ".", timeLimitSeconds: 30 }),
+        ask: (broker) => broker.entries["commands.run"]({ command: nodeVersion, folder: ".", timeLimitSeconds: 30 }),
         effects: ["read", "write", "network", "spend"],
         change: commandNeeds("delete"),
         detail: { command: nodeVersion, folder: "." },
@@ -723,7 +723,8 @@ const proofs: Proofs = {
     ],
     outsideGrant: [
       {
-        ask: (broker) => broker.runCommand({ command: ["git", "status"], folder: ".", timeLimitSeconds: 30 }),
+        ask: (broker) =>
+          broker.entries["commands.run"]({ command: ["git", "status"], folder: ".", timeLimitSeconds: 30 }),
         effects: allFive,
         change:
           `To allow it, add the command's leading arguments under resources.commands in ${manifest}; ` +
@@ -731,7 +732,7 @@ const proofs: Proofs = {
         detail: { command: ["git", "status"], folder: "." },
       },
       {
-        ask: (broker) => broker.runCommand({ command: nodeVersion, folder: "..", timeLimitSeconds: 30 }),
+        ask: (broker) => broker.entries["commands.run"]({ command: nodeVersion, folder: "..", timeLimitSeconds: 30 }),
         effects: allFive,
         change: projectFolderOnly,
         detail: { command: nodeVersion, folder: ".." },
@@ -739,7 +740,7 @@ const proofs: Proofs = {
     ],
     allowed: [
       {
-        ask: (broker) => broker.runCommand({ command: nodeVersion, folder: ".", timeLimitSeconds: 30 }),
+        ask: (broker) => broker.entries["commands.run"]({ command: nodeVersion, folder: ".", timeLimitSeconds: 30 }),
         effects: allFive,
         value: {
           end: exited,
@@ -764,7 +765,12 @@ const proofs: Proofs = {
       },
       {
         ask: (broker) =>
-          broker.runCommand({ command: echoing, folder: "notes-in", timeLimitSeconds: 30, input: "hello" }),
+          broker.entries["commands.run"]({
+            command: echoing,
+            folder: "notes-in",
+            timeLimitSeconds: 30,
+            input: "hello",
+          }),
         effects: allFive,
         value: {
           end: exited,

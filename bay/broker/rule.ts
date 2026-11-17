@@ -1,7 +1,7 @@
 import { type Answer, errorLine, failed, type RefusalWording, refused } from "../answers.ts";
 import type { ActionCaller, Effect, Json, ModeGrants } from "../contracts.ts";
 import type { Layout } from "../layout.ts";
-import type { ChildProcesses, Clock, FileInspector, FileSystem, Http, ThrowawayFolders } from "../ports.ts";
+import type { ChildProcesses, Clock, FileInspector, FileSystem, Http, Processes, ThrowawayFolders } from "../ports.ts";
 import type { SecretStore } from "../secrets.ts";
 import type { DatabaseProcess } from "./database-process.ts";
 import { type ActionAt, missingEffectRefusal, type Need, type SpendAmounts } from "./effect-rule.ts";
@@ -50,6 +50,8 @@ export type Doing = {
   readonly clock: Clock;
   readonly childProcesses: ChildProcesses;
   readonly http: Http;
+  readonly processes: Processes;
+  readonly commandSearchPath: string;
   readonly limits: StepLimits;
   readonly record: (kind: string, detail: Json) => Promise<void>;
   readonly addSpending: (amounts: SpendAmounts) => void;

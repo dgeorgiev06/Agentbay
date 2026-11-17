@@ -103,6 +103,7 @@ features:
       - bay/broker/database-operations.ts
       - bay/broker/other-operations.ts
       - bay/broker/http-operations.ts
+      - bay/broker/command-operations.ts
     may_import:
       - vocabulary
       - safety

@@ -67,7 +67,7 @@ test("a command's time limit is cut to the broker's own limit", async () => {
   await withCommandBroker({ commandMilliseconds: 500 }, async (broker) => {
     const startedAt = Date.now();
     const command = ["node", "-e", "setInterval(() => {}, 1000)"];
-    const ran = valueOf(await broker.runCommand({ command, folder: ".", timeLimitSeconds: 30 }));
+    const ran = valueOf(await broker.entries["commands.run"]({ command, folder: ".", timeLimitSeconds: 30 }));
     assert.deepEqual(ran.end, { how: "timed-out" });
     assert.ok(Date.now() - startedAt < 5000);
   });
@@ -76,7 +76,7 @@ test("a command's time limit is cut to the broker's own limit", async () => {
 test("the broker records a command's secret arguments redacted", async () => {
   await withCommandBroker({}, async (broker, events) => {
     const command = ["node", "-e", "process.exit(0)", madeUpSecret];
-    valueOf(await broker.runCommand({ command, folder: ".", timeLimitSeconds: 30 }));
+    valueOf(await broker.entries["commands.run"]({ command, folder: ".", timeLimitSeconds: 30 }));
     const recorded = events.events.find((event) => event.kind === "command")?.detail ?? null;
     assert.deepEqual(fieldOf(recorded, "command"), ["node", "-e", "process.exit(0)", "[redacted:BROKER_TOKEN]"]);
   });

@@ -121,17 +121,8 @@ type Answering = {
   readonly [Name in OperationName]: (request: Requests[Name]) => Promise<Answer<Results[Name]>>;
 };
 
-type AnsweredByTheClass = Omit<Answering, keyof Broker["entries"]>;
-
-function answeredByTheClass(started: Started): AnsweredByTheClass {
-  const { broker } = started;
-  return {
-    "commands.run": (request) => broker.runCommand(request),
-  };
-}
-
 function answeringFor(started: Started): Answering {
-  return { ...started.broker.entries, ...answeredByTheClass(started) };
+  return started.broker.entries;
 }
 
 function answerFor<Name extends OperationName>(

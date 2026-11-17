@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { decide } from "../guard-decide.ts";
+import { decide, type Decision, type GuardSetup } from "../guard-decide.ts";
 import { readPolicy } from "../guard-input.ts";
 import type { FolderEntry, PathFacts } from "../guard-paths.ts";
 import { ask, askIn, assertAllowed, assertDenied, setup, stepsFile, world } from "./guard-world.ts";
@@ -39,6 +39,111 @@ test("the main thread may not write agentbay's own rules, however the path is sp
   assertAllowed(ask(undefined, "NotebookEdit", { notebook_path: "/p/src/x.ipynb" }));
   assertAllowed(ask(undefined, "Write", { file_path: "/p/.agentbay-notes/x.md" }));
   assertAllowed(ask(undefined, "Write", { file_path: "/k/components/mail/x.md" }));
+});
+
+const kitAsTheProject: GuardSetup = { ...setup, project: "/k" };
+
+function asOwner(where: GuardSetup, call: OwnerCall): Decision {
+  const payload = { cwd: call.cwd ?? where.project, tool_name: call.tool, tool_input: call.input };
+  return decide(where, payload, world);
+}
+
+type OwnerCall = {
+  readonly tool: string;
+  readonly input: Readonly<Record<string, unknown>>;
+  readonly cwd?: string;
+};
+
+const writesIntoTheBaseFolder: readonly (readonly [OwnerCall, string])[] = [
+  [{ tool: "Write", input: { file_path: "/k/components/base/notes/mode.yaml" } }, "/k/components/base/notes/mode.yaml"],
+  [{ tool: "Edit", input: { file_path: "/k/components/base/notes/mode.yaml" } }, "/k/components/base/notes/mode.yaml"],
+  [
+    { tool: "Edit", input: { file_path: "/k/components/base/forge/scripts/merge.ts" } },
+    "/k/components/base/forge/scripts/merge.ts",
+  ],
+  [
+    { tool: "MultiEdit", input: { file_path: "/k/components/base/forge/mode.yaml" } },
+    "/k/components/base/forge/mode.yaml",
+  ],
+  [
+    { tool: "NotebookEdit", input: { notebook_path: "/k/components/base/forge/x.ipynb" } },
+    "/k/components/base/forge/x.ipynb",
+  ],
+  [
+    { tool: "Write", input: { file_path: "base/notes/mode.yaml" }, cwd: "/k/components" },
+    "/k/components/base/notes/mode.yaml",
+  ],
+  [{ tool: "Write", input: { file_path: "/k/Components/BASE/notes/mode.yaml" } }, "/k/Components/BASE/notes/mode.yaml"],
+  [{ tool: "Write", input: { file_path: "/p/kit-base/notes/mode.yaml" } }, "/p/kit-base/notes/mode.yaml"],
+  [{ tool: "Edit", input: { file_path: "/p/kit-base/forge/scripts/merge.ts" } }, "/p/kit-base/forge/scripts/merge.ts"],
+];
+
+const climbsIntoTheBaseFolder: readonly (readonly [OwnerCall, string])[] = [
+  [
+    { tool: "Write", input: { file_path: "/p/../k/components/base/notes/mode.yaml" } },
+    "/k/components/base/notes/mode.yaml",
+  ],
+  [
+    { tool: "Edit", input: { file_path: "../k/components/base/forge/mode.yaml" } },
+    "/k/components/base/forge/mode.yaml",
+  ],
+];
+
+function baseFolderRefusal(tool: string, path: string): Decision {
+  return {
+    verdict: "deny",
+    reason:
+      `agentbay denied ${tool} of ${path}: a mode placed in the kit's components/base/ is granted its list with no ` +
+      "trust; make the mode in the project instead, and the owner decides whether to trust it.",
+  };
+}
+
+test("when the project is not the kit, the session agent may not write into the kit's components/base/", () => {
+  for (const [call, shown] of [...writesIntoTheBaseFolder, ...climbsIntoTheBaseFolder]) {
+    assert.deepEqual(asOwner(setup, call), baseFolderRefusal(call.tool, shown), JSON.stringify(call));
+  }
+});
+
+test("when the kit is reached through a link, a write by the real path into its components/base/ is refused too", () => {
+  const kitBehindALink: GuardSetup = { ...setup, kit: "/linked/kit" };
+  for (const path of ["/k/components/base/new/mode.yaml", "/linked/kit/components/base/new/mode.yaml"]) {
+    const call = { tool: "Write", input: { file_path: path } };
+    assert.deepEqual(asOwner(kitBehindALink, call), baseFolderRefusal("Write", path), path);
+  }
+});
+
+test("when the project is the kit, the session agent writes into components/base/ as before", () => {
+  for (const [call] of writesIntoTheBaseFolder) {
+    assert.deepEqual(asOwner(kitAsTheProject, call), { verdict: "allow" }, JSON.stringify(call));
+  }
+  for (const [call] of climbsIntoTheBaseFolder) {
+    const written = String(call.input["file_path"]);
+    assert.deepEqual(
+      asOwner(kitAsTheProject, call),
+      { verdict: "deny", reason: `agentbay denied ${call.tool} of ${written}: the path climbs with '..'.` },
+      written,
+    );
+  }
+  assert.deepEqual(asOwner(kitAsTheProject, { tool: "Write", input: { file_path: "/k/bay/x.ts" } }), {
+    verdict: "deny",
+    reason: `agentbay denied Write of /k/bay/x.ts: ${ownRules}.`,
+  });
+});
+
+test("the session agent reads and searches the kit's components/base/ as before, whatever the project", () => {
+  const reads: readonly OwnerCall[] = [
+    { tool: "Read", input: { file_path: "/k/components/base/forge/mode.yaml" } },
+    { tool: "Read", input: { file_path: "/p/kit-base/forge/scripts/merge.ts" } },
+    { tool: "Glob", input: { pattern: "**/mode.yaml", path: "/k/components/base" } },
+    { tool: "Grep", input: { pattern: "commands", path: "/k/components/base" } },
+    { tool: "Bash", input: { command: "ls /k/components/base" } },
+  ];
+  for (const call of reads) {
+    assert.deepEqual(asOwner(setup, call), { verdict: "allow" }, JSON.stringify(call));
+    assert.deepEqual(asOwner(kitAsTheProject, call), { verdict: "allow" }, JSON.stringify(call));
+  }
+  const beside = { tool: "Write", input: { file_path: "/k/components/base-notes/x.md" } };
+  assert.deepEqual(asOwner(setup, beside), { verdict: "allow" });
 });
 
 test("a main thread write that names no path text is denied", () => {
@@ -270,7 +375,7 @@ test("a search pattern may not climb, start at home, name a closed location or r
   assertDenied(ask(digest, "Grep", { pattern: "x", path: "/p/clean", glob: ".*" }), "hidden");
 });
 
-test("a command must be a listed prefix, alone or followed by a space and plain arguments", () => {
+test("a command must be the words of a listed command, alone or followed by a space and plain arguments", () => {
   for (const command of ["node --test", "node --test tests/a.test.ts", "git status", "git status --short -b"]) {
     assertAllowed(ask(builder, "Bash", { command }), command);
   }
@@ -278,11 +383,11 @@ test("a command must be a listed prefix, alone or followed by a space and plain 
     assertAllowed(ask(builder, "Bash", { command }), JSON.stringify(command));
   }
   for (const command of ["node --testx", "node --test2 x", "node", "git", "git statusx", "npm test", "nodex --test"]) {
-    assertDenied(ask(builder, "Bash", { command }), "listed command prefix", command);
+    assertDenied(ask(builder, "Bash", { command }), "not the words of a command the step may run", command);
   }
 });
 
-test("every character outside the plain set after a prefix is denied", () => {
+test("every character outside the plain set after the command's words is denied", () => {
   const forbidden = ["'", '"', ";", "&", "|", "$", "`", ">", "<", "\n", "\r", "\t", "(", ")", "{", "}"];
   for (const character of [...forbidden, "*", "?", "~", "!", "#", "\\", "[", "]", "^", "\u0000"]) {
     const command = `node --test a${character}b`;
@@ -293,15 +398,18 @@ test("every character outside the plain set after a prefix is denied", () => {
 test("empty, multi-line and look-alike commands are denied", () => {
   assertDenied(ask(builder, "Bash", { command: "" }), "empty");
   assertDenied(ask(builder, "Bash", { command: " \t " }), "empty");
-  assertDenied(ask(builder, "Bash", { command: "\nnode --test" }), "listed command prefix");
-  assertDenied(ask(builder, "Bash", { command: "node --test\n" }), "listed command prefix");
-  assertDenied(ask(builder, "Bash", { command: "node --test\nrm -rf x" }), "listed command prefix");
+  assertDenied(ask(builder, "Bash", { command: "\nnode --test" }), "not the words of a command the step may run");
+  assertDenied(ask(builder, "Bash", { command: "node --test\n" }), "not the words of a command the step may run");
+  assertDenied(
+    ask(builder, "Bash", { command: "node --test\nrm -rf x" }),
+    "not the words of a command the step may run",
+  );
   assertDenied(ask(builder, "Bash", { command: "node --test x\nrm -rf x" }), "holds a character");
-  assertDenied(ask(builder, "Bash", { command: "nоde --test" }), "listed command prefix");
-  assertDenied(ask(builder, "Bash", { command: "node —test" }), "listed command prefix");
+  assertDenied(ask(builder, "Bash", { command: "nоde --test" }), "not the words of a command the step may run");
+  assertDenied(ask(builder, "Bash", { command: "node —test" }), "not the words of a command the step may run");
   assertDenied(ask(builder, "Bash", { command: "node --test a；b" }), "holds a character");
-  assertDenied(ask(builder, "Bash", { command: "node --test x" }), "listed command prefix");
-  assertDenied(ask(builder, "Bash", { command: "node\t--test" }), "listed command prefix");
+  assertDenied(ask(builder, "Bash", { command: "node --test x" }), "not the words of a command the step may run");
+  assertDenied(ask(builder, "Bash", { command: "node\t--test" }), "not the words of a command the step may run");
   assertDenied(ask(builder, "Bash", { command: 12 }), "no command text");
   assertDenied(ask(builder, "Bash", {}), "no command text");
 });
@@ -356,6 +464,25 @@ test("a relative path is resolved against the call's working folder", () => {
   assertAllowed(decide(setup, { ...payload, cwd: "/p/out" }, world));
   assertDenied(decide(setup, { ...payload, cwd: "/p/notes" }, world), "resources.files.write");
   assertDenied(decide(setup, { ...payload, cwd: "relative" }, world), "no absolute working folder");
+});
+
+test("a denied command names the step, the commands it may run and the manifest line", () => {
+  assert.deepEqual(ask(builder, "Bash", { command: "npm test" }), {
+    verdict: "deny",
+    reason:
+      'agentbay denied Bash "npm test" for step agentbay-forge-build: it is not the words of a command the step may ' +
+      "run, alone or followed by a space and arguments, and the step may run only node --test, git status; a " +
+      "command listed by name under resources.commands in the mode.yaml of mode forge, with effects that the " +
+      "step's actions declare, would allow it.",
+  });
+  assert.deepEqual(ask(builder, "Bash", { command: "node --test a;b" }), {
+    verdict: "deny",
+    reason:
+      'agentbay denied Bash "node --test a;b" for step agentbay-forge-build: the text after the command\'s words ' +
+      "holds a character other than letters, digits, spaces and _ . / = : , @ % + -, and the step may run only " +
+      "node --test, git status; a command listed by name under resources.commands in the mode.yaml of mode " +
+      "forge, with effects that the step's actions declare, would allow it.",
+  });
 });
 
 test("a deny reason names the step, what it may do and the manifest line", () => {

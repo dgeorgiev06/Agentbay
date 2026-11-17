@@ -11,6 +11,8 @@ export const alwaysDeniedNames: readonly string[] = [
 
 export const kitFolders: readonly string[] = ["bay", "schemas", "adapters", "framework"];
 
+export const baseModesFolder = "components/base";
+
 export const searchBound = { entries: 5000, depth: 12 } as const;
 
 export type StepRules = {

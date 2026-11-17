@@ -2,6 +2,7 @@ import { isAbsolute, join, sep } from "node:path";
 import { checkCommand } from "./guard-commands.ts";
 import { readPayload, searchBound, type PolicyReading, type StepRules, type ToolCall } from "./guard-input.ts";
 import {
+  baseModeFoldersOf,
   closedName,
   closedNameIn,
   insideAnyRoot,
@@ -11,6 +12,7 @@ import {
   realRoots,
   resolveTarget,
   walkSearchFolder,
+  writtenPathOf,
   type PathFacts,
   type Places,
   type WalkFinding,
@@ -30,6 +32,8 @@ type Caller =
   | { readonly kind: "stranger"; readonly name: string }
   | { readonly kind: "unverifiable"; readonly name: string; readonly reason: string };
 
+type ClosedArea = { readonly folders: readonly string[]; readonly why: string };
+
 type ToolKind = "read" | "write" | "search" | "command" | "kernel" | "other";
 
 type StepContext = {
@@ -41,6 +45,10 @@ type StepContext = {
 };
 
 const ownRulesMessage = "this changes agentbay's own rules; only the owner edits it, outside the agent";
+
+const baseModesMessage =
+  "a mode placed in the kit's components/base/ is granted its list with no trust; " +
+  "make the mode in the project instead, and the owner decides whether to trust it";
 
 const ownerClosedNames: readonly string[] = [".agentbay", ".claude", ".mcp.json"];
 
@@ -95,6 +103,19 @@ function ownerClosedFolders(places: Places, facts: PathFacts): readonly string[]
   return [...closedNames, ...kitFoldersOf(places, facts)];
 }
 
+function ownerClosedAreas(places: Places, facts: PathFacts): readonly ClosedArea[] {
+  return [
+    { folders: ownerClosedFolders(places, facts), why: ownRulesMessage },
+    { folders: baseModeFoldersOf(places, facts), why: baseModesMessage },
+  ];
+}
+
+function closedAreaHolding(paths: readonly string[], places: Places, facts: PathFacts): ClosedArea | undefined {
+  return ownerClosedAreas(places, facts).find((area) =>
+    paths.some((path) => area.folders.some((folder) => isInsideIgnoringCase(path, folder))),
+  );
+}
+
 function ownerDecision(call: ToolCall, places: Places, facts: PathFacts): Decision {
   if (toolKind(call.tool) !== "write") {
     return allow;
@@ -103,15 +124,15 @@ function ownerDecision(call: ToolCall, places: Places, facts: PathFacts): Decisi
   if (typeof raw !== "string") {
     return deny(`${call.tool}: the call names no file path text, so the hook cannot check it`);
   }
-  const target = resolveTarget(raw, workingFolder(call, places), facts);
-  if (target.kind === "refused") {
-    return deny(`${call.tool} of ${raw}: ${target.why}`);
+  const base = workingFolder(call, places);
+  const target = resolveTarget(raw, base, facts);
+  const written = target.kind === "resolved" ? target.written : (writtenPathOf(raw, base) ?? raw);
+  const paths = target.kind === "resolved" ? [target.written, target.real] : [written];
+  const area = closedAreaHolding(paths, places, facts);
+  if (area !== undefined) {
+    return deny(`${call.tool} of ${written}: ${area.why}`);
   }
-  const closed = ownerClosedFolders(places, facts);
-  const touches = [target.written, target.real].some((path) =>
-    closed.some((folder) => isInsideIgnoringCase(path, folder)),
-  );
-  return touches ? deny(`${call.tool} of ${target.written}: ${ownRulesMessage}`) : allow;
+  return target.kind === "refused" ? deny(`${call.tool} of ${raw}: ${target.why}`) : allow;
 }
 
 function howToAllow(tool: string, rules: StepRules): string {
@@ -122,7 +143,10 @@ function howToAllow(tool: string, rules: StepRules): string {
     case "write":
       return `a folder under resources.files.write in the mode.yaml of mode ${rules.mode} would allow writing it`;
     case "command":
-      return `a prefix under resources.commands in the mode.yaml of mode ${rules.mode} would allow a command`;
+      return (
+        `a command listed by name under resources.commands in the mode.yaml of mode ${rules.mode}, ` +
+        "with effects that the step's actions declare, would allow it"
+      );
     case "kernel":
       return `naming ${tool.slice("mcp__agentbay__".length)} in the Tools section of skill ${rules.skill} would allow it`;
     case "other":

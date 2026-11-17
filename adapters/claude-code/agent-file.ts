@@ -45,9 +45,11 @@ function writeRule(agent: SkillAgent, project: string): string {
 
 function commandRule(agent: SkillAgent): string {
   const commands = agentCommands(agent).map((command) => `\`${command}\``);
-  return commands.length === 0
-    ? "- Never try to run shell commands: this step has none."
-    : `- Run only commands that start with ${commands.join(", ")}, with plain arguments.`;
+  if (commands.length === 0) {
+    return "- Never try to run shell commands: this step has none.";
+  }
+  const rule = "- Run only the commands your mode lists, each as its listed words alone or followed by plain arguments";
+  return `${rule}: ${commands.join(", ")}.`;
 }
 
 export function agentFileText(agent: SkillAgent, project: string): string {

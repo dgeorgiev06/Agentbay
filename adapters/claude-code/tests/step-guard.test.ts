@@ -36,11 +36,13 @@ writeFileSync(join(outside, "secret.txt"), "not for agents");
 writeFileSync(join(project, "notes", "a.md"), "note");
 symlinkSync(outside, join(project, "notes", "escape"));
 symlinkSync(join(project, ".agentbay"), join(project, "out", "closed"));
+const kit = dirname(dirname(adapterFolder));
+symlinkSync(join(kit, "components", "base"), join(project, "kit-base"));
 
 const policy: StepsFile = {
   version: 1,
   project,
-  kit: dirname(dirname(adapterFolder)),
+  kit,
   agents: {
     "agentbay-mail-digest": {
       mode: "mail",
@@ -161,6 +163,19 @@ test("without a policy file the hook process denies subagents and still guards t
   } finally {
     writePolicy();
   }
+});
+
+test("the hook process follows a real link into the kit's components/base/ and denies the session agent", () => {
+  const written = join(project, "kit-base", "store", "mode.yaml");
+  const run = runGuard(payload("Edit", { file_path: written, old_string: "a", new_string: "b" }, false));
+  assertDeniedRun(
+    run,
+    `agentbay denied Edit of ${written}: a mode placed in the kit's components/base/ is granted its list with no ` +
+      "trust; make the mode in the project instead, and the owner decides whether to trust it.",
+  );
+  assertAllowedRun(runGuard(payload("Read", { file_path: written }, false)));
+  const inTheKit = JSON.stringify({ cwd: kit, tool_name: "Edit", tool_input: { file_path: written } });
+  assertAllowedRun(runGuard(inTheKit, ["--project", kit]));
 });
 
 test("the hook and the guard files it loads import only node:fs, node:path, node:process and each other", () => {

@@ -139,6 +139,7 @@ const ran = { end: { how: "exited", exitCode: 0 }, milliseconds: 12, stdout: out
 function resultCases(base: Fields, problem: string, wrong: Fields): readonly Refused[] {
   return [
     { what: "not a mapping", value: [base], problem },
+    { what: "null", value: null, problem },
     ...Object.keys(base).flatMap((name) => [
       missing(base, name, problem),
       given(base, { [name]: wrong[name] ?? null }, problem),

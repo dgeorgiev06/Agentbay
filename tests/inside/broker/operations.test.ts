@@ -217,6 +217,12 @@ test("call: every JSON value is a result, so no result of a call is malformed", 
   }
 });
 
+test("call: a number JSON cannot hold is not a result", () => {
+  for (const value of [Number.NaN, Number.POSITIVE_INFINITY, [Number.NEGATIVE_INFINITY]]) {
+    assert.deepEqual(shapes.call.result(value), { ok: false, problem: "The value is not a JSON value." });
+  }
+});
+
 test("commands.run: an end that is none of exited, signalled and timed-out is refused", () => {
   assert.deepEqual(shapes["commands.run"].result({ ...ran, end: { how: "vanished" } }), {
     ok: false,

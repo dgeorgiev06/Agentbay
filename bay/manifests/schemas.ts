@@ -10,15 +10,15 @@ type SchemaFile =
   | { readonly state: "invalid"; readonly reason: string }
   | { readonly state: "valid"; readonly schema: unknown };
 
-type SchemaLabel = "input" | "output";
-
 export type SchemaSource = {
   readonly file: string;
   readonly schemaFile: SchemaFile;
-  readonly label: SchemaLabel;
+  readonly label: SchemaDirection;
 };
 
 export const schemaDirections = ["input", "output"] as const;
+
+export type SchemaDirection = (typeof schemaDirections)[number];
 
 async function readSchemaFile(files: FileSystem, file: string): Promise<SchemaFile> {
   const text = await files.readText(file);

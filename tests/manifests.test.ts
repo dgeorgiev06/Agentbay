@@ -1030,7 +1030,9 @@ function foldersOf(inspection: Inspection): readonly unknown[] {
   ]);
 }
 
-function readFolder(inspection: Inspection, folder: string): Extract<InspectedFolder, { readonly manifest: object }> {
+type InspectedFolderRead = Extract<InspectedFolder, { readonly manifest: object }>;
+
+function readFolder(inspection: Inspection, folder: string): InspectedFolderRead {
   const found = inspection.folders.find((entry) => entry.folder === folder);
   assert.ok(found?.manifest !== undefined, `${folder} was not read`);
   return found;
@@ -1223,26 +1225,25 @@ describe("inspectSystem", () => {
     });
   });
 
-  test("a read folder checks a value against a schema of its mode, and says nothing of a schema it cannot use", async () => {
-    const files = rooted({
-      ...validFiles(),
-      "components/modes/notes/schemas/strict.json": JSON.stringify({ type: "object", required: ["text"] }),
-      "components/modes/notes/schemas/unusable.json": JSON.stringify({ type: "mapping" }),
-      "components/modes/notes/schemas/broken.json": "{ not json",
-    });
-    const notes = readFolder(await inspectionOf({ files, layout }), "/kit/components/modes/notes");
-    const example = "/kit/components/modes/notes/tests/add.example.json";
-    const against = (schema: string): { readonly schema: string; readonly file: string; readonly under: string } => ({
-      schema,
-      file: example,
-      under: "input",
-    });
-    assert.deepEqual(await notes.schemaProblems({ text: "Tea" }, against("schemas/strict.json")), []);
-    assert.deepEqual(await notes.schemaProblems({}, against("schemas/strict.json")), [
+  test("a read folder checks a value against a schema of an action, and says nothing of a schema it cannot use", async () => {
+    const digestInput = "components/modes/briefing/schemas/digest-input.json";
+    const inspected = async (schemaText: string | undefined): Promise<InspectedFolderRead> => {
+      const files = { ...validFiles(), [digestInput]: schemaText ?? "" };
+      const kept =
+        schemaText === undefined
+          ? Object.fromEntries(Object.entries(files).filter(([path]) => path !== digestInput))
+          : files;
+      return readFolder(await inspectionOf({ files: rooted(kept), layout }), "/kit/components/modes/briefing");
+    };
+    const example = "/kit/components/modes/briefing/tests/digest.example.json";
+    const against = { action: "digest", direction: "input", file: example } as const;
+    const strict = await inspected(JSON.stringify({ type: "object", required: ["text"] }));
+    assert.deepEqual(await strict.schemaProblems({ text: "Tea" }, against), []);
+    assert.deepEqual(await strict.schemaProblems({}, against), [
       { file: example, path: "/input", message: "input is missing the required field text.", fix: "Add text." },
     ]);
-    for (const schema of ["schemas/unusable.json", "schemas/broken.json", "schemas/gone.json"]) {
-      assert.deepEqual(await notes.schemaProblems({}, against(schema)), []);
+    for (const schemaText of [JSON.stringify({ type: "mapping" }), "{ not json", undefined]) {
+      assert.deepEqual(await (await inspected(schemaText)).schemaProblems({}, against), []);
     }
   });
 

@@ -9,7 +9,7 @@ import { failedTests, type ModeFiles } from "./kit-copy.ts";
 import { memoryStore, memoryStoreFiles } from "./made-up-modes.ts";
 import { almanac, almanacFiles, wrongAlmanac } from "./made-up-sources.ts";
 import { tally, tallyFiles } from "./made-up-toolchains.ts";
-import { shelf, shelfFiles } from "./made-up-worktrees.ts";
+import { casesThatNeedMergeSetAsideOrApply, shelf, shelfFiles } from "./made-up-worktrees.ts";
 import { kit } from "./project-fixture.ts";
 
 type Ran = {
@@ -25,6 +25,7 @@ type MadeUpMode = {
   readonly files: ModeFiles;
   readonly kitFolder: string;
   readonly ownLines?: readonly Replacement[];
+  readonly trusted?: readonly string[];
 };
 
 const modesFolder = "components/modes";
@@ -41,7 +42,10 @@ const sdkInTheKit = join(kit, "bay", "sdk.ts");
 
 const relativeImport = /(from |import\()"(\.\.?\/[^"]+)"/g;
 
-const projectLine: Replacement = [/\}\);\n$/, "}, { project: import.meta.dirname });\n"];
+function projectLineOf(trusted: readonly string[]): Replacement {
+  const trust = trusted.length === 0 ? "" : `, trusted: ${JSON.stringify(trusted)}`;
+  return [/\}\);\n$/, `}, { project: import.meta.dirname${trust} });\n`];
+}
 
 const startHandedOn: Replacement = [`modes: ["${shelf}"] })`, `modes: ["${shelf}"] }, start)`];
 
@@ -54,15 +58,21 @@ const projectConfig = {
   },
 };
 
-const untrustedConfig = { adapter: "claude-code", bindings: {} };
+const configWithoutBindings = { adapter: "claude-code", bindings: {} };
 
 let project: string;
+
+let trustedProject: string;
 
 let untrustedProject: string;
 
 let projectModesRan: Ran;
 
 let wrongModeRan: Ran;
+
+let trustedToolchainRan: Ran;
+
+let trustedWorktreesRan: Ran;
 
 let toolchainRan: Ran;
 
@@ -130,6 +140,7 @@ function placedInProject(folder: string, mode: MadeUpMode): ModeFiles {
         relativeImport,
         (_whole, before: string, specifier: string) => `${before}"${placedImport(dirname(path), specifier)}"`,
       );
+      const projectLine = projectLineOf(mode.trusted ?? []);
       const ownLines = path === `tests/${mode.name}.test.ts` ? [...(mode.ownLines ?? []), projectLine] : [];
       return [path, replaced(path, imports, ownLines)];
     }),
@@ -193,6 +204,24 @@ async function projectWith(config: object, modes: readonly MadeUpMode[]): Promis
   return folder;
 }
 
+function toolModes(tallyTrusts: readonly string[], shelfTrusts: readonly string[]): readonly MadeUpMode[] {
+  return [
+    {
+      name: tally,
+      files: tallyFiles(tally, "stops a check at its limit"),
+      kitFolder: baseFolder,
+      trusted: tallyTrusts,
+    },
+    {
+      name: shelf,
+      files: shelfFiles(shelf, "keeps a changed worktree"),
+      kitFolder: baseFolder,
+      ownLines: [startHandedOn],
+      trusted: shelfTrusts,
+    },
+  ];
+}
+
 before(async () => {
   project = await projectWith(projectConfig, [
     { name: almanac, files: almanacFiles(almanac, "continues after the cursor"), kitFolder: modesFolder },
@@ -200,25 +229,22 @@ before(async () => {
     { name: memoryStore, files: memoryStoreFiles(memoryStore, "keeps every item"), kitFolder: modesFolder },
   ]);
   await writeMode(project, digest, await digestFiles());
-  untrustedProject = await projectWith(untrustedConfig, [
-    { name: tally, files: tallyFiles(tally, "stops a check at its limit"), kitFolder: baseFolder },
-    {
-      name: shelf,
-      files: shelfFiles(shelf, "keeps a changed worktree"),
-      kitFolder: baseFolder,
-      ownLines: [startHandedOn],
-    },
-  ]);
-  [projectModesRan, wrongModeRan, toolchainRan, worktreesRan] = await Promise.all([
-    sharedTestsRan(project, [almanac, memoryStore]),
-    sharedTestsRan(project, [wrongAlmanac]),
-    sharedTestsRan(untrustedProject, [tally]),
-    sharedTestsRan(untrustedProject, [shelf]),
-  ]);
+  trustedProject = await projectWith(configWithoutBindings, toolModes([tally], [shelf]));
+  untrustedProject = await projectWith(configWithoutBindings, toolModes([], []));
+  [projectModesRan, wrongModeRan, trustedToolchainRan, trustedWorktreesRan, toolchainRan, worktreesRan] =
+    await Promise.all([
+      sharedTestsRan(project, [almanac, memoryStore]),
+      sharedTestsRan(project, [wrongAlmanac]),
+      sharedTestsRan(trustedProject, [tally]),
+      sharedTestsRan(trustedProject, [shelf]),
+      sharedTestsRan(untrustedProject, [tally]),
+      sharedTestsRan(untrustedProject, [shelf]),
+    ]);
 });
 
 after(async () => {
   await rm(project, { recursive: true, force: true });
+  await rm(trustedProject, { recursive: true, force: true });
   await rm(untrustedProject, { recursive: true, force: true });
 });
 
@@ -253,13 +279,38 @@ test("a project's source that repeats the item at the cursor fails the shared te
   assert.deepEqual(passedPerMode(tested.output), { [wrongAlmanac]: 9 });
 });
 
-test("a project's toolchain and worktrees modes load from the project, and without the owner's trust only their cases that need no listed command or throwaway folder pass", () => {
+test("a project's toolchain and worktrees modes, trusted in their tests, pass every case of their shared tests but the practices file in the kit and the actions the worktrees mode does not build, run from the project", () => {
+  assert.equal(trustedToolchainRan.status, 1, trustedToolchainRan.output);
+  assert.deepEqual(failedTests(trustedToolchainRan.output), [
+    `toolchain@1, ${tally}: describe names a language, a practices file in the kit, and checks with distinct names, ` +
+      "and runs nothing",
+  ]);
+  assert.deepEqual(passedPerMode(trustedToolchainRan.output), { [tally]: 15 });
+  assert.equal(trustedWorktreesRan.status, 1, trustedWorktreesRan.output);
+  assert.deepEqual(
+    failedTests(trustedWorktreesRan.output),
+    casesThatNeedMergeSetAsideOrApply.map((name) => `worktrees@1, ${shelf}: ${name}`),
+  );
+  assert.deepEqual(passedPerMode(trustedWorktreesRan.output), { [shelf]: 23 });
+});
+
+test("without trusted in their tests, a project's toolchain and worktrees modes load from the project, and a case that needs a listed command is refused with the broker's sentence and a sentence for the test's author", () => {
   assert.equal(toolchainRan.status, 1, toolchainRan.output);
   assert.deepEqual(passedPerMode(toolchainRan.output), { [tally]: 6 });
   assert.equal(worktreesRan.status, 1, worktreesRan.output);
   assert.deepEqual(passedPerMode(worktreesRan.output), { [shelf]: 5 });
-  assert.match(
+  assert.ok(
+    worktreesRan.output.includes(
+      `but the owner does not trust the list of mode ${shelf}, so none of its commands or throwaway folders is ` +
+        `granted. The owner reads the list and decides with: bay approve --trust ${shelf}.`,
+    ),
     worktreesRan.output,
-    /but the owner does not trust the list of mode shelf, so none of its commands or throwaway folders is granted/,
+  );
+  assert.ok(
+    worktreesRan.output.includes(
+      "A test runs the commands of a mode outside the kit's components/base/ only when it trusts the mode. Name it " +
+        `where the test opens the project: { project: import.meta.dirname, trusted: ["${shelf}"] }.`,
+    ),
+    worktreesRan.output,
   );
 });

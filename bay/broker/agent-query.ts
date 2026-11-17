@@ -3,16 +3,12 @@ import type { ChildEnd, ChildProcesses } from "../ports.ts";
 import type { Json } from "../contracts.ts";
 import { isJson, parsedLine } from "../protocol-json.ts";
 import { isRecord } from "../json.ts";
+import type { AgentQueryResult } from "../sdk.ts";
 
 export type AgentQueryLimits = {
   readonly rows: number;
   readonly resultBytes: number;
   readonly milliseconds: number;
-};
-
-export type AgentQueryResult = {
-  readonly columns: readonly string[];
-  readonly rows: readonly (readonly Json[])[];
 };
 
 export type AgentQueryOutcome =

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path/posix";
-import { type AgentQueryOutcome, type AgentQueryResult, runAgentQuery } from "./agent-query.ts";
+import { type AgentQueryOutcome, runAgentQuery } from "./agent-query.ts";
 import { type Answer, errorLine, failed, granted, listed, manifestOf, refused } from "../answers.ts";
 import type {
   ChildProcesses,
@@ -14,18 +14,8 @@ import type {
   Processes,
   ThrowawayFolders,
 } from "../ports.ts";
-import type {
-  CommandOutput,
-  CommandRan,
-  CommandRequest,
-  Effect,
-  EventSink,
-  Json,
-  ModeGrants,
-  Permissions,
-  StepPlace,
-} from "../contracts.ts";
-import type { DatabaseResult, ExecuteResult, Migration, Row, SqlParameters } from "./database.ts";
+import type { Effect, EventSink, Json, ModeGrants, Permissions, StepPlace } from "../contracts.ts";
+import type { DatabaseResult, Migration } from "./database.ts";
 import { DatabaseProcess } from "./database-process.ts";
 import {
   type ActionAt,
@@ -44,6 +34,15 @@ import { isInsideOrEqual, pathIn, shownPath, type Layout } from "../layout.ts";
 import type { SecretStore } from "../secrets.ts";
 import { isJsonRecord } from "../protocol-json.ts";
 import { leadingKeyword, readKeywords, writeKeywords } from "./sql-statements.ts";
+import type {
+  AgentQueryResult,
+  CommandOutput,
+  CommandRan,
+  CommandRequest,
+  ExecuteResult,
+  Row,
+  SqlParameters,
+} from "../sdk.ts";
 
 export type BrokerLimits = {
   readonly agentQueryRows: number;

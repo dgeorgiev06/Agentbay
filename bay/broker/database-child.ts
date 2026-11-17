@@ -1,5 +1,6 @@
 import type { Json } from "../contracts.ts";
-import { type DatabaseResult, type Migration, ModeDatabase, type SqlParameters } from "./database.ts";
+import { type DatabaseResult, type Migration, ModeDatabase } from "./database.ts";
+import type { SqlParameters } from "../sdk.ts";
 import { isJsonRecord, parsedLine } from "../protocol-json.ts";
 
 type Order =

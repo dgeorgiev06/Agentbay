@@ -1,12 +1,19 @@
 import { pathToFileURL } from "node:url";
 import type { Answer } from "../answers.ts";
-import type { CommandRan, Json } from "../contracts.ts";
-import type { ExecuteResult, Row } from "./database.ts";
+import type { Json } from "../contracts.ts";
 import { isJson, isJsonRecord } from "../protocol-json.ts";
-import type { HttpResponse } from "../ports.ts";
 import { type ChildMessage, type ParentMessage, parentMessageOf, type ResourceRequest } from "./script-protocol.ts";
-import type { AgentQueryResult } from "./agent-query.ts";
-import type { DatabasePartition, DefinedScript, ScriptContext, ScriptError } from "../sdk.ts";
+import type {
+  AgentQueryResult,
+  CommandRan,
+  DatabasePartition,
+  DefinedScript,
+  ExecuteResult,
+  HttpResponse,
+  Row,
+  ScriptContext,
+  ScriptError,
+} from "../sdk.ts";
 
 type Start = Extract<ParentMessage, { readonly type: "start" }>;
 

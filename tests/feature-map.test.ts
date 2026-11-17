@@ -25,11 +25,23 @@ type ModesRule = {
   readonly testsImportKitThrough: readonly string[];
 };
 
+type InterfacesRule = {
+  readonly within: string;
+  readonly sharedTest: string;
+  readonly sharedTestsImportKitThrough: readonly string[];
+};
+
+type ModeFolder = {
+  readonly folder: string;
+  readonly implements: readonly string[];
+};
+
 type FeatureMap = {
   readonly features: readonly Feature[];
   readonly outside: readonly OutsideFolder[];
   readonly modes: ModesRule | undefined;
-  readonly modeFolders: readonly string[];
+  readonly interfaces: InterfacesRule | undefined;
+  readonly modeFolders: readonly ModeFolder[];
 };
 
 type SourceFile = {
@@ -44,7 +56,8 @@ type Rule =
   | "kernel-reaches-out"
   | "test-reaches-in"
   | "inside-reaches-across"
-  | "mode-test-reaches-out";
+  | "mode-test-reaches-out"
+  | "shared-test-reaches-out";
 
 type Break = {
   readonly from: string;
@@ -71,6 +84,7 @@ const rules: readonly Rule[] = [
   "test-reaches-in",
   "inside-reaches-across",
   "mode-test-reaches-out",
+  "shared-test-reaches-out",
 ];
 
 const scannedFolders = ["bay", "adapters", "components", "schemas"] as const;
@@ -107,7 +121,13 @@ function parsedMap(text: string): FeatureMap {
     folder,
     importsKernelThrough: textsField(entry, "imports_kernel_through"),
   }));
-  return { features, outside, modes: modesRuleOf(fieldOf(map, "modes")), modeFolders: [] };
+  return {
+    features,
+    outside,
+    modes: modesRuleOf(fieldOf(map, "modes")),
+    interfaces: interfacesRuleOf(fieldOf(map, "interfaces")),
+    modeFolders: [],
+  };
 }
 
 function modesRuleOf(value: Json | undefined): ModesRule | undefined {
@@ -122,6 +142,20 @@ function modesRuleOf(value: Json | undefined): ModesRule | undefined {
   };
 }
 
+function interfacesRuleOf(value: Json | undefined): InterfacesRule | undefined {
+  const within = value === undefined ? undefined : textField(value, "within");
+  const sharedTest = value === undefined ? undefined : textField(value, "shared_test");
+  if (value === undefined || within === undefined || sharedTest === undefined) {
+    return undefined;
+  }
+  return { within, sharedTest, sharedTestsImportKitThrough: textsField(value, "shared_tests_import_kit_through") };
+}
+
+function modeFolderOf(manifestFile: string, manifest: string): ModeFolder {
+  const references = textsField(toJson(parse(manifest)), "implements");
+  return { folder: dirname(manifestFile), implements: references.map((reference) => reference.split("@")[0] ?? "") };
+}
+
 function modeFoldersIn(map: FeatureMap, files: readonly string[]): readonly string[] {
   const within = map.modes?.within;
   if (within === undefined) {
@@ -130,11 +164,11 @@ function modeFoldersIn(map: FeatureMap, files: readonly string[]): readonly stri
   return files.filter((file) => basename(file) === modeManifest && isInside(file, within)).map(dirname);
 }
 
-function withModeFolders(map: FeatureMap, folders: readonly string[]): FeatureMap {
+function withModeFolders(map: FeatureMap, folders: readonly ModeFolder[]): FeatureMap {
   const importsKernelThrough = map.modes?.importsKernelThrough ?? [];
   return {
     ...map,
-    outside: [...map.outside, ...folders.map((folder) => ({ folder, importsKernelThrough }))],
+    outside: [...map.outside, ...folders.map(({ folder }) => ({ folder, importsKernelThrough }))],
     modeFolders: [...map.modeFolders, ...folders],
   };
 }
@@ -212,22 +246,52 @@ function testImportRule(map: FeatureMap, from: string, to: string): Rule | undef
   return inside === target.name ? undefined : "inside-reaches-across";
 }
 
-function modeOfTest(map: FeatureMap, file: string): string | undefined {
-  return map.modeFolders.find((folder) => isInside(file, join(folder, testFolder)));
+function modeOfTest(map: FeatureMap, file: string): ModeFolder | undefined {
+  return map.modeFolders.find((mode) => isInside(file, join(mode.folder, testFolder)));
 }
 
-function modeTestImportRule(map: FeatureMap, mode: string, to: string): Rule | undefined {
-  const allowed = [...(map.modes?.testsImportKitThrough ?? []), ...(map.modes?.importsKernelThrough ?? [])];
-  return allowed.includes(to) || isInside(to, mode) ? undefined : "mode-test-reaches-out";
+function sharedTestOf(rule: InterfacesRule, name: string): string {
+  return join(rule.within, name, rule.sharedTest);
+}
+
+function isSharedTest(map: FeatureMap, file: string): boolean {
+  const rule = map.interfaces;
+  if (rule === undefined || !isInside(file, rule.within)) {
+    return false;
+  }
+  const [name = ""] = file.slice(rule.within.length + 1).split("/");
+  return file === sharedTestOf(rule, name);
+}
+
+function modeTestImportRule(map: FeatureMap, mode: ModeFolder, to: string): Rule | undefined {
+  const rule = map.interfaces;
+  const sharedTests = rule === undefined ? [] : mode.implements.map((name) => sharedTestOf(rule, name));
+  const allowed = [
+    ...(map.modes?.testsImportKitThrough ?? []),
+    ...(map.modes?.importsKernelThrough ?? []),
+    ...sharedTests,
+  ];
+  return allowed.includes(to) || isInside(to, mode.folder) ? undefined : "mode-test-reaches-out";
+}
+
+function sharedTestImportRule(map: FeatureMap, to: string): Rule | undefined {
+  const allowed = map.interfaces?.sharedTestsImportKitThrough ?? [];
+  return allowed.includes(to) ? undefined : "shared-test-reaches-out";
 }
 
 function ruleOf(map: FeatureMap, from: string, to: string): Rule | undefined {
-  if (isInside(from, testFolder)) {
-    return testImportRule(map, from, to);
+  if (isSharedTest(map, from)) {
+    return sharedTestImportRule(map, to);
   }
   const mode = modeOfTest(map, from);
   if (mode !== undefined) {
     return modeTestImportRule(map, mode, to);
+  }
+  if (isSharedTest(map, to)) {
+    return "shared-test-reaches-out";
+  }
+  if (isInside(from, testFolder)) {
+    return testImportRule(map, from, to);
   }
   return isKernelFile(from) ? kernelImportRule(map, from, to) : outsideImportRule(map, from, to);
 }
@@ -317,7 +381,11 @@ function kitMap(): FeatureMap {
     within === undefined
       ? []
       : readdirSync(within, { recursive: true, encoding: "utf8" }).map((file) => join(within, file));
-  return withModeFolders(map, modeFoldersIn(map, files));
+  const manifests = modeFoldersIn(map, files).map((folder) => join(folder, modeManifest));
+  return withModeFolders(
+    map,
+    manifests.map((file) => modeFolderOf(file, readFileSync(file, "utf8"))),
+  );
 }
 
 function breaksIn(map: FeatureMap, files: readonly string[]): readonly Break[] {
@@ -437,7 +505,10 @@ test("a folder that holds a mode.yaml under the modes rule's folder is a mode fo
 });
 
 test("a file of a mode folder may import only the kernel files the modes rule names, with no entry for the mode", () => {
-  const map = withModeFolders(mapWithModes, ["components/modes/notes", "components/base/keeper"]);
+  const map = withModeFolders(mapWithModes, [
+    { folder: "components/modes/notes", implements: [] },
+    { folder: "components/base/keeper", implements: [] },
+  ]);
   const sources = [
     scanned("components/modes/notes/scripts/add.ts", relative("../../../../bay/words.ts")),
     scanned("components/modes/notes/scripts/lib/rows.ts", relative("../../../../../bay/spelling.ts")),
@@ -452,7 +523,10 @@ test("a file of a mode folder may import only the kernel files the modes rule na
 });
 
 test("a file under a mode's tests/ folder may import the test toolbox, the toolbox and its own mode's files, and nothing else", () => {
-  const map = withModeFolders(mapWithModes, ["components/modes/notes", "components/base/keeper"]);
+  const map = withModeFolders(mapWithModes, [
+    { folder: "components/modes/notes", implements: [] },
+    { folder: "components/base/keeper", implements: [] },
+  ]);
   const test = "components/modes/notes/tests/add.test.ts";
   const sources = [
     scanned(test, relative("../../../../tests/test-toolbox.ts")),
@@ -475,6 +549,87 @@ test("a file under a mode's tests/ folder may import the test toolbox, the toolb
       to: "components/base/keeper/scripts/keep.ts",
       rule: "mode-test-reaches-out",
     },
+  ]);
+});
+
+const mapWithInterfaces = parsedMap(`
+features:
+  words:
+    entry: [bay/words.ts]
+    private: []
+    may_import: []
+modes:
+  within: components
+  imports_kernel_through: [bay/words.ts]
+  tests_import_kit_through: [tests/test-toolbox.ts]
+interfaces:
+  within: components/base/interfaces
+  shared_test: tests/shared.ts
+  shared_tests_import_kit_through: [tests/test-toolbox.ts]
+`);
+
+const storeShared = "components/base/interfaces/items-store/tests/shared.ts";
+
+test("the interfaces rule is read with its folder, the shared test's place in an interface's folder and what a shared test may import", () => {
+  assert.deepEqual(mapWithInterfaces.interfaces, {
+    within: "components/base/interfaces",
+    sharedTest: "tests/shared.ts",
+    sharedTestsImportKitThrough: ["tests/test-toolbox.ts"],
+  });
+  assert.equal(mapWithModes.interfaces, undefined);
+});
+
+test("a mode folder knows the interfaces its mode.yaml implements, by name", () => {
+  assert.deepEqual(
+    modeFolderOf("components/base/keeper/mode.yaml", "name: keeper\nimplements: [items-store@1, notes@2]\n"),
+    {
+      folder: "components/base/keeper",
+      implements: ["items-store", "notes"],
+    },
+  );
+  assert.deepEqual(modeFolderOf("components/modes/notes/mode.yaml", "name: notes\n"), {
+    folder: "components/modes/notes",
+    implements: [],
+  });
+});
+
+test("a mode's test may import the shared test of an interface its mode implements, and no other interface's", () => {
+  const map = withModeFolders(mapWithInterfaces, [
+    { folder: "components/base/keeper", implements: ["items-store"] },
+    { folder: "components/modes/notes", implements: ["notes"] },
+  ]);
+  const sources = [
+    scanned(
+      "components/base/keeper/tests/items-store.test.ts",
+      relative("../../interfaces/items-store/tests/shared.ts"),
+    ),
+    scanned(
+      "components/modes/notes/tests/store.test.ts",
+      relative("../../../base/interfaces/items-store/tests/shared.ts"),
+    ),
+    scanned("components/modes/notes/tests/notes.test.ts", relative("../../../base/interfaces/notes/tests/shared.ts")),
+  ];
+  assert.deepEqual(mapBreaks(map, sources), [
+    { from: "components/modes/notes/tests/store.test.ts", to: storeShared, rule: "mode-test-reaches-out" },
+  ]);
+});
+
+test("a shared test imports only the test toolbox, and only a test of an implementing mode imports it", () => {
+  const map = withModeFolders(mapWithInterfaces, [{ folder: "components/base/keeper", implements: ["items-store"] }]);
+  const sources = [
+    scanned(storeShared, relative("../../../../../tests/test-toolbox.ts")),
+    scanned(storeShared, relative("../../../../../tests/project-fixture.ts")),
+    scanned(storeShared, relative("../../../../../bay/words.ts")),
+    scanned(storeShared, relative("../../notes/tests/shared.ts")),
+    scanned("components/base/keeper/scripts/keep.ts", relative("../../interfaces/items-store/tests/shared.ts")),
+    scanned("tests/store.test.ts", relative("../components/base/interfaces/items-store/tests/shared.ts")),
+  ];
+  assert.deepEqual(mapBreaks(map, sources), [
+    { from: storeShared, to: "tests/project-fixture.ts", rule: "shared-test-reaches-out" },
+    { from: storeShared, to: "bay/words.ts", rule: "shared-test-reaches-out" },
+    { from: storeShared, to: "components/base/interfaces/notes/tests/shared.ts", rule: "shared-test-reaches-out" },
+    { from: "components/base/keeper/scripts/keep.ts", to: storeShared, rule: "shared-test-reaches-out" },
+    { from: "tests/store.test.ts", to: storeShared, rule: "shared-test-reaches-out" },
   ]);
 });
 
@@ -652,6 +807,15 @@ test("the kit's map lets a mode's tests import from the kit only the test toolbo
   assert.ok(modes);
   assert.deepEqual(modes.testsImportKitThrough, ["tests/test-toolbox.ts"]);
   assert.deepEqual(modes.importsKernelThrough, ["bay/sdk.ts"]);
+});
+
+test("the kit's map names the interfaces folder, the shared test's place and that a shared test imports only the test toolbox", () => {
+  const map = parsedMap(readFileSync(mapFile, "utf8"));
+  assert.deepEqual(map.interfaces, {
+    within: "components/base/interfaces",
+    sharedTest: "tests/shared.ts",
+    sharedTestsImportKitThrough: ["tests/test-toolbox.ts"],
+  });
 });
 
 test("every kernel file of the kit is in exactly one feature", () => {

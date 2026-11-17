@@ -1,5 +1,13 @@
-import { dirname, join, normalize } from "node:path/posix";
-import { errors, type CheckContext, type Finding, type KitTree, type ModeFolder } from "./check-context.ts";
+import { dirname, join, normalize, relative } from "node:path/posix";
+import {
+  errors,
+  isLoaded,
+  type CheckContext,
+  type Finding,
+  type KitTree,
+  type LoadedModeFolder,
+  type ModeFolder,
+} from "./check-context.ts";
 import { importSpecifiers, type ImportSpecifier } from "./import-scanner.ts";
 import { isInsideOrEqual, pathIn, shownPath, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
@@ -22,12 +30,15 @@ type Graph = ReadonlyMap<string, readonly string[]>;
 type ModeImport = {
   readonly layout: Layout;
   readonly mode: ModeFolder;
+  readonly sharedTests: readonly string[];
   readonly entry: LiteralImport;
 };
 
 const sdkFile = "bay/sdk.ts";
 
 const testToolboxFile = "tests/test-toolbox.ts";
+
+export const sharedTestFile = "tests/shared.ts";
 
 const entryPoints = ["bay/cli.ts", "bay/mcp.ts"] as const;
 
@@ -101,15 +112,39 @@ function modeImportProblem(found: ModeImport): Problem | undefined {
   }
   const target = resolved(entry.file, entry.text);
   const isKitSdk = mode.home === "kit" && target === sdkFileOf(layout);
-  return isKitSdk || isInsideOrEqual(target, mode.folder) || isTestToolbox(found, target)
+  return isKitSdk || isInsideOrEqual(target, mode.folder) || isKitTestFile(found, target)
     ? undefined
     : outsideImportProblem(found, target);
 }
 
-function isTestToolbox(found: ModeImport, target: string): boolean {
-  const { layout, mode, entry } = found;
-  const inTests = isInsideOrEqual(entry.file, join(mode.folder, "tests"));
-  return inTests && target === pathIn(layout, "kit", testToolboxFile);
+function isModeTest(mode: ModeFolder, file: string): boolean {
+  return isInsideOrEqual(file, join(mode.folder, "tests"));
+}
+
+function isKitTestFile(found: ModeImport, target: string): boolean {
+  const { layout, mode, sharedTests, entry } = found;
+  const kitTestFiles = [pathIn(layout, "kit", testToolboxFile), ...sharedTests];
+  return isModeTest(mode, entry.file) && kitTestFiles.includes(target);
+}
+
+function sharedTestOf(context: CheckContext, reference: string): string {
+  const [name = ""] = reference.split("@");
+  return pathIn(context.layout, "kit", join(context.kit.layout.interfaces, name, sharedTestFile));
+}
+
+function implementedReferences(mode: ModeFolder): readonly string[] {
+  return isLoaded(mode) ? (mode.manifest.implements ?? []) : [];
+}
+
+async function existingSharedTests(context: CheckContext, mode: ModeFolder): Promise<ReadonlyMap<string, string>> {
+  const found = new Map<string, string>();
+  for (const reference of implementedReferences(mode)) {
+    const file = sharedTestOf(context, reference);
+    if (await context.files.exists(file)) {
+      found.set(reference, file);
+    }
+  }
+  return found;
 }
 
 function computedImportProblems(layout: Layout, source: SourceFile): readonly Problem[] {
@@ -126,14 +161,51 @@ function computedImportProblems(layout: Layout, source: SourceFile): readonly Pr
     }));
 }
 
+type SharedTestsOfMode = {
+  readonly layout: Layout;
+  readonly mode: LoadedModeFolder;
+  readonly sharedTests: ReadonlyMap<string, string>;
+};
+
+function testedFiles(mode: ModeFolder, sources: readonly SourceFile[]): ReadonlySet<string> {
+  const imports = sources.filter((source) => isModeTest(mode, source.file)).flatMap(literalImports);
+  return new Set(imports.filter((entry) => isRelative(entry.text)).map((entry) => resolved(entry.file, entry.text)));
+}
+
+function unrunSharedTestProblems(found: SharedTestsOfMode, sources: readonly SourceFile[]): readonly Problem[] {
+  const { layout, mode, sharedTests } = found;
+  const imported = testedFiles(mode, sources);
+  const references = mode.manifest.implements ?? [];
+  const name = mode.manifest.name;
+  return [...sharedTests]
+    .filter(([, file]) => !imported.has(file))
+    .map(([reference, file]) =>
+      mode.at(["implements", references.indexOf(reference)], {
+        message:
+          `Mode ${name} implements ${reference}, whose shared test ${shownPath(layout, file)} no test of the ` +
+          "mode imports, so nothing shows that the mode does what the interface means.",
+        fix:
+          `Add a test under ${mode.label}/tests/ that imports ${relative(join(mode.folder, "tests"), file)} ` +
+          `and calls what it exports with { mode: "${name}" }.`,
+      }),
+    );
+}
+
 async function modeImportProblems(context: CheckContext, mode: ModeFolder): Promise<readonly Problem[]> {
   const { layout } = context;
   const paths = mode.files.filter((file) => file.endsWith(".ts")).map((file) => join(mode.folder, file));
   const sources = await readSources(context.files, paths);
-  return sources.flatMap((source) => [
-    ...literalImports(source).flatMap((entry) => modeImportProblem({ layout, mode, entry }) ?? []),
-    ...computedImportProblems(layout, source),
-  ]);
+  const sharedTests = await existingSharedTests(context, mode);
+  const allowed = [...sharedTests.values()];
+  return [
+    ...sources.flatMap((source) => [
+      ...literalImports(source).flatMap(
+        (entry) => modeImportProblem({ layout, mode, sharedTests: allowed, entry }) ?? [],
+      ),
+      ...computedImportProblems(layout, source),
+    ]),
+    ...(isLoaded(mode) ? unrunSharedTestProblems({ layout, mode, sharedTests }, sources) : []),
+  ];
 }
 
 function kernelGraph(sources: readonly SourceFile[]): Graph {

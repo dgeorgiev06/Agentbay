@@ -232,11 +232,21 @@ features:
 modes:
   purpose:
     Every folder under components/ that holds a mode.yaml is a mode. A mode is outside the kernel. A file under a
-    mode's tests/ folder imports the test toolbox, the toolbox and files of its own mode, and nothing else.
+    mode's tests/ folder imports the test toolbox, the toolbox, files of its own mode and the shared test of each
+    interface the mode implements, and nothing else.
   within: components
   imports_kernel_through:
     - bay/sdk.ts
   tests_import_kit_through:
+    - tests/test-toolbox.ts
+interfaces:
+  purpose:
+    Every <name>.yaml in components/base/interfaces is an interface. Its shared test, <name>/tests/shared.ts, states
+    what every mode that implements the interface must do. A shared test imports only the test toolbox, and only the
+    tests of a mode that implements the interface import it.
+  within: components/base/interfaces
+  shared_test: tests/shared.ts
+  shared_tests_import_kit_through:
     - tests/test-toolbox.ts
 outside:
   adapters/claude-code:

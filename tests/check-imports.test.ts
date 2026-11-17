@@ -30,6 +30,55 @@ test("a test of a kit mode may import the kit's tests/test-toolbox.ts, and nothi
   findFinding(await checkScript(harness), script, "which resolves to tests/test-toolbox.ts");
 });
 
+const storeShared = "components/base/interfaces/items-store/tests/shared.ts";
+
+const notesShared = "components/base/interfaces/notes/tests/shared.ts";
+
+const sharedTestText = 'import { openModeProject } from "../../../../../tests/test-toolbox.ts";\n';
+
+test("a mode's test may import the shared test of an interface its mode implements, and not another interface's", async () => {
+  const storeTest = "components/base/store/tests/items-store.test.ts";
+  const notesTest = "components/modes/notes/tests/notes.test.ts";
+  const report = await check({
+    ...cleanFiles(),
+    [storeShared]: sharedTestText,
+    [notesShared]: sharedTestText,
+    [storeTest]: 'import { testItemsStore } from "../../interfaces/items-store/tests/shared.ts";\n',
+    [notesTest]: [
+      'import { testNotes } from "../../../base/interfaces/notes/tests/shared.ts";',
+      'import { testItemsStore } from "../../../base/interfaces/items-store/tests/shared.ts";',
+      "",
+    ].join("\n"),
+  });
+  const finding = findFinding(report, notesTest, `which resolves to ${storeShared}`);
+  assert.equal(finding.line, 2);
+  withoutFinding(report, "../../interfaces/items-store/tests/shared.ts");
+  withoutFinding(report, "../../../base/interfaces/notes/tests/shared.ts");
+  withoutFinding(report, "whose shared test");
+});
+
+test("a mode that implements an interface with a shared test, and has no test that imports it, is reported with a fix", async () => {
+  const storeScript = "components/base/store/scripts/put.ts";
+  const report = await check({
+    ...cleanFiles(),
+    [storeShared]: sharedTestText,
+    [storeScript]: 'import { testItemsStore } from "../../interfaces/items-store/tests/shared.ts";\n',
+  });
+  const finding = findFinding(
+    report,
+    "components/base/store/mode.yaml",
+    `Mode store implements items-store@1, whose shared test ${storeShared} no test of the mode imports`,
+  );
+  assert.equal(
+    finding.fix,
+    "Add a test under components/base/store/tests/ that imports ../../interfaces/items-store/tests/shared.ts " +
+      'and calls what it exports with { mode: "store" }.',
+  );
+  assert.equal(finding.severity, "error");
+  findFinding(report, storeScript, `which resolves to ${storeShared}`);
+  withoutFinding(report, "Mode notes implements");
+});
+
 test("mode code importing another mode's file is reported with the resolved path", async () => {
   const report = await checkScript('import { put } from "../../../base/store/scripts/put.ts";\n');
   const finding = findFinding(

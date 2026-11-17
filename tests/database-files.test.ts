@@ -2,22 +2,56 @@ import assert from "node:assert/strict";
 import { chmod, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
-import { openModeProject, type ModeProject } from "./mode-harness.ts";
-
-const config = {
-  bindings: { "items-source": "fake-source", "items-store": "store" },
-  adapter: "claude-code",
-  modes: ["feed-briefing"],
-  settings: {
-    "feed-briefing": { selector: {}, lookback: "14d", maxItems: 100 },
-    "fake-source": { baseDate: "2026-11-15T12:00:00.000Z", pageSize: 10, costPerItemUsd: 0.001 },
-  },
-};
+import { stringify } from "yaml";
+import type { Kernel } from "../bay/kernel.ts";
+import { openKernel } from "./kernel-fixture.ts";
+import { makeProject, type Project } from "./project-fixture.ts";
 
 type Entry = {
   readonly path: string;
   readonly mode: number;
 };
+
+const keeper = {
+  name: "keeper",
+  version: "1.0.0",
+  description: "Keeps a note in a partition of its own database.",
+  resources: { db: { migrations: "migrations" } },
+  actions: {
+    keep: {
+      description: "When a test needs a run that writes a database partition.",
+      input: "schemas/anything.json",
+      output: "schemas/anything.json",
+      effects: ["read", "write"],
+      run: [{ script: "scripts/keep.ts" }],
+    },
+  },
+};
+
+const keepScript = [
+  'import { defineScript, fail } from "agentbay/sdk";',
+  "",
+  "export const run = defineScript(async (_input, context) => {",
+  '  const partition = context.db.partition("notes");',
+  "  const migrated = await partition.migrate();",
+  "  if (!migrated.ok) {",
+  "    return fail(migrated.message);",
+  "  }",
+  "  const kept = await partition.execute(\"insert into kept (text) values ('a note')\");",
+  "  return kept.ok ? { kept: true } : fail(kept.message);",
+  "});",
+  "",
+].join("\n");
+
+async function projectWithKeeper(): Promise<Project> {
+  const project = await makeProject();
+  const folder = "components/modes/keeper";
+  await project.write(`${folder}/mode.yaml`, stringify(keeper));
+  await project.write(`${folder}/schemas/anything.json`, '{ "type": "object" }\n');
+  await project.write(`${folder}/migrations/0001-kept.sql`, "create table kept (text text not null);\n");
+  await project.write(`${folder}/scripts/keep.ts`, keepScript);
+  return project;
+}
 
 async function entriesOf(root: string): Promise<readonly Entry[]> {
   const entries: Entry[] = [];
@@ -40,55 +74,47 @@ function assertOwnerOnly(entries: readonly Entry[]): void {
   }
 }
 
-async function synced(project: ModeProject): Promise<void> {
-  await project.output("feed-briefing.sync", { since: "2026-11-01T00:00:00Z" });
+async function kept(kernel: Kernel): Promise<void> {
+  const run = await kernel.runs.start({ action: "keeper.keep" }, {});
+  assert.ok(run.ok && run.value.state.status === "done", JSON.stringify(run));
 }
 
-test("after a run and a store write the folders are 0700 and every database file is 0600", async () => {
-  const project = await openModeProject(config);
+test("after a run and a partition write the folders are 0700 and every database file is 0600", async () => {
+  const project = await projectWithKeeper();
+  const kernel = await openKernel(project);
   try {
-    await synced(project);
+    await kept(kernel);
     const entries = await entriesOf(project.root);
     const names = entries.map((entry) => entry.path);
     assert.ok(names.includes(join(".agentbay", "kernel.db")), names.join(", "));
-    assert.ok(names.includes(join(".agentbay", "data", "store--feed-briefing.db")), names.join(", "));
+    assert.ok(names.includes(join(".agentbay", "data", "keeper--notes.db")), names.join(", "));
     assert.ok(
       names.some((name) => name.endsWith("-wal")),
       names.join(", "),
     );
     assertOwnerOnly(entries);
   } finally {
-    await project.close();
+    kernel.close();
+    await project.remove();
   }
 });
 
 test("a folder or database file left wider than owner-only is narrowed when the kernel next uses it", async () => {
-  const first = await openModeProject(config);
-  await synced(first);
-  for (const entry of await entriesOf(first.root)) {
-    await chmod(join(first.root, entry.path), entry.path.includes(".db") ? 0o644 : 0o755);
+  const project = await projectWithKeeper();
+  const first = await openKernel(project);
+  await kept(first);
+  for (const entry of await entriesOf(project.root)) {
+    await chmod(join(project.root, entry.path), entry.path.includes(".db") ? 0o644 : 0o755);
   }
-  const widened = await entriesOf(first.root);
+  const widened = await entriesOf(project.root);
   assert.ok(widened.every((entry) => (entry.mode & 0o044) !== 0));
-  const project = await first.reopen(config);
+  first.close();
+  const kernel = await openKernel(project);
   try {
-    await synced(project);
+    await kept(kernel);
     assertOwnerOnly(await entriesOf(project.root));
   } finally {
-    await project.close();
-  }
-});
-
-test("the fake source and the feed briefing make only kernel.db and the briefing's store partition", async () => {
-  const project = await openModeProject(config);
-  try {
-    await project.output("fake-source.describe", {});
-    await synced(project);
-    const names = (await readdir(join(project.root, ".agentbay", "data"))).filter((name) => name.endsWith(".db"));
-    assert.deepEqual(names, ["store--feed-briefing.db"]);
-    const top = (await readdir(join(project.root, ".agentbay"))).filter((name) => name.endsWith(".db"));
-    assert.deepEqual(top, ["kernel.db"]);
-  } finally {
-    await project.close();
+    kernel.close();
+    await project.remove();
   }
 });

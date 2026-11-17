@@ -14,7 +14,7 @@ import {
   systemClock,
 } from "../bay/node-ports.ts";
 import type { Clock } from "../bay/ports.ts";
-import { createScriptRunner, scriptCommand } from "../bay/script-runner.ts";
+import { createScriptRunner, scriptCommand } from "../bay/broker/script-runner.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import {
   kitFolder,
@@ -365,9 +365,9 @@ test("the runner starts node with the permission model, the grants and the prelo
   const bay = join(kitFolder, "bay");
   assert.deepEqual(scriptCommand("/project/components/modes/notes/scripts/a.ts", request), [
     "--permission",
-    `--allow-fs-read=${bay}/script-host.ts`,
-    `--allow-fs-read=${bay}/script-preload.ts`,
-    `--allow-fs-read=${bay}/script-protocol.ts`,
+    `--allow-fs-read=${bay}/broker/script-host.ts`,
+    `--allow-fs-read=${bay}/broker/script-preload.ts`,
+    `--allow-fs-read=${bay}/broker/script-protocol.ts`,
     `--allow-fs-read=${bay}/protocol-json.ts`,
     `--allow-fs-read=${bay}/sdk.ts`,
     "--allow-fs-read=/project/components/modes/notes",
@@ -377,8 +377,8 @@ test("the runner starts node with the permission model, the grants and the prelo
     "--allow-fs-write=/project/out",
     "--allow-fs-write=/project/out/*",
     "--disable-warning=ExperimentalWarning",
-    `--import=file://${bay}/script-preload.ts`,
-    `${bay}/script-host.ts`,
+    `--import=file://${bay}/broker/script-preload.ts`,
+    `${bay}/broker/script-host.ts`,
     "/project/components/modes/notes/scripts/a.ts",
   ]);
 });

@@ -1,6 +1,6 @@
-import { listed, type Resource, type RefusalWording } from "./answers.ts";
-import type { Effect, Permissions } from "./contracts.ts";
-import type { HttpRequest } from "./ports.ts";
+import { listed, type Resource, type RefusalWording } from "../answers.ts";
+import type { Effect, Permissions } from "../contracts.ts";
+import type { HttpRequest } from "../ports.ts";
 import { leadingKeyword, statementWords, writeKeywords } from "./sql-statements.ts";
 
 export type SpendAmounts = {

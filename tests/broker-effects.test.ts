@@ -3,9 +3,9 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { Answer } from "../bay/answers.ts";
-import { Broker } from "../bay/broker.ts";
+import { Broker } from "../bay/broker/broker.ts";
 import type { Effect } from "../bay/contracts.ts";
-import { effectRefusal, type BrokerOperation } from "../bay/effect-rule.ts";
+import { effectRefusal, type BrokerOperation } from "../bay/broker/effect-rule.ts";
 import {
   nodeChildProcesses,
   nodeFileInspector,
@@ -15,7 +15,7 @@ import {
   systemClock,
 } from "../bay/node-ports.ts";
 import type { ChildProcesses, FileInspector, FileSystem, Http, Processes, ThrowawayFolders } from "../bay/ports.ts";
-import { scriptCommand } from "../bay/script-runner.ts";
+import { scriptCommand } from "../bay/broker/script-runner.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import {
   noProcesses,

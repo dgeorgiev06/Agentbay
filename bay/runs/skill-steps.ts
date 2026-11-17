@@ -1,7 +1,7 @@
 import { join } from "node:path/posix";
 import { refused } from "../answers.ts";
 import type { Json, Permissions, RunEvent, Submission } from "../contracts.ts";
-import { effectRefusal } from "../effect-rule.ts";
+import { effectRefusal } from "../broker/effect-rule.ts";
 import { textField } from "../json.ts";
 import { failedWith, problemText, type Outcome, type Problem } from "../outcome.ts";
 import type { ActionTarget, Schema, SkillUse } from "../manifests/manifests.ts";

@@ -1,30 +1,18 @@
 breaks:
   - from: bay/adapter.ts
-    to: bay/effect-rule.ts
+    to: bay/broker/effect-rule.ts
     rule: private-file
   - from: bay/answers.ts
     to: bay/secret-patterns.ts
     rule: may-not-import
-  - from: bay/broker.ts
-    to: bay/effect-rule.ts
-    rule: private-file
-  - from: bay/broker.ts
-    to: bay/sql-statements.ts
-    rule: private-file
+  - from: bay/broker/database.ts
+    to: bay/owner-only.ts
+    rule: may-not-import
   - from: bay/build.ts
     to: bay/skill-tools.ts
     rule: may-not-import
   - from: bay/check-imports.ts
-    to: bay/script-protocol.ts
-    rule: may-not-import
-  - from: bay/database.ts
-    to: bay/owner-only.ts
-    rule: may-not-import
-  - from: bay/database.ts
-    to: bay/sql-statements.ts
-    rule: private-file
-  - from: bay/folder-links.ts
-    to: bay/file-access.ts
+    to: bay/broker/script-protocol.ts
     rule: may-not-import
   - from: bay/kernel.ts
     to: bay/check-context.ts
@@ -36,7 +24,7 @@ breaks:
     to: bay/tool-definitions.ts
     rule: private-file
   - from: bay/new.ts
-    to: bay/script-protocol.ts
+    to: bay/broker/script-protocol.ts
     rule: may-not-import
   - from: bay/node-ports.ts
     to: bay/check-context.ts
@@ -45,59 +33,35 @@ breaks:
     to: bay/skill-tools.ts
     rule: private-file
   - from: bay/runs/skill-steps.ts
-    to: bay/effect-rule.ts
+    to: bay/broker/effect-rule.ts
     rule: private-file
   - from: bay/runs/sqlite-run-store.ts
     to: bay/owner-only.ts
     rule: may-not-import
-  - from: bay/script-host.ts
-    to: bay/agent-query.ts
-    rule: private-file
-  - from: bay/script-host.ts
-    to: bay/database.ts
-    rule: private-file
-  - from: bay/script-protocol.ts
-    to: bay/database.ts
-    rule: private-file
-  - from: bay/script-runner.ts
-    to: bay/effect-rule.ts
-    rule: private-file
-  - from: bay/script-runner.ts
-    to: bay/folder-links.ts
-    rule: may-not-import
-  - from: bay/script-runner.ts
-    to: bay/secrets.ts
-    rule: may-not-import
-  - from: bay/sdk.ts
-    to: bay/agent-query.ts
-    rule: private-file
-  - from: bay/sdk.ts
-    to: bay/database.ts
-    rule: private-file
   - from: bay/tools.ts
     to: bay/kernel.ts
     rule: may-not-import
 test_breaks:
   - from: tests/broker-database.test.ts
-    to: bay/agent-query.ts
+    to: bay/broker/agent-query.ts
     rule: test-reaches-in
   - from: tests/broker-effects.test.ts
-    to: bay/effect-rule.ts
+    to: bay/broker/effect-rule.ts
     rule: test-reaches-in
   - from: tests/broker-helpers.test.ts
-    to: bay/file-access.ts
+    to: bay/broker/file-access.ts
     rule: test-reaches-in
   - from: tests/broker-helpers.test.ts
-    to: bay/http-access.ts
+    to: bay/broker/http-access.ts
     rule: test-reaches-in
   - from: tests/broker-helpers.test.ts
-    to: bay/script-protocol.ts
+    to: bay/broker/script-protocol.ts
+    rule: test-reaches-in
+  - from: tests/broker-helpers.test.ts
+    to: bay/broker/sql-statements.ts
     rule: test-reaches-in
   - from: tests/broker-helpers.test.ts
     to: bay/secret-patterns.ts
-    rule: test-reaches-in
-  - from: tests/broker-helpers.test.ts
-    to: bay/sql-statements.ts
     rule: test-reaches-in
   - from: tests/build.test.ts
     to: bay/skill-tools.ts
@@ -139,7 +103,7 @@ test_breaks:
     to: bay/run-report.ts
     rule: test-reaches-in
   - from: tests/unexpected-errors.test.ts
-    to: bay/database-process.ts
+    to: bay/broker/database-process.ts
     rule: test-reaches-in
   - from: tests/unexpected-errors.test.ts
     to: bay/last-resort.ts

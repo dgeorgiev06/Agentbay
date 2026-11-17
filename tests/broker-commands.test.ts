@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Broker, type BrokerLimits } from "../bay/broker.ts";
+import { Broker, type BrokerLimits } from "../bay/broker/broker.ts";
 import type { Effect } from "../bay/contracts.ts";
 import { fieldOf } from "../bay/json.ts";
 import {

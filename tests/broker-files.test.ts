@@ -3,7 +3,7 @@ import { mkdir, readdir, readFile, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { Answer } from "../bay/answers.ts";
-import { Broker } from "../bay/broker.ts";
+import { Broker } from "../bay/broker/broker.ts";
 import {
   nodeChildProcesses,
   nodeFileInspector,

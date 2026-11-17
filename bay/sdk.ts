@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
-import type { AgentQueryResult } from "./agent-query.ts";
+import type { AgentQueryResult } from "./broker/agent-query.ts";
 import type { Answer } from "./answers.ts";
 import type { CommandRan, CommandRequest, Json } from "./contracts.ts";
-import type { ExecuteResult, Row, SqlParameters } from "./database.ts";
+import type { ExecuteResult, Row, SqlParameters } from "./broker/database.ts";
 import type { HttpRequest, HttpResponse } from "./ports.ts";
 
 export type { Json } from "./contracts.ts";

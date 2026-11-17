@@ -1,4 +1,4 @@
-import { Broker } from "./broker.ts";
+import { Broker } from "./broker/broker.ts";
 import type { FileListing } from "./check-context.ts";
 import type { Layout } from "./layout.ts";
 import type { Permissions, StepPlace } from "./contracts.ts";
@@ -27,7 +27,7 @@ import type {
 } from "./ports.ts";
 import { loadSystem, type System } from "./manifests/manifests.ts";
 import { openRuns, type Runs } from "./runs/runs.ts";
-import { createScriptRunner } from "./script-runner.ts";
+import { createScriptRunner } from "./broker/script-runner.ts";
 import { SecretStore, type SecretStoreOptions } from "./secrets.ts";
 import type { Outcome } from "./outcome.ts";
 

@@ -1,9 +1,9 @@
 import { fileURLToPath } from "node:url";
-import { errorLine } from "./answers.ts";
-import type { Child, ChildEnd, ChildProcesses } from "./ports.ts";
-import type { Json } from "./contracts.ts";
+import { errorLine } from "../answers.ts";
+import type { Child, ChildEnd, ChildProcesses } from "../ports.ts";
+import type { Json } from "../contracts.ts";
 import type { DatabaseResult, Migration, SqlParameters } from "./database.ts";
-import { isJsonRecord, parsedLine } from "./protocol-json.ts";
+import { isJsonRecord, parsedLine } from "../protocol-json.ts";
 
 export type DatabaseOrder =
   | { readonly method: "query"; readonly sql: string; readonly parameters: SqlParameters }

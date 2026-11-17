@@ -1,5 +1,5 @@
 import { errorLine, type Answer } from "./answers.ts";
-import type { Broker } from "./broker.ts";
+import type { Broker } from "./broker/broker.ts";
 import type { Json } from "./contracts.ts";
 import { byteSize, fieldOf, numberField, textField, isRecord } from "./json.ts";
 import type { Kernel } from "./kernel.ts";

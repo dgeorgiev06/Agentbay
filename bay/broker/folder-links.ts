@@ -1,7 +1,7 @@
 import { join } from "node:path/posix";
 import { expectedRealPath } from "./file-access.ts";
-import { isInsideOrEqual, type Layout } from "./layout.ts";
-import type { FileInspector } from "./ports.ts";
+import { isInsideOrEqual, type Layout } from "../layout.ts";
+import type { FileInspector } from "../ports.ts";
 
 export type EscapingLink = {
   readonly link: string;

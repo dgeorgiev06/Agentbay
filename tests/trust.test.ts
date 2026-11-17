@@ -234,6 +234,19 @@ test("a trust record that lacks a field is refused with a sentence for each fiel
   });
 });
 
+test("a trust record whose entry lacks when or how the trust was given is refused", async () => {
+  const entry = { list: given.list, hash: given.hash };
+  const message = (field: string): string =>
+    `The trust record .agentbay/trust.json has no field modes.go-toolchain.${field}, so no list it holds is granted.`;
+  assert.deepEqual(await recordRead(JSON.stringify({ version: 1, modes: { "go-toolchain": entry } })), {
+    ok: false,
+    problems: [
+      { file: ".agentbay/trust.json", path: "/modes/go-toolchain/at", message: message("at"), fix },
+      { file: ".agentbay/trust.json", path: "/modes/go-toolchain/by", message: message("by"), fix },
+    ],
+  });
+});
+
 test("a trust record with a field of the wrong kind is refused with its sentence", async () => {
   const record = {
     version: 2,

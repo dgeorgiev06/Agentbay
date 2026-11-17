@@ -9,7 +9,6 @@ import { fakeClock } from "./fakes.ts";
 import {
   failureOf,
   noProcesses,
-  grantsIn,
   permissionsIn,
   place,
   recordingSink,
@@ -170,7 +169,7 @@ test("a transport error is a failed answer with a redacted message, not an excep
   const { broker, secrets } = setup(() => {
     throw new Error(`connection reset while sending ${madeUpToken}`);
   });
-  await secrets.get("API_TOKEN", grantsIn("/project", { secrets: ["API_TOKEN"] }));
+  await secrets.lookUp("API_TOKEN");
   const message = failureOf(await broker.request(get("https://api.example.com/x"))).message;
   assert.doesNotMatch(message, new RegExp(madeUpToken));
   assert.match(message, /connection reset/);
@@ -178,7 +177,7 @@ test("a transport error is a failed answer with a redacted message, not an excep
 
 test("every request is logged as an event with credentials redacted", async () => {
   const { broker, events, secrets } = setup(() => ok);
-  const token = await broker.secret("API_TOKEN");
+  const token = await broker.entries["secrets.get"]({ name: "API_TOKEN" });
   assert.deepEqual(token, { ok: true, value: madeUpToken });
   await broker.request(
     get(`https://api.example.com/x?key=${madeUpToken}`, {
@@ -200,7 +199,7 @@ test("every request is logged as an event with credentials redacted", async () =
 
 test("an event a script emits is appended after redaction", async () => {
   const { broker, events } = setup(() => ok);
-  await broker.secret("API_TOKEN");
+  await broker.entries["secrets.get"]({ name: "API_TOKEN" });
   assert.deepEqual(await broker.emit("synced", { note: `token ${madeUpToken}`, count: 3 }), { ok: true, value: null });
   assert.deepEqual(events.events.at(-1), {
     at: "2026-11-14T08:00:00.000Z",
@@ -223,7 +222,7 @@ test("a script may not emit an event that looks like a refusal", async () => {
 
 test("an undeclared secret through the broker is refused and recorded", async () => {
   const { broker, events } = setup(() => ok);
-  const message = refusalOf(await broker.secret("OTHER_TOKEN"));
+  const message = refusalOf(await broker.entries["secrets.get"]({ name: "OTHER_TOKEN" }));
   assert.match(message, /OTHER_TOKEN/);
   assert.equal(events.events[0]?.kind, "refused");
 });

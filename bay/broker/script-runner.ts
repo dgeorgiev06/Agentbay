@@ -129,7 +129,6 @@ type AnsweredByTheClass = Omit<Answering, keyof Broker["entries"]>;
 function answeredByTheClass(started: Started): AnsweredByTheClass {
   const { broker } = started;
   return {
-    "secrets.get": (request) => broker.secret(request.name),
     "http.request": (request) => broker.request(request),
     "events.emit": (request) => broker.emit(request.kind, request.detail),
     call: (request) => calledAnswer(started, request),

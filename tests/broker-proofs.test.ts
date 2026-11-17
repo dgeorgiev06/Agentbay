@@ -22,7 +22,7 @@ import {
   writeProjectFile,
 } from "./broker-fixture.ts";
 
-type Moved = keyof Broker["entries"] | "secrets.get" | "http.request" | "events.emit" | "spend" | "commands.run";
+type Moved = keyof Broker["entries"] | "http.request" | "events.emit" | "spend" | "commands.run";
 
 type Asking = {
   readonly ask: (broker: Broker) => Promise<Answer<Json>>;
@@ -501,19 +501,29 @@ const proofs: Proofs = {
     withoutEffect: "needs no effect",
     outsideGrant: [
       {
-        ask: (broker) => broker.secret("OTHER_TOKEN"),
+        ask: (broker) => broker.entries["secrets.get"]({ name: "OTHER_TOKEN" }),
         effects: every,
         change: `To allow it, add OTHER_TOKEN under resources.secrets in ${manifest}.`,
       },
       {
-        ask: (broker) => broker.secret("api_token"),
+        ask: (broker) => broker.entries["secrets.get"]({ name: "api_token" }),
         effects: every,
         change: `Rename the secret in resources.secrets in ${manifest} and where it is stored.`,
       },
     ],
     allowed: [
-      { ask: (broker) => broker.secret("API_TOKEN"), effects: [], value: secretValue, recorded: [] },
-      { ask: (broker) => broker.secret("SECOND_TOKEN"), effects: [], value: secondSecretValue, recorded: [] },
+      {
+        ask: (broker) => broker.entries["secrets.get"]({ name: "API_TOKEN" }),
+        effects: [],
+        value: secretValue,
+        recorded: [],
+      },
+      {
+        ask: (broker) => broker.entries["secrets.get"]({ name: "SECOND_TOKEN" }),
+        effects: [],
+        value: secondSecretValue,
+        recorded: [],
+      },
     ],
   },
   "http.request": {

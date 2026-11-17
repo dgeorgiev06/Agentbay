@@ -5,7 +5,6 @@ import { callKernelTool } from "../bay/tools.ts";
 import { problemText, type Outcome } from "../bay/outcome.ts";
 import { bay } from "./cli-fixture.ts";
 import { openProject, startedTask } from "./kernel-fixture.ts";
-import { activeModeGrants } from "./system-fixture.ts";
 
 const madeUpSecret = "made-up-secret-7f3a9c41";
 
@@ -93,8 +92,7 @@ test("the answer of the tool actions passes through the scrubber like every tool
   const opened = await openProject({}, { environment: { AGENTBAY_SECRET_NOTE_KEY: madeUpSecret } });
   try {
     const { kernel, project } = opened;
-    const permissions = { ...activeModeGrants(kernel.system, "writer"), secrets: ["NOTE_KEY"] };
-    assert.ok((await kernel.secrets.get("NOTE_KEY", permissions)).ok);
+    assert.ok((await kernel.secrets.lookUp("NOTE_KEY")).ok);
     const manifestPath = "components/modes/writer/mode.yaml";
     const manifest = await project.read(manifestPath);
     const leaking = manifest.replace("Drafts a note from a greeting and keeps it.", `Holds ${madeUpSecret}.`);

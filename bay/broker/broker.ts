@@ -27,6 +27,7 @@ import {
 import { checkPath } from "./file-access.ts";
 import { databaseEntries, type DatabaseOperationName } from "./database-operations.ts";
 import { dataFolder, fileEntries, type FileOperationName } from "./file-operations.ts";
+import { otherEntries, type OtherOperationName } from "./other-operations.ts";
 import { checkUrl, type Hop, loggedHeaders, nextRequest, redirectTarget, type UrlCheck } from "./http-access.ts";
 import { isInsideOrEqual, pathIn, shownPath, type Layout } from "../layout.ts";
 import type { SecretStore } from "../secrets.ts";
@@ -103,7 +104,7 @@ function spendingRefusal(spending: Json): Answer<never> {
   });
 }
 
-type EntryName = FileOperationName | DatabaseOperationName;
+type EntryName = FileOperationName | DatabaseOperationName | OtherOperationName;
 
 export class Broker {
   readonly #options: BrokerOptions;
@@ -120,7 +121,7 @@ export class Broker {
     this.#effects = options.permissions.actionEffects;
     this.#limits = { ...defaultBrokerLimits, ...options.limits };
     const step = this.#step();
-    this.entries = { ...fileEntries(step), ...databaseEntries(step) };
+    this.entries = { ...fileEntries(step), ...databaseEntries(step), ...otherEntries(step) };
   }
 
   #step(): Step {
@@ -134,6 +135,7 @@ export class Broker {
         throwawayFolders: options.throwawayFolders,
         inspector,
         scrubber: options.secrets,
+        secrets: options.secrets,
         clock: options.clock,
         childProcesses: options.childProcesses,
         limits: this.#limits,
@@ -146,10 +148,6 @@ export class Broker {
       },
       settled: (answer, detail) => this.#settle(answer, detail),
     };
-  }
-
-  secret(name: string): Promise<Answer<string>> {
-    return this.#guarded({ kind: "secrets.get", name }, () => this.#options.secrets.get(name, this.#grants));
   }
 
   request(request: HttpRequest): Promise<Answer<HttpResponse>> {

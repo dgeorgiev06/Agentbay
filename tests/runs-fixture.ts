@@ -15,7 +15,7 @@ import { openRuns, type Run, type Runs, type Task } from "../bay/runs/runs.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import { noProcesses } from "./broker-fixture.ts";
 import { fakeClock, fakeFileSystem, fakeFolders, type FakeFileSystem } from "./fakes.ts";
-import { activeModeGrants, yamlText } from "./system-fixture.ts";
+import { yamlText } from "./system-fixture.ts";
 
 export type Script = (request: ScriptRequest) => StepOutcome | Promise<StepOutcome>;
 
@@ -342,14 +342,14 @@ function secretStore(): SecretStore {
   return new SecretStore({ environment, processes: noProcesses, platform: "linux" });
 }
 
-async function handOut(scrubber: SecretStore, system: System): Promise<void> {
-  const handedOut = await scrubber.get(secretName, activeModeGrants(system, "notes"));
+async function handOut(scrubber: SecretStore): Promise<void> {
+  const handedOut = await scrubber.lookUp(secretName);
   assert.ok(handedOut.ok);
 }
 
-export async function fixtureScrubber(system: System): Promise<SecretStore> {
+export async function fixtureScrubber(): Promise<SecretStore> {
   const scrubber = secretStore();
-  await handOut(scrubber, system);
+  await handOut(scrubber);
   return scrubber;
 }
 
@@ -379,7 +379,7 @@ export async function openedRuns(opening: Opening = {}): Promise<OpenedRuns> {
   const { project, remove } = projectFolder();
   const fixture = await fixtureSystem(opening.changes);
   const scrubber = secretStore();
-  const handOutSecret = (): Promise<void> => handOut(scrubber, fixture.system);
+  const handOutSecret = (): Promise<void> => handOut(scrubber);
   if (opening.secretHandedOut !== "later") {
     await handOutSecret();
   }

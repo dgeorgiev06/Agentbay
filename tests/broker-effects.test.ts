@@ -238,7 +238,10 @@ test("spend: a report of more than nothing needs spend; a report of nothing need
 
 test("secrets and events need no effect of their own", async () => {
   await withBroker([], async (broker, _root, events) => {
-    assert.deepEqual(await broker.secret("API_TOKEN"), { ok: true, value: "made-up-token-for-effects" });
+    assert.deepEqual(await broker.entries["secrets.get"]({ name: "API_TOKEN" }), {
+      ok: true,
+      value: "made-up-token-for-effects",
+    });
     assert.deepEqual(await broker.emit("noted", { a: 1 }), { ok: true, value: null });
     assert.ok(events.events.some((event) => event.kind === "noted"));
   });
@@ -304,7 +307,7 @@ const brokerMethods: Readonly<Record<string, MethodRow>> = {
     needs: ["write", "delete"],
     usesPorts: true,
   },
-  secret: { call: (broker) => broker.secret("API_TOKEN"), needs: [], usesPorts: true },
+  "secrets.get": { call: (broker) => broker.entries["secrets.get"]({ name: "API_TOKEN" }), needs: [], usesPorts: true },
   request: {
     call: (broker) => broker.request({ method: "GET", url: "https://api.example.com/x", headers: {} }),
     needs: ["network"],

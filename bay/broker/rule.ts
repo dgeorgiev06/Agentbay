@@ -37,6 +37,7 @@ export type Doing = {
   readonly throwawayFolders: ThrowawayFolders;
   readonly inspector: FileInspector;
   readonly scrubber: Pick<SecretStore, "redact" | "redactJson" | "redactKnownValues">;
+  readonly secrets: Pick<SecretStore, "lookUp">;
   readonly clock: Clock;
   readonly childProcesses: ChildProcesses;
   readonly limits: AgentQueryLimits;

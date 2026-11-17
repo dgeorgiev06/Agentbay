@@ -26,7 +26,7 @@ The mode `git-worktrees` implements `worktrees@1`. It is the only mode that runs
 
 ## How git is run
 
-Every command starts with the same options, so no code from the repository runs:
+Every command runs git with these options, so no code from the repository runs:
 
 | Option | Closes |
 |---|---|
@@ -35,7 +35,7 @@ Every command starts with the same options, so no code from the repository runs:
 | `-c submodule.recurse=false` | work in submodules, which have their own configuration |
 | `--attr-source=<the empty tree>` | attributes in the repository's files, so no filter, diff driver or merge driver is chosen by them |
 
-`apply` and `check-attr` run without `--attr-source`: git 2.43 crashes when `apply` is given it. A copy's own attributes are read instead, and `apply` refuses a path they give a filter.
+The manifest states the first three once, in `resources.commandsStartWith`, and every listed command starts with them. `--attr-source` is written in each command's own words, because two commands leave it out: `apply` and `check-attr` run without it, since git 2.43 crashes when `apply` is given it. A copy's own attributes are read instead, and `apply` refuses a path they give a filter. A test of the mode, `tests/listed-commands.test.ts`, reads the full words of every listed command from `bay check` and fails if one lacks an option it must carry.
 
 The words of each listed command end with `--end-of-options` or `--` where git allows it, so an argument a script adds cannot be an option such as `--force` or `--output`. Three commands end otherwise. `repository-filters` ends with its pattern, and git reads every later argument as a value pattern. `abort-merge` ends with `--abort`, and git refuses any later argument. `restore-paths` ends with `--source`, so a script's first argument is the commit and git reads a later argument that starts with a dash as an option. The kernel runs each command with only `PATH`, so git reads no user configuration.
 

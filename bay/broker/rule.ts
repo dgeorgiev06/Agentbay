@@ -1,8 +1,10 @@
 import { type Answer, errorLine, failed, listed, type RefusalWording, refused, type Resource } from "../answers.ts";
 import type { ActionCaller, Effect, Json, ModeGrants, Permissions } from "../contracts.ts";
 import type { Layout } from "../layout.ts";
+import type { Outcome } from "../outcome.ts";
 import type { ChildProcesses, Clock, FileInspector, FileSystem, Http, Processes, ThrowawayFolders } from "../ports.ts";
 import type { SecretStore } from "../secrets.ts";
+import type { TrustRecord } from "../trust.ts";
 import type { DatabaseProcess } from "./database-process.ts";
 import { type OperationName, type Requests, type Results, shapes } from "./operations.ts";
 
@@ -64,6 +66,7 @@ export type Asking = {
   readonly layout: Layout;
   readonly inspector: FileInspector;
   readonly limits: StepLimits;
+  readonly trustRecordNow: () => Promise<Outcome<TrustRecord>>;
 };
 
 export type Doing = {

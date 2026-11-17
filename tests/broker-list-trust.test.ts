@@ -15,7 +15,7 @@ import {
 } from "../bay/node-ports.ts";
 import type { FileSystem } from "../bay/ports.ts";
 import { SecretStore } from "../bay/secrets.ts";
-import { listHashOf, readTrustRecord } from "../bay/trust.ts";
+import { listHashOf, readTrustRecord, recordWithoutTrust, recordWithTrust, type TrustRecord } from "../bay/trust.ts";
 import {
   noProcesses,
   permissionsIn,
@@ -27,7 +27,7 @@ import {
   valueOf,
   withProject,
 } from "./broker-fixture.ts";
-import { trustGiving, trustRecordFileOf } from "./system-fixture.ts";
+import { trustGiving, trustRecordFileOf, trustRecordFiles } from "./system-fixture.ts";
 
 const everyEffect: readonly Effect[] = ["read", "write", "network", "spend", "delete"];
 
@@ -42,6 +42,8 @@ const list: ModeList = { mode: "notes", commands: [leaving], commandsStartWith: 
 const olderList: ModeList = { ...list, commands: [{ ...leaving, effects: ["read"] }] };
 
 const olderGiven: TrustGiven = { list: olderList, hash: listHashOf(olderList), ...trustGiving };
+
+const laterGiving = { at: "2026-11-19T09:40:00.000Z", by: "a test" } as const;
 
 const unreadableText = "{";
 
@@ -79,6 +81,12 @@ async function writeFiles(root: string, files: Readonly<Record<string, string>>)
     await mkdir(dirname(join(root, path)), { recursive: true });
     await writeFile(join(root, path), text, "utf8");
   }
+}
+
+async function recordIn(root: string): Promise<TrustRecord> {
+  const record = await readTrustRecord(nodeFileSystem, projectLayout(root));
+  assert.ok(record.ok, JSON.stringify(record));
+  return record.value;
 }
 
 async function withListBroker(loaded: Loaded, run: (setup: Setup) => Promise<void>): Promise<void> {
@@ -191,6 +199,21 @@ const unreadable =
   ", but the trust record .agentbay/trust.json is not JSON, so no list it holds is granted. The owner removes " +
   ".agentbay/trust.json, then trusts each mode again, this one with: bay approve --trust notes.";
 
+const withdrawnAfterLoad =
+  ", but the owner does not trust the list of mode notes, so none of its commands or throwaway folders is " +
+  "granted; the trust record changed after this run loaded the mode's list. The owner reads the list and " +
+  "decides with: bay approve --trust notes.";
+
+const otherListAfterLoad =
+  ", but the list of mode notes is not the list the owner trusted on 2026-11-19, so none of its commands or " +
+  "throwaway folders is granted; the trust record changed after this run loaded the mode's list. The owner " +
+  "reads what changed and decides with: bay approve --trust notes.";
+
+const unreadableAfterLoad =
+  ", but the trust record .agentbay/trust.json is not JSON, so no list it holds is granted; the trust record " +
+  "changed after this run loaded the mode's list. The owner removes .agentbay/trust.json, then trusts each " +
+  "mode again, this one with: bay approve --trust notes.";
+
 test("each operation of a mode whose list the owner never trusted is refused with the sentence that says how to decide", async () => {
   await withListBroker({ listTrust: { state: "never trusted", list }, granted: false }, async (setup) => {
     await assertEachRefused(setup, neverTrusted);
@@ -219,6 +242,12 @@ test("a name the mode does not list gets the trust sentence while its list is no
   });
 });
 
+const trusted: Loaded = {
+  listTrust: { state: "trusted", given: { list, hash: listHashOf(list), ...trustGiving } },
+  granted: true,
+  recordText: Object.values(trustRecordFiles(list))[0] ?? "",
+};
+
 const leave = { name: "leave", arguments: [], folder: ".", timeLimitSeconds: 30 };
 
 async function assertEachRuns(setup: Setup): Promise<void> {
@@ -239,6 +268,35 @@ async function assertEachRuns(setup: Setup): Promise<void> {
     { left: true, linked: true, kept: false },
   );
 }
+
+test("a trusted mode's command and throwaway operations run while the record holds its list, each after a read of it", async () => {
+  await withListBroker(trusted, async (setup) => {
+    await assertEachRuns(setup);
+    assert.equal(setup.recordReads(), 4);
+  });
+});
+
+test("each operation is refused, and nothing is done, when the owner withdrew the trust after the run loaded it", async () => {
+  await withListBroker(trusted, async (setup) => {
+    await writeFiles(setup.root, trustRecordFileOf(recordWithoutTrust(await recordIn(setup.root), "notes")));
+    await assertEachRefused(setup, withdrawnAfterLoad);
+  });
+});
+
+test("each operation is refused when the record holds another list of the mode than the run loaded", async () => {
+  await withListBroker(trusted, async (setup) => {
+    const other = recordWithTrust(await recordIn(setup.root), olderList, laterGiving);
+    await writeFiles(setup.root, trustRecordFileOf(other));
+    await assertEachRefused(setup, otherListAfterLoad);
+  });
+});
+
+test("each operation is refused when the trust record cannot be read after the run loaded it", async () => {
+  await withListBroker(trusted, async (setup) => {
+    await writeFiles(setup.root, trustRecordFileOf(unreadableText));
+    await assertEachRefused(setup, unreadableAfterLoad);
+  });
+});
 
 test("a base mode's command and throwaway operations run with the trust record unreadable, and never read it", async () => {
   const base: Loaded = { listTrust: { state: "not needed" }, granted: true, recordText: unreadableText };

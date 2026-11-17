@@ -1,4 +1,5 @@
 import type { RefusalWording } from "../answers.ts";
+import type { TrustGiven } from "../contracts.ts";
 import type { Problem } from "../outcome.ts";
 import type { Asking } from "./rule.ts";
 
@@ -52,12 +53,34 @@ function unreadableRecord(mode: string, problems: readonly Problem[]): NotInForc
   });
 }
 
-export function listInForce(asking: Asking): ListInForce {
+function changedAfterLoad(refused: NotInForce): NotInForce {
+  const { declared, change } = refused.refusal;
+  return notInForce({
+    declared: `${declared}; the trust record changed after this run loaded the mode's list`,
+    change,
+  });
+}
+
+async function stillTrusted(mode: string, loaded: TrustGiven, asking: Asking): Promise<ListInForce> {
+  const record = await asking.trustRecordNow();
+  if (!record.ok) {
+    return changedAfterLoad(unreadableRecord(mode, record.problems));
+  }
+  const { modes } = record.value;
+  const now = Object.hasOwn(modes, mode) ? modes[mode] : undefined;
+  if (now === undefined) {
+    return changedAfterLoad(neverTrusted(mode));
+  }
+  return now.hash === loaded.hash ? inForce : changedAfterLoad(changedSinceTrusted(mode, now.at));
+}
+
+export async function listInForce(asking: Asking): Promise<ListInForce> {
   const { mode, listTrust } = asking.grants;
   switch (listTrust.state) {
     case "not needed":
-    case "trusted":
       return inForce;
+    case "trusted":
+      return stillTrusted(mode, listTrust.given, asking);
     case "never trusted":
       return neverTrusted(mode);
     case "changed":

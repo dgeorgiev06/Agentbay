@@ -103,7 +103,7 @@ async function throwawayPlace(place: ThrowawayPlace, asking: Asking): Promise<Ru
   const full = resolve(layout.project, place.path);
   const permitted = grants.throwawayPaths;
   const asked = place.asked;
-  const list = listInForce(asking);
+  const list = await listInForce(asking);
   if (!list.inForce) {
     return refusedWith({ resource: "files", asked, ...list.refusal });
   }

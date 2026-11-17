@@ -48,8 +48,8 @@ export function lackedEffect(command: GrantedCommand, effects: readonly Effect[]
   return command.effects.find((effect) => !effects.includes(effect));
 }
 
-function listedCommand(request: CommandRequest, asking: Asking): Ruling<GrantedCommand> {
-  const list = listInForce(asking);
+async function listedCommand(request: CommandRequest, asking: Asking): Promise<Ruling<GrantedCommand>> {
+  const list = await listInForce(asking);
   if (!list.inForce) {
     return refusedWith({ resource: "commands", asked: askedToRun(request, asking), ...list.refusal });
   }
@@ -157,7 +157,7 @@ const commandsRun: Definition<"commands.run", CommandToRun | NoFolder> = {
   needs: () => [],
   described: describedCommand,
   rule: async (request, asking) => {
-    const command = listedCommand(request, asking);
+    const command = await listedCommand(request, asking);
     if (!command.allowed) {
       return command;
     }

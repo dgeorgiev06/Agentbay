@@ -130,7 +130,6 @@ function answeredByTheClass(started: Started): AnsweredByTheClass {
   const { broker } = started;
   return {
     "http.request": (request) => broker.request(request),
-    "events.emit": (request) => broker.emit(request.kind, request.detail),
     call: (request) => calledAnswer(started, request),
     spend: (request) => spentAnswer(started, request.spending),
     "commands.run": (request) => broker.runCommand(request),

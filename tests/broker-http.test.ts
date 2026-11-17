@@ -200,7 +200,10 @@ test("every request is logged as an event with credentials redacted", async () =
 test("an event a script emits is appended after redaction", async () => {
   const { broker, events } = setup(() => ok);
   await broker.entries["secrets.get"]({ name: "API_TOKEN" });
-  assert.deepEqual(await broker.emit("synced", { note: `token ${madeUpToken}`, count: 3 }), { ok: true, value: null });
+  assert.deepEqual(
+    await broker.entries["events.emit"]({ kind: "synced", detail: { note: `token ${madeUpToken}`, count: 3 } }),
+    { ok: true, value: null },
+  );
   assert.deepEqual(events.events.at(-1), {
     at: "2026-11-14T08:00:00.000Z",
     runId: "run-1",
@@ -211,7 +214,7 @@ test("an event a script emits is appended after redaction", async () => {
 
 test("a script may not emit an event that looks like a refusal", async () => {
   const { broker, events } = setup(() => ok);
-  refusalOf(await broker.emit("refused", { forged: true }));
+  refusalOf(await broker.entries["events.emit"]({ kind: "refused", detail: { forged: true } }));
   assert.equal(events.events.filter((event) => event.kind === "refused").length, 1);
   assert.match(
     JSON.stringify(events.events[0]?.detail),

@@ -74,8 +74,6 @@ const defaultBrokerLimits: BrokerLimits = {
   commandOutputCharacters: 64 * 1024,
 };
 
-const brokerKinds: readonly string[] = ["refused", "http", "redacted", "command", "throwaway"];
-
 const noAmounts: SpendAmounts = { items: 0, usd: 0, tokens: 0 };
 
 const spendMeasures = ["items", "usd", "tokens"] as const;
@@ -153,21 +151,6 @@ export class Broker {
   request(request: HttpRequest): Promise<Answer<HttpResponse>> {
     const operation = { kind: "http.request" as const, method: request.method, url: request.url };
     return this.#guarded(operation, () => this.#sendFollowingRedirects(request));
-  }
-
-  emit(kind: string, detail: Json): Promise<Answer<null>> {
-    return this.#guarded({ kind: "events.emit", eventKind: kind }, async () => {
-      if (brokerKinds.includes(kind)) {
-        return refused({
-          resource: "events",
-          asked: `${this.#asking} to emit an event of the kind ${kind}`,
-          declared: `the kinds ${brokerKinds.join(" and ")} are written only by the broker`,
-          change: "Choose another kind for the event.",
-        });
-      }
-      await this.#append(kind, detail);
-      return granted(null);
-    });
   }
 
   spend(spending: Json): Promise<Answer<SpendAmounts>> {

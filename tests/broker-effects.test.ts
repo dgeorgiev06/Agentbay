@@ -242,7 +242,10 @@ test("secrets and events need no effect of their own", async () => {
       ok: true,
       value: "made-up-token-for-effects",
     });
-    assert.deepEqual(await broker.emit("noted", { a: 1 }), { ok: true, value: null });
+    assert.deepEqual(await broker.entries["events.emit"]({ kind: "noted", detail: { a: 1 } }), {
+      ok: true,
+      value: null,
+    });
     assert.ok(events.events.some((event) => event.kind === "noted"));
   });
 });
@@ -313,7 +316,11 @@ const brokerMethods: Readonly<Record<string, MethodRow>> = {
     needs: ["network"],
     usesPorts: true,
   },
-  emit: { call: (broker) => broker.emit("noted", {}), needs: [], usesPorts: true },
+  "events.emit": {
+    call: (broker) => broker.entries["events.emit"]({ kind: "noted", detail: {} }),
+    needs: [],
+    usesPorts: true,
+  },
   spend: { call: (broker) => broker.spend({ usd: 1 }), needs: ["spend"], usesPorts: false },
   runCommand: {
     call: (broker) => broker.runCommand({ command: ["node", "--version"], folder: ".", timeLimitSeconds: 30 }),

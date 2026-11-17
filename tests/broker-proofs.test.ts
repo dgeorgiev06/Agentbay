@@ -22,7 +22,7 @@ import {
   writeProjectFile,
 } from "./broker-fixture.ts";
 
-type Moved = keyof Broker["entries"] | "http.request" | "events.emit" | "spend" | "commands.run";
+type Moved = keyof Broker["entries"] | "http.request" | "spend" | "commands.run";
 
 type Asking = {
   readonly ask: (broker: Broker) => Promise<Answer<Json>>;
@@ -593,18 +593,27 @@ const proofs: Proofs = {
   "events.emit": {
     withoutEffect: "needs no effect",
     outsideGrant: [
-      { ask: (broker) => broker.emit("refused", { forged: true }), effects: every, change: brokerKinds },
-      { ask: (broker) => broker.emit("http", { url: "https://a.example" }), effects: every, change: brokerKinds },
+      {
+        ask: (broker) => broker.entries["events.emit"]({ kind: "refused", detail: { forged: true } }),
+        effects: every,
+        change: brokerKinds,
+      },
+      {
+        ask: (broker) => broker.entries["events.emit"]({ kind: "http", detail: { url: "https://a.example" } }),
+        effects: every,
+        change: brokerKinds,
+      },
     ],
     allowed: [
       {
-        ask: (broker) => broker.emit("noted", { day: "2026-11-17" }),
+        ask: (broker) => broker.entries["events.emit"]({ kind: "noted", detail: { day: "2026-11-17" } }),
         effects: [],
         value: null,
         recorded: [{ kind: "noted", detail: { day: "2026-11-17" } }],
       },
       {
-        ask: (broker) => broker.emit("synced", { note: `token ${secretValue}`, count: 3 }),
+        ask: (broker) =>
+          broker.entries["events.emit"]({ kind: "synced", detail: { note: `token ${secretValue}`, count: 3 } }),
         effects: [],
         value: null,
         recorded: [{ kind: "synced", detail: { note: "token [redacted:API_TOKEN]", count: 3 } }],

@@ -271,6 +271,17 @@ test("call: every JSON value is a result, so no result of a call is malformed", 
   }
 });
 
+test("commands.run: an end that is none of exited, signalled and timed-out is refused", () => {
+  assert.deepEqual(shapes["commands.run"].result({ ...ran, end: { how: "vanished" } }), {
+    ok: false,
+    problem: "The value is not a command's end, time and output.",
+  });
+  assert.deepEqual(shapes["commands.run"].result({ ...ran, end: { how: "timed-out" } }), {
+    ok: true,
+    value: { ...ran, end: { how: "timed-out" } },
+  });
+});
+
 test("a request drops fields its operation does not have", () => {
   assert.deepEqual(shapes["files.read"].request({ path: "a.txt", text: "extra" }), {
     ok: true,

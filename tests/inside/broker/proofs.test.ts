@@ -737,7 +737,8 @@ const proofs: Proofs = {
         effects: allFive,
         change:
           `To allow it, list changes under resources.commands in ${manifest} with the words it runs and its ` +
-          "effects; only a mode under the kit's components/base/ may list commands.",
+          "effects; a mode outside the kit's components/base/ is granted the commands it lists only when the owner " +
+          "trusts its list.",
         detail: { name: "changes", arguments: [], folder: "." },
       },
       {

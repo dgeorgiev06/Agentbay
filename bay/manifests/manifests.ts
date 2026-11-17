@@ -7,6 +7,7 @@ import type { SkillFrontMatter } from "../generated/skill.ts";
 import type { Workflow } from "../generated/workflow.ts";
 import { isProjectTheKit, shownProblems, type Home, type Layout } from "../layout.ts";
 import { toJson } from "../json.ts";
+import { readTrustRecord } from "../trust.ts";
 import type { FileSystem } from "../ports.ts";
 import { resolveInput, resolveValue } from "./references.ts";
 import {
@@ -495,7 +496,7 @@ async function inspect(files: FileSystem, layout: Layout): Promise<Pass> {
   if (problems.length > 0 || !config.ok) {
     return { inspection: { ...found, problems: shownProblems(layout, problems) }, build: undefined };
   }
-  const granted = grantsOfActiveModes(context);
+  const granted = grantsOfActiveModes(context, await readTrustRecord(files, layout));
   if (!granted.ok) {
     return { inspection: { ...found, problems: shownProblems(layout, granted.problems) }, build: undefined };
   }

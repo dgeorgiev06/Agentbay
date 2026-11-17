@@ -11,6 +11,7 @@ const noGrants: ModeGrants = {
   secrets: [],
   hosts: [],
   commands: [],
+  listTrust: { state: "not needed" },
 };
 
 const everyEffect: readonly Effect[] = ["read", "write", "network", "spend", "delete"];

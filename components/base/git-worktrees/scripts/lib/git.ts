@@ -18,11 +18,27 @@ export type GitEnd = {
   readonly stderr: string;
 };
 
+const changesTheCheckout: readonly string[] = ["restore", "switch", "merge", "add", "commit", "apply"];
+
 function subcommandOf(gitArguments: readonly string[]): string {
   return gitArguments.find((argument) => !argument.startsWith("-")) ?? "";
 }
 
+function isUnderForge(folder: string): boolean {
+  return folder.startsWith(".forge/") && !folder.split("/").includes("..");
+}
+
+function refuseInOwnersCheckout(folder: string, subcommand: string): void {
+  if (changesTheCheckout.includes(subcommand) && !isUnderForge(folder)) {
+    fail(
+      `The mode runs git ${subcommand} only in a folder under .forge/, not in ${folder}, ` +
+        "so that the owner's checkout is never changed.",
+    );
+  }
+}
+
 export async function git(context: ScriptContext, folder: string, gitArguments: readonly string[]): Promise<GitEnd> {
+  refuseInOwnersCheckout(folder, subcommandOf(gitArguments));
   const command = ["git", ...protections, ...gitArguments];
   const answer = await context.commands.run({ command, folder, timeLimitSeconds });
   if (!answer.ok) {

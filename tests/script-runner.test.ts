@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdir, readFile, symlink } from "node:fs/promises";
+import { mkdir, readdir, readFile, symlink } from "node:fs/promises";
 import { createServer, type Server } from "node:net";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { test } from "node:test";
 import type { ActionCaller, Effect, Json, ScriptRequest, StepOutcome } from "../bay/contracts.ts";
 import { fieldOf } from "../bay/json.ts";
@@ -234,6 +234,40 @@ test("a script cannot read /etc/passwd, the kit's own files or the mode's databa
   });
 });
 
+test("of the kernel's files a script can read only the six the host and its toolbox are made of", async () => {
+  await withScriptProject(async (root) => {
+    const entries = await readdir(join(kitFolder, "bay"), { recursive: true, withFileTypes: true });
+    const kernelFiles = entries
+      .filter((entry) => entry.isFile())
+      .map((entry) => relative(kitFolder, join(entry.parentPath, entry.name)))
+      .sort();
+    const run = await attempt(
+      root,
+      [
+        "const fs = await import('node:fs');",
+        `const files = ${JSON.stringify(kernelFiles)};`,
+        "const readable = [];",
+        "for (const file of files) {",
+        "  try {",
+        `    fs.readFileSync(${JSON.stringify(kitFolder)} + '/' + file);`,
+        "    readable.push(file);",
+        "  } catch {}",
+        "}",
+        "return readable;",
+      ].join("\n"),
+    );
+    assert.ok(kernelFiles.length > 100, String(kernelFiles.length));
+    assert.deepEqual(outputOf(run), [
+      "bay/broker/operations.ts",
+      "bay/broker/script-host.ts",
+      "bay/broker/script-preload.ts",
+      "bay/broker/script-protocol.ts",
+      "bay/protocol-json.ts",
+      "bay/sdk.ts",
+    ]);
+  });
+});
+
 test("a script cannot write outside its write paths directly, even inside a read path", async () => {
   await withScriptProject(async (root) => {
     for (const file of [join(root, "outside/new.txt"), join(root, "notes-in/today.md"), join(root, "x.txt")]) {
@@ -367,6 +401,7 @@ test("the runner starts node with the permission model, the grants and the prelo
     "--permission",
     `--allow-fs-read=${bay}/broker/script-host.ts`,
     `--allow-fs-read=${bay}/broker/script-preload.ts`,
+    `--allow-fs-read=${bay}/broker/operations.ts`,
     `--allow-fs-read=${bay}/broker/script-protocol.ts`,
     `--allow-fs-read=${bay}/protocol-json.ts`,
     `--allow-fs-read=${bay}/sdk.ts`,

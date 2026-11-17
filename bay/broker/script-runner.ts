@@ -16,6 +16,7 @@ import type {
 import type { EventSink, Json, ScriptRequest, ScriptRunner, Spend, StepOutcome } from "../contracts.ts";
 import { mayRemoveFiles, writableFolders } from "./effect-rule.ts";
 import { escapingLinks } from "./folder-links.ts";
+import { notAValidMessage } from "./operations.ts";
 import { isInsideOrEqual, shownPath, type Layout } from "../layout.ts";
 import { type ChildMessage, childMessageOf, removalAllowedArgument, type ResourceRequest } from "./script-protocol.ts";
 import type { SecretStore } from "../secrets.ts";
@@ -68,6 +69,7 @@ const preloadFile = `${bayFolder}broker/script-preload.ts`;
 const filesTheHostReads: readonly string[] = [
   hostFile,
   preloadFile,
+  `${bayFolder}broker/operations.ts`,
   `${bayFolder}broker/script-protocol.ts`,
   `${bayFolder}protocol-json.ts`,
   `${bayFolder}sdk.ts`,
@@ -221,7 +223,7 @@ function outcomeOf(
   limits: { readonly milliseconds: number; readonly outputBytes: number },
 ) {
   if (state.malformed) {
-    return { status: "failed" as const, reason: "The script sent a line that is not a valid message." };
+    return { status: "failed" as const, reason: notAValidMessage };
   }
   const final = state.final;
   if (end.how !== "exited" || final === undefined) {

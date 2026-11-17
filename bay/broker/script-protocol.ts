@@ -33,7 +33,7 @@ export type ChildMessage =
   | { readonly type: "failed"; readonly reason: string }
   | { readonly type: "crashed"; readonly reason: string };
 
-type StartMessage = {
+export type StartMessage = {
   readonly type: "start";
   readonly input: Json;
   readonly settings: { readonly [key: string]: Json };

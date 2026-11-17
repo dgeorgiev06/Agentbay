@@ -1,15 +1,18 @@
-import type { Resource } from "../answers.ts";
+import type { Answer, Resource } from "../answers.ts";
 import type { Json } from "../contracts.ts";
 import { isJson, isJsonRecord } from "../protocol-json.ts";
 import { httpMethods, isHttpMethod, isParameters, isStringRecord, isText, isTexts } from "./script-protocol.ts";
+import type { StartMessage } from "./script-protocol.ts";
 import type {
   AgentQueryResult,
   CommandRan,
   CommandRequest,
+  DatabasePartition,
   ExecuteResult,
   HttpRequest,
   HttpResponse,
   Row,
+  ScriptContext,
   SqlParameters,
 } from "../sdk.ts";
 
@@ -333,3 +336,67 @@ export const shapes: { readonly [Name in OperationName]: Shape<Name> } = {
   spend: { resource: "spend", request: spendRequestOf, result: nothingOf },
   "commands.run": { resource: "commands", request: commandRequestOf, result: commandRanOf },
 };
+
+export type Misreading = { readonly side: "request" | "result"; readonly problem: string };
+
+export const notAValidMessage = "The script sent a line that is not a valid message.";
+
+const unexpectedAnswer = "The broker's answer did not have the expected shape.";
+
+export function shownToAuthor(misreading: Misreading): string {
+  return misreading.side === "request" ? notAValidMessage : unexpectedAnswer;
+}
+
+export type Asking = {
+  readonly ask: (operation: OperationName, request: Json) => Promise<Answer<Json>>;
+  readonly reportUnreadAnswer: (operation: OperationName, value: Json) => void;
+};
+
+export function contextOver(asking: Asking, start: StartMessage): ScriptContext {
+  const asked = async <Name extends OperationName>(
+    operation: Name,
+    request: Requests[Name] & Json,
+  ): Promise<Answer<Results[Name]>> => {
+    const answer = await asking.ask(operation, request);
+    if (!answer.ok) {
+      return answer;
+    }
+    const reading = shapes[operation].result(answer.value);
+    if (reading.ok) {
+      return { ok: true, value: reading.value };
+    }
+    asking.reportUnreadAnswer(operation, answer.value);
+    return { ok: false, kind: "failed", message: shownToAuthor({ side: "result", problem: reading.problem }) };
+  };
+  const partitionOf = (partition: string): DatabasePartition => ({
+    migrate: () => asked("db.migrate", { partition }),
+    execute: (sql, parameters = []) => asked("db.execute", { sql, parameters, partition }),
+    query: (sql, parameters = []) => asked("db.query", { sql, parameters, partition }),
+    agentQuery: (sql) => asked("db.agentQuery", { sql, partition }),
+  });
+  return {
+    db: {
+      execute: (sql, parameters = []) => asked("db.execute", { sql, parameters }),
+      query: (sql, parameters = []) => asked("db.query", { sql, parameters }),
+      partition: partitionOf,
+    },
+    files: {
+      read: (path) => asked("files.read", { path }),
+      write: (path, text) => asked("files.write", { path, text }),
+      list: (path) => asked("files.list", { path }),
+      makeFolder: (path) => asked("files.makeFolder", { path }),
+      link: (path, target) => asked("files.link", { path, target }),
+      remove: (path) => asked("files.remove", { path }),
+    },
+    secrets: { get: (name) => asked("secrets.get", { name }) },
+    http: { request: (request) => asked("http.request", request) },
+    events: { emit: (kind, detail) => asked("events.emit", { kind, detail }) },
+    commands: { run: (request) => asked("commands.run", request) },
+    call: (reference, input) => asked("call", { reference, input }),
+    settings: start.settings,
+    now: () => new Date(start.now),
+    spend: (spending) => asked("spend", { spending: { ...spending } }),
+    caller: start.caller,
+    skillInput: start.skillInput,
+  };
+}

@@ -2,18 +2,9 @@ import { pathToFileURL } from "node:url";
 import type { Answer } from "../answers.ts";
 import type { Json } from "../contracts.ts";
 import { isJson, isJsonRecord } from "../protocol-json.ts";
-import { type ChildMessage, type ParentMessage, parentMessageOf, type ResourceRequest } from "./script-protocol.ts";
-import type {
-  AgentQueryResult,
-  CommandRan,
-  DatabasePartition,
-  DefinedScript,
-  ExecuteResult,
-  HttpResponse,
-  Row,
-  ScriptContext,
-  ScriptError,
-} from "../sdk.ts";
+import { contextOver, type OperationName } from "./operations.ts";
+import { type ChildMessage, type ParentMessage, parentMessageOf } from "./script-protocol.ts";
+import type { DefinedScript, ScriptError } from "../sdk.ts";
 
 type Start = Extract<ParentMessage, { readonly type: "start" }>;
 
@@ -30,10 +21,6 @@ let started: ((start: Start) => void) | undefined;
 const start = new Promise<Start>((resolve) => {
   started = resolve;
 });
-
-function send(message: ChildMessage): void {
-  protocolWrite(`${JSON.stringify(message)}\n`);
-}
 
 function finish(message: ChildMessage): void {
   process.stderr.write("", () => {
@@ -63,102 +50,24 @@ process.stdin.on("data", (chunk: string) => {
   }
 });
 
-function ask(request: ResourceRequest): Promise<Answer<Json>> {
+function ask(operation: OperationName, request: Json): Promise<Answer<Json>> {
   const id = nextRequestId;
   nextRequestId += 1;
+  const fields = operation === "http.request" || operation === "commands.run" ? { request } : request;
   return new Promise((resolve) => {
     waiting.set(id, resolve);
-    send({ type: "request", id, request });
+    protocolWrite(
+      `${JSON.stringify({ type: "request", id, request: { resource: operation, ...fieldsOf(fields) } })}\n`,
+    );
   });
 }
 
-function narrowed<T>(answer: Answer<Json>, fits: (value: Json) => value is Json & T): Answer<T> {
-  if (!answer.ok) {
-    return answer;
-  }
-  if (fits(answer.value)) {
-    return { ok: true, value: answer.value };
-  }
-  return { ok: false, kind: "failed", message: "The broker's answer did not have the expected shape." };
+function fieldsOf(value: Json): { readonly [key: string]: Json } {
+  return isJsonRecord(value) ? value : {};
 }
 
-const isText = (value: Json): value is string => typeof value === "string";
-
-const isNothing = (value: Json): value is null => value === null;
-
-const isTexts = (value: Json): value is readonly string[] =>
-  Array.isArray(value) && value.every((item: Json) => typeof item === "string");
-
-const isRows = (value: Json): value is readonly Row[] =>
-  Array.isArray(value) && value.every((item: Json) => isJsonRecord(item));
-
-const isExecuteResult = (value: Json): value is ExecuteResult =>
-  isJsonRecord(value) && typeof value.changes === "number" && typeof value.lastInsertRowid === "number";
-
-const isResponse = (value: Json): value is HttpResponse =>
-  isJsonRecord(value) && typeof value.status === "number" && typeof value.body === "string";
-
-const isAnything = (value: Json): value is Json => isJson(value);
-
-const isCells = (value: Json): value is readonly Json[] => Array.isArray(value);
-
-const isCommandOutput = (value: Json | undefined): boolean =>
-  isJsonRecord(value) && typeof value.text === "string" && typeof value.cut === "boolean";
-
-const isCommandRan = (value: Json): value is CommandRan & Json =>
-  isJsonRecord(value) &&
-  isJsonRecord(value.end) &&
-  typeof value.end.how === "string" &&
-  typeof value.milliseconds === "number" &&
-  isCommandOutput(value.stdout) &&
-  isCommandOutput(value.stderr);
-
-const isAgentQueryResult = (value: Json): value is AgentQueryResult & Json =>
-  isJsonRecord(value) && isTexts(value.columns ?? null) && Array.isArray(value.rows) && value.rows.every(isCells);
-
-function partitionOf(partition: string): DatabasePartition {
-  return {
-    migrate: async () => narrowed(await ask({ resource: "db.migrate", partition }), isTexts),
-    execute: async (sql, parameters = []) =>
-      narrowed(await ask({ resource: "db.execute", sql, parameters, partition }), isExecuteResult),
-    query: async (sql, parameters = []) =>
-      narrowed(await ask({ resource: "db.query", sql, parameters, partition }), isRows),
-    agentQuery: async (sql) => narrowed(await ask({ resource: "db.agentQuery", sql, partition }), isAgentQueryResult),
-  };
-}
-
-function contextFor(order: Start): ScriptContext {
-  const settings = order.settings;
-  return {
-    db: {
-      execute: async (sql, parameters = []) =>
-        narrowed(await ask({ resource: "db.execute", sql, parameters }), isExecuteResult),
-      query: async (sql, parameters = []) => narrowed(await ask({ resource: "db.query", sql, parameters }), isRows),
-      partition: partitionOf,
-    },
-    files: {
-      read: async (path) => narrowed(await ask({ resource: "files.read", path }), isText),
-      write: async (path, text) => narrowed(await ask({ resource: "files.write", path, text }), isNothing),
-      list: async (path) => narrowed(await ask({ resource: "files.list", path }), isTexts),
-      makeFolder: async (path) => narrowed(await ask({ resource: "files.makeFolder", path }), isNothing),
-      link: async (path, target) => narrowed(await ask({ resource: "files.link", path, target }), isNothing),
-      remove: async (path) => narrowed(await ask({ resource: "files.remove", path }), isNothing),
-    },
-    secrets: { get: async (name) => narrowed(await ask({ resource: "secrets.get", name }), isText) },
-    http: { request: async (request) => narrowed(await ask({ resource: "http.request", request }), isResponse) },
-    events: {
-      emit: async (kind, detail) => narrowed(await ask({ resource: "events.emit", kind, detail }), isNothing),
-    },
-    commands: {
-      run: async (request) => narrowed(await ask({ resource: "commands.run", request }), isCommandRan),
-    },
-    call: async (reference, input) => narrowed(await ask({ resource: "call", reference, input }), isAnything),
-    settings,
-    now: () => new Date(order.now),
-    spend: async (spending) => narrowed(await ask({ resource: "spend", spending: { ...spending } }), isNothing),
-    caller: order.caller,
-    skillInput: order.skillInput,
-  };
+function reportUnreadAnswer(): void {
+  return undefined;
 }
 
 function isDefinedScript(value: unknown): value is DefinedScript {
@@ -204,7 +113,7 @@ async function runScript(file: string): Promise<ChildMessage> {
     return { type: "crashed", reason: script };
   }
   try {
-    const output: unknown = await script.handler(order.input, contextFor(order));
+    const output: unknown = await script.handler(order.input, contextOver({ ask, reportUnreadAnswer }, order));
     return isJson(output)
       ? { type: "done", output }
       : { type: "crashed", reason: "The script returned no JSON value." };

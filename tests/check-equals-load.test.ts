@@ -41,9 +41,14 @@ const twins: readonly Twin[] = [
     valid: { files: { write: ["out/probe/scripts/"] } },
   },
   {
-    rule: "a command in a project mode",
-    broken: { commands: { tests: { run: "node --test", effects: ["read"] } } },
-    valid: { commands: {} },
+    rule: "a listed command with no effects",
+    broken: { commands: { tests: { run: "node --test", effects: [] } } },
+    valid: { commands: { tests: { run: "node --test", effects: ["read"] } } },
+  },
+  {
+    rule: "a write path to the project's config file",
+    broken: { files: { write: ["agentbay.config.yaml"] } },
+    valid: { files: { write: ["out/agentbay.config.yaml"] } },
   },
   {
     rule: "a kit folder from a mode that is not forge",

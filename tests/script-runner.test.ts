@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdir, readFile, symlink } from "node:fs/promises";
+import { mkdir, readdir, readFile, symlink } from "node:fs/promises";
 import { createServer, type Server } from "node:net";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { test } from "node:test";
-import type { ActionCaller, Effect, Json, ScriptRequest, StepOutcome } from "../bay/contracts.ts";
+import type { ActionCaller, Effect, Json, RunEvent, ScriptRequest, StepOutcome } from "../bay/contracts.ts";
 import { fieldOf } from "../bay/json.ts";
 import {
   nodeChildProcesses,
@@ -49,6 +49,7 @@ type RunOptions = {
   readonly caller?: string;
   readonly skillInput?: Json;
   readonly clock?: Clock;
+  readonly events?: ReturnType<typeof recordingSink>;
 };
 
 function scriptSource(body: string): string {
@@ -68,7 +69,7 @@ async function attempt(root: string, body: string, options: RunOptions = {}): Pr
 }
 
 async function runScript(root: string, options: RunOptions): Promise<Run> {
-  const events = recordingSink();
+  const events = options.events ?? recordingSink();
   const calls: (readonly [string, Json])[] = [];
   const secrets = new SecretStore({
     environment: { AGENTBAY_SECRET_API_TOKEN: madeUpToken },
@@ -83,6 +84,9 @@ async function runScript(root: string, options: RunOptions): Promise<Run> {
     http: scriptedHttp((request) => {
       if (request.url.endsWith("/redirect")) {
         return { status: 302, headers: { location: "https://evil.example/collect" }, body: "" };
+      }
+      if (request.url.endsWith("/not-a-number")) {
+        return { status: Number.NaN, headers: {}, body: "" };
       }
       return { status: 200, headers: {}, body: "remote text" };
     }),
@@ -234,6 +238,40 @@ test("a script cannot read /etc/passwd, the kit's own files or the mode's databa
   });
 });
 
+test("of the kernel's files a script can read only the six the host and its toolbox are made of", async () => {
+  await withScriptProject(async (root) => {
+    const entries = await readdir(join(kitFolder, "bay"), { recursive: true, withFileTypes: true });
+    const kernelFiles = entries
+      .filter((entry) => entry.isFile())
+      .map((entry) => relative(kitFolder, join(entry.parentPath, entry.name)))
+      .sort();
+    const run = await attempt(
+      root,
+      [
+        "const fs = await import('node:fs');",
+        `const files = ${JSON.stringify(kernelFiles)};`,
+        "const readable = [];",
+        "for (const file of files) {",
+        "  try {",
+        `    fs.readFileSync(${JSON.stringify(kitFolder)} + '/' + file);`,
+        "    readable.push(file);",
+        "  } catch {}",
+        "}",
+        "return readable;",
+      ].join("\n"),
+    );
+    assert.ok(kernelFiles.length > 100, String(kernelFiles.length));
+    assert.deepEqual(outputOf(run), [
+      "bay/broker/operations.ts",
+      "bay/broker/script-host.ts",
+      "bay/broker/script-preload.ts",
+      "bay/broker/script-protocol.ts",
+      "bay/protocol-json.ts",
+      "bay/sdk.ts",
+    ]);
+  });
+});
+
 test("a script cannot write outside its write paths directly, even inside a read path", async () => {
   await withScriptProject(async (root) => {
     for (const file of [join(root, "outside/new.txt"), join(root, "notes-in/today.md"), join(root, "x.txt")]) {
@@ -367,6 +405,7 @@ test("the runner starts node with the permission model, the grants and the prelo
     "--permission",
     `--allow-fs-read=${bay}/broker/script-host.ts`,
     `--allow-fs-read=${bay}/broker/script-preload.ts`,
+    `--allow-fs-read=${bay}/broker/operations.ts`,
     `--allow-fs-read=${bay}/broker/script-protocol.ts`,
     `--allow-fs-read=${bay}/protocol-json.ts`,
     `--allow-fs-read=${bay}/sdk.ts`,
@@ -823,6 +862,103 @@ test("a script that sends a forged final message with a value that is not JSON f
       ].join("\n"),
     );
     assert.match(reasonOf(run), /not a valid message/);
+  });
+});
+
+function refusedDetails(run: Run): readonly Json[] {
+  return run.events.events.filter((event) => event.kind === "refused").map((event) => event.detail);
+}
+
+test("a request that its operation's guard refuses ends the script, and the guard's sentence is an event", async () => {
+  const cases = [
+    {
+      body: "await context.files.read(42);",
+      detail: { resource: "files", operation: "files.read", problem: "The field path is missing or is not text." },
+    },
+    {
+      body: "await context.http.request({ method: 'TRACE', url: 'https://api.example.com/x', headers: {} });",
+      detail: {
+        resource: "http",
+        operation: "http.request",
+        problem: "The field method is missing or is not one of GET, POST, PUT, PATCH, DELETE.",
+      },
+    },
+    {
+      body: "await context.events.emit('noted');",
+      detail: {
+        resource: "events",
+        operation: "events.emit",
+        problem: "The field detail is missing or is not a JSON value.",
+      },
+    },
+  ];
+  await withScriptProject(async (root) => {
+    for (const { body, detail } of cases) {
+      const run = await attempt(root, `${body}\nreturn 'went on';`, { permissions: { effects: ["read", "network"] } });
+      assert.equal(reasonOf(run), "The script sent a line that is not a valid message.", detail.operation);
+      assert.deepEqual(refusedDetails(run), [
+        {
+          resource: detail.resource,
+          step: "look.0",
+          operation: detail.operation,
+          message: "The script sent a line that is not a valid message.",
+          problem: detail.problem,
+        },
+      ]);
+    }
+  });
+});
+
+test("an answer its operation's guard refuses gives the script today's sentence, and the guard's sentence is an event", async () => {
+  await withScriptProject(async (root) => {
+    const run = await attempt(
+      root,
+      "return await context.http.request({ method: 'GET', url: 'https://api.example.com/not-a-number', headers: {} });",
+      { permissions: { effects: ["read", "network"] } },
+    );
+    assert.deepEqual(outputOf(run), {
+      ok: false,
+      kind: "failed",
+      message: "The broker's answer did not have the expected shape.",
+    });
+    assert.deepEqual(refusedDetails(run), [
+      {
+        resource: "http",
+        step: "look.0",
+        operation: "http.request",
+        message: "The broker's answer did not have the expected shape.",
+        problem: "The value is not a response with a status, headers and a body.",
+      },
+    ]);
+  });
+});
+
+function slowSink(): ReturnType<typeof recordingSink> {
+  const events: RunEvent[] = [];
+  return {
+    events,
+    append: (event) =>
+      new Promise((resolve) => {
+        setTimeout(() => {
+          events.push(event);
+          resolve();
+        }, 200);
+      }),
+  };
+}
+
+test("the run ends only after the events of a refused request and an unread answer are stored", async () => {
+  await withScriptProject(async (root) => {
+    const permissions: PermissionChanges = { effects: ["read", "network"] };
+    const unread = await attempt(
+      root,
+      "return await context.http.request({ method: 'GET', url: 'https://api.example.com/not-a-number', headers: {} });",
+      { permissions, events: slowSink() },
+    );
+    const storedWhenUnreadEnded = refusedDetails(unread).map((detail) => fieldOf(detail, "operation"));
+    const refused = await attempt(root, "await context.files.read(42);", { permissions, events: slowSink() });
+    const storedWhenRefusedEnded = refusedDetails(refused).map((detail) => fieldOf(detail, "operation"));
+    assert.deepEqual([storedWhenUnreadEnded, storedWhenRefusedEnded], [["http.request"], ["files.read"]]);
   });
 });
 

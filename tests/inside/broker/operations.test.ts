@@ -41,10 +41,7 @@ const examples: Examples = {
     results: [["0001-items.sql", "0002-tags.sql"], []],
   },
   "db.agentQuery": {
-    requests: [
-      { sql: "select id, title from items", partition: "feed-briefing" },
-      { sql: "select 1", partition: "store" },
-    ],
+    requests: [{ sql: "select id, title from items", partition: "feed-briefing" }, { sql: "select 1" }],
     results: [
       {
         columns: ["id", "title"],

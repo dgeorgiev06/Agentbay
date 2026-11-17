@@ -1,15 +1,16 @@
-import type { Resource } from "../answers.ts";
+import type { Answer, Resource } from "../answers.ts";
 import type { Json } from "../contracts.ts";
 import { isJson, isJsonRecord } from "../protocol-json.ts";
-import { httpMethods, isHttpMethod, isParameters, isStringRecord, isText, isTexts } from "./script-protocol.ts";
 import type {
   AgentQueryResult,
   CommandRan,
   CommandRequest,
+  DatabasePartition,
   ExecuteResult,
   HttpRequest,
   HttpResponse,
   Row,
+  ScriptContext,
   SqlParameters,
 } from "../sdk.ts";
 
@@ -25,7 +26,7 @@ export type Requests = {
   readonly "db.execute": StatementRequest;
   readonly "db.query": StatementRequest;
   readonly "db.migrate": { readonly partition: string };
-  readonly "db.agentQuery": { readonly sql: string; readonly partition: string };
+  readonly "db.agentQuery": { readonly sql: string; readonly partition?: string };
   readonly "files.read": PathRequest;
   readonly "files.list": PathRequest;
   readonly "files.write": { readonly path: string; readonly text: string };
@@ -60,6 +61,28 @@ export type Results = {
 };
 
 export type OperationName = keyof Requests;
+
+const httpMethods: readonly string[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+
+export function isText(value: Json | undefined): value is string {
+  return typeof value === "string";
+}
+
+function isTexts(value: Json | undefined): value is readonly string[] {
+  return Array.isArray(value) && value.every((item: Json) => typeof item === "string");
+}
+
+function isStringRecord(value: Json | undefined): value is { readonly [key: string]: string } {
+  return isJsonRecord(value) && Object.values(value).every((item) => typeof item === "string");
+}
+
+function isParameters(value: Json | undefined): value is SqlParameters {
+  return Array.isArray(value) || isJsonRecord(value);
+}
+
+function isHttpMethod(value: Json | undefined): value is HttpRequest["method"] {
+  return typeof value === "string" && httpMethods.includes(value);
+}
 
 export type Reading<Value> =
   { readonly ok: true; readonly value: Value } | { readonly ok: false; readonly problem: string };
@@ -120,7 +143,10 @@ function agentQueryRequestOf(value: Json): Reading<Requests["db.agentQuery"]> {
   if (!isText(sql)) {
     return lacking("sql", "text");
   }
-  return isText(partition) ? read({ sql, partition }) : lacking("partition", "text");
+  if (partition === undefined) {
+    return read({ sql });
+  }
+  return isText(partition) ? read({ sql, partition }) : misgiven("partition", "text");
 }
 
 function pathRequestOf(value: Json): Reading<PathRequest> {
@@ -333,3 +359,78 @@ export const shapes: { readonly [Name in OperationName]: Shape<Name> } = {
   spend: { resource: "spend", request: spendRequestOf, result: nothingOf },
   "commands.run": { resource: "commands", request: commandRequestOf, result: commandRanOf },
 };
+
+export function isOperationName(value: Json | undefined): value is OperationName {
+  return typeof value === "string" && Object.hasOwn(shapes, value);
+}
+
+export type Misreading = { readonly side: "request" | "result"; readonly problem: string };
+
+export const notAValidMessage = "The script sent a line that is not a valid message.";
+
+const unexpectedAnswer = "The broker's answer did not have the expected shape.";
+
+export function shownToAuthor(misreading: Misreading): string {
+  return misreading.side === "request" ? notAValidMessage : unexpectedAnswer;
+}
+
+export type ScriptStart = {
+  readonly settings: { readonly [key: string]: Json };
+  readonly now: string;
+  readonly caller?: string;
+  readonly skillInput?: Json;
+};
+
+export type Asking = {
+  readonly ask: (operation: OperationName, request: Json) => Promise<Answer<Json>>;
+  readonly reportUnreadAnswer: (operation: OperationName, value: Json) => void;
+};
+
+export function contextOver(asking: Asking, start: ScriptStart): ScriptContext {
+  const asked = async <Name extends OperationName>(
+    operation: Name,
+    request: Requests[Name] & Json,
+  ): Promise<Answer<Results[Name]>> => {
+    const answer = await asking.ask(operation, request);
+    if (!answer.ok) {
+      return answer;
+    }
+    const reading = shapes[operation].result(answer.value);
+    if (reading.ok) {
+      return { ok: true, value: reading.value };
+    }
+    asking.reportUnreadAnswer(operation, answer.value);
+    return { ok: false, kind: "failed", message: shownToAuthor({ side: "result", problem: reading.problem }) };
+  };
+  const partitionOf = (partition: string): DatabasePartition => ({
+    migrate: () => asked("db.migrate", { partition }),
+    execute: (sql, parameters = []) => asked("db.execute", { sql, parameters, partition }),
+    query: (sql, parameters = []) => asked("db.query", { sql, parameters, partition }),
+    agentQuery: (sql) => asked("db.agentQuery", { sql, partition }),
+  });
+  return {
+    db: {
+      execute: (sql, parameters = []) => asked("db.execute", { sql, parameters }),
+      query: (sql, parameters = []) => asked("db.query", { sql, parameters }),
+      partition: partitionOf,
+    },
+    files: {
+      read: (path) => asked("files.read", { path }),
+      write: (path, text) => asked("files.write", { path, text }),
+      list: (path) => asked("files.list", { path }),
+      makeFolder: (path) => asked("files.makeFolder", { path }),
+      link: (path, target) => asked("files.link", { path, target }),
+      remove: (path) => asked("files.remove", { path }),
+    },
+    secrets: { get: (name) => asked("secrets.get", { name }) },
+    http: { request: (request) => asked("http.request", request) },
+    events: { emit: (kind, detail) => asked("events.emit", { kind, detail }) },
+    commands: { run: (request) => asked("commands.run", request) },
+    call: (reference, input) => asked("call", { reference, input }),
+    settings: start.settings,
+    now: () => new Date(start.now),
+    spend: (spending) => asked("spend", { spending: { ...spending } }),
+    caller: start.caller,
+    skillInput: start.skillInput,
+  };
+}

@@ -1,53 +1,44 @@
 import type { Answer, Resource } from "../answers.ts";
 import type { Json } from "../contracts.ts";
 import { isJsonRecord, parsedLine } from "../protocol-json.ts";
-import type { CommandRequest, HttpRequest, SqlParameters } from "../sdk.ts";
+import {
+  isOperationName,
+  isText,
+  type OperationName,
+  type Reading,
+  type Requests,
+  type ScriptStart,
+  shapes,
+} from "./operations.ts";
 
 export const sdkSpecifier = "agentbay/sdk";
 
 export const removalAllowedArgument = "--agentbay-may-remove-files";
 
-export type ResourceRequest =
-  | {
-      readonly resource: "db.execute" | "db.query";
-      readonly sql: string;
-      readonly parameters: SqlParameters;
-      readonly partition?: string;
-    }
-  | { readonly resource: "db.migrate"; readonly partition: string }
-  | { readonly resource: "db.agentQuery"; readonly sql: string; readonly partition: string }
-  | { readonly resource: "files.read" | "files.list"; readonly path: string }
-  | { readonly resource: "files.write"; readonly path: string; readonly text: string }
-  | { readonly resource: "files.makeFolder" | "files.remove"; readonly path: string }
-  | { readonly resource: "files.link"; readonly path: string; readonly target: string }
-  | { readonly resource: "secrets.get"; readonly name: string }
-  | { readonly resource: "http.request"; readonly request: HttpRequest }
-  | { readonly resource: "events.emit"; readonly kind: string; readonly detail: Json }
-  | { readonly resource: "call"; readonly reference: string; readonly input: Json }
-  | { readonly resource: "spend"; readonly spending: Json }
-  | { readonly resource: "commands.run"; readonly request: CommandRequest };
+export type AskedFor<Name extends OperationName> = { readonly operation: Name; readonly request: Requests[Name] };
 
-export type ChildMessage =
-  | { readonly type: "request"; readonly id: number; readonly request: ResourceRequest }
+type Final =
   | { readonly type: "done"; readonly output: Json }
   | { readonly type: "failed"; readonly reason: string }
   | { readonly type: "crashed"; readonly reason: string };
 
-type StartMessage = {
-  readonly type: "start";
-  readonly input: Json;
-  readonly settings: { readonly [key: string]: Json };
-  readonly now: string;
-  readonly caller?: string;
-  readonly skillInput?: Json;
-};
+export type ChildLine =
+  | { readonly type: "request"; readonly id: number; readonly operation: OperationName; readonly request: Json }
+  | { readonly type: "unread-answer"; readonly operation: OperationName; readonly value: Json }
+  | Final;
+
+export type ChildMessage =
+  | { readonly type: "request"; readonly id: number; readonly asked: AskedFor<OperationName> }
+  | { readonly type: "unreadable-request"; readonly operation: OperationName; readonly problem: string }
+  | { readonly type: "unread-answer"; readonly operation: OperationName; readonly problem: string }
+  | Final;
+
+export type StartMessage = { readonly type: "start"; readonly input: Json } & ScriptStart;
 
 export type ParentMessage =
   StartMessage | { readonly type: "answer"; readonly id: number; readonly answer: Answer<Json> };
 
 type Fields = { readonly [key: string]: Json };
-
-export const httpMethods: readonly string[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
 const resources: readonly string[] = [
   "db",
@@ -65,131 +56,25 @@ function isResource(value: Json | undefined): value is Resource {
   return typeof value === "string" && resources.includes(value);
 }
 
-export function isText(value: Json | undefined): value is string {
-  return typeof value === "string";
+function askedOf<Name extends OperationName>(operation: Name, value: Json): Reading<AskedFor<Name>> {
+  const reading = shapes[operation].request(value);
+  return reading.ok ? { ok: true, value: { operation, request: reading.value } } : reading;
 }
 
-export function isStringRecord(value: Json | undefined): value is { readonly [key: string]: string } {
-  return isJsonRecord(value) && Object.values(value).every((item) => typeof item === "string");
+function requestMessageOf(id: number, operation: OperationName, value: Json): ChildMessage {
+  const reading = askedOf(operation, value);
+  if (reading.ok) {
+    return { type: "request", id, asked: reading.value };
+  }
+  return { type: "unreadable-request", operation, problem: reading.problem };
 }
 
-export function isParameters(value: Json | undefined): value is SqlParameters {
-  return Array.isArray(value) || isJsonRecord(value);
+function unreadAnswerOf(operation: OperationName, value: Json): ChildMessage | undefined {
+  const reading = shapes[operation].result(value);
+  return reading.ok ? undefined : { type: "unread-answer", operation, problem: reading.problem };
 }
 
-export function isHttpMethod(value: Json | undefined): value is HttpRequest["method"] {
-  return typeof value === "string" && httpMethods.includes(value);
-}
-
-function httpRequestOf(value: Json | undefined): HttpRequest | undefined {
-  if (!isJsonRecord(value) || !isHttpMethod(value.method) || !isText(value.url) || !isStringRecord(value.headers)) {
-    return undefined;
-  }
-  if (value.body === undefined) {
-    return { method: value.method, url: value.url, headers: value.headers };
-  }
-  return isText(value.body)
-    ? { method: value.method, url: value.url, headers: value.headers, body: value.body }
-    : undefined;
-}
-
-export function isTexts(value: Json | undefined): value is readonly string[] {
-  return Array.isArray(value) && value.every((item: Json) => typeof item === "string");
-}
-
-function commandRequestOf(value: Json | undefined): CommandRequest | undefined {
-  if (!isJsonRecord(value) || !isTexts(value.command) || !isText(value.folder)) {
-    return undefined;
-  }
-  const { timeLimitSeconds, input } = value;
-  if (typeof timeLimitSeconds !== "number" || (input !== undefined && !isText(input))) {
-    return undefined;
-  }
-  const request = { command: value.command, folder: value.folder, timeLimitSeconds };
-  return input === undefined ? request : { ...request, input };
-}
-
-function partitionRequestOf(fields: Fields): ResourceRequest | undefined {
-  const { resource, partition, sql } = fields;
-  if (!isText(partition)) {
-    return undefined;
-  }
-  if (resource === "db.migrate") {
-    return { resource, partition };
-  }
-  return resource === "db.agentQuery" && isText(sql) ? { resource, sql, partition } : undefined;
-}
-
-function databaseRequestOf(fields: Fields): ResourceRequest | undefined {
-  const { resource, sql, parameters, partition } = fields;
-  const isStatement = resource === "db.execute" || resource === "db.query";
-  if (!isStatement || !isText(sql) || !isParameters(parameters)) {
-    return partitionRequestOf(fields);
-  }
-  if (partition === undefined) {
-    return { resource, sql, parameters };
-  }
-  return isText(partition) ? { resource, sql, parameters, partition } : undefined;
-}
-
-function fileRequestOf(fields: Fields): ResourceRequest | undefined {
-  const resource = fields.resource;
-  if (!isText(fields.path)) {
-    return undefined;
-  }
-  if (resource === "files.read" || resource === "files.list") {
-    return { resource, path: fields.path };
-  }
-  if (resource === "files.makeFolder" || resource === "files.remove") {
-    return { resource, path: fields.path };
-  }
-  if (resource === "files.write" && isText(fields.text)) {
-    return { resource, path: fields.path, text: fields.text };
-  }
-  if (resource === "files.link" && isText(fields.target)) {
-    return { resource, path: fields.path, target: fields.target };
-  }
-  return undefined;
-}
-
-function secretOrEventRequestOf(fields: Fields): ResourceRequest | undefined {
-  if (fields.resource === "secrets.get" && isText(fields.name)) {
-    return { resource: "secrets.get", name: fields.name };
-  }
-  if (fields.resource === "events.emit" && isText(fields.kind) && fields.detail !== undefined) {
-    return { resource: "events.emit", kind: fields.kind, detail: fields.detail };
-  }
-  return undefined;
-}
-
-function callOrSpendRequestOf(fields: Fields): ResourceRequest | undefined {
-  if (fields.resource === "call" && isText(fields.reference) && fields.input !== undefined) {
-    return { resource: "call", reference: fields.reference, input: fields.input };
-  }
-  if (fields.resource === "spend" && fields.spending !== undefined) {
-    return { resource: "spend", spending: fields.spending };
-  }
-  return undefined;
-}
-
-function resourceRequestOf(value: Json | undefined): ResourceRequest | undefined {
-  if (!isJsonRecord(value)) {
-    return undefined;
-  }
-  if (value.resource === "http.request") {
-    const request = httpRequestOf(value.request);
-    return request === undefined ? undefined : { resource: "http.request", request };
-  }
-  if (value.resource === "commands.run") {
-    const request = commandRequestOf(value.request);
-    return request === undefined ? undefined : { resource: "commands.run", request };
-  }
-  return (
-    databaseRequestOf(value) ?? fileRequestOf(value) ?? secretOrEventRequestOf(value) ?? callOrSpendRequestOf(value)
-  );
-}
-
-function finalMessageOf(fields: Fields): ChildMessage | undefined {
+function finalMessageOf(fields: Fields): Final | undefined {
   if (fields.type === "done") {
     return fields.output === undefined ? undefined : { type: "done", output: fields.output };
   }
@@ -204,9 +89,12 @@ export function childMessageOf(line: string): ChildMessage | undefined {
   if (!isJsonRecord(value)) {
     return undefined;
   }
-  if (value.type === "request" && typeof value.id === "number") {
-    const request = resourceRequestOf(value.request);
-    return request === undefined ? undefined : { type: "request", id: value.id, request };
+  const { type, id, operation } = value;
+  if (type === "request" && typeof id === "number" && isOperationName(operation)) {
+    return requestMessageOf(id, operation, value.request ?? null);
+  }
+  if (type === "unread-answer" && isOperationName(operation) && value.value !== undefined) {
+    return unreadAnswerOf(operation, value.value);
   }
   return finalMessageOf(value);
 }

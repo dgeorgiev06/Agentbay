@@ -9,7 +9,7 @@ import {
   type Terminal,
 } from "../command-context.ts";
 import type { Command } from "../command-line.ts";
-import type { ModeList, TrustGiven } from "../contracts.ts";
+import type { ListTrust, ModeList, TrustGiven } from "../contracts.ts";
 import type { Kernel } from "../kernel.ts";
 import type { ActiveMode } from "../manifests/manifests.ts";
 import type { Problem } from "../outcome.ts";
@@ -63,6 +63,8 @@ type Card = {
   readonly hash: string;
   readonly prompt: string;
 };
+
+type Answerable = Exclude<ListTrust, { readonly state: "not needed" | "unreadable record" }>;
 
 type TrustSubject =
   | { readonly verdict: "give"; readonly list: ModeList; readonly modeFolder: string; readonly card: Card }
@@ -325,13 +327,13 @@ function notNeeded(found: ActiveMode): TrustRefusal {
   return { reason, mode: found.manifest.name };
 }
 
-async function givingSubject(kernel: Kernel, found: ActiveMode): Promise<TrustSubject | TrustRefusal> {
-  const { listTrust, modeFolder } = found.grants;
+async function givingSubject(
+  kernel: Kernel,
+  found: ActiveMode,
+  listTrust: Answerable,
+): Promise<TrustSubject | TrustRefusal> {
+  const { modeFolder } = found.grants;
   switch (listTrust.state) {
-    case "not needed":
-      return notNeeded(found);
-    case "unreadable record":
-      return { reason: "unreadable record", problems: listTrust.problems };
     case "trusted":
       return { reason: "already trusted", given: listTrust.given };
     case "never trusted": {
@@ -347,19 +349,10 @@ async function givingSubject(kernel: Kernel, found: ActiveMode): Promise<TrustSu
   }
 }
 
-function withdrawingSubject(found: ActiveMode): TrustSubject | TrustRefusal {
-  const { listTrust } = found.grants;
-  switch (listTrust.state) {
-    case "not needed":
-      return notNeeded(found);
-    case "unreadable record":
-      return { reason: "unreadable record", problems: listTrust.problems };
-    case "never trusted":
-      return { reason: "nothing to withdraw", mode: found.manifest.name };
-    case "trusted":
-    case "changed":
-      return withdrawing(listTrust.given);
-  }
+function withdrawingSubject(found: ActiveMode, listTrust: Answerable): TrustSubject | TrustRefusal {
+  return listTrust.state === "never trusted"
+    ? { reason: "nothing to withdraw", mode: found.manifest.name }
+    : withdrawing(listTrust.given);
 }
 
 async function subjectOf(kernel: Kernel, ask: TrustAsk): Promise<TrustSubject | TrustRefusal> {
@@ -367,7 +360,14 @@ async function subjectOf(kernel: Kernel, ask: TrustAsk): Promise<TrustSubject | 
   if (found === undefined) {
     return { reason: kernel.system.inactive.has(ask.mode) ? "inactive mode" : "no such mode", mode: ask.mode };
   }
-  return ask.verdict === "give" ? givingSubject(kernel, found) : withdrawingSubject(found);
+  const { listTrust } = found.grants;
+  if (listTrust.state === "not needed") {
+    return notNeeded(found);
+  }
+  if (listTrust.state === "unreadable record") {
+    return { reason: "unreadable record", problems: listTrust.problems };
+  }
+  return ask.verdict === "give" ? givingSubject(kernel, found, listTrust) : withdrawingSubject(found, listTrust);
 }
 
 function hasList(list: ModeList): boolean {

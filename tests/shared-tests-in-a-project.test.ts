@@ -299,18 +299,23 @@ test("without trusted in their tests, a project's toolchain and worktrees modes 
   assert.deepEqual(passedPerMode(toolchainRan.output), { [tally]: 6 });
   assert.equal(worktreesRan.status, 1, worktreesRan.output);
   assert.deepEqual(passedPerMode(worktreesRan.output), { [shelf]: 5 });
-  assert.ok(
-    worktreesRan.output.includes(
-      `but the owner does not trust the list of mode ${shelf}, so none of its commands or throwaway folders is ` +
-        `granted. The owner reads the list and decides with: bay approve --trust ${shelf}.`,
-    ),
-    worktreesRan.output,
-  );
-  assert.ok(
-    worktreesRan.output.includes(
-      "A test runs the commands of a mode outside the kit's components/base/ only when it trusts the mode. Name it " +
-        `where the test opens the project: { project: import.meta.dirname, trusted: ["${shelf}"] }.`,
-    ),
-    worktreesRan.output,
-  );
+  for (const [mode, tested] of [
+    [tally, toolchainRan],
+    [shelf, worktreesRan],
+  ] as const) {
+    assert.ok(
+      tested.output.includes(
+        `but the owner does not trust the list of mode ${mode}, so none of its commands or throwaway folders is ` +
+          `granted. The owner reads the list and decides with: bay approve --trust ${mode}.`,
+      ),
+      tested.output,
+    );
+    assert.ok(
+      tested.output.includes(
+        "A test runs the commands of a mode outside the kit's components/base/ only when it trusts the mode. Name " +
+          `it where the test opens the project: { project: import.meta.dirname, trusted: ["${mode}"] }.`,
+      ),
+      tested.output,
+    );
+  }
 });

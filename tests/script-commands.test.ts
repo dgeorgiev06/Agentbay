@@ -193,13 +193,18 @@ test("a working folder inside .agentbay/ is refused, also through a link", async
   });
 });
 
-test("a mode outside components/base/ that lists a command loads without it, and its script is refused as for a name it does not list", async () => {
+test("a mode outside components/base/ that lists a command loads without it, and its script is told the owner does not trust its list", async () => {
   const kit = await makeCommandKit({ commands: version, tier: "modes" });
   try {
     const kernel = await openCommandKernel(kit);
     try {
       const ran = await ranCommands(kernel, [{ name: "version" }]);
-      assert.equal(refusalMessage(ran.answers[0] ?? null), unknownSentence("version with []", "none", kit.manifest));
+      assert.equal(
+        refusalMessage(ran.answers[0] ?? null),
+        "The step 0 of action go asked to run the listed command version with [] in ., but the owner does not " +
+          "trust the list of mode command-prober, so none of its commands or throwaway folders is granted. The " +
+          "owner reads the list and decides with: bay approve --trust command-prober.",
+      );
       assert.deepEqual(eventsOfKind(ran.run, "command"), []);
     } finally {
       kernel.close();

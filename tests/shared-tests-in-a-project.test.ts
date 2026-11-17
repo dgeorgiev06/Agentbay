@@ -258,5 +258,8 @@ test("a project's toolchain and worktrees modes load from the project, and witho
   assert.deepEqual(passedPerMode(toolchainRan.output), { [tally]: 6 });
   assert.equal(worktreesRan.status, 1, worktreesRan.output);
   assert.deepEqual(passedPerMode(worktreesRan.output), { [shelf]: 5 });
-  assert.match(worktreesRan.output, /but the mode shelf keeps throwaway folders only in: nothing/);
+  assert.match(
+    worktreesRan.output,
+    /but the owner does not trust the list of mode shelf, so none of its commands or throwaway folders is granted/,
+  );
 });

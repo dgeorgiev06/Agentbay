@@ -2,6 +2,7 @@ import { basename, dirname, resolve } from "node:path/posix";
 import { failed, granted, listed, manifestOf, type RefusalWording } from "../answers.ts";
 import { checkPath, type PathCheck, type Purpose } from "./file-access.ts";
 import { isInsideOrEqual, pathIn, shownPath } from "../layout.ts";
+import { listInForce } from "./list-in-force.ts";
 import type { OperationName } from "./operations.ts";
 import {
   allowedWith,
@@ -102,6 +103,10 @@ async function throwawayPlace(place: ThrowawayPlace, asking: Asking): Promise<Ru
   const full = resolve(layout.project, place.path);
   const permitted = grants.throwawayPaths;
   const asked = place.asked;
+  const list = listInForce(asking);
+  if (!list.inForce) {
+    return refusedWith({ resource: "files", asked, ...list.refusal });
+  }
   if (!permitted.some((folder) => full !== folder && isInsideOrEqual(full, folder))) {
     return refusedWith(outsideThrowaway(asked, asking));
   }

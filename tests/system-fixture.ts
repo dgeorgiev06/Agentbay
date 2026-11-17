@@ -195,6 +195,10 @@ export async function systemReport(files: FileSystem, reportLayout: Layout): Pro
 
 export const trustGiving = { at: "2026-11-17T14:02:00.000Z", by: "a test" } as const;
 
+export function trustRecordFileOf(text: string): Record<string, string> {
+  return { ".agentbay/trust.json": text };
+}
+
 export function trustRecordFiles(list: ModeList): Record<string, string> {
-  return { ".agentbay/trust.json": recordWithTrust({ version: 1, modes: {} }, list, trustGiving) };
+  return trustRecordFileOf(recordWithTrust({ version: 1, modes: {} }, list, trustGiving));
 }

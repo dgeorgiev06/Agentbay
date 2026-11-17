@@ -107,6 +107,7 @@ features:
       - bay/broker/other-operations.ts
       - bay/broker/http-operations.ts
       - bay/broker/command-operations.ts
+      - bay/broker/list-in-force.ts
     may_import:
       - vocabulary
       - safety

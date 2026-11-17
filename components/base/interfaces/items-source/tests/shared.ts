@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { openModeProject, type ModeProject, type Run } from "../../../../../tests/test-toolbox.ts";
+import {
+  openModeProject,
+  type ModeProject,
+  type ProjectFolder,
+  type ProjectOptions,
+  type Run,
+} from "../../../../../tests/test-toolbox.ts";
 
 type Value = Awaited<ReturnType<ModeProject["output"]>>;
 
@@ -61,10 +67,13 @@ type Probe = {
   readonly matches: (item: Item) => boolean;
 };
 
-type Source = {
-  readonly underTest: ItemsSourceUnderTest;
+type Opening = {
   readonly config: Parameters<typeof openModeProject>[0];
-  readonly startAt: string;
+  readonly options: ProjectOptions;
+};
+
+type Source = Opening & {
+  readonly underTest: ItemsSourceUnderTest;
   readonly on: (project: ModeProject) => Source;
   readonly describe: () => Promise<Description>;
   readonly fetchRun: (selector: Fields, cursor: Value) => Promise<Run>;
@@ -370,7 +379,7 @@ const cases: readonly Case[] = [
     name: "after the project is opened again, a page's cursor continues with the next page, and the last one with nothing",
     restsOn: "fetch-response cursor (pass it back to continue after these items, now or on a later sync)",
     run: async (source) => {
-      const project = await openModeProject(source.config, { startAt: source.startAt });
+      const project = await openModeProject(source.config, source.options);
       let current = project;
       try {
         const pages = await source.on(project).walk({});
@@ -451,7 +460,7 @@ const cases: readonly Case[] = [
       const first = await source.fetch({}, null);
       assert.ok(first.cost.usd > 0, "the settings given must make the first page cost something");
       const budget = dollars(first.cost.usd / 2);
-      const project = await openModeProject({ ...source.config, budget: { usd: budget } }, { startAt: source.startAt });
+      const project = await openModeProject({ ...source.config, budget: { usd: budget } }, source.options);
       try {
         const run = await project.run(`${source.underTest.mode}.fetch`, { selector: {}, cursor: null });
         assert.deepEqual(run.state.status === "waiting" ? run.state.waiting.reason : run.state.status, "budget");
@@ -514,7 +523,7 @@ const cases: readonly Case[] = [
   },
 ];
 
-function sourceFor(project: ModeProject, underTest: ItemsSourceUnderTest, started: Started): Source {
+function sourceFor(project: ModeProject, underTest: ItemsSourceUnderTest, opening: Opening): Source {
   const reference = (action: string): string => `${underTest.mode}.${action}`;
   const fetchRun = (selector: Fields, cursor: Value): Promise<Run> =>
     project.run(reference("fetch"), { selector, cursor });
@@ -534,10 +543,9 @@ function sourceFor(project: ModeProject, underTest: ItemsSourceUnderTest, starte
     return runs;
   };
   return {
+    ...opening,
     underTest,
-    config: configOf(underTest, started),
-    startAt: started.startAt,
-    on: (other) => sourceFor(other, underTest, started),
+    on: (other) => sourceFor(other, underTest, opening),
     describe: async () => descriptionOf(await project.output(reference("describe"), {})),
     fetchRun,
     fetch: async (selector, cursor) => pageOf(outputOf(await fetchRun(selector, cursor))),
@@ -551,13 +559,15 @@ function configOf(underTest: ItemsSourceUnderTest, started: Started): Parameters
   return { bindings: {}, adapter: "claude-code", modes: [mode], settings: { [mode]: started.settings } };
 }
 
-export function testItemsSource(underTest: ItemsSourceUnderTest): void {
+export function testItemsSource(underTest: ItemsSourceUnderTest, projectFolder: ProjectFolder = {}): void {
   const { mode } = underTest;
   let started: Started;
+  let opening: Opening;
   let project: ModeProject;
   before(async () => {
     started = await underTest.start();
-    project = await openModeProject(configOf(underTest, started), { startAt: started.startAt });
+    opening = { config: configOf(underTest, started), options: { ...projectFolder, startAt: started.startAt } };
+    project = await openModeProject(opening.config, opening.options);
   });
   after(async () => {
     await project.close();
@@ -565,7 +575,7 @@ export function testItemsSource(underTest: ItemsSourceUnderTest): void {
   });
   for (const entry of cases) {
     test(`${interfaceName}@1, ${mode}: ${entry.name}`, async () => {
-      await entry.run(sourceFor(project, underTest, started));
+      await entry.run(sourceFor(project, underTest, opening));
     });
   }
 }

@@ -148,6 +148,21 @@ test("a mode of the kit outside components/base/ that lists a command, and runs 
   );
 });
 
+test("a mode of the kit's components/base/ that lists a command, and runs no shared test, is told no second argument", async () => {
+  const baseKeeper = "components/base/keeper/mode.yaml";
+  const report = await check({
+    ...cleanFiles(),
+    [storeShared]: sharedTestText,
+    [baseKeeper]: keeperManifest(tidyCommand),
+  });
+  assert.equal(
+    findFinding(report, baseKeeper, "no test of the mode runs").fix,
+    "Add a test file under components/base/keeper/tests/ that imports the function " +
+      '../../interfaces/items-store/tests/shared.ts exports and calls it with { mode: "keeper" }. ' +
+      "An import of its types alone, or of the file for its side effects, runs nothing.",
+  );
+});
+
 test("a mode whose test imports only types from the shared test with import type does not run it", async () => {
   const report = await checkStoreTest(
     'import type { Files } from "../../interfaces/items-store/tests/shared.ts";\nexport type Seen = Files;\n',

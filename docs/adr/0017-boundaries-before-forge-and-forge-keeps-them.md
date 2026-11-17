@@ -1,6 +1,6 @@
 # 17. Boundaries are fixed before forge continues, and forge is built to keep them
 
-Date: 2026-11-16. Status: the first part accepted by the owner; the second part proposed, for the owner to accept or change.
+Date: 2026-11-16. Status: accepted by the owner, both parts. The owner added item 8.
 
 The owner saw that slices which each added one mode also changed many shared files, and asked for an audit (`docs/research/2026-11-16-boundary-audit.md`). It confirmed it: runs and manifests are real boundaries, mode source is clean, and the area every mode leans on (toolbox, script protocol, script runner, broker, effect rule, shared types, ports) is not a module. A new mode also edits three lists by hand and copies its interface's schemas.
 
@@ -29,7 +29,7 @@ Isolation chain:
 
 Then G4 onward as `0015` orders them.
 
-## Proposed: how forge keeps boundaries
+## How forge keeps boundaries
 
 1. **Every slice has a kind and a write scope, and a script enforces it.** A mode slice may change only `components/<tier>/<mode>/` and its interface folder. A capability slice names one kernel feature and may change only that feature, its tests and the toolbox. The proof kind "changes are in scope" (G4) compares the paths changed with the scope and fails the slice on any other path. No model judges this.
 2. **A builder that lacks a capability stops.** A mode builder that needs something the toolbox does not have reports it and ends. Forge then plans a capability slice first. A builder's skill has no instruction that lets it add to the kernel from a mode slice.
@@ -38,5 +38,13 @@ Then G4 onward as `0015` orders them.
 5. **Sealed features only grow.** The list of features with nothing private reached from outside never shrinks. A slice that adds to either debt list fails; the lists may only shrink.
 6. **The plan proves slices do not overlap before any is built.** Scopes of slices planned to run together are disjoint, checked by script. That is what makes two builders safe.
 7. **The audit is repeated by script.** What can be counted without a model is counted on every merge into the integration branch: files changed together across slices, lists edited by more than one slice, copied files, exports per entry file. A number that worsens is shown on the merge card.
+
+8. **A plan is written so that work can run side by side.** The owner asked for this: well-bounded modules and vertical slices are what make it possible, and the plan must use them. A plan is a list of slices, and each slice states:
+   - what it delivers that can be seen working on its own (a vertical deliverable, not a layer);
+   - its kind and its write scope, as in item 1;
+   - the slices it must come after, each with the reason: an interface, a capability or a file it needs from that slice;
+   - the interface it builds against, when it runs beside the slice that implements the other side. The interface is agreed and merged first, as a slice of its own, so that both sides can be built at once.
+
+   From these a script works out waves: slices in the same wave have disjoint write scopes and no order between them. The plan shows the waves, the longest chain, and how many builders a wave can use. A plan in which every slice waits for the one before is sent back unless it says why no other order exists. A slice that cannot be given a write scope smaller than a whole kernel feature is a sign the feature needs an entry file first, and the plan says so.
 
 **Cost.** Items 1, 5 and 6 are scripts on top of what G4 and G5 already plan. Items 3, 4 and 7 are new, about one slice together. Item 2 makes some jobs take two slices where one would have done, which is the point.

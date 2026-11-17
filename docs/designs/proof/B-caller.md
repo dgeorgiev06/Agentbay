@@ -198,7 +198,7 @@ The plan's table in this form, rows whose scope was prose rewritten as paths (ro
 
 | # | Slice | Kind | Write scope | After | Because |
 |---|---|---|---|---|---|
-| I1 | `proof@1`: ten kinds and `brief` | I | `components/base/interfaces/proof.yaml`, `components/base/interfaces/proof/*-request.json`, `components/base/interfaces/proof/*-response.json`, `tests/made-up-proofs*` | D1 | the chosen interface |
+| I1 | `proof@1`: ten kinds and `brief` | I | `components/base/interfaces/proof.yaml`, `components/base/interfaces/proof/*-request.json`, `components/base/interfaces/proof/*-response.json`, `components/base/interfaces/proof/tests/shared.ts`, `tests/made-up-proofs*` | D1 | the chosen interface |
 | I2 | The brief's form | I | `components/base/interfaces/proof/brief.json`, `components/base/interfaces/proof/tests/brief.ts` | D1 | the chosen form |
 | C1r | Approvals with choices, in runs | C | `bay/runs/**`, `schemas/workflow.schema.json`, `bay/generated/workflow.ts`, `tests/runs-choices*` | D1 | the chosen card |
 | C1c | The card drawn, and `--choice` | C | `bay/run-card.ts`, `bay/run-report.ts`, `bay/commands/approve.ts`, `tests/run-card*` | C1r | the choices it draws |

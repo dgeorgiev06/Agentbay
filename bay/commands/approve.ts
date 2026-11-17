@@ -25,6 +25,7 @@ import {
   scriptFilesOf,
   shown,
   writeTrustRecord,
+  type ScriptFileChange,
 } from "../trust.ts";
 import { hashOf } from "../json.ts";
 import { differenceCard, listSize, scriptsCard, trustCard, trustedWhen, withdrawCard } from "../trust-card.ts";
@@ -321,19 +322,23 @@ function answerRefusalResult(refusal: AnswerRefusal): CommandResult {
   }
 }
 
-async function changedScripts(kernel: Kernel, folder: string, given: TrustGiven): Promise<number> {
-  const now = await scriptFilesNow(kernel, folder);
-  return scriptFileChanges(given.scripts, now).length;
-}
+type ScriptsNow = {
+  readonly scripts: ScriptFiles;
+  readonly changes: readonly ScriptFileChange[];
+};
 
 async function scriptFilesNow(kernel: Kernel, folder: string): Promise<ScriptFiles> {
   const paths = await kernel.ports.listing.projectFiles(folder);
   return scriptFilesOf(kernel.ports.files, folder, paths);
 }
 
-async function trustedSubject(kernel: Kernel, folder: string, given: TrustGiven): Promise<TrustSubject | TrustRefusal> {
+async function scriptsSince(kernel: Kernel, folder: string, given: TrustGiven): Promise<ScriptsNow> {
   const scripts = await scriptFilesNow(kernel, folder);
-  const changes = scriptFileChanges(given.scripts, scripts);
+  return { scripts, changes: scriptFileChanges(given.scripts, scripts) };
+}
+
+async function trustedSubject(kernel: Kernel, folder: string, given: TrustGiven): Promise<TrustSubject | TrustRefusal> {
+  const { scripts, changes } = await scriptsSince(kernel, folder, given);
   if (changes.length === 0) {
     return { reason: "already trusted", given };
   }
@@ -363,7 +368,8 @@ async function givingSubject(
     }
     case "changed": {
       const { list, given } = listTrust;
-      const lines = differenceCard({ list, given, changedScripts: await changedScripts(kernel, modeFolder, given) });
+      const { changes } = await scriptsSince(kernel, modeFolder, given);
+      const lines = differenceCard({ list, given, changedScripts: changes.length });
       return giving(list, modeFolder, { lines, prompt: prompts.changed });
     }
   }

@@ -1,6 +1,6 @@
 import { stringify } from "yaml";
 
-export type ModeFiles = Readonly<Record<string, string>>;
+import type { ModeFiles } from "./kit-copy.ts";
 
 export type TallyVariant = "stops a check at its limit" | "passes a check stopped at its limit";
 

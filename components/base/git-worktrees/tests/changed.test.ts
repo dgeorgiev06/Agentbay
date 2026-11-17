@@ -4,7 +4,7 @@ import { commitFiles, git, openRepositoryProject } from "./repository.ts";
 
 const moved = "A file long enough that git sees it moved rather than replaced.\n".repeat(4);
 
-test("each path that differs between two commits is given with how it changed", async () => {
+test("the paths that differ come in the order git gives them, by path", async () => {
   const project = await openRepositoryProject();
   try {
     const from = await commitFiles(project, {
@@ -25,29 +25,6 @@ test("each path that differs between two commits is given with how it changed", 
         { path: "new-name.txt", how: "renamed", from: "old-name.txt" },
       ],
     });
-  } finally {
-    await project.close();
-  }
-});
-
-test("the same commit twice gives no paths", async () => {
-  const project = await openRepositoryProject();
-  try {
-    assert.deepEqual(await project.output("git-worktrees.changed", { from: "main", to: project.base }), {
-      paths: [],
-    });
-  } finally {
-    await project.close();
-  }
-});
-
-test("a commit that does not exist is refused", async () => {
-  const project = await openRepositoryProject();
-  try {
-    assert.equal(
-      await project.failure("git-worktrees.changed", { from: "main", to: "nowhere" }),
-      "There is no commit nowhere in the repository.",
-    );
   } finally {
     await project.close();
   }

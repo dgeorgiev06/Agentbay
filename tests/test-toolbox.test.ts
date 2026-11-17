@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
+import { parse, stringify } from "yaml";
 import { makeProject } from "./project-fixture.ts";
 import { openModeProject, type ModeProject, type Run } from "./test-toolbox.ts";
 
@@ -49,6 +52,7 @@ test("the test toolbox exports these names and no others", async () => {
     "CallOptions",
     "Decision",
     "ModeProject",
+    "ProjectFolder",
     "ProjectOptions",
     "Run",
     "openModeProject",
@@ -77,6 +81,56 @@ test("a project opened with the modes of a project beside the kit offers these o
     ]);
     assert.deepEqual(await project.output("greeter.fetch", { name: "Ada" }), { greeting: "Hello, Ada" });
   });
+});
+
+async function writtenConfig(project: ModeProject): Promise<unknown> {
+  return parse(await readFile(join(project.root, "agentbay.config.yaml"), "utf8"));
+}
+
+test("a folder inside a project opens that project, its config under the one given, and again when it is reopened", async () => {
+  const beside = await makeProject();
+  const inside = join(beside.root, "components/modes/writer/tests");
+  const given = { bindings: {}, adapter: "claude-code", settings: { writer: { signature: "From the test" } } };
+  let project = await openModeProject({ ...given, modes: ["store"] }, { project: inside });
+  try {
+    assert.deepEqual(await writtenConfig(project), {
+      bindings: { "greeting-source": "greeter" },
+      adapter: "claude-code",
+      settings: { writer: { signature: "From the test" } },
+      modes: ["store"],
+    });
+    assert.deepEqual(await project.output("greeter.fetch", { name: "Ada" }), { greeting: "Hello, Ada" });
+    project = await project.reopen({ bindings: {}, adapter: "claude-code" });
+    assert.deepEqual(await writtenConfig(project), {
+      bindings: { "greeting-source": "greeter" },
+      adapter: "claude-code",
+      settings: { writer: { signature: "Yours, the writer" } },
+      modes: [],
+    });
+    const run = await project.run("writer.compose", { name: "Ada" });
+    assert.equal(run.state.status === "waiting" ? run.state.waiting.reason : run.state.status, "skill");
+  } finally {
+    await project.close();
+    await beside.remove();
+  }
+});
+
+test("a project's mode with the name of a kit mode is refused, and the kit's mode does not take its place", async () => {
+  const beside = await makeProject();
+  const manifest = { name: "store", version: "1.0.0", description: "Has the name of a kit mode.", actions: {} };
+  await beside.write("components/modes/store/mode.yaml", stringify(manifest));
+  try {
+    await assert.rejects(openModeProject(config, { project: beside.root }), /Two modes are named store/);
+  } finally {
+    await beside.remove();
+  }
+});
+
+test("a folder that is in no project is refused with a reason", async () => {
+  await assert.rejects(
+    openModeProject(config, { project: tmpdir() }),
+    /no folder at or above the one given holds agentbay.config.yaml/,
+  );
 });
 
 const innerFiles = ["../bay/kernel.ts", "../bay/runs/runs.ts", "../bay/ports.ts"];

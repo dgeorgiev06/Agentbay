@@ -122,6 +122,8 @@ test("an option that needs a value takes the next word even when it starts with 
     [["echo", "a", "--times", "--3", "--json"], { times: "--3" }],
     [["echo", "a", "--times", "-", "--json"], { times: "-" }],
     [["echo", "a", "--times", "--quiet", "--json"], { times: "--quiet" }],
+    [["echo", "a", "--times", "--jsonish", "--json"], { times: "--jsonish" }],
+    [["echo", "a", "--times", "--loudest", "--json"], { times: "--loudest" }],
   ];
   for (const [argv, values] of cases) {
     const ran = await echoed(argv);

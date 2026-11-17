@@ -137,7 +137,14 @@ const keptItemLine = "    items = [...items.filter((kept) => kept.id !== id), it
 
 const lostItemLine = "    items = added === 1 ? items : [...items.filter((kept) => kept.id !== id), item];";
 
-const memoryLibrary = String.raw`import { fail, fieldsOf, parseIsoTime, type Json, type JsonFields, type ScriptContext } from "../../../../../bay/sdk.ts";
+const memoryLibrary = String.raw`import {
+  fail,
+  fieldsOf,
+  parseIsoTime,
+  type Json,
+  type JsonFields,
+  type ScriptContext,
+} from "../../../../../bay/sdk.ts";
 
 type Spent = { readonly month: string; readonly items: number; readonly usd: number };
 
@@ -166,7 +173,9 @@ const defaultLimit = 100;
 const columns = ["id", "kind", "source", "at", "title", "text", "url", "author", "labels", "data"];
 
 const itemsView =
-  "items_view (" + columns.join(", ") + ") as (select " +
+  "items_view (" +
+  columns.join(", ") +
+  ") as (select " +
   columns.map((column) => "json_extract(value, '$." + column + "')").join(", ") +
   " from shelf, json_each(shelf.document, '$.items'))";
 
@@ -177,12 +186,56 @@ function text(value: Json | undefined): string {
   return typeof value === "string" ? value : "";
 }
 
+function isList(value: Json | undefined): value is readonly Json[] {
+  return Array.isArray(value);
+}
+
 function texts(value: Json | undefined): readonly string[] {
-  return Array.isArray(value) ? value.filter((entry) => typeof entry === "string") : [];
+  return isList(value) ? value.filter((entry) => typeof entry === "string") : [];
 }
 
 function list(value: Json | undefined): readonly JsonFields[] {
-  return Array.isArray(value) ? value.map((entry) => fieldsOf(entry)) : [];
+  return isList(value) ? value.map((entry) => fieldsOf(entry)) : [];
+}
+
+function count(value: Json | undefined): number {
+  return typeof value === "number" ? value : 0;
+}
+
+function jsonOf(value: unknown): Json {
+  if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry: unknown) => jsonOf(entry));
+  }
+  return typeof value === "object"
+    ? Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, jsonOf(entry)]))
+    : null;
+}
+
+function syncedOf(fields: JsonFields): Synced {
+  return {
+    source: text(fields.source),
+    kinds: texts(fields.kinds),
+    cursor: fields.cursor ?? null,
+    lastSync: text(fields.lastSync),
+    selector: fields.selector ?? null,
+    spent: list(fields.spent).map((entry) => ({
+      month: text(entry.month),
+      items: count(entry.items),
+      usd: count(entry.usd),
+    })),
+    pages: texts(fields.pages),
+  };
+}
+
+function shelfOf(document: Json | undefined): Shelf {
+  if (typeof document !== "string") {
+    return emptyShelf;
+  }
+  const fields = fieldsOf(jsonOf(JSON.parse(document)));
+  return { items: list(fields.items), deleted: texts(fields.deleted), sources: list(fields.sources).map(syncedOf) };
 }
 
 function timeOf(value: Json | undefined): number {
@@ -202,7 +255,9 @@ function nameOf(name: string): string {
 }
 
 function globOf(glob: string): RegExp {
-  const parts = nameOf(glob).split("*").map((part) => part.replace(/[.*+?^$()|[\]{}\\]/g, "\\$&"));
+  const parts = nameOf(glob)
+    .split("*")
+    .map((part) => part.replace(/[.*+?^$()|[\]{}\\]/g, "\\$&"));
   return new RegExp("^" + parts.join(".*") + "$", "s");
 }
 
@@ -264,13 +319,17 @@ function refusals(input: JsonFields, shelf: Shelf): readonly string[] {
   ];
 }
 
+function pageOf(input: JsonFields, items: number, usd: number): string {
+  return JSON.stringify([input.cursor ?? null, items, usd, list(input.items).map((item) => item.id ?? null)]);
+}
+
 function spendingAfter(input: JsonFields, synced: Synced | undefined, now: Date): Pick<Synced, "spent" | "pages"> {
   const spent = synced?.spent ?? [];
   const pages = synced?.pages ?? [];
   const cost = fieldsOf(input.cost ?? {});
-  const items = typeof cost.items === "number" ? cost.items : 0;
-  const usd = typeof cost.usd === "number" ? cost.usd : 0;
-  const page = JSON.stringify([input.cursor ?? null, items, usd, list(input.items).map((item) => item.id ?? "")]);
+  const items = count(cost.items);
+  const usd = count(cost.usd);
+  const page = pageOf(input, items, usd);
   if ((items === 0 && usd === 0) || pages.includes(page)) {
     return { spent, pages };
   }
@@ -280,6 +339,37 @@ function spendingAfter(input: JsonFields, synced: Synced | undefined, now: Date)
   return { spent: [...spent.filter((entry) => entry.month !== month), total], pages: [...pages, page] };
 }
 
+function skipReason(input: JsonFields, shelf: Shelf, item: JsonFields): string | undefined {
+  const id = text(item.id);
+  if (shelf.deleted.includes(id)) {
+    return id + " was deleted, so it is not kept.";
+  }
+  if (input.selector !== undefined && !matches(input.selector, item)) {
+    return id + " does not match its selector, so it is not kept.";
+  }
+  return undefined;
+}
+
+function stored(input: JsonFields, shelf: Shelf): { readonly items: readonly JsonFields[]; readonly output: Json } {
+  let items = shelf.items;
+  let added = 0;
+  let updated = 0;
+  const skipped: Json[] = [];
+  for (const item of list(input.items)) {
+    const id = text(item.id);
+    const reason = skipReason(input, shelf, item);
+    if (reason !== undefined) {
+      skipped.push({ id, reason });
+      continue;
+    }
+    const had = items.some((other) => other.id === id);
+    items = [...items.filter((kept) => kept.id !== id), item];
+    added += had ? 0 : 1;
+    updated += had ? 1 : 0;
+  }
+  return { items, output: { added, updated, skipped } };
+}
+
 async function put(input: JsonFields, shelf: Shelf, context: ScriptContext): Promise<Json> {
   const refused = refusals(input, shelf);
   if (refused.length > 0) {
@@ -287,25 +377,7 @@ async function put(input: JsonFields, shelf: Shelf, context: ScriptContext): Pro
   }
   const source = text(input.source);
   const synced = shelf.sources.find((entry) => entry.source === source);
-  let items = shelf.items;
-  let added = 0;
-  let updated = 0;
-  const skipped: Json[] = [];
-  for (const item of list(input.items)) {
-    const id = text(item.id);
-    if (shelf.deleted.includes(id)) {
-      skipped.push({ id, reason: id + " was deleted, so it is not kept." });
-      continue;
-    }
-    if (input.selector !== undefined && !matches(input.selector, item)) {
-      skipped.push({ id, reason: id + " does not match its selector, so it is not kept." });
-      continue;
-    }
-    const had = items.some((kept) => kept.id === id);
-    items = [...items.filter((kept) => kept.id !== id), item];
-    added += had ? 0 : 1;
-    updated += had ? 1 : 0;
-  }
+  const { items, output } = stored(input, shelf);
   const entry: Synced = {
     source,
     kinds: texts(input.kinds),
@@ -316,7 +388,7 @@ async function put(input: JsonFields, shelf: Shelf, context: ScriptContext): Pro
   };
   const sources = [...shelf.sources.filter((other) => other.source !== source), entry];
   await saved({ ...shelf, items, sources }, context);
-  return { added, updated, skipped };
+  return output;
 }
 
 async function update(input: JsonFields, shelf: Shelf, context: ScriptContext): Promise<Json> {
@@ -403,8 +475,7 @@ async function opened(context: ScriptContext): Promise<Shelf> {
     return fail(migrated.message);
   }
   const rows = await partition.query("select document from shelf where id = 1");
-  const document = rows.ok ? rows.value[0]?.document : undefined;
-  return typeof document === "string" ? JSON.parse(document) : emptyShelf;
+  return shelfOf(rows.ok ? rows.value[0]?.document : undefined);
 }
 
 async function saved(shelf: Shelf, context: ScriptContext): Promise<void> {

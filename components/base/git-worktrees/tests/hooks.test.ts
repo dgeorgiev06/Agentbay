@@ -35,6 +35,22 @@ test("no hook of the repository runs when a slice is cut", async () => {
   }
 });
 
+test("a file-system monitor named in the repository's configuration does not run", async () => {
+  const project = await openRepositoryProject();
+  try {
+    await project.output("git-worktrees.cut", { slice: "watched", base: "main" });
+    const monitor = join(project.root, git(project, ".", ["rev-parse", "--git-path", "fsmonitor-probe"]).trim());
+    const ran = join(project.root, "fsmonitor-ran");
+    await writeFile(monitor, `#!/bin/sh\ntouch "${ran}"\n`, "utf8");
+    await chmod(monitor, 0o755);
+    git(project, ".", ["config", "core.fsmonitor", monitor]);
+    await project.output("git-worktrees.status", { folder: ".forge/worktrees/watched", base: "main" });
+    assert.equal(await exists(ran), false);
+  } finally {
+    await project.close();
+  }
+});
+
 test("a repository whose own configuration names a filter is refused, and the filter does not run", async () => {
   const project = await openRepositoryProject();
   try {

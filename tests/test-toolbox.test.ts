@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { test } from "node:test";
 import { parse, stringify } from "yaml";
 import { isRecord } from "../bay/json.ts";
@@ -143,6 +143,43 @@ test("a folder that is in no project is refused with a reason", async () => {
     openModeProject(config, { project: tmpdir() }),
     /no folder at or above the one given holds agentbay.config.yaml/,
   );
+});
+
+async function suiteEntriesIn(folder: string): Promise<readonly string[]> {
+  return (await readdir(folder)).filter((name) => name.startsWith("agentbay-")).sort();
+}
+
+async function withOwnTemporaryFolder(body: (folder: string) => Promise<void>): Promise<void> {
+  const folder = await realpath(await mkdtemp(join(tmpdir(), "agentbay-own-temporary-")));
+  const outer = process.env.TMPDIR;
+  process.env.TMPDIR = folder;
+  try {
+    await body(folder);
+  } finally {
+    if (outer === undefined) {
+      Reflect.deleteProperty(process.env, "TMPDIR");
+    } else {
+      process.env.TMPDIR = outer;
+    }
+    await rm(folder, { recursive: true, force: true });
+  }
+}
+
+test("a project that fails to load and a folder in no project leave no folder behind in the temporary folder", async () => {
+  await withOwnTemporaryFolder(async (folder) => {
+    const beside = await makeProject();
+    const manifest = { name: "store", version: "1.0.0", description: "Has the name of a kit mode.", actions: {} };
+    await beside.write("components/modes/store/mode.yaml", stringify(manifest));
+    try {
+      const before = await suiteEntriesIn(folder);
+      assert.deepEqual(before, [basename(beside.root)]);
+      await assert.rejects(openModeProject(config, { project: beside.root }), /Two modes are named store/);
+      await assert.rejects(openModeProject(config, { project: folder }), /no folder at or above the one given holds/);
+      assert.deepEqual(await suiteEntriesIn(folder), before);
+    } finally {
+      await beside.remove();
+    }
+  });
 });
 
 const innerFiles = ["../bay/kernel.ts", "../bay/runs/runs.ts", "../bay/ports.ts"];

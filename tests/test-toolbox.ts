@@ -274,6 +274,15 @@ function configOver(projectConfig: Fields, given: Config): Fields {
 
 export async function openModeProject(config: Config, options: ProjectOptions = {}): Promise<ModeProject> {
   const root = await realpath(await mkdtemp(join(tmpdir(), "agentbay-modes-")));
+  try {
+    return await openedIn(root, config, options);
+  } catch (error) {
+    await rm(root, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+async function openedIn(root: string, config: Config, options: ProjectOptions): Promise<ModeProject> {
   execFileSync("git", ["init", "-q"], { cwd: root });
   const project = options.project === undefined ? undefined : projectRootAt(resolve(options.project));
   if (project !== undefined) {
@@ -286,12 +295,7 @@ export async function openModeProject(config: Config, options: ProjectOptions = 
   const opening = { config, projectConfig, clock: settableClock(options.startAt) };
   const trusted = options.trusted ?? [];
   if (trusted.length > 0) {
-    try {
-      await trustIn(root, opening, trusted);
-    } catch (error) {
-      await rm(root, { recursive: true, force: true });
-      throw error;
-    }
+    await trustIn(root, opening, trusted);
   }
   return projectIn(root, opening);
 }

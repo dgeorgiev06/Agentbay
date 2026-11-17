@@ -7,7 +7,8 @@
     "node": ">=22.18.0"
   },
   "scripts": {
-    "test": "node --test",
+    "test": "node --test --test-concurrency=$(node -p 'os.availableParallelism() + 1')",
+    "test:times": "node tests/suite-times.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint --config components/base/typescript/eslint.config.js --max-warnings 0 .",
     "format:check": "prettier --config components/base/typescript/prettier.json --check \"**/*.{ts,js}\" package.json tsconfig.json knip.json \"components/base/typescript/*.json\"",

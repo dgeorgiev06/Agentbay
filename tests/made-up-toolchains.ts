@@ -7,6 +7,7 @@ export type TallyVariant =
   | "passes a check stopped at its limit"
   | "writes its build output beside the folder"
   | "writes its build output in the project's root"
+  | "writes its build output in the kernel's state folder"
   | "builds only into a folder with no build output";
 
 export const tally = "tally";
@@ -16,6 +17,8 @@ export const wrongTally = "tally-wrong";
 export const besideTally = "tally-beside";
 
 export const rootTally = "tally-root";
+
+export const kernelStateTally = "tally-kernel-state";
 
 export const onceTally = "tally-once";
 
@@ -30,6 +33,7 @@ const buildCommands: Readonly<Record<TallyVariant, string>> = {
   "passes a check stopped at its limit": "sh build.sh build -p",
   "writes its build output beside the folder": "sh build.sh ../build -p",
   "writes its build output in the project's root": "sh build.sh ../../build -p",
+  "writes its build output in the kernel's state folder": "sh build.sh ../../.agentbay/build -p",
   "builds only into a folder with no build output": "sh build.sh build",
 };
 

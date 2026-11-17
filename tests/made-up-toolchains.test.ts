@@ -6,6 +6,7 @@ import { after, before, test } from "node:test";
 import { addMode, copyOfTheKit, failedTests } from "./kit-copy.ts";
 import {
   besideTally,
+  kernelStateTally,
   onceTally,
   rootTally,
   tally,
@@ -28,6 +29,7 @@ const modes: Readonly<Record<string, TallyVariant>> = {
   [wrongTally]: "passes a check stopped at its limit",
   [besideTally]: "writes its build output beside the folder",
   [rootTally]: "writes its build output in the project's root",
+  [kernelStateTally]: "writes its build output in the kernel's state folder",
   [onceTally]: "builds only into a folder with no build output",
 };
 
@@ -109,6 +111,12 @@ test("a made-up toolchain whose build writes in the project's root fails the sha
   const tested = ranFor(rootTally);
   assert.equal(tested.status, 1, tested.output);
   assert.deepEqual(failedTests(tested.output), [caseOf(rootTally, writesOutsideTheFolder)]);
+});
+
+test("a made-up toolchain whose build writes in the kernel's state folder fails the shared test's case on writing outside the folder", () => {
+  const tested = ranFor(kernelStateTally);
+  assert.equal(tested.status, 1, tested.output);
+  assert.deepEqual(failedTests(tested.output), [caseOf(kernelStateTally, writesOutsideTheFolder)]);
 });
 
 test("a made-up toolchain whose build fails where it has built before fails the shared test's case on a second call", () => {

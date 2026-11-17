@@ -61,6 +61,8 @@ test("the real bay check on the kit itself reports no errors, the two size warni
         "--no-autostash --no-rerere-autoupdate --end-of-options",
     ),
     listedGit(29, `${committing} merge --abort`),
+    listedGit(30, `${git} add --all --`),
+    listedGit(31, `${committing} commit --quiet --no-verify --no-gpg-sign --file=- --end-of-options`),
     listed(9, "npm run generate:check --"),
     listed(10, "npm run typecheck --"),
     listed(11, "npm run lint --"),

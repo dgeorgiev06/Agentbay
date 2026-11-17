@@ -29,3 +29,7 @@ actions:
     input: worktrees/merge-request.json
     output: worktrees/merge-response.json
     effects: [read, write, network, spend, delete]
+  set-aside:
+    input: worktrees/set-aside-request.json
+    output: worktrees/set-aside-response.json
+    effects: [read, write, network, spend, delete]

@@ -27,6 +27,8 @@ resources:
     - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 worktree add --end-of-options
     - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 -c user.name=agentbay-git-worktrees -c user.email=git-worktrees@agentbay.invalid -c gc.auto=0 merge --no-ff --no-edit --no-stat --no-verify --no-gpg-sign --no-verify-signatures --no-autostash --no-rerere-autoupdate --end-of-options
     - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 -c user.name=agentbay-git-worktrees -c user.email=git-worktrees@agentbay.invalid -c gc.auto=0 merge --abort
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 add --all --
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 -c user.name=agentbay-git-worktrees -c user.email=git-worktrees@agentbay.invalid -c gc.auto=0 commit --quiet --no-verify --no-gpg-sign --file=- --end-of-options
 
 actions:
   cut:
@@ -78,3 +80,10 @@ actions:
     effects: [read, write, network, spend, delete]
     run:
       - script: scripts/merge.ts
+  set-aside:
+    description: When a slice's worktree has changed or untracked files to keep but not on its branch; they are committed to a new branch forge/wip/<slice>/<n>, and the worktree goes back to its head with no changes.
+    input: schemas/set-aside-request.json
+    output: schemas/set-aside-response.json
+    effects: [read, write, network, spend, delete]
+    run:
+      - script: scripts/set-aside.ts

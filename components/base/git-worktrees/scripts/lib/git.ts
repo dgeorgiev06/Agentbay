@@ -53,11 +53,22 @@ function optionsFor(subcommand: string): readonly string[] {
   return [...protections, ...emptyAttributes, ...(makesCommits.includes(subcommand) ? committer : [])];
 }
 
-export async function git(context: ScriptContext, folder: string, gitArguments: readonly string[]): Promise<GitEnd> {
+export type Fed = {
+  readonly gitArguments: readonly string[];
+  readonly input: string;
+};
+
+async function ran(
+  context: ScriptContext,
+  folder: string,
+  given: { readonly gitArguments: readonly string[]; readonly input?: string },
+): Promise<GitEnd> {
+  const { gitArguments, input } = given;
   const subcommand = subcommandOf(gitArguments);
   refuseInOwnersCheckout(folder, subcommand);
   const command = ["git", ...optionsFor(subcommand), ...gitArguments];
-  const answer = await context.commands.run({ command, folder, timeLimitSeconds });
+  const request = { command, folder, timeLimitSeconds };
+  const answer = await context.commands.run(input === undefined ? request : { ...request, input });
   if (!answer.ok) {
     return fail(answer.message);
   }
@@ -76,8 +87,23 @@ export async function git(context: ScriptContext, folder: string, gitArguments: 
   }
 }
 
+export function git(context: ScriptContext, folder: string, gitArguments: readonly string[]): Promise<GitEnd> {
+  return ran(context, folder, { gitArguments });
+}
+
+export function gitFed(context: ScriptContext, folder: string, fed: Fed): Promise<GitEnd> {
+  return ran(context, folder, fed);
+}
+
 export function firstLine(text: string): string {
   return text.split("\n").find((line) => line.trim() !== "") ?? "it gave no reason";
+}
+
+export function succeededOutput(ended: GitEnd, gitArguments: readonly string[]): string {
+  if (ended.exitCode !== 0) {
+    return fail(`git ${subcommandOf(gitArguments)} failed: ${firstLine(ended.stderr)}`);
+  }
+  return ended.stdout;
 }
 
 export async function gitSucceeded(
@@ -85,11 +111,7 @@ export async function gitSucceeded(
   folder: string,
   gitArguments: readonly string[],
 ): Promise<string> {
-  const ended = await git(context, folder, gitArguments);
-  if (ended.exitCode !== 0) {
-    return fail(`git ${subcommandOf(gitArguments)} failed: ${firstLine(ended.stderr)}`);
-  }
-  return ended.stdout;
+  return succeededOutput(await git(context, folder, gitArguments), gitArguments);
 }
 
 export function nulFields(output: string): readonly string[] {

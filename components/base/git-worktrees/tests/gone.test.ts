@@ -96,3 +96,17 @@ test("merge says plainly that a worktree it made no longer exists", async () => 
     await project.close();
   }
 });
+
+test("set-aside says plainly that a worktree it made no longer exists", async () => {
+  const project = await openRepositoryProject();
+  try {
+    await cutAndLose(project);
+    assert.equal(
+      await project.failure("git-worktrees.set-aside", { folder: worktree }),
+      "The folder .forge/worktrees/lost was made by this mode but no longer exists, so the mode does not set aside " +
+        "the work of it.",
+    );
+  } finally {
+    await project.close();
+  }
+});

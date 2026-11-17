@@ -237,7 +237,6 @@ modes:
     - bay/sdk.ts
   tests_import_kit_through:
     - tests/test-toolbox.ts
-    - tests/mode-harness.ts
 outside:
   adapters/claude-code:
     purpose: Fits Claude Code to the kernel - agent files, the step guard, settings, the tool server config.

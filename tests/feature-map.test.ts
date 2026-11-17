@@ -647,6 +647,13 @@ test("the kit's map names no folder under the modes rule's folder: the rule cove
   assert.ok(kitMap().outside.some((outside) => isInside(outside.folder, within)));
 });
 
+test("the kit's map lets a mode's tests import from the kit only the test toolbox and the toolbox", () => {
+  const modes = parsedMap(readFileSync(mapFile, "utf8")).modes;
+  assert.ok(modes);
+  assert.deepEqual(modes.testsImportKitThrough, ["tests/test-toolbox.ts"]);
+  assert.deepEqual(modes.importsKernelThrough, ["bay/sdk.ts"]);
+});
+
 test("every kernel file of the kit is in exactly one feature", () => {
   const map = parsedMap(readFileSync(mapFile, "utf8"));
   assert.deepEqual(coverageProblems(map, kitFiles().filter(isKernelFile)), []);

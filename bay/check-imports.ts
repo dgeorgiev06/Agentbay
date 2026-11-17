@@ -27,7 +27,7 @@ type ModeImport = {
 
 const sdkFile = "bay/sdk.ts";
 
-const testToolboxFiles = ["tests/test-toolbox.ts", "tests/mode-harness.ts"] as const;
+const testToolboxFile = "tests/test-toolbox.ts";
 
 const entryPoints = ["bay/cli.ts", "bay/mcp.ts"] as const;
 
@@ -109,7 +109,7 @@ function modeImportProblem(found: ModeImport): Problem | undefined {
 function isTestToolbox(found: ModeImport, target: string): boolean {
   const { layout, mode, entry } = found;
   const inTests = isInsideOrEqual(entry.file, join(mode.folder, "tests"));
-  return inTests && testToolboxFiles.some((file) => target === pathIn(layout, "kit", file));
+  return inTests && target === pathIn(layout, "kit", testToolboxFile);
 }
 
 function computedImportProblems(layout: Layout, source: SourceFile): readonly Problem[] {

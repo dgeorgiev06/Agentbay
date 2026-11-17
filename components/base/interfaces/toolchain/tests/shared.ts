@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { openModeProject, type ModeProject, type ProjectFolder } from "../../../../../tests/test-toolbox.ts";
@@ -53,7 +53,8 @@ type Toolchain = {
   readonly failure: (action: string, input: Fields) => Promise<string>;
   readonly write: (label: string, wanted: Wanted) => Promise<string>;
   readonly filesIn: (folder: string) => Promise<Files>;
-  readonly outside: (folder: string) => Promise<Files>;
+  readonly projectOutsideTheFolders: () => Promise<Files>;
+  readonly projectAsOpened: Files;
 };
 
 type Case = {
@@ -75,11 +76,15 @@ const waitedSeconds = 30;
 
 const unknownCheck = "no-such-check";
 
-const missingFolder = "checkouts/nowhere";
+const checkoutsFolder = "checkouts";
+
+const missingFolder = join(checkoutsFolder, "nowhere");
 
 const givenReason = "a reason is given";
 
 const kernelStateFolder = ".agentbay";
+
+const kernelDatabase = /\.db(-wal|-shm|-journal)?$/;
 
 const sums: WantedTestFile = [
   { name: "one and one make two", outcome: "passes" },
@@ -425,10 +430,9 @@ const cases: readonly Case[] = [
     run: async (toolchain) => {
       const description = await toolchain.describe();
       const folder = await toolchain.write("written-only-inside", allPassing(description, [sums, wrongSum]));
-      const before = await toolchain.outside(folder);
       await toolchain.check({ folder });
       await toolchain.test({ folder });
-      assert.deepEqual(await toolchain.outside(folder), before);
+      assert.deepEqual(await toolchain.projectOutsideTheFolders(), toolchain.projectAsOpened);
     },
   },
   {
@@ -467,41 +471,51 @@ async function filesUnder(root: string, folder: string): Promise<Record<string, 
   return found;
 }
 
-function isInside(folder: string, path: string): boolean {
-  return path === folder || path.startsWith(`${folder}/`);
+type Setting = {
+  readonly index: number;
+  readonly foldersSetAside: Set<string>;
+  readonly asOpened: Files;
+};
+
+function isKernelDatabase(path: string): boolean {
+  return path.startsWith(`${kernelStateFolder}/`) && kernelDatabase.test(path);
 }
 
-async function shownEntry(root: string, path: string): Promise<string> {
-  return isInside(kernelStateFolder, relative(root, path)) ? "" : readFile(path, "utf8");
-}
-
-async function entriesOutside(root: string, folder: string, skipped: string): Promise<Record<string, string>> {
+async function entriesOutside(root: string, folder: string, skipped: ReadonlySet<string>): Promise<Files> {
   const found: Record<string, string> = {};
   for (const entry of await readdir(folder, { withFileTypes: true })) {
     const path = join(folder, entry.name);
-    if (path === skipped) {
+    const shown = relative(root, path);
+    if (skipped.has(path) || isKernelDatabase(shown)) {
       continue;
     }
     if (entry.isDirectory()) {
-      found[`${relative(root, path)}/`] = "";
+      found[`${shown}/`] = "";
       Object.assign(found, await entriesOutside(root, path, skipped));
     } else {
-      found[relative(root, path)] = await shownEntry(root, path);
+      found[shown] = await readFile(path, "utf8");
     }
   }
   return found;
 }
 
-function toolchainFor(project: ModeProject, underTest: ToolchainUnderTest, index: number): Toolchain {
+function toolchainFor(project: ModeProject, underTest: ToolchainUnderTest, setting: Setting): Toolchain {
   const reference = (action: string): string => `${underTest.mode}.${action}`;
+  const given = (input: Fields): Fields => {
+    if (typeof input.folder === "string") {
+      setting.foldersSetAside.add(resolve(project.root, input.folder));
+    }
+    return input;
+  };
   return {
     describe: async () => descriptionOf(await project.output(reference("describe"), {})),
     describeRun: () => project.run(reference("describe"), {}),
-    check: (input) => project.output(reference("check"), { timeLimitSeconds: checkSeconds, ...input }),
-    test: (input) => project.output(reference("test"), { timeLimitSeconds: testSeconds, ...input }),
-    failure: (action, input) => project.failure(reference(action), input),
+    check: (input) => project.output(reference("check"), { timeLimitSeconds: checkSeconds, ...given(input) }),
+    test: (input) => project.output(reference("test"), { timeLimitSeconds: testSeconds, ...given(input) }),
+    failure: (action, input) => project.failure(reference(action), given(input)),
     write: async (label, wanted) => {
-      const folder = join("checkouts", `case-${String(index + 1)}-${label}`);
+      const folder = join(checkoutsFolder, `case-${String(setting.index + 1)}-${label}`);
+      setting.foldersSetAside.add(join(project.root, folder));
       for (const [path, text] of Object.entries(underTest.checkout(wanted))) {
         const file = join(project.root, folder, path);
         await mkdir(dirname(file), { recursive: true });
@@ -510,22 +524,27 @@ function toolchainFor(project: ModeProject, underTest: ToolchainUnderTest, index
       return folder;
     },
     filesIn: (folder) => filesUnder(join(project.root, folder), join(project.root, folder)),
-    outside: (folder) => entriesOutside(project.root, project.root, join(project.root, folder)),
+    projectOutsideTheFolders: () => entriesOutside(project.root, project.root, setting.foldersSetAside),
+    projectAsOpened: setting.asOpened,
   };
 }
 
 export function testToolchain(underTest: ToolchainUnderTest, projectFolder: ProjectFolder = {}): void {
   const { mode } = underTest;
+  const foldersSetAside = new Set<string>();
   let project: ModeProject;
+  let asOpened: Files;
   before(async () => {
     project = await openModeProject({ bindings: {}, adapter: "claude-code", modes: [mode] }, projectFolder);
+    await mkdir(join(project.root, checkoutsFolder));
+    asOpened = await entriesOutside(project.root, project.root, foldersSetAside);
   });
   after(async () => {
     await project.close();
   });
   for (const [index, entry] of cases.entries()) {
     test(`${interfaceName}@1, ${mode}: ${entry.name}`, async () => {
-      await entry.run(toolchainFor(project, underTest, index));
+      await entry.run(toolchainFor(project, underTest, { index, foldersSetAside, asOpened }));
     });
   }
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ModeList } from "../bay/contracts.ts";
+import { isRecord } from "../bay/json.ts";
 import { recordWithTrust } from "../bay/trust.ts";
 import { checkFake, separate, separateFiles } from "./check-fixture.ts";
 import { config, schemaText, yamlText } from "./system-fixture.ts";
@@ -176,4 +177,41 @@ test("a trust record that cannot be read is one error, whether or not a project 
   const nothingListed = goManifest.slice(0, goManifest.indexOf("resources:"));
   const quiet = { ...goFiles(nothingListed), ".agentbay/trust.json": "{ version: 1" };
   assert.deepEqual(await findingsOf(quiet), [unreadable]);
+});
+
+test("the counts of a changed list say how many commands were removed and changed, and folders removed", async () => {
+  const trusted: ModeList = {
+    ...goList,
+    commands: [...goList.commands, { name: "fmt", words: ["go", "fmt", "./..."], effects: ["read", "write"] }],
+  };
+  const manifest = goManifest
+    .replace("    build: { run: build ./..., effects: [read, write] }\n", "")
+    .replace("    vet: { run: vet ./..., effects: [read] }", "    vet: { run: vet -all, effects: [read] }")
+    .replace("  files:\n    throwaway: [.forge/go-cache/]\n", "");
+  const files = { ...goFiles(manifest), ".agentbay/trust.json": recordFor(trusted, scriptsOnTheDay) };
+  const findings = await findingsOf(files);
+  assert.deepEqual(
+    findings.map((finding) => (isRecord(finding) ? finding.message : finding)),
+    [
+      "The list of mode go-toolchain is not the list the owner trusted on 2026-11-17 (2 commands removed, 1 " +
+        "changed; 1 throwaway folder removed), so none of it is granted.",
+    ],
+  );
+});
+
+test("a script file whose name could redraw a terminal is named with escapes", async () => {
+  const files = {
+    ...goFiles(goManifest),
+    [`${folder}/scripts/\u001b[2Jclear.ts`]: vetScript,
+    ".agentbay/trust.json": recordFor(goList, scriptsOnTheDay),
+  };
+  const findings = await findingsOf(files);
+  assert.deepEqual(
+    findings.slice(2).map((finding) => (isRecord(finding) ? finding.message : finding)),
+    [
+      "1 script file of mode go-toolchain changed since the owner trusted its list on 2026-11-17: " +
+        "scripts/\\u001b[2Jclear.ts added. The list did not change, so the trust stands; the scripts choose the " +
+        "arguments of its commands.",
+    ],
+  );
 });

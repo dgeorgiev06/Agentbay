@@ -4,6 +4,7 @@ import { test } from "node:test";
 import type { Answer } from "../bay/answers.ts";
 import { createBroker, type StepBroker } from "../bay/broker/broker.ts";
 import type { Effect, ModeGrants } from "../bay/contracts.ts";
+import type { Child, ChildProcesses } from "../bay/ports.ts";
 import {
   nodeChildProcesses,
   nodeFileInspector,
@@ -291,5 +292,60 @@ test("an agent query redacts what it returns before it cuts long cells", async (
 test("an agent query against a mode with no database yet fails plainly", async () => {
   await withBroker(["read"], async ({ broker }) => {
     assert.match(failureOf(await broker.ask("db.agentQuery", { sql: "select 1" })).message, /no database yet/);
+  });
+});
+
+function watchedChildProcesses(started: Child[]): ChildProcesses {
+  return {
+    start: (request, onLine) => {
+      const child = nodeChildProcesses.start(request, onLine);
+      started.push(child);
+      return child;
+    },
+  };
+}
+
+async function endWithin(child: Child, milliseconds: number): Promise<string> {
+  let timer: NodeJS.Timeout | undefined;
+  const waited = new Promise<string>((resolve) => {
+    timer = setTimeout(() => {
+      resolve("still running");
+    }, milliseconds);
+  });
+  try {
+    return await Promise.race([child.ended.then((end) => end.how), waited]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+test("closing a step's broker ends the database processes it opened", async () => {
+  await withProject(async (root) => {
+    const started: Child[] = [];
+    const broker = createBroker({
+      layout: projectLayout(root),
+      files: nodeFileSystem,
+      throwawayFolders: nodeThrowawayFolders,
+      inspector: nodeFileInspector,
+      http: scriptedHttp(() => ({ status: 500, headers: {}, body: "" })),
+      secrets: new SecretStore({ environment: {}, processes: noProcesses, platform: "linux" }),
+      events: recordingSink(),
+      clock: systemClock,
+      childProcesses: watchedChildProcesses(started),
+      processes: noProcesses,
+      commandSearchPath: "/usr/bin:/bin",
+    }).forStep(place, permissionsIn(root, { effects: ["read", "write"] }));
+    try {
+      valueOf(await broker.ask("db.execute", { sql: "create table notes (title text)", parameters: [] }));
+      valueOf(await broker.ask("db.query", { sql: "select count(*) as notes from notes", parameters: [] }));
+      assert.equal(started.length, 1);
+      broker.close();
+      assert.deepEqual(await Promise.all(started.map((child) => endWithin(child, 5000))), ["signalled"]);
+    } finally {
+      broker.close();
+      for (const child of started) {
+        child.kill();
+      }
+    }
   });
 });

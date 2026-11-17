@@ -8,7 +8,7 @@ import {
   type LoadedModeFolder,
   type ModeFolder,
 } from "./check-context.ts";
-import { importSpecifiers, type ImportSpecifier } from "./import-scanner.ts";
+import { type Binds, importSpecifiers, type ImportSpecifier } from "./import-scanner.ts";
 import { isInsideOrEqual, pathIn, shownPath, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
 import { sdkSpecifier } from "./protocol-json.ts";
@@ -23,6 +23,7 @@ type LiteralImport = {
   readonly file: string;
   readonly text: string;
   readonly line: number;
+  readonly binds: Binds;
 };
 
 type Graph = ReadonlyMap<string, readonly string[]>;
@@ -53,7 +54,7 @@ async function readSources(files: FileSystem, paths: readonly string[]): Promise
 
 function literalImports(source: SourceFile): readonly LiteralImport[] {
   return source.specifiers.flatMap((specifier) =>
-    specifier.kind === "literal" ? [{ file: source.file, text: specifier.text, line: specifier.line }] : [],
+    specifier.kind === "literal" ? [{ ...specifier, file: source.file }] : [],
   );
 }
 
@@ -167,26 +168,28 @@ type SharedTestsOfMode = {
   readonly sharedTests: ReadonlyMap<string, string>;
 };
 
-function testedFiles(mode: ModeFolder, sources: readonly SourceFile[]): ReadonlySet<string> {
+function filesTestsTakeValuesFrom(mode: ModeFolder, sources: readonly SourceFile[]): ReadonlySet<string> {
   const imports = sources.filter((source) => isModeTest(mode, source.file)).flatMap(literalImports);
-  return new Set(imports.filter((entry) => isRelative(entry.text)).map((entry) => resolved(entry.file, entry.text)));
+  const valueImports = imports.filter((entry) => entry.binds === "values" && isRelative(entry.text));
+  return new Set(valueImports.map((entry) => resolved(entry.file, entry.text)));
 }
 
 function unrunSharedTestProblems(found: SharedTestsOfMode, sources: readonly SourceFile[]): readonly Problem[] {
   const { layout, mode, sharedTests } = found;
-  const imported = testedFiles(mode, sources);
+  const run = filesTestsTakeValuesFrom(mode, sources);
   const references = mode.manifest.implements ?? [];
   const name = mode.manifest.name;
   return [...sharedTests]
-    .filter(([, file]) => !imported.has(file))
+    .filter(([, file]) => !run.has(file))
     .map(([reference, file]) =>
       mode.at(["implements", references.indexOf(reference)], {
         message:
           `Mode ${name} implements ${reference}, whose shared test ${shownPath(layout, file)} no test of the ` +
-          "mode imports, so nothing shows that the mode does what the interface means.",
+          "mode runs, so nothing shows that the mode does what the interface means.",
         fix:
-          `Add a test under ${mode.label}/tests/ that imports ${relative(join(mode.folder, "tests"), file)} ` +
-          `and calls what it exports with { mode: "${name}" }.`,
+          `Add a test file under ${mode.label}/tests/ that imports the function ` +
+          `${relative(join(mode.folder, "tests"), file)} exports and calls it with { mode: "${name}" }. ` +
+          "An import of its types alone, or of the file for its side effects, runs nothing.",
       }),
     );
 }

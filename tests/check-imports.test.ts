@@ -57,6 +57,21 @@ test("a mode's test may import the shared test of an interface its mode implemen
   withoutFinding(report, "whose shared test");
 });
 
+const storeTest = "components/base/store/tests/items-store.test.ts";
+
+const unrunMessage =
+  `Mode store implements items-store@1, whose shared test ${storeShared} no test of the mode runs, ` +
+  "so nothing shows that the mode does what the interface means.";
+
+const unrunFix =
+  "Add a test file under components/base/store/tests/ that imports the function " +
+  '../../interfaces/items-store/tests/shared.ts exports and calls it with { mode: "store" }. ' +
+  "An import of its types alone, or of the file for its side effects, runs nothing.";
+
+async function checkStoreTest(text: string): ReturnType<typeof check> {
+  return check({ ...cleanFiles(), [storeShared]: sharedTestText, [storeTest]: text });
+}
+
 test("a mode that implements an interface with a shared test, and has no test that imports it, is reported with a fix", async () => {
   const storeScript = "components/base/store/scripts/put.ts";
   const report = await check({
@@ -64,19 +79,50 @@ test("a mode that implements an interface with a shared test, and has no test th
     [storeShared]: sharedTestText,
     [storeScript]: 'import { testItemsStore } from "../../interfaces/items-store/tests/shared.ts";\n',
   });
-  const finding = findFinding(
-    report,
-    "components/base/store/mode.yaml",
-    `Mode store implements items-store@1, whose shared test ${storeShared} no test of the mode imports`,
-  );
-  assert.equal(
-    finding.fix,
-    "Add a test under components/base/store/tests/ that imports ../../interfaces/items-store/tests/shared.ts " +
-      'and calls what it exports with { mode: "store" }.',
-  );
+  const finding = findFinding(report, "components/base/store/mode.yaml", unrunMessage);
+  assert.equal(finding.fix, unrunFix);
   assert.equal(finding.severity, "error");
   findFinding(report, storeScript, `which resolves to ${storeShared}`);
   withoutFinding(report, "Mode notes implements");
+});
+
+test("a mode whose test imports only types from the shared test with import type does not run it", async () => {
+  const report = await checkStoreTest(
+    'import type { Files } from "../../interfaces/items-store/tests/shared.ts";\nexport type Seen = Files;\n',
+  );
+  assert.equal(findFinding(report, "components/base/store/mode.yaml", unrunMessage).fix, unrunFix);
+});
+
+test("a mode whose test imports only names marked type from the shared test does not run it", async () => {
+  const report = await checkStoreTest(
+    'import { type Files, type Start } from "../../interfaces/items-store/tests/shared.ts";\n' +
+      "export type Seen = Files | Start;\n",
+  );
+  assert.equal(findFinding(report, "components/base/store/mode.yaml", unrunMessage).fix, unrunFix);
+});
+
+test("a mode whose test imports the shared test only for its side effects does not run it", async () => {
+  const report = await checkStoreTest('import "../../interfaces/items-store/tests/shared.ts";\n');
+  assert.equal(findFinding(report, "components/base/store/mode.yaml", unrunMessage).fix, unrunFix);
+});
+
+test("a mode whose test imports the shared test's function and calls it with the mode runs it", async () => {
+  const report = await checkStoreTest(
+    [
+      'import { testItemsStore, type Files } from "../../interfaces/items-store/tests/shared.ts";',
+      'testItemsStore({ mode: "store" });',
+      "export type Seen = Files;",
+      "",
+    ].join("\n"),
+  );
+  withoutFinding(report, "whose shared test");
+});
+
+test("a test that imports the shared test's function and never calls it counts as running it: the check cannot tell", async () => {
+  const report = await checkStoreTest(
+    'import { testItemsStore } from "../../interfaces/items-store/tests/shared.ts";\nvoid testItemsStore;\n',
+  );
+  withoutFinding(report, "whose shared test");
 });
 
 test("mode code importing another mode's file is reported with the resolved path", async () => {

@@ -5,26 +5,24 @@ import { test } from "node:test";
 import type { Answer } from "../bay/answers.ts";
 import { Broker } from "../bay/broker/broker.ts";
 import type { Effect, Json, ModeGrants } from "../bay/contracts.ts";
-import {
-  nodeChildProcesses,
-  nodeFileInspector,
-  nodeFileSystem,
-  nodeThrowawayFolders,
-  systemClock,
-} from "../bay/node-ports.ts";
+import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, nodeThrowawayFolders } from "../bay/node-ports.ts";
+import type { HttpRequest, HttpResponse } from "../bay/ports.ts";
 import { SecretStore } from "../bay/secrets.ts";
+import { fakeClock } from "./fakes.ts";
 import {
+  exitedProcess,
   noProcesses,
   permissionsIn,
   place,
   projectLayout,
+  recordingProcesses,
   recordingSink,
   scriptedHttp,
   withProject,
   writeProjectFile,
 } from "./broker-fixture.ts";
 
-type Moved = keyof Broker["entries"];
+type Moved = keyof Broker["entries"] | "secrets.get" | "http.request" | "events.emit" | "spend" | "commands.run";
 
 type Asking = {
   readonly ask: (broker: Broker) => Promise<Answer<Json>>;
@@ -32,7 +30,7 @@ type Asking = {
   readonly grants?: (root: string) => Partial<ModeGrants>;
 };
 
-type Refusing = Asking & { readonly change: string };
+type Refusing = Asking & { readonly change: string; readonly detail?: { readonly [key: string]: Json } };
 
 type Allowed = Asking & { readonly value: Json; readonly recorded: readonly Json[] };
 
@@ -47,6 +45,8 @@ type Proofs = {
 };
 
 const secretValue = "made-up-token-for-proofs";
+
+const secondSecretValue = "second-made-up-token-for-proofs";
 
 const manifest = "<root>/components/modes/notes/mode.yaml";
 
@@ -65,6 +65,43 @@ const kebabPartition = "Name the partition with lowercase letters, digits and si
 const plainSql = "No manifest line allows attach, detach, vacuum, pragma or transaction statements; use plain SQL.";
 
 const migrationsOfTheMode = `Point resources.db.migrations in ${manifest} at a folder of the mode.`;
+
+const networkNeeded = `A request over the network needs the network effect; to allow it, add network to actions.look.effects in ${manifest}.`;
+
+const spendNeeded = `Spending more than nothing needs the spend effect; to allow it, add spend to actions.look.effects in ${manifest}.`;
+
+const commandNeeds = (effect: Effect): string =>
+  `A command can do anything its program can, so running one needs all five effects; to allow it, add ${effect} to actions.look.effects in ${manifest}.`;
+
+const brokerKinds = "Choose another kind for the event.";
+
+const spendingShape = "Report spending as { items, usd, tokens } with numbers of at least 0.";
+
+const projectFolderOnly =
+  'Give a folder of the project in the call to context.commands.run, such as "."; no manifest line allows another.';
+
+const allFive: readonly Effect[] = ["read", "write", "network", "spend", "delete"];
+
+const fine: HttpResponse = { status: 200, headers: {}, body: "fine" };
+
+function answeredRequest(request: HttpRequest): HttpResponse {
+  if (request.url === "https://api.example.com/start") {
+    return { status: 302, headers: { location: "/next" }, body: "" };
+  }
+  return fine;
+}
+
+function get(url: string, headers: Readonly<Record<string, string>> = {}): HttpRequest {
+  return { method: "GET", url, headers };
+}
+
+const exited = { how: "exited", exitCode: 0 } as const;
+
+const nodeVersion = ["node", "--version"];
+
+const echoing = ["node", "-e", "process.stdin.pipe(process.stdout)"];
+
+const helloHash = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
 
 const outsideMigrations = (root: string): Partial<ModeGrants> => ({
   migrationsFolder: join(root, "components/base/store/migrations"),
@@ -460,6 +497,218 @@ const proofs: Proofs = {
       },
     ],
   },
+  "secrets.get": {
+    withoutEffect: "needs no effect",
+    outsideGrant: [
+      {
+        ask: (broker) => broker.secret("OTHER_TOKEN"),
+        effects: every,
+        change: `To allow it, add OTHER_TOKEN under resources.secrets in ${manifest}.`,
+      },
+      {
+        ask: (broker) => broker.secret("api_token"),
+        effects: every,
+        change: `Rename the secret in resources.secrets in ${manifest} and where it is stored.`,
+      },
+    ],
+    allowed: [
+      { ask: (broker) => broker.secret("API_TOKEN"), effects: [], value: secretValue, recorded: [] },
+      { ask: (broker) => broker.secret("SECOND_TOKEN"), effects: [], value: secondSecretValue, recorded: [] },
+    ],
+  },
+  "http.request": {
+    withoutEffect: [
+      { ask: (broker) => broker.request(get("https://api.example.com/x")), effects: [], change: networkNeeded },
+      {
+        ask: (broker) =>
+          broker.request({ method: "POST", url: "https://api.example.com/x", headers: {}, body: "payload" }),
+        effects: writing,
+        change: networkNeeded,
+      },
+    ],
+    outsideGrant: [
+      {
+        ask: (broker) => broker.request(get("https://evil.example/collect")),
+        effects: allFive,
+        change: `To allow it, add evil.example under resources.network in ${manifest}.`,
+      },
+      {
+        ask: (broker) => broker.request(get("http://api.example.com/x")),
+        effects: allFive,
+        change: "Use an https:// URL; no manifest line allows another scheme.",
+      },
+    ],
+    allowed: [
+      {
+        ask: (broker) => broker.request(get("https://api.example.com/x")),
+        effects: ["network"],
+        value: fine,
+        recorded: [
+          {
+            kind: "http",
+            detail: { step: "look.0", method: "GET", url: "https://api.example.com/x", headers: {}, status: 200 },
+          },
+        ],
+      },
+      {
+        ask: (broker) =>
+          broker.request(get("https://api.example.com/start", { authorization: `Bearer ${secretValue}` })),
+        effects: ["network"],
+        value: fine,
+        recorded: [
+          {
+            kind: "http",
+            detail: {
+              step: "look.0",
+              method: "GET",
+              url: "https://api.example.com/start",
+              headers: { authorization: "[redacted]" },
+              status: 302,
+            },
+          },
+          {
+            kind: "http",
+            detail: {
+              step: "look.0",
+              method: "GET",
+              url: "https://api.example.com/next",
+              headers: { authorization: "[redacted]" },
+              status: 200,
+            },
+          },
+        ],
+      },
+    ],
+  },
+  "events.emit": {
+    withoutEffect: "needs no effect",
+    outsideGrant: [
+      { ask: (broker) => broker.emit("refused", { forged: true }), effects: every, change: brokerKinds },
+      { ask: (broker) => broker.emit("http", { url: "https://a.example" }), effects: every, change: brokerKinds },
+    ],
+    allowed: [
+      {
+        ask: (broker) => broker.emit("noted", { day: "2026-11-17" }),
+        effects: [],
+        value: null,
+        recorded: [{ kind: "noted", detail: { day: "2026-11-17" } }],
+      },
+      {
+        ask: (broker) => broker.emit("synced", { note: `token ${secretValue}`, count: 3 }),
+        effects: [],
+        value: null,
+        recorded: [{ kind: "synced", detail: { note: "token [redacted:API_TOKEN]", count: 3 } }],
+      },
+    ],
+  },
+  spend: {
+    withoutEffect: [
+      { ask: (broker) => broker.spend({ usd: 0.5 }), effects: [], change: spendNeeded },
+      { ask: (broker) => broker.spend({ items: 1 }), effects: every, change: spendNeeded },
+    ],
+    outsideGrant: [
+      { ask: (broker) => broker.spend({ items: -1 }), effects: allFive, change: spendingShape },
+      { ask: (broker) => broker.spend({ usd: "x" }), effects: allFive, change: spendingShape },
+    ],
+    allowed: [
+      {
+        ask: (broker) => broker.spend({ usd: 0.5 }),
+        effects: ["spend"],
+        value: { items: 0, usd: 0.5, tokens: 0 },
+        recorded: [],
+      },
+      {
+        ask: (broker) => broker.spend({ items: 2, tokens: 100 }),
+        effects: ["spend"],
+        value: { items: 2, usd: 0, tokens: 100 },
+        recorded: [],
+      },
+    ],
+  },
+  "commands.run": {
+    withoutEffect: [
+      {
+        ask: (broker) => broker.runCommand({ command: nodeVersion, folder: ".", timeLimitSeconds: 30 }),
+        effects: [],
+        change: commandNeeds("read"),
+        detail: { command: nodeVersion, folder: "." },
+      },
+      {
+        ask: (broker) => broker.runCommand({ command: nodeVersion, folder: ".", timeLimitSeconds: 30 }),
+        effects: ["read", "write", "network", "spend"],
+        change: commandNeeds("delete"),
+        detail: { command: nodeVersion, folder: "." },
+      },
+    ],
+    outsideGrant: [
+      {
+        ask: (broker) => broker.runCommand({ command: ["git", "status"], folder: ".", timeLimitSeconds: 30 }),
+        effects: allFive,
+        change:
+          `To allow it, add the command's leading arguments under resources.commands in ${manifest}; ` +
+          "only a mode under the kit's components/base/ may list commands.",
+        detail: { command: ["git", "status"], folder: "." },
+      },
+      {
+        ask: (broker) => broker.runCommand({ command: nodeVersion, folder: "..", timeLimitSeconds: 30 }),
+        effects: allFive,
+        change: projectFolderOnly,
+        detail: { command: nodeVersion, folder: ".." },
+      },
+    ],
+    allowed: [
+      {
+        ask: (broker) => broker.runCommand({ command: nodeVersion, folder: ".", timeLimitSeconds: 30 }),
+        effects: allFive,
+        value: {
+          end: exited,
+          milliseconds: 0,
+          stdout: { text: "v1.0.0\n", cut: false },
+          stderr: { text: "", cut: false },
+        },
+        recorded: [
+          {
+            kind: "command",
+            detail: {
+              step: "look.0",
+              command: nodeVersion,
+              folder: ".",
+              end: exited,
+              milliseconds: 0,
+              stdoutHash: "",
+              stderrHash: "",
+            },
+          },
+        ],
+      },
+      {
+        ask: (broker) =>
+          broker.runCommand({ command: echoing, folder: "notes-in", timeLimitSeconds: 30, input: "hello" }),
+        effects: allFive,
+        value: {
+          end: exited,
+          milliseconds: 0,
+          stdout: { text: "said [redacted:API_TOKEN]", cut: false },
+          stderr: { text: "", cut: false },
+        },
+        recorded: [
+          {
+            kind: "command",
+            detail: {
+              step: "look.0",
+              command: echoing,
+              folder: "notes-in",
+              end: exited,
+              milliseconds: 0,
+              inputHash: helloHash,
+              stdoutHash: "",
+              stderrHash: "",
+            },
+          },
+        ],
+      },
+    ],
+  },
 };
 
 type Asked = {
@@ -467,6 +716,7 @@ type Asked = {
   readonly recorded: readonly Json[];
   readonly before: string;
   readonly after: string;
+  readonly sent: number;
 };
 
 async function treeOf(root: string, folder = root): Promise<readonly string[]> {
@@ -525,13 +775,23 @@ async function asked(asking: Asking): Promise<Asked> {
   await withProject(async (root) => {
     await projectWithNotes(root);
     const events = recordingSink();
+    const http = scriptedHttp(answeredRequest);
+    const processes = recordingProcesses((request) =>
+      exitedProcess(0, request.arguments[0] === "--version" ? "v1.0.0\n" : `said ${secretValue}`, ""),
+    );
     const secrets = new SecretStore({
-      environment: { AGENTBAY_SECRET_API_TOKEN: secretValue },
+      environment: { AGENTBAY_SECRET_API_TOKEN: secretValue, AGENTBAY_SECRET_SECOND_TOKEN: secondSecretValue },
       processes: noProcesses,
       platform: "linux",
     });
     await secrets.lookUp("API_TOKEN");
-    const grants = { throwawayPaths: [join(root, "scratch")], secrets: ["API_TOKEN"], ...asking.grants?.(root) };
+    const grants = {
+      throwawayPaths: [join(root, "scratch")],
+      secrets: ["API_TOKEN", "SECOND_TOKEN"],
+      hosts: ["api.example.com"],
+      commands: ["node --version", "node -e"],
+      ...asking.grants?.(root),
+    };
     const broker = new Broker({
       layout: projectLayout(root),
       permissions: permissionsIn(root, { effects: asking.effects, ...grants }),
@@ -539,12 +799,12 @@ async function asked(asking: Asking): Promise<Asked> {
       files: nodeFileSystem,
       throwawayFolders: nodeThrowawayFolders,
       inspector: nodeFileInspector,
-      http: scriptedHttp(() => ({ status: 500, headers: {}, body: "" })),
+      http,
       secrets,
       events,
-      clock: systemClock,
+      clock: fakeClock(new Date("2026-11-17T08:00:00Z")),
       childProcesses: nodeChildProcesses,
-      processes: noProcesses,
+      processes,
       commandSearchPath: "/usr/bin:/bin",
     });
     const before = (await treeOf(root)).join("\n");
@@ -552,7 +812,8 @@ async function asked(asking: Asking): Promise<Asked> {
       const answer = await asking.ask(broker);
       const recorded = events.events.map((event) => shownJson({ kind: event.kind, detail: event.detail }, root));
       const after = (await treeOf(root)).join("\n");
-      result = { answer: shownAnswer(answer, root), recorded, before, after };
+      const sent = http.requests.length + processes.requests.length;
+      result = { answer: shownAnswer(answer, root), recorded, before, after, sent };
     } finally {
       broker.close();
     }
@@ -562,15 +823,13 @@ async function asked(asking: Asking): Promise<Asked> {
 }
 
 async function assertRefusedAndNothingDone(name: string, refusing: Refusing): Promise<void> {
-  const { answer, recorded, before, after } = await asked(refusing);
+  const { answer, recorded, before, after, sent } = await asked(refusing);
   assert.ok(!answer.ok && answer.kind === "refused", `${name}: ${JSON.stringify(answer)}`);
   assert.equal(answer.change, refusing.change, name);
-  assert.deepEqual(
-    recorded,
-    [{ kind: "refused", detail: { resource: answer.resource, step: "look.0", message: answer.message } }],
-    name,
-  );
+  const detail = { resource: answer.resource, step: "look.0", message: answer.message, ...refusing.detail };
+  assert.deepEqual(recorded, [{ kind: "refused", detail }], name);
   assert.equal(after, before, `${name}: the project changed`);
+  assert.equal(sent, 0, `${name}: a request was sent or a command was run`);
 }
 
 test("an operation without its needed effect is refused and does nothing", async () => {

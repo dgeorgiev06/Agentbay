@@ -206,6 +206,19 @@ test("submit refuses a run or step argument, a missing token, an unknown token a
   });
 });
 
+test("submit hands a token that starts with two dashes to the token check, and says when the token is forgotten", async () => {
+  await withProject(async (project) => {
+    const root = ["--project", project.root];
+    const output = '{"text":"Hello, Ada, and welcome back."}';
+    const dashed = await bay(["submit", output, "--token", "--Zm9yZ2VkLXRva2VuLWZvci10aGUtdGVzdC1vbmx5", ...root]);
+    assert.equal(dashed.exitCode, 1, dashed.output);
+    assert.match(dashed.output, /The token is not valid: it was never issued/);
+    const forgotten = await bay(["submit", output, "--token", "--json", ...root]);
+    assert.equal(forgotten.exitCode, 2);
+    assert.deepEqual(forgotten.json, { ok: false, usage: "The option --token needs a value." });
+  });
+});
+
 test("submit never prints the token of the next skill step, and says how the coordinator gets its task", async () => {
   await withProject(async (project) => {
     const root = ["--project", project.root];

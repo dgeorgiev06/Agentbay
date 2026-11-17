@@ -1,4 +1,4 @@
-import { isAbsolute, join, normalize } from "node:path/posix";
+import { basename, isAbsolute, join, normalize } from "node:path/posix";
 import type { GrantedCommand, ListTrust, ModeGrants, ModeList } from "./contracts.ts";
 import type { Mode } from "./generated/mode.ts";
 import { isInsideOrEqual, isProjectTheKit, pathIn, shownPath, type Home, type Layout } from "./layout.ts";
@@ -95,11 +95,17 @@ function ownCodeAreas(own: GrantRequest): readonly ProtectedArea[] {
 }
 
 function stateAreas(layout: Layout): readonly ProtectedArea[] {
-  return stateFolders.map((folder) => ({
+  const folders = stateFolders.map((folder) => ({
     path: pathIn(layout, "project", folder.path),
     name: folder.name,
     rule: noMode,
   }));
+  const configFile = {
+    path: layout.configFile,
+    name: `the project's config file ${basename(layout.configFile)}`,
+    rule: noMode,
+  };
+  return [...folders, configFile];
 }
 
 function kernelAreas(layout: Layout): readonly ProtectedArea[] {

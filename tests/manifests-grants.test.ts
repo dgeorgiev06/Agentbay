@@ -121,6 +121,16 @@ const brokenProjects: readonly Broken[] = [
     ),
   },
   {
+    rule: "a write path to the project's config file",
+    files: briefingWith({ files: { write: ["agentbay.config.yaml"] } }),
+    layout,
+    problem: pathProblem(
+      briefingFile,
+      firstWrite,
+      "The path agentbay.config.yaml points into the project's config file agentbay.config.yaml, which no mode may name.",
+    ),
+  },
+  {
     rule: "a path into a kernel folder of the kit",
     files: briefingWith({ files: { read: ["bay/sdk.ts"] } }),
     layout,

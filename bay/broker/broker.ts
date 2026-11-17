@@ -1,5 +1,5 @@
 import type { Answer, RefusalWording } from "../answers.ts";
-import type { Effect, Permissions, ScriptRunner, StepPlace } from "../contracts.ts";
+import type { Effect, GrantedCommand, ModeGrants, Permissions, ScriptRunner, StepPlace } from "../contracts.ts";
 import type { OperationName, Results } from "./operations.ts";
 import { lackedEffect } from "./command-operations.ts";
 import { type ActionAt, type EntryRequests, missingEffectRefusal, type Need, writableFolders } from "./rule.ts";
@@ -36,8 +36,12 @@ export function createBroker(services: ScriptRunnerOptions): Broker {
   };
 }
 
+function commandsForAnAgent(grants: ModeGrants): readonly GrantedCommand[] {
+  return grants.listTrust.state === "not needed" ? grants.commands : [];
+}
+
 export function reachOf(permissions: Permissions): Reach {
-  const runnable = permissions.grants.commands.filter(
+  const runnable = commandsForAnAgent(permissions.grants).filter(
     (command) => lackedEffect(command, permissions.actionEffects) === undefined,
   );
   return {

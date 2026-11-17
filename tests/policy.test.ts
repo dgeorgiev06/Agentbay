@@ -546,6 +546,34 @@ test("a mode outside the kit's components/base/ that names throwaway folders is 
   assert.deepEqual(grantsFor(projectBase, "briefing").throwawayPaths, []);
 });
 
+test("no mode may be granted the project's config file, to write or to read, in any case of its name", () => {
+  const naming = (files: DeclaredFiles): Modes => [
+    { folder: "/project/components/base/briefing", manifest: { ...briefing, resources: { files } } },
+  ];
+  const wording = "points into the project's config file agentbay.config.yaml, which no mode may name.";
+  assert.deepEqual(
+    problemsFor(
+      naming({ write: ["agentbay.config.yaml", "./Agentbay.Config.yaml"], read: ["agentbay.config.yaml"] }),
+      "briefing",
+    ).map((problem) => [problem.at, problem.message]),
+    [
+      [["resources", "files", "read", 0], `The path agentbay.config.yaml ${wording}`],
+      [["resources", "files", "write", 0], `The path agentbay.config.yaml ${wording}`],
+      [["resources", "files", "write", 1], `The path ./Agentbay.Config.yaml ${wording}`],
+    ],
+  );
+  const forge: Modes = [
+    {
+      folder: "/project/components/base/forge",
+      manifest: modeNamed("forge", { files: { write: ["agentbay.config.yaml"] } }),
+    },
+  ];
+  assert.deepEqual(
+    problemsFor(forge, "forge").map((problem) => problem.message),
+    [`The path agentbay.config.yaml ${wording}`],
+  );
+});
+
 test("a throwaway folder may not be the project root, nor be or sit inside .agentbay/", () => {
   const named = (throwaway: readonly string[]): Modes => [
     { folder: "/project/components/base/briefing", manifest: { ...briefing, resources: { files: { throwaway } } } },

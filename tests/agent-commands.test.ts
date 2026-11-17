@@ -3,7 +3,8 @@ import { test } from "node:test";
 import { agentCommands, type SkillAgent } from "../bay/adapter.ts";
 import type { Effect, ModeGrants } from "../bay/contracts.ts";
 import { layoutOf } from "../bay/layout.ts";
-import { grantsOf } from "../bay/policy.ts";
+import { grantsOf, listOf } from "../bay/policy.ts";
+import { listHashOf } from "../bay/trust.ts";
 import { grantsIn, modeNamed } from "./broker-fixture.ts";
 import { grantedCommand } from "./grants-fixture.ts";
 
@@ -70,4 +71,37 @@ test("an agent is given each command as the words its mode's commands start with
     "git -c core.hooksPath=/dev/null status --porcelain --",
     "git -c core.hooksPath=/dev/null worktree remove --end-of-options",
   ]);
+});
+
+test("an agent's own shell in a skill step is given the commands of the kit's base modes only, never those of a project mode the owner trusts", () => {
+  const manifest = modeNamed("notes", {
+    commands: { changes: { run: "git status --porcelain --", effects: ["read"] } },
+  });
+  const list = listOf(manifest);
+  const given = { list, hash: listHashOf(list), at: "2026-11-17T14:02:00.000Z", by: "a test" };
+  const project = layoutOf({ kit: "/kit", project: "/project" });
+  const trusted = grantsOf({
+    manifest,
+    home: "project",
+    folder: "/project/components/modes/notes",
+    layout: project,
+    otherModes: [],
+    record: { ok: true, value: { version: 1, modes: { notes: given } } },
+  });
+  assert.ok(trusted.ok, JSON.stringify(trusted));
+  assert.equal(trusted.value.listTrust.state, "trusted");
+  assert.deepEqual(trusted.value.commands, [
+    { name: "changes", words: ["git", "status", "--porcelain", "--"], effects: ["read"] },
+  ]);
+  assert.deepEqual(agentCommands(agentWith(["read"], trusted.value)), []);
+  const base = grantsOf({
+    manifest,
+    home: "kit",
+    folder: "/kit/components/base/notes",
+    layout: project,
+    otherModes: [],
+    record: { ok: true, value: { version: 1, modes: {} } },
+  });
+  assert.ok(base.ok, JSON.stringify(base));
+  assert.deepEqual(agentCommands(agentWith(["read"], base.value)), ["git status --porcelain --"]);
 });

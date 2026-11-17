@@ -547,12 +547,12 @@ A made-up worktrees@1 that a test adds to a copy of the kit. It keeps each commi
 `;
 }
 
-function repositoryOf(name: string): string {
+function modeTestOf(name: string): string {
   return String.raw`import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { openModeProject, type ModeProject } from "../../../../tests/test-toolbox.ts";
-import type { Change, Files, Repository, Start } from "../../interfaces/worktrees/tests/shared.ts";
+import { testWorktrees, type Change, type Files, type Repository, type Start } from "../../interfaces/worktrees/tests/shared.ts";
 
 type Commit = {
   readonly parents: readonly string[];
@@ -648,7 +648,7 @@ async function committed(shelf: Shelf, change: Change): Promise<string> {
   return commit;
 }
 
-export async function startShelf(start: Start): Promise<Repository> {
+async function startShelf(start: Start): Promise<Repository> {
   const project = await openModeProject({ bindings: {}, adapter: "claude-code", modes: ["${name}"] });
   const shelf = { project, folder: join(project.root, ".shelf") };
   await writeText(join(shelf.folder, "HEAD"), start.branch + "\n");
@@ -667,12 +667,6 @@ export async function startShelf(start: Start): Promise<Repository> {
     checkedOut: () => checkedOut(shelf),
   };
 }
-`;
-}
-
-function modeTestOf(name: string): string {
-  return String.raw`import { testWorktrees } from "../../interfaces/worktrees/tests/shared.ts";
-import { startShelf } from "./repository.ts";
 
 testWorktrees({ mode: "${name}", ownData: [".shelf"], start: startShelf });
 `;
@@ -696,7 +690,6 @@ export function shelfFiles(name: string, variant: ShelfVariant): ModeFiles {
     "scripts/overlay.ts": overlayScript,
     "scripts/remove.ts": remove,
     "scripts/unbuilt.ts": unbuiltScript,
-    "tests/repository.ts": repositoryOf(name),
     [`tests/${name}.test.ts`]: modeTestOf(name),
     ...Object.fromEntries(exampleFiles),
   };

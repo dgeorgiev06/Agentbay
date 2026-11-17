@@ -1,7 +1,7 @@
 import { fail, type ScriptContext } from "../../../../bay/sdk.ts";
 import { changesIn } from "./lib/changes.ts";
 import { throwawayChanged } from "./lib/copies.ts";
-import { forgetFolder, madeFolder } from "./lib/folders.ts";
+import { folderExists, forgetFolder, goneSentence, madeFolder, type Made } from "./lib/folders.ts";
 import { git, gitSucceeded, safeCommitOf } from "./lib/git.ts";
 import { defineRequestScript } from "./lib/request.ts";
 
@@ -57,11 +57,20 @@ async function removeWorktree(context: ScriptContext, worktree: Worktree): Promi
   await gitSucceeded(context, ".", ["branch", "-d", "--end-of-options", worktree.branch]);
 }
 
+function forgottenReason(folder: string, made: Made): string {
+  const forgotten = `${goneSentence(folder)}, so the mode forgets it.`;
+  return made.kind === "worktree" ? `${forgotten} Its branch ${made.branch} is kept.` : forgotten;
+}
+
 export const run = defineRequestScript(async (request, context) => {
   const folder = request.text("folder");
   const made = await madeFolder(context, folder);
   if (made === undefined) {
     return fail(`The folder ${folder} was not made by this mode, so the mode does not remove it.`);
+  }
+  if (!(await folderExists(context, folder))) {
+    await forgetFolder(context, folder);
+    return { folder, kind: "forgotten", reason: forgottenReason(folder, made) };
   }
   if (made.kind === "copy") {
     await throwawayChanged(context.files.remove(folder));

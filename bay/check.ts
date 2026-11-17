@@ -1,23 +1,21 @@
 import {
   checkContextOf,
+  counted,
   errors,
-  isLoaded,
   warnings,
   type CheckContext,
   type FileListing,
   type Finding,
-  type LoadedModeFolder,
 } from "./check-context.ts";
-import { listed } from "./answers.ts";
 import { checkImports, checkKernelImports } from "./check-imports.ts";
 import { checkKitLayout, checkLayout } from "./check-layout.ts";
 import { checkLimits } from "./check-limits.ts";
 import { checkSkills } from "./check-skills.ts";
+import { checkTrust } from "./check-trust.ts";
 import { isProjectTheKit, shownPath, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
 import { inspectSystem } from "./manifests/manifests.ts";
-import { listedCommandsOf } from "./policy.ts";
-import type { Problem } from "./outcome.ts";
+import { readTrustRecord } from "./trust.ts";
 
 export type CheckPorts = {
   readonly files: FileSystem;
@@ -29,26 +27,6 @@ export type CheckReport = {
   readonly errors: number;
   readonly warnings: number;
 };
-
-function commandProblems(mode: LoadedModeFolder): readonly Problem[] {
-  return listedCommandsOf(mode.manifest).map(({ name, words, effects }) =>
-    mode.at(["resources", "commands", name], {
-      message:
-        `Mode ${mode.manifest.name} lists the command ${name}, which runs ${words.join(" ")} and which the mode says ` +
-        `has the effects: ${listed(effects, "none")}; a listed command can run code the agent wrote.`,
-      fix:
-        "Remove the command unless the mode cannot work without it. If it stays, review its words and its effects: " +
-        "the kernel believes the effects a mode lists and cannot check them.",
-    }),
-  );
-}
-
-function checkBaseCommands(context: CheckContext): readonly Finding[] {
-  return context.modes
-    .filter(isLoaded)
-    .filter((mode) => mode.tier === "base")
-    .flatMap((mode) => warnings(commandProblems(mode)));
-}
 
 async function kitFindings(context: CheckContext): Promise<readonly Finding[]> {
   if (!isProjectTheKit(context.layout)) {
@@ -68,13 +46,14 @@ function shownFindings(layout: Layout, findings: readonly Finding[]): readonly F
 export async function checkSystem(ports: CheckPorts, layout: Layout): Promise<CheckReport> {
   const inspection = await inspectSystem(ports.files, layout);
   const context = await checkContextOf({ ...ports, layout, inspection });
+  const record = await readTrustRecord(ports.files, layout);
   const findings = shownFindings(layout, [
     ...errors(inspection.problems),
     ...warnings(inspection.notices),
     ...(await checkSkills(context)),
     ...(await checkLayout(context)),
     ...(await checkImports(context)),
-    ...checkBaseCommands(context),
+    ...(await checkTrust(context, record)),
     ...(await kitFindings(context)),
   ]);
   const errorCount = findings.filter((finding) => finding.severity === "error").length;
@@ -104,10 +83,6 @@ function place(finding: Finding): string {
 function findingLines(finding: Finding): readonly string[] {
   const heading = `${place(finding)}: ${finding.severity}: ${finding.message}`;
   return finding.fix === undefined ? [heading] : [heading, `  fix: ${finding.fix}`];
-}
-
-function counted(count: number, word: string): string {
-  return `${String(count)} ${word}${count === 1 ? "" : "s"}`;
 }
 
 export function summarizeCheck(report: CheckReport): string {

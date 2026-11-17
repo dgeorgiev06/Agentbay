@@ -17,15 +17,16 @@ import { listOf } from "../policy.ts";
 import { runResult } from "../run-report.ts";
 import { shownPath } from "../layout.ts";
 import {
-  changedScriptFiles,
   listHashOf,
   readTrustRecord,
   recordWithTrust,
   recordWithoutTrust,
+  scriptFileChanges,
   scriptFilesOf,
+  shown,
   writeTrustRecord,
 } from "../trust.ts";
-import { differenceCard, listSize, shown, trustCard, trustedWhen, withdrawCard } from "../trust-card.ts";
+import { differenceCard, listSize, trustCard, trustedWhen, withdrawCard } from "../trust-card.ts";
 
 type Channel = { readonly via: "terminal" } | { readonly via: "chat"; readonly quote: string };
 
@@ -314,7 +315,8 @@ function answerRefusalResult(refusal: AnswerRefusal): CommandResult {
 
 async function changedScripts(kernel: Kernel, folder: string, given: TrustGiven): Promise<number> {
   const now = await scriptFilesNow(kernel, folder);
-  return changedScriptFiles(given.scripts, now).length;
+  const changes = scriptFileChanges(given.scripts, now);
+  return changes.added.length + changes.removed.length + changes.changed.length;
 }
 
 async function scriptFilesNow(kernel: Kernel, folder: string): Promise<TrustGiven["scripts"]> {

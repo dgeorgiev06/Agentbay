@@ -1,5 +1,5 @@
 import type { Effect, GrantedCommand, ModeList, TrustGiven } from "./contracts.ts";
-import { listHashOf } from "./trust.ts";
+import { listChanges, listHashOf, shown, type CommandChange, type ListChanges } from "./trust.ts";
 
 export type FirstCard = {
   readonly list: ModeList;
@@ -32,13 +32,6 @@ type Table = {
   readonly nameWidth: number;
 };
 
-type Marker = "+" | "-" | "~";
-
-type CommandChange = {
-  readonly marker: Marker;
-  readonly segments: readonly Segment[];
-};
-
 const width = 44;
 
 const nameWidthAtMost = 16;
@@ -53,24 +46,6 @@ const meaning = [
   "You trust exactly this list. Any change",
   "to it asks you again.",
 ];
-
-function isRedrawing(code: number): boolean {
-  return (
-    code < 0x20 ||
-    (code >= 0x7f && code <= 0x9f) ||
-    (code >= 0x202a && code <= 0x202e) ||
-    (code >= 0x2066 && code <= 0x2069)
-  );
-}
-
-export function shown(text: string): string {
-  return Array.from(text)
-    .map((character) => {
-      const code = character.charCodeAt(0);
-      return isRedrawing(code) ? `\\u${code.toString(16).padStart(4, "0")}` : character;
-    })
-    .join("");
-}
 
 function columns(text: string): number {
   return Array.from(text).length;
@@ -213,79 +188,43 @@ export function trustCard(card: FirstCard): readonly string[] {
   ];
 }
 
-function sameWords(first: readonly string[], second: readonly string[]): boolean {
-  return first.length === second.length && first.every((word, index) => word === second[index]);
-}
+const markers: Readonly<Record<CommandChange["change"], string>> = {
+  added: "+",
+  removed: "-",
+  changed: "~",
+  kept: "=",
+};
 
-function sameEffects(first: readonly Effect[], second: readonly Effect[]): boolean {
-  return sameWords([...first].sort(), [...second].sort());
-}
-
-function changedSegments(before: GrantedCommand, now: GrantedCommand): readonly Segment[] {
-  const wordsWere = sameWords(before.words, now.words) ? [] : [{ label: wasLabel, tokens: wordTokens(before.words) }];
-  const effectsWere = sameEffects(before.effects, now.effects)
-    ? []
-    : [{ label: wasLabel, tokens: effectTokens(before.effects) }];
+function changedSegments(change: CommandChange): readonly Segment[] {
+  if (change.change !== "changed") {
+    return commandSegments(change.command);
+  }
+  const { command, wordsWere, effectsWere } = change;
   return [
-    { label: shown(now.name), tokens: wordTokens(now.words) },
-    ...wordsWere,
-    { label: "", tokens: effectTokens(now.effects) },
-    ...effectsWere,
+    { label: shown(command.name), tokens: wordTokens(command.words) },
+    ...(wordsWere === undefined ? [] : [{ label: wasLabel, tokens: wordTokens(wordsWere) }]),
+    { label: "", tokens: effectTokens(command.effects) },
+    ...(effectsWere === undefined ? [] : [{ label: wasLabel, tokens: effectTokens(effectsWere) }]),
   ];
 }
 
-function commandChange(before: GrantedCommand | undefined, now: GrantedCommand | undefined): CommandChange | undefined {
-  if (before === undefined) {
-    return now === undefined ? undefined : { marker: "+", segments: commandSegments(now) };
-  }
-  if (now === undefined) {
-    return { marker: "-", segments: commandSegments(before) };
-  }
-  if (sameWords(before.words, now.words) && sameEffects(before.effects, now.effects)) {
-    return undefined;
-  }
-  return { marker: "~", segments: changedSegments(before, now) };
+function commandChanges(changes: ListChanges): readonly string[] {
+  const shownChanges = changes.commands.flatMap((change) => (change.change === "kept" ? [] : [change]));
+  const table = { marked: true, nameWidth: nameWidthOf(shownChanges.map((change) => change.command.name)) };
+  return shownChanges.flatMap((change) => rowLines(table, markers[change.change], changedSegments(change)));
 }
 
-function commandNamed(commands: readonly GrantedCommand[], name: string): GrantedCommand | undefined {
-  return commands.find((command) => command.name === name);
-}
-
-function commandNames(change: ChangedList): readonly string[] {
-  const names = [...change.given.list.commands, ...change.list.commands].map((command) => command.name);
-  return [...new Set(names)].sort();
-}
-
-function commandChanges(change: ChangedList): readonly string[] {
-  const names = commandNames(change);
-  const changes = names.flatMap((name) => {
-    const found = commandChange(
-      commandNamed(change.given.list.commands, name),
-      commandNamed(change.list.commands, name),
-    );
-    return found === undefined ? [] : [{ name, found }];
-  });
-  const table = { marked: true, nameWidth: nameWidthOf(changes.map(({ name }) => name)) };
-  return changes.flatMap(({ found }) => rowLines(table, found.marker, found.segments));
-}
-
-function folderChanges(change: ChangedList): readonly string[] {
-  const before = change.given.list.throwaway;
-  const now = change.list.throwaway;
-  const added = now.filter((folder) => !before.includes(folder)).map((folder) => ["+", folder] as const);
-  const removed = before.filter((folder) => !now.includes(folder)).map((folder) => ["-", folder] as const);
+function folderChanges(changes: ListChanges): readonly string[] {
+  const added = changes.folders.added.map((folder) => ["+", folder] as const);
+  const removed = changes.folders.removed.map((folder) => ["-", folder] as const);
   return [...added, ...removed].flatMap(([marker, folder]) =>
     hanging([marker, "folder", shown(folder)], { first: "  ", rest: "    " }),
   );
 }
 
-function stayedLine(change: ChangedList): readonly string[] {
-  const names = commandNames(change).filter((name) => {
-    const before = commandNamed(change.given.list.commands, name);
-    const now = commandNamed(change.list.commands, name);
-    return before !== undefined && now !== undefined && commandChange(before, now) === undefined;
-  });
-  const folders = change.list.throwaway.filter((folder) => change.given.list.throwaway.includes(folder));
+function stayedLine(changes: ListChanges): readonly string[] {
+  const names = changes.commands.flatMap((change) => (change.change === "kept" ? [change.command.name] : []));
+  const folders = changes.folders.kept;
   const stayed = [...names.map(shown), ...folders.map((folder) => `folder ${shown(folder)}`)];
   const items = stayed.length === 0 ? ["nothing"] : listed(stayed);
   return hanging(["=", "as", "before:", ...items], { first: "  ", rest: "    " });
@@ -309,13 +248,14 @@ export function listSize(list: ModeList): string {
 
 export function differenceCard(change: ChangedList): readonly string[] {
   const { list, given } = change;
+  const changes = listChanges(given.list, list);
   return [
     ...paragraph(`The mode ${shown(list.mode)} changed its list.`),
     ...paragraph(`${trustedWhen(given)} None of it runs until you decide.`),
     "",
-    ...commandChanges(change),
-    ...folderChanges(change),
-    ...stayedLine(change),
+    ...commandChanges(changes),
+    ...folderChanges(changes),
+    ...stayedLine(changes),
     "",
     ...paragraph(scriptsSentence(change.changedScripts)),
     "",

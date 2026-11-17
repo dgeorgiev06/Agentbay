@@ -193,7 +193,7 @@ export async function systemReport(files: FileSystem, reportLayout: Layout): Pro
   return { outcome: await loadSystem(files, reportLayout), active: new Set(active), notices: inspection.notices };
 }
 
-export const trustGiving = { at: "2026-11-17T14:02:00.000Z", by: "a test" } as const;
+export const trustGiving = { scripts: {}, at: "2026-11-17T14:02:00.000Z", by: "a test" } as const;
 
 export function trustRecordFiles(list: ModeList): Record<string, string> {
   return { ".agentbay/trust.json": recordWithTrust({ version: 1, modes: {} }, list, trustGiving) };

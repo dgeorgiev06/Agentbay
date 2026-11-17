@@ -78,7 +78,7 @@ test("an agent's own shell in a skill step is given the commands of the kit's ba
     commands: { changes: { run: "git status --porcelain --", effects: ["read"] } },
   });
   const list = listOf(manifest);
-  const given = { list, hash: listHashOf(list), at: "2026-11-17T14:02:00.000Z", by: "a test" };
+  const given = { list, hash: listHashOf(list), scripts: {}, at: "2026-11-17T14:02:00.000Z", by: "a test" };
   const project = layoutOf({ kit: "/kit", project: "/project" });
   const trusted = grantsOf({
     manifest,

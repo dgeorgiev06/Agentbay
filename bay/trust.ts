@@ -1,8 +1,9 @@
-import type { Effect, GrantedCommand, ModeList, TrustGiven } from "./contracts.ts";
+import { join } from "node:path";
+import type { Effect, GrantedCommand, ModeList, ScriptFiles, TrustGiven } from "./contracts.ts";
 import { hashOf, isRecord, parseJson } from "./json.ts";
 import { pathIn, type Layout } from "./layout.ts";
 import { failedWith, succeededWith, type Outcome, type Problem } from "./outcome.ts";
-import type { FileSystem } from "./ports.ts";
+import type { FileSystem, Folders } from "./ports.ts";
 
 export type TrustRecord = {
   readonly version: 1;
@@ -10,8 +11,14 @@ export type TrustRecord = {
 };
 
 export type TrustGiving = {
+  readonly scripts: ScriptFiles;
   readonly at: string;
   readonly by: string;
+};
+
+export type RecordPorts = {
+  readonly files: FileSystem;
+  readonly folders: Folders;
 };
 
 type Place = readonly (string | number)[];
@@ -37,6 +44,10 @@ type Elements<T> = {
 };
 
 const recordPath = ".agentbay/trust.json";
+
+const manifestFile = "mode.yaml";
+
+const testsFolder = "tests/";
 
 const effects: readonly string[] = ["read", "write", "network", "spend", "delete"] satisfies readonly Effect[];
 
@@ -74,6 +85,7 @@ function entryText(given: TrustGiven): TrustGiven {
       throwaway: list.throwaway,
     },
     hash: given.hash,
+    scripts: given.scripts,
     at: given.at,
     by: given.by,
   };
@@ -89,13 +101,40 @@ function recordText(entries: readonly (readonly [string, TrustGiven])[]): string
 }
 
 export function recordWithTrust(record: TrustRecord, list: ModeList, giving: TrustGiving): string {
-  const given = { list, hash: listHashOf(list), at: giving.at, by: giving.by };
+  const given = { list, hash: listHashOf(list), scripts: giving.scripts, at: giving.at, by: giving.by };
   const others = Object.entries(record.modes).filter(([mode]) => mode !== list.mode);
   return recordText([...others, [list.mode, given]]);
 }
 
 export function recordWithoutTrust(record: TrustRecord, mode: string): string {
   return recordText(Object.entries(record.modes).filter(([name]) => name !== mode));
+}
+
+export async function writeTrustRecord(ports: RecordPorts, layout: Layout, text: string): Promise<void> {
+  const file = trustRecordFile(layout);
+  await ports.files.writeAtomic(file, text);
+  await ports.folders.ensureOwnerOnlyFile(file);
+}
+
+function isScriptFile(path: string): boolean {
+  return path !== manifestFile && !path.startsWith(testsFolder);
+}
+
+export async function scriptFilesOf(files: FileSystem, folder: string, paths: readonly string[]): Promise<ScriptFiles> {
+  const read = await Promise.all(
+    paths.filter(isScriptFile).map(async (path) => [path, await files.readText(join(folder, path))] as const),
+  );
+  const hashed = read.flatMap(([path, text]) => (text === undefined ? [] : [[path, hashOf(text)] as const]));
+  return Object.fromEntries(hashed.sort(([first], [second]) => (first < second ? -1 : 1)));
+}
+
+function hashIn(scripts: ScriptFiles, path: string): string | undefined {
+  return Object.hasOwn(scripts, path) ? scripts[path] : undefined;
+}
+
+export function changedScriptFiles(before: ScriptFiles, now: ScriptFiles): readonly string[] {
+  const paths = [...new Set([...Object.keys(before), ...Object.keys(now)])].sort();
+  return paths.filter((path) => hashIn(before, path) !== hashIn(now, path));
 }
 
 function problemAt(place: Place, message: string): Problem {
@@ -172,6 +211,19 @@ function elementsAt<T>(at: FieldName, elements: Elements<T>, problems: Problem[]
   return undefined;
 }
 
+function scriptsAt(owner: Owner, problems: Problem[]): ScriptFiles | undefined {
+  const field = fieldAt(owner, "scripts", problems);
+  if (field === undefined) {
+    return undefined;
+  }
+  const { value } = field;
+  if (isRecord(value) && Object.values(value).every(isText)) {
+    return Object.fromEntries(Object.entries(value).flatMap(([path, hash]) => (isText(hash) ? [[path, hash]] : [])));
+  }
+  problems.push(wrongKind(field.place, "a map of script files to their hashes"));
+  return undefined;
+}
+
 function commandOf(field: Field, problems: Problem[]): GrantedCommand | undefined {
   const owner = ownerOf(field, problems);
   if (owner === undefined) {
@@ -223,12 +275,13 @@ function givenAt(modes: Owner, name: string, problems: Problem[]): TrustGiven | 
   }
   const list = listAt(entry, problems);
   const hash = textAt(entry, "hash", problems);
+  const scripts = scriptsAt(entry, problems);
   const at = textAt(entry, "at", problems);
   const by = textAt(entry, "by", problems);
-  if (list === undefined || hash === undefined || at === undefined || by === undefined) {
+  if (list === undefined || hash === undefined || scripts === undefined || at === undefined || by === undefined) {
     return undefined;
   }
-  return { list, hash, at, by };
+  return { list, hash, scripts, at, by };
 }
 
 function disagreements(name: string, given: TrustGiven): readonly Problem[] {

@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Json } from "../../../bay/contracts.ts";
-import { type OperationName, type Requests, type Results, shapes } from "../../../bay/broker/operations.ts";
+import {
+  type OperationName,
+  type Reading,
+  type Requests,
+  type Results,
+  shapes,
+  shownToAuthor,
+} from "../../../bay/broker/operations.ts";
 import { refusedRequests, refusedResults } from "./operation-refusals.ts";
 
 type Examples = {
@@ -175,6 +182,18 @@ test("the table holds the sixteen operations a script can ask for, each with its
   );
 });
 
+function sentenceOf(side: "request" | "result", operation: OperationName, reading: Reading<unknown>): string {
+  return reading.ok ? "read" : shownToAuthor({ side, operation, misfit: reading.misfit });
+}
+
+function requestSentence(operation: OperationName, value: Json): string {
+  return sentenceOf("request", operation, shapes[operation].request(value));
+}
+
+function answerSentence(operation: OperationName, value: Json): string {
+  return sentenceOf("result", operation, shapes[operation].result(value));
+}
+
 function roundTrip<Name extends OperationName>(name: Name, given: Examples[Name]): void {
   for (const request of given.requests) {
     assert.deepEqual(shapes[name].request(request), { ok: true, value: request }, `the request ${name}`);
@@ -191,7 +210,7 @@ for (const name of operationNames) {
 
   for (const refused of refusedRequests[name]) {
     test(`${name}: a request with ${refused.what} is refused with a sentence`, () => {
-      assert.deepEqual(shapes[name].request(refused.value), { ok: false, problem: refused.problem });
+      assert.equal(requestSentence(name, refused.value), refused.sentence);
     });
   }
 }
@@ -203,7 +222,7 @@ function hasResultThatCanBeMalformed(name: OperationName): name is Exclude<Opera
 for (const name of operationNames.filter(hasResultThatCanBeMalformed)) {
   for (const refused of refusedResults[name]) {
     test(`${name}: a result with ${refused.what} is refused with a sentence`, () => {
-      assert.deepEqual(shapes[name].result(refused.value), { ok: false, problem: refused.problem });
+      assert.equal(answerSentence(name, refused.value), refused.sentence);
     });
   }
 }
@@ -216,24 +235,133 @@ test("call: every JSON value is a result, so no result of a call is malformed", 
 
 test("call: a number JSON cannot hold is not a result", () => {
   for (const value of [Number.NaN, Number.POSITIVE_INFINITY, [Number.NEGATIVE_INFINITY]]) {
-    assert.deepEqual(shapes.call.result(value), { ok: false, problem: "The value is not a JSON value." });
+    assert.equal(answerSentence("call", value), "The answer to call is not a JSON value.");
   }
 });
 
 test("commands.run: an end that is none of exited, signalled and timed-out is refused", () => {
-  assert.deepEqual(shapes["commands.run"].result({ ...ran, end: { how: "vanished" } }), {
-    ok: false,
-    problem: "The value is not a command's end, time and output.",
-  });
+  assert.equal(
+    answerSentence("commands.run", { ...ran, end: { how: "vanished" } }),
+    "The field end.how in the answer to commands.run is not one of exited, signalled, timed-out.",
+  );
   assert.deepEqual(shapes["commands.run"].result({ ...ran, end: { how: "timed-out" } }), {
     ok: true,
     value: { ...ran, end: { how: "timed-out" } },
   });
 });
 
-test("a request drops fields its operation does not have", () => {
-  assert.deepEqual(shapes["files.read"].request({ path: "a.txt", text: "extra" }), {
-    ok: true,
-    value: { path: "a.txt" },
-  });
+const marker = "made-up-marker-7f3a";
+
+const sentencesByEntryFile: readonly (readonly [OperationName, Json, string])[] = [
+  ["db.query", { parameters: [] }, "The field sql is missing from the request for db.query. It must be text."],
+  [
+    "db.query",
+    { sql: "select 1", parameters: 3 },
+    "The field parameters in the request for db.query is not a list or a mapping.",
+  ],
+  [
+    "db.query",
+    { sql: "select 1", parameters: [], params: [] },
+    "The field params in the request for db.query is not one it takes. It takes the fields sql, parameters and partition.",
+  ],
+  [
+    "files.write",
+    { path: "notes-out/a.txt" },
+    "The field text is missing from the request for files.write. It must be text.",
+  ],
+  ["files.write", { path: 7, text: "hello" }, "The field path in the request for files.write is not text."],
+  [
+    "files.write",
+    { path: "notes-out/a.txt", text: "hello", content: "hello" },
+    "The field content in the request for files.write is not one it takes. It takes the fields path and text.",
+  ],
+  [
+    "http.request",
+    { method: "GET", headers: {} },
+    "The field url is missing from the request for http.request. It must be text.",
+  ],
+  [
+    "http.request",
+    { method: "TRACE", url: "https://api.example.com", headers: {} },
+    "The field method in the request for http.request is not one of GET, POST, PUT, PATCH, DELETE.",
+  ],
+  [
+    "http.request",
+    { method: "GET", url: "https://api.example.com", headers: {}, timeout: 5 },
+    "The field timeout in the request for http.request is not one it takes. It takes the fields method, url, headers and body.",
+  ],
+  [
+    "http.request",
+    { method: "GET", url: "https://api.example.com", headers: { accept: 1 } },
+    "The field headers.accept in the request for http.request is not text.",
+  ],
+  [
+    "commands.run",
+    { name: "changes", arguments: [], timeLimitSeconds: 30 },
+    "The field folder is missing from the request for commands.run. It must be text.",
+  ],
+  [
+    "commands.run",
+    { name: "changes", arguments: [], folder: ".", timeLimitSeconds: "30" },
+    "The field timeLimitSeconds in the request for commands.run is not a number.",
+  ],
+  [
+    "commands.run",
+    { name: "changes", arguments: [], folder: ".", timeLimitSeconds: 30, command: "git" },
+    "The field command in the request for commands.run is not one it takes. " +
+      "It takes the fields name, arguments, folder, timeLimitSeconds and input.",
+  ],
+  [
+    "commands.run",
+    { name: "changes", arguments: ["--short", 1], folder: ".", timeLimitSeconds: 30 },
+    "The field arguments[1] in the request for commands.run is not text.",
+  ],
+  [
+    "events.emit",
+    { kind: "noted" },
+    "The field detail is missing from the request for events.emit. It must be a JSON value.",
+  ],
+  ["events.emit", { kind: false, detail: null }, "The field kind in the request for events.emit is not text."],
+  [
+    "events.emit",
+    { kind: "noted", detail: null, level: "info" },
+    "The field level in the request for events.emit is not one it takes. It takes the fields kind and detail.",
+  ],
+  ["secrets.get", {}, "The field name is missing from the request for secrets.get. It must be text."],
+  ["files.read", "notes-in/a.txt", "The request for files.read is not a mapping."],
+];
+
+test("a malformed request of each entry file's operations is shown to its author as the field's path and what it must be", () => {
+  for (const [operation, value, sentence] of sentencesByEntryFile) {
+    assert.equal(requestSentence(operation, value), sentence, JSON.stringify(value));
+  }
+});
+
+test("the sentence for a malformed request never holds the value that was wrong", () => {
+  const wrongValues: readonly (readonly [OperationName, Json])[] = [
+    ["db.query", { sql: "select 1", parameters: marker }],
+    ["files.write", { path: [marker], text: "hello" }],
+    ["http.request", { method: marker, url: "https://api.example.com", headers: {} }],
+    ["http.request", { method: "GET", url: "https://api.example.com", headers: { accept: [marker] } }],
+    ["commands.run", { name: "changes", arguments: [marker, 1], folder: ".", timeLimitSeconds: marker }],
+    ["events.emit", { kind: { marker }, detail: null }],
+    ["call", { reference: [marker], input: marker }],
+  ];
+  for (const [operation, value] of wrongValues) {
+    const sentence = requestSentence(operation, value);
+    assert.notEqual(sentence, "read");
+    assert.ok(!sentence.includes(marker), sentence);
+  }
+});
+
+test("an answer the toolbox could not read is shown as the field's path in the answer and what it must be", () => {
+  assert.equal(
+    answerSentence("commands.run", { ...ran, stdout: { text: "", cut: "no" } }),
+    "The field stdout.cut in the answer to commands.run is not true or false.",
+  );
+  assert.equal(
+    answerSentence("http.request", { status: null, headers: {}, body: "" }),
+    "The field status in the answer to http.request is not a number.",
+  );
+  assert.equal(answerSentence("files.read", null), "The answer to files.read is not text.");
 });

@@ -159,7 +159,7 @@ test("an answer that fits its operation's result reaches the script as it came",
   assert.deepEqual(unread, []);
 });
 
-test("an answer that does not fit gives the script today's sentence and is reported with its operation", async () => {
+test("an answer that does not fit gives the script the sentence for what did not fit, and is reported with its operation", async () => {
   const { context, unread } = recording((operation) => ({
     ok: true,
     value: operation === "files.read" ? ["not", "text"] : "not a fitting value",
@@ -167,17 +167,17 @@ test("an answer that does not fit gives the script today's sentence and is repor
   assert.deepEqual(await context.files.read("notes-in/a.md"), {
     ok: false,
     kind: "failed",
-    message: "The broker's answer did not have the expected shape.",
+    message: "The answer to files.read is not text.",
   });
   assert.deepEqual(await context.files.remove(".forge/copies/k3"), {
     ok: false,
     kind: "failed",
-    message: "The broker's answer did not have the expected shape.",
+    message: "The answer to files.remove is not null.",
   });
   assert.deepEqual(await context.http.request(httpRequest), {
     ok: false,
     kind: "failed",
-    message: "The broker's answer did not have the expected shape.",
+    message: "The answer to http.request is not a mapping.",
   });
   assert.deepEqual(unread, [
     ["files.read", ["not", "text"]],

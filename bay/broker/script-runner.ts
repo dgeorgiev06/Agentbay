@@ -6,14 +6,7 @@ import type { Child, ChildEnd, ChildRequest } from "../ports.ts";
 import type { RunEvent, ScriptRequest, ScriptRunner, Spend, StepOutcome } from "../contracts.ts";
 import { mayRemoveFiles, writableFolders } from "./rule.ts";
 import { escapingLinks } from "./folder-links.ts";
-import {
-  notAValidMessage,
-  type OperationName,
-  type Requests,
-  type Results,
-  shapes,
-  shownToAuthor,
-} from "./operations.ts";
+import { notAValidMessage, type OperationName, type Requests, type Results, shapes } from "./operations.ts";
 import { isInsideOrEqual, shownPath } from "../layout.ts";
 import { type AskedFor, type ChildMessage, childMessageOf, removalAllowedArgument } from "./script-protocol.ts";
 
@@ -182,13 +175,11 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
   }
 
   function misreadingEvent(started: Started, misread: Misread): RunEvent {
-    const side = misread.type === "unreadable-request" ? "request" : "result";
     const detail = {
       resource: shapes[misread.operation].resource,
       step: started.request.place.stepKey,
       operation: misread.operation,
-      message: shownToAuthor({ side, problem: misread.problem }),
-      problem: misread.problem,
+      message: misread.sentence,
     };
     return {
       at: options.clock.now().toISOString(),
@@ -219,7 +210,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
         return;
       case "unreadable-request":
         state.inFlight.push(options.events.append(misreadingEvent(running, message)));
-        stop(shownToAuthor({ side: "request", problem: message.problem }));
+        stop(message.sentence);
         return;
       case "unread-answer":
         state.inFlight.push(options.events.append(misreadingEvent(running, message)));

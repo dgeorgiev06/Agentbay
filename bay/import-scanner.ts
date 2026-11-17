@@ -1,5 +1,7 @@
+export type Binds = "values" | "types" | "nothing";
+
 export type ImportSpecifier =
-  | { readonly kind: "literal"; readonly text: string; readonly line: number }
+  | { readonly kind: "literal"; readonly text: string; readonly line: number; readonly binds: Binds }
   | { readonly kind: "computed"; readonly line: number };
 
 type Token = {
@@ -134,9 +136,12 @@ function lexCode(source: string, start: number, insideTemplate: boolean): Lexed 
   return { tokens, end: position };
 }
 
-function literalAt(at: Tokens, token: Token | undefined, keyword: Token): ImportSpecifier | undefined {
+type Named = { readonly token: Token | undefined; readonly binds: Binds };
+
+function literalAt(at: Tokens, keyword: Token, named: Named): ImportSpecifier | undefined {
+  const { token, binds } = named;
   return token?.kind === "string"
-    ? { kind: "literal", text: token.text, line: lineAt(at.source, keyword.start) }
+    ? { kind: "literal", text: token.text, line: lineAt(at.source, keyword.start), binds }
     : undefined;
 }
 
@@ -147,24 +152,59 @@ function callAt(at: Tokens, index: number): ImportSpecifier | undefined {
   }
   const line = lineAt(at.source, keyword.start);
   if (argument?.kind === "string" && (close?.text === ")" || close?.text === ",")) {
-    return { kind: "literal", text: argument.text, line };
+    return { kind: "literal", text: argument.text, line, binds: "values" };
   }
   return { kind: "computed", line };
 }
 
-function fromClauseAt(at: Tokens, index: number, keyword: Token): ImportSpecifier | undefined {
+function fromAt(at: Tokens, index: number): number | undefined {
   let depth = 0;
   for (const [offset, token] of at.tokens.slice(index).entries()) {
     depth += token.text === "{" ? 1 : 0;
     depth -= token.text === "}" ? 1 : 0;
     if (depth === 0 && token.kind === "word" && token.text === "from") {
-      return literalAt(at, at.tokens[index + offset + 1], keyword);
+      return index + offset;
     }
     if (depth === 0 && [";", "=", "import", "export"].includes(token.text)) {
       return undefined;
     }
   }
   return undefined;
+}
+
+function namesBetweenBraces(clause: readonly Token[]): readonly (readonly Token[])[] {
+  const open = clause.findIndex((token) => token.text === "{");
+  const close = clause.findIndex((token) => token.text === "}");
+  if (open < 0) {
+    return [];
+  }
+  const names: Token[][] = [[]];
+  for (const token of clause.slice(open + 1, close < 0 ? undefined : close)) {
+    if (token.text === ",") {
+      names.push([]);
+    } else {
+      names.at(-1)?.push(token);
+    }
+  }
+  return names.filter((name) => name.length > 0);
+}
+
+function isMarkedType(name: readonly Token[]): boolean {
+  return name[0]?.text === "type" && name.length > 1 && name[1]?.text !== "as";
+}
+
+function bindsOf(clause: readonly Token[]): Binds {
+  const [first, second] = clause;
+  if (first?.text === "type" && second !== undefined && second.text !== ",") {
+    return "types";
+  }
+  const open = clause.findIndex((token) => token.text === "{");
+  const beforeBraces = open < 0 ? clause : clause.slice(0, open);
+  const names = namesBetweenBraces(clause);
+  if (beforeBraces.some((token) => token.text !== ",") || names.some((name) => !isMarkedType(name))) {
+    return "values";
+  }
+  return names.length > 0 ? "types" : "nothing";
 }
 
 function importAt(at: Tokens, index: number, keyword: Token): ImportSpecifier | undefined {
@@ -175,13 +215,21 @@ function importAt(at: Tokens, index: number, keyword: Token): ImportSpecifier | 
   if (next === undefined || next.text === ".") {
     return undefined;
   }
-  return next.kind === "string" ? literalAt(at, next, keyword) : fromClauseAt(at, index + 1, keyword);
+  if (next.kind === "string") {
+    return literalAt(at, keyword, { token: next, binds: "nothing" });
+  }
+  const from = fromAt(at, index + 1);
+  const clause = at.tokens.slice(index + 1, from);
+  return from === undefined
+    ? undefined
+    : literalAt(at, keyword, { token: at.tokens[from + 1], binds: bindsOf(clause) });
 }
 
 function exportAt(at: Tokens, index: number, keyword: Token): ImportSpecifier | undefined {
   const first = at.tokens[index + 1]?.text === "type" ? index + 2 : index + 1;
   const opening = at.tokens[first]?.text;
-  return opening === "*" || opening === "{" ? fromClauseAt(at, first, keyword) : undefined;
+  const from = opening === "*" || opening === "{" ? fromAt(at, first) : undefined;
+  return from === undefined ? undefined : literalAt(at, keyword, { token: at.tokens[from + 1], binds: "nothing" });
 }
 
 type Recognizer = (at: Tokens, index: number, keyword: Token) => ImportSpecifier | undefined;

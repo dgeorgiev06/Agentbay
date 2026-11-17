@@ -815,66 +815,82 @@ function refusedDetails(run: Run): readonly Json[] {
   return run.events.events.filter((event) => event.kind === "refused").map((event) => event.detail);
 }
 
-test("a request that its operation's guard refuses ends the script, and the guard's sentence is an event", async () => {
+test("a request its operation's guard refuses ends the script with the sentence for the field, which is also the event", async () => {
   const cases = [
     {
       body: "await context.files.read(42);",
-      detail: { resource: "files", operation: "files.read", problem: "The field path is missing or is not text." },
+      resource: "files",
+      operation: "files.read",
+      sentence: "The field path in the request for files.read is not text.",
     },
     {
       body: "await context.http.request({ method: 'TRACE', url: 'https://api.example.com/x', headers: {} });",
-      detail: {
-        resource: "http",
-        operation: "http.request",
-        problem: "The field method is missing or is not one of GET, POST, PUT, PATCH, DELETE.",
-      },
+      resource: "http",
+      operation: "http.request",
+      sentence: "The field method in the request for http.request is not one of GET, POST, PUT, PATCH, DELETE.",
+    },
+    {
+      body: "await context.http.request({ method: 'GET', url: 'https://api.example.com/x', headers: { accept: 1 } });",
+      resource: "http",
+      operation: "http.request",
+      sentence: "The field headers.accept in the request for http.request is not text.",
+    },
+    {
+      body: "await context.http.request({ method: 'GET', url: 'https://api.example.com/x', headers: {}, timeout: 5 });",
+      resource: "http",
+      operation: "http.request",
+      sentence:
+        "The field timeout in the request for http.request is not one it takes. " +
+        "It takes the fields method, url, headers and body.",
     },
     {
       body: "await context.events.emit('noted');",
-      detail: {
-        resource: "events",
-        operation: "events.emit",
-        problem: "The field detail is missing or is not a JSON value.",
-      },
+      resource: "events",
+      operation: "events.emit",
+      sentence: "The field detail is missing from the request for events.emit. It must be a JSON value.",
     },
   ];
   await withScriptProject(async (root) => {
-    for (const { body, detail } of cases) {
+    for (const { body, resource, operation, sentence } of cases) {
       const run = await attempt(root, `${body}\nreturn 'went on';`, { permissions: { effects: ["read", "network"] } });
-      assert.equal(reasonOf(run), "The script sent a line that is not a valid message.", detail.operation);
-      assert.deepEqual(refusedDetails(run), [
-        {
-          resource: detail.resource,
-          step: "look.0",
-          operation: detail.operation,
-          message: "The script sent a line that is not a valid message.",
-          problem: detail.problem,
-        },
-      ]);
+      assert.equal(reasonOf(run), sentence, operation);
+      assert.deepEqual(refusedDetails(run), [{ resource, step: "look.0", operation, message: sentence }]);
     }
   });
 });
 
-test("an answer its operation's guard refuses gives the script today's sentence, and the guard's sentence is an event", async () => {
+test("a request whose wrong value is a marker never shows the marker to its author or in the journal", async () => {
+  const marker = "made-up-marker-5c1e";
+  const bodies = [
+    `await context.files.write(['${marker}'], 'x');`,
+    `await context.db.query('select 1', '${marker}');`,
+    `await context.http.request({ method: '${marker}', url: 'https://api.example.com/x', headers: {} });`,
+    `await context.http.request({ method: 'GET', url: 'https://api.example.com/x', headers: { a: ['${marker}'] } });`,
+    `await context.commands.run({ name: 'v', arguments: [], folder: '.', timeLimitSeconds: '${marker}' });`,
+    `await context.events.emit({ kind: '${marker}' }, null);`,
+  ];
+  await withScriptProject(async (root) => {
+    for (const body of bodies) {
+      const run = await attempt(root, `${body}\nreturn 'went on';`, { permissions: { effects: ["read", "network"] } });
+      assert.match(reasonOf(run), /^The field /, body);
+      assert.equal(refusedDetails(run).length, 1, body);
+      const seen = JSON.stringify([run.outcome, run.events.events]);
+      assert.ok(!seen.includes(marker), seen);
+    }
+  });
+});
+
+test("an answer its operation's guard refuses gives the script the sentence for the field, which is also the event", async () => {
   await withScriptProject(async (root) => {
     const run = await attempt(
       root,
       "return await context.http.request({ method: 'GET', url: 'https://api.example.com/not-a-number', headers: {} });",
       { permissions: { effects: ["read", "network"] } },
     );
-    assert.deepEqual(outputOf(run), {
-      ok: false,
-      kind: "failed",
-      message: "The broker's answer did not have the expected shape.",
-    });
+    const sentence = "The field status in the answer to http.request is not a number.";
+    assert.deepEqual(outputOf(run), { ok: false, kind: "failed", message: sentence });
     assert.deepEqual(refusedDetails(run), [
-      {
-        resource: "http",
-        step: "look.0",
-        operation: "http.request",
-        message: "The broker's answer did not have the expected shape.",
-        problem: "The value is not a response with a status, headers and a body.",
-      },
+      { resource: "http", step: "look.0", operation: "http.request", message: sentence },
     ]);
   });
 });

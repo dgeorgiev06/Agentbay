@@ -8,7 +8,7 @@ const subcommands = {
   "switch-branch": "switch",
   changes: "status",
   "commits-between": "log",
-  "changed-paths": "diff",
+  "changed-paths": "diff-tree",
   "is-ignored": "check-ignore",
   "paths-at-commit": "ls-tree",
   "untracked-paths": "ls-files",

@@ -244,10 +244,15 @@ export async function folderExists(context: ScriptContext, folder: string): Prom
   return (await ended(context, ".", ["folder-exists", folder])).exitCode === 0;
 }
 
+function regularFiles(output: string): readonly string[] {
+  return output.split("\n\n").flatMap((block) => {
+    const [heading = "", ...names] = block.split("\n");
+    return names.filter((name) => name !== "" && !/[/@|=]$/.test(name)).map((name) => heading.slice(0, -1) + "/" + name);
+  });
+}
+
 export async function filesIn(context: ScriptContext, folder: string, ignored: readonly string[]): Promise<Files> {
-  const listed = (await ranWell(context, folder, ["list-files"]))
-    .split("\0")
-    .filter((path) => path !== "")
+  const listed = regularFiles(await ranWell(context, folder, ["list-files"]))
     .map((path) => path.slice(2))
     .filter((path) => !isIgnored(path, ignored))
     .sort();
@@ -496,23 +501,23 @@ resources:
     write: [.shelf]
     throwaway: [.forge/worktrees/, .forge/copies/]
   commands:
-    list-files: { run: find . -type f -print0, effects: [read, write, network, spend, delete] }
-    read-file: { run: cat --, effects: [read, write, network, spend, delete] }
-    write-file: { run: tee --, effects: [read, write, network, spend, delete] }
-    make-folder: { run: mkdir -p --, effects: [read, write, network, spend, delete] }
-    folder-exists: { run: ls -d --, effects: [read, write, network, spend, delete] }
+    list-files: { run: ls -R -A -1 --file-type --, effects: [read] }
+    read-file: { run: cat --, effects: [read] }
+    write-file: { run: tee --, effects: [write] }
+    make-folder: { run: mkdir -p --, effects: [write] }
+    folder-exists: { run: ls -d --, effects: [read] }
 actions:
   cut:
     description: When a test needs a slice's worktree and branch cut from a commit on the shelf.
-    effects: [read, write, network, spend, delete]
+    effects: [read, write, delete]
     run: [{ script: scripts/cut.ts }]
   status:
     description: When a test needs to know where a slice's worktree stands.
-    effects: [read, write, network, spend, delete]
+    effects: [read]
     run: [{ script: scripts/status.ts }]
   changed:
     description: When a test needs the paths that differ between two commits on the shelf.
-    effects: [read, write, network, spend, delete]
+    effects: [read]
     run: [{ script: scripts/changed.ts }]
   copy:
     description: When a test needs a throwaway copy of a commit's files.
@@ -524,19 +529,19 @@ actions:
     run: [{ script: scripts/overlay.ts }]
   remove:
     description: When a test no longer needs a copy, or a clean and merged worktree.
-    effects: [read, write, network, spend, delete]
+    effects: [read, write, delete]
     run: [{ script: scripts/remove.ts }]
   merge:
     description: When a test would merge a slice; the shelf does not build this action and refuses it.
-    effects: [read, write, network, spend, delete]
+    effects: [read, write, delete]
     run: [{ script: scripts/unbuilt.ts }]
   set-aside:
     description: When a test would set a slice's work aside; the shelf does not build this action and refuses it.
-    effects: [read, write, network, spend, delete]
+    effects: [read, write, delete]
     run: [{ script: scripts/unbuilt.ts }]
   apply:
     description: When a test would apply a patch to a copy; the shelf does not build this action and refuses it.
-    effects: [read, write, network, spend, delete]
+    effects: [read, write, delete]
     run: [{ script: scripts/unbuilt.ts }]
 `;
 }

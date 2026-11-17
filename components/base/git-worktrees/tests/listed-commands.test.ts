@@ -26,14 +26,19 @@ function warningsOf(file: string): readonly (readonly unknown[])[] {
     .map((finding) => [fieldOf(finding, "severity"), fieldOf(finding, "line"), fieldOf(finding, "message")]);
 }
 
-const everyEffect = "read, write, network, spend, delete";
+type Listed = {
+  readonly line: number;
+  readonly name: string;
+  readonly run: string;
+  readonly effects: string;
+};
 
-function listedAt(line: number, name: string, run: string): readonly unknown[] {
+function listedAt(listed: Listed): readonly unknown[] {
   return [
     "warning",
-    line,
-    `Mode git-worktrees lists the command ${name}, which runs ${run} and which the mode says has the effects: ` +
-      `${everyEffect}; a listed command can run code the agent wrote.`,
+    listed.line,
+    `Mode git-worktrees lists the command ${listed.name}, which runs ${listed.run} and which the mode says has ` +
+      `the effects: ${listed.effects}; a listed command can run code the agent wrote.`,
   ];
 }
 
@@ -45,44 +50,114 @@ const committing = `${git} -c user.name=agentbay-git-worktrees -c user.email=git
 
 test("bay check on the kit warns once for each command the git-worktrees mode lists, and for nothing else", () => {
   assert.deepEqual(warningsOf(manifest), [
-    listedAt(13, "commit-of", `${git} rev-parse --verify --quiet --end-of-options`),
-    listedAt(
-      16,
-      "repository-filters",
-      `${git} config --show-scope --name-only --get-regexp ^(filter\\.|merge\\..*\\.driver$)`,
-    ),
-    listedAt(19, "add-detached-worktree", `${git} worktree add --detach --end-of-options`),
-    listedAt(22, "make-branch", `${git} branch --end-of-options`),
-    listedAt(25, "switch-branch", `${git} switch --end-of-options`),
-    listedAt(28, "changes", `${git} status --porcelain=v1 -z --untracked-files=all --ignore-submodules=all --`),
-    listedAt(
-      31,
-      "commits-between",
-      `${git} log -z --reverse --no-show-signature --no-color --format=%H%x20%s --end-of-options`,
-    ),
-    listedAt(
-      34,
-      "changed-paths",
-      `${git} diff --name-status -z -M --no-ext-diff --no-textconv --no-color --no-relative --end-of-options`,
-    ),
-    listedAt(37, "is-ignored", `${git} check-ignore --quiet --end-of-options`),
-    listedAt(40, "paths-at-commit", `${git} ls-tree -z --name-only --end-of-options`),
-    listedAt(43, "untracked-paths", `${git} ls-files -z --others --directory --end-of-options`),
-    listedAt(46, "restore-paths", `${git} --work-tree=. restore --worktree --source`),
-    listedAt(49, "is-ancestor", `${git} merge-base --is-ancestor --end-of-options`),
-    listedAt(52, "remove-worktree", `${git} worktree remove --end-of-options`),
-    listedAt(55, "delete-branch", `${git} branch -d --end-of-options`),
-    listedAt(58, "add-worktree", `${git} worktree add --end-of-options`),
-    listedAt(
-      61,
-      "merge-branch",
-      `${committing} merge --no-ff --no-edit --no-stat --no-verify --no-gpg-sign --no-verify-signatures ` +
+    listedAt({
+      line: 13,
+      name: "commit-of",
+      effects: "read",
+      run: `${git} rev-parse --verify --quiet --end-of-options`,
+    }),
+    listedAt({
+      line: 16,
+      name: "repository-filters",
+      effects: "read",
+      run: `${git} config --show-scope --name-only --get-regexp ^(filter\\.|merge\\..*\\.driver$)`,
+    }),
+    listedAt({
+      line: 19,
+      name: "add-detached-worktree",
+      effects: "read, write",
+      run: `${git} worktree add --detach --end-of-options`,
+    }),
+    listedAt({ line: 22, name: "make-branch", effects: "read, write", run: `${git} branch --end-of-options` }),
+    listedAt({
+      line: 25,
+      name: "switch-branch",
+      effects: "read, write, delete",
+      run: `${git} switch --end-of-options`,
+    }),
+    listedAt({
+      line: 28,
+      name: "changes",
+      effects: "read",
+      run: `${git} --no-optional-locks status --porcelain=v1 -z --untracked-files=all --ignore-submodules=all --`,
+    }),
+    listedAt({
+      line: 31,
+      name: "commits-between",
+      effects: "read",
+      run: `${git} log -z --reverse --no-show-signature --no-color --format=%H%x20%s --end-of-options`,
+    }),
+    listedAt({
+      line: 34,
+      name: "changed-paths",
+      effects: "read",
+      run: `${git} diff-tree -r --name-status -z -M --no-ext-diff --no-textconv --no-color --no-relative --end-of-options`,
+    }),
+    listedAt({ line: 37, name: "is-ignored", effects: "read", run: `${git} check-ignore --quiet --end-of-options` }),
+    listedAt({
+      line: 40,
+      name: "paths-at-commit",
+      effects: "read",
+      run: `${git} ls-tree -z --name-only --end-of-options`,
+    }),
+    listedAt({
+      line: 43,
+      name: "untracked-paths",
+      effects: "read",
+      run: `${git} ls-files -z --others --directory --end-of-options`,
+    }),
+    listedAt({
+      line: 46,
+      name: "restore-paths",
+      effects: "read, write, network, spend, delete",
+      run: `${git} --work-tree=. restore --worktree --source`,
+    }),
+    listedAt({
+      line: 49,
+      name: "is-ancestor",
+      effects: "read",
+      run: `${git} merge-base --is-ancestor --end-of-options`,
+    }),
+    listedAt({
+      line: 52,
+      name: "remove-worktree",
+      effects: "read, write, delete",
+      run: `${git} worktree remove --end-of-options`,
+    }),
+    listedAt({
+      line: 55,
+      name: "delete-branch",
+      effects: "read, write, delete",
+      run: `${git} branch -d --end-of-options`,
+    }),
+    listedAt({ line: 58, name: "add-worktree", effects: "read, write", run: `${git} worktree add --end-of-options` }),
+    listedAt({
+      line: 61,
+      name: "merge-branch",
+      effects: "read, write, delete",
+      run:
+        `${committing} merge --no-ff --no-edit --no-stat --no-verify --no-gpg-sign --no-verify-signatures ` +
         "--no-autostash --no-rerere-autoupdate --end-of-options",
-    ),
-    listedAt(64, "abort-merge", `${committing} merge --abort`),
-    listedAt(67, "stage-everything", `${git} add --all --`),
-    listedAt(70, "commit-staged", `${committing} commit --quiet --no-verify --no-gpg-sign --file=- --end-of-options`),
-    listedAt(73, "filters-of-paths", `${unattributed} --work-tree=. check-attr -z filter --`),
-    listedAt(76, "apply-patch", `${unattributed} --work-tree=. apply --end-of-options`),
+    }),
+    listedAt({ line: 64, name: "abort-merge", effects: "read, write, delete", run: `${committing} merge --abort` }),
+    listedAt({ line: 67, name: "stage-everything", effects: "read, write, delete", run: `${git} add --all --` }),
+    listedAt({
+      line: 70,
+      name: "commit-staged",
+      effects: "read, write, delete",
+      run: `${committing} commit --quiet --no-verify --no-gpg-sign --file=- --end-of-options`,
+    }),
+    listedAt({
+      line: 73,
+      name: "filters-of-paths",
+      effects: "read",
+      run: `${unattributed} --work-tree=. check-attr -z filter --`,
+    }),
+    listedAt({
+      line: 76,
+      name: "apply-patch",
+      effects: "read, write, delete",
+      run: `${unattributed} --work-tree=. apply --end-of-options`,
+    }),
   ]);
 });

@@ -243,6 +243,21 @@ test("an action that no interface names and gives no input is an error with a fi
   ]);
 });
 
+test("an action that no interface names and gives no output is an error with a fix", async () => {
+  const waveWithoutOutput = { description: wave.description, input: wave.input, effects: wave.effects, run: wave.run };
+  const problems = await problemsOf(withGreeter({ actions: { greet, part, wave: waveWithoutOutput, introduce } }));
+  assert.deepEqual(
+    problems.map((problem) => [problem.path, problem.message, problem.fix]),
+    [
+      [
+        "/actions/wave",
+        "Action wave of mode greeter gives no output schema, and no interface that greeter implements names wave.",
+        "Add output: with the JSON Schema file of the output of wave.",
+      ],
+    ],
+  );
+});
+
 test("two interfaces of a mode that name the same action are an error with a fix", async () => {
   const alsoGreet = {
     input: "farewell/part-input.json",

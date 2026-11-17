@@ -118,8 +118,9 @@ Added by this round, from ADR 15, 17, 18 and 20:
 - The example slice is TR2 and the example plan is `docs/plans/0022-forge-in-waves.md`. The cards are drawn for TR2
   as if forge had carried it. Every number on a TR2 card that is not in the repository is marked as an example.
 - Every line of a card carries one of three marks: `ran` (the kernel ran a command or a step and recorded it),
-  `calc` (a script computed it from what was run), `judged:<model>` (a named model judged it). A line with none of
-  the three is the card's own frame: the question, a choice, a heading.
+  `calc` (a script computed it from what was run), `judged` (a model judged or wrote it; the card names the model
+  at the end of that passage). A line with none of the three is the card's own frame: the question, a choice, the
+  hash. The mark sits in a left margin of seven columns, so a line has 37 for its words.
 - Cards are at most 44 columns, as the trust card is.
 
 ## Words this adds to `CONTEXT.md`

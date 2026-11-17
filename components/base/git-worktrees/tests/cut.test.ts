@@ -81,7 +81,7 @@ test("a slice name with a slash, a space or a leading dash, or a base with a lea
         "short hash, or a branch name. It has no .. and does not start with a dash.",
     );
     assert.equal(refsAndWorktrees(project), before);
-    assert.deepEqual(await project.kernel.runs.list(), []);
+    assert.deepEqual(await project.runs(), []);
   } finally {
     await project.close();
   }

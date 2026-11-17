@@ -3,7 +3,7 @@ import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import { git, openRepositoryProject } from "./repository.ts";
-import type { ModeProject } from "../../../../tests/mode-harness.ts";
+import type { ModeProject } from "../../../../tests/test-toolbox.ts";
 
 const worktree = ".forge/worktrees/lost";
 const copy = ".forge/copies/lost";

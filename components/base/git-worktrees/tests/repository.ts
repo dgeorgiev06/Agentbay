@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { openModeProject, type ModeProject } from "../../../../tests/mode-harness.ts";
+import { openModeProject, type ModeProject } from "../../../../tests/test-toolbox.ts";
 
 export type Files = Readonly<Record<string, string>>;
 

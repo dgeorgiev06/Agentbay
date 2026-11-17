@@ -90,7 +90,7 @@
       "required": ["run", "effects"],
       "properties": {
         "run": {
-          "description": "The words the command runs: the program, then its fixed arguments, separated by spaces. A script names the command and gives only the arguments that follow these words.",
+          "description": "The command's fixed words, separated by spaces. When the mode gives commandsStartWith, they follow those words; otherwise the first word is the program. A script names the command and gives only the arguments that come after.",
           "type": "string",
           "pattern": "\\S"
         },

@@ -370,9 +370,9 @@ test("a listed command whose words are only spaces does not load", async () => {
       [
         [
           "/resources/commands/blank/run",
-          "resources.commands.blank.run is not in the expected form. Expected: The words the command runs: the " +
-            "program, then its fixed arguments, separated by spaces. A script names the command and gives only the " +
-            "arguments that follow these words.",
+          "resources.commands.blank.run is not in the expected form. Expected: The command's fixed words, " +
+            "separated by spaces. When the mode gives commandsStartWith, they follow those words; otherwise the " +
+            "first word is the program. A script names the command and gives only the arguments that come after.",
         ],
       ],
     );

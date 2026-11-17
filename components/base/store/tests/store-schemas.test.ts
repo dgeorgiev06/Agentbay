@@ -16,7 +16,9 @@ function definitionsOf(file: string): Definitions {
 
 function schemaFiles(): readonly string[] {
   return ["items-source", "items-store"].flatMap((folder) =>
-    readdirSync(join(interfaces, folder)).map((name) => join(interfaces, folder, name)),
+    readdirSync(join(interfaces, folder))
+      .filter((name) => name.endsWith(".json"))
+      .map((name) => join(interfaces, folder, name)),
   );
 }
 

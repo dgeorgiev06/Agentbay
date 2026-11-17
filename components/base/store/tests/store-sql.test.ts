@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { Json } from "../../../../bay/sdk.ts";
 import { openModeProject, type ModeProject } from "../../../../tests/test-toolbox.ts";
-import { fieldsOf, listOf } from "../scripts/lib/json.ts";
+import { fieldsOf } from "../scripts/lib/json.ts";
 
 let project: ModeProject;
 
@@ -41,11 +41,7 @@ async function sql(text: string, caller = "mail-briefing"): Promise<Json> {
   return project.output("items-store.sql", { sql: text }, { caller });
 }
 
-test("sql runs one select over the caller's views and returns columns and rows", async () => {
-  assert.deepEqual(await sql("select author, count(*) as posts from items_view group by author"), {
-    columns: ["author", "posts"],
-    rows: [["fake-author", 3]],
-  });
+test("items_search is the full-text index of the caller's items, joined to items on rowid", async () => {
   const searched = await sql(
     "select items.id from items_search join items on items.rowid = items_search.rowid " +
       "where items_search match 'post' order by items.id limit 2",
@@ -53,7 +49,7 @@ test("sql runs one select over the caller's views and returns columns and rows",
   assert.deepEqual(fieldsOf(searched).rows, [["fake:1"], ["fake:2"]]);
 });
 
-test("sql refuses a second statement, a write and attach, and the items stay", async () => {
+test("an agent's query that is refused says so, for a write to the store's own tables and for a pragma too", async () => {
   const refused = [
     "select 1; select 2",
     "delete from items",
@@ -79,12 +75,7 @@ test("sql refuses more rows than its limit and stops a runaway query", async () 
   assert.deepEqual(fieldsOf(await sql("select count(*) from items", "todo")).rows, [[250]]);
 });
 
-test("one caller cannot see another caller's items through query, get or sql", async () => {
-  const queried = await project.output("items-store.query", { selector: { limit: 1000 } }, { caller: "mail-briefing" });
-  assert.equal(listOf(fieldsOf(queried).items).length, 3);
-  const got = await project.output("items-store.get", { ids: ["other:1"] }, { caller: "mail-briefing" });
-  assert.deepEqual(fieldsOf(got).missing, ["other:1"]);
-  assert.deepEqual(fieldsOf(await sql("select count(*) from items where source = 'other'")).rows, [[0]]);
+test("one caller cannot attach another caller's database file, nor see it listed", async () => {
   const otherFile = join(project.root, ".agentbay", "data", "store--todo.db");
   const attach = await project.failure(
     "items-store.sql",

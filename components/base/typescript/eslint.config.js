@@ -36,12 +36,14 @@ function parentSteps(count) {
   return `(\\.\\./){${count}}`;
 }
 
+const interfaceSharedTest = "(?!.*/interfaces/[a-z0-9-]+/tests/shared\\.ts$)";
+
 function otherModeImports(tier, mode, depth) {
   const intoTier = `${parentSteps(depth + 1)}(?!${mode}/|\\.\\./)`;
   const intoComponents = `${parentSteps(depth + 2)}(?!${tier}/${mode}/|\\.\\./)`;
   const intoRepository = `${parentSteps(depth + 3)}components/(?!${tier}/${mode}/)`;
   return {
-    regex: `^(${intoTier}|${intoComponents}|${intoRepository})`,
+    regex: `^${interfaceSharedTest}(${intoTier}|${intoComponents}|${intoRepository})`,
     message: "A mode may not import the files of another mode; call its actions through an interface.",
   };
 }

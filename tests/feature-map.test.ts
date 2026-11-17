@@ -297,11 +297,12 @@ function ruleOf(map: FeatureMap, from: string, to: string): Rule | undefined {
 }
 
 function sealedFolderOf(feature: Feature): SealedFolder | undefined {
-  const [entry, ...others] = feature.entry;
-  if (entry === undefined || others.length > 0) {
+  const [folder, ...otherFolders] = new Set(feature.private.map(dirname));
+  const [entry, ...otherEntries] = feature.entry.filter((file) => dirname(file) === folder);
+  if (folder === undefined || entry === undefined || otherFolders.length > 0 || otherEntries.length > 0) {
     return undefined;
   }
-  return { feature: feature.name, folder: dirname(entry), entry };
+  return { feature: feature.name, folder, entry };
 }
 
 function reachesIntoFolder(sealed: SealedFolder, sources: readonly SourceFile[]): readonly string[] {
@@ -721,11 +722,31 @@ test("a sealed feature's private files are imported only from inside its folder 
   ]);
 });
 
-test("a feature with more than one entry file is not sealed in a folder", () => {
-  const map = parsedMap(stringify({ features: { words: { entry: ["bay/a.ts", "bay/b.ts"] } } }));
+test("a feature with more than one entry file in its folder is not sealed in a folder", () => {
+  const map = parsedMap(stringify({ features: { words: { entry: ["bay/a.ts", "bay/b.ts"], private: ["bay/c.ts"] } } }));
   const [words] = map.features;
   assert.ok(words);
   assert.equal(sealedFolderOf(words), undefined);
+});
+
+test("a feature whose private files share one folder is sealed there, with the one entry file in that folder", () => {
+  const map = parsedMap(
+    stringify({
+      features: {
+        broker: { entry: ["bay/broker/broker.ts", "bay/sdk.ts"], private: ["bay/broker/rule.ts"] },
+        toolbox: { entry: ["bay/sdk.ts", "bay/broker/broker.ts"], private: ["bay/broker/rule.ts"] },
+        spread: { entry: ["bay/broker/broker.ts", "bay/sdk.ts"], private: ["bay/broker/rule.ts", "bay/rule.ts"] },
+      },
+    }),
+  );
+  assert.deepEqual(
+    map.features.map((feature) => sealedFolderOf(feature)),
+    [
+      { feature: "broker", folder: "bay/broker", entry: "bay/broker/broker.ts" },
+      { feature: "toolbox", folder: "bay/broker", entry: "bay/broker/broker.ts" },
+      undefined,
+    ],
+  );
 });
 
 test("an entry file's export ... from lines are found, over one line or several, and nothing else is", () => {

@@ -5,7 +5,13 @@ import { join, relative } from "node:path";
 import { test } from "node:test";
 import type { Json, Permissions, StepOutcome } from "../bay/contracts.ts";
 import { layoutOf, type Layout } from "../bay/layout.ts";
-import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } from "../bay/node-ports.ts";
+import {
+  nodeChildProcesses,
+  nodeFileInspector,
+  nodeFileSystem,
+  nodeThrowawayFolders,
+  systemClock,
+} from "../bay/node-ports.ts";
 import { createScriptRunner } from "../bay/script-runner.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import { kitFolder, noProcesses, place, recordingSink, scriptedHttp, writeProjectFile } from "./broker-fixture.ts";
@@ -43,6 +49,7 @@ async function run(layout: Layout, modeFolder: string): Promise<StepOutcome> {
   const runner = createScriptRunner({
     layout,
     files: nodeFileSystem,
+    throwawayFolders: nodeThrowawayFolders,
     inspector: nodeFileInspector,
     http: scriptedHttp(() => ({ status: 500, headers: {}, body: "" })),
     secrets: new SecretStore({ environment: {}, processes: noProcesses, platform: "linux" }),

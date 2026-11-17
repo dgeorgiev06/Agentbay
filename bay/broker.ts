@@ -12,6 +12,7 @@ import type {
   HttpResponse,
   ProcessOutput,
   Processes,
+  ThrowawayFolders,
 } from "./ports.ts";
 import type {
   CommandOutput,
@@ -62,6 +63,7 @@ export type BrokerOptions = {
   readonly permissions: Permissions;
   readonly place: StepPlace;
   readonly files: FileSystem;
+  readonly throwawayFolders: ThrowawayFolders;
   readonly inspector: FileInspector;
   readonly http: Http;
   readonly secrets: SecretStore;
@@ -297,7 +299,7 @@ export class Broker {
       if (await this.#isTaken(full)) {
         return failed(`The folder ${operation.path} already exists.`);
       }
-      await this.#options.files.makeFolder(full);
+      await this.#options.throwawayFolders.makeFolder(full);
       await this.#recordThrowaway({ did: "made the folder", path: operation.path });
       return granted(null);
     });
@@ -313,7 +315,7 @@ export class Broker {
       if (await this.#isTaken(full)) {
         return failed(`The path ${operation.path} already exists.`);
       }
-      await this.#options.files.link(full, leadsTo.value);
+      await this.#options.throwawayFolders.link(full, leadsTo.value);
       await this.#recordThrowaway({ did: "made a link", path: operation.path, target: operation.target });
       return granted(null);
     });
@@ -322,7 +324,7 @@ export class Broker {
   remove(path: string): Promise<Answer<null>> {
     const operation = { kind: "files.remove" as const, path: this.#shown(path) };
     return this.#throwawayChange(operation, { path, checked: "folder" }, async (full) => {
-      await this.#options.files.removeAll(full);
+      await this.#options.throwawayFolders.removeAll(full);
       await this.#recordThrowaway({ did: "removed", path: operation.path });
       return granted(null);
     });

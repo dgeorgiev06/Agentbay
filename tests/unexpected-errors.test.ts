@@ -9,7 +9,13 @@ import { DatabaseProcess } from "../bay/database-process.ts";
 import { fieldOf, parseJson, textField } from "../bay/json.ts";
 import { lastResortHandler } from "../bay/last-resort.ts";
 import { replyTo } from "../bay/mcp-server.ts";
-import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } from "../bay/node-ports.ts";
+import {
+  nodeChildProcesses,
+  nodeFileInspector,
+  nodeFileSystem,
+  nodeThrowawayFolders,
+  systemClock,
+} from "../bay/node-ports.ts";
 import { createScriptRunner } from "../bay/script-runner.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import type { ChildProcesses } from "../bay/ports.ts";
@@ -112,6 +118,7 @@ test("a script whose call to another action throws gets a failed answer and the 
     const runner = createScriptRunner({
       layout: projectLayout(root),
       files: nodeFileSystem,
+      throwawayFolders: nodeThrowawayFolders,
       inspector: nodeFileInspector,
       http: scriptedHttp(() => ({ status: 500, headers: {}, body: "" })),
       secrets: new SecretStore({ environment: {}, processes: noProcesses, platform: "linux" }),

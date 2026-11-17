@@ -11,9 +11,20 @@ import {
   nodeFolders,
   nodeProcesses,
   nodeRemoval,
+  nodeThrowawayFolders,
   systemClock,
 } from "./node-ports.ts";
-import type { ChildProcesses, Clock, FileInspector, FileSystem, Folders, Http, Processes, Removal } from "./ports.ts";
+import type {
+  ChildProcesses,
+  Clock,
+  FileInspector,
+  FileSystem,
+  Folders,
+  Http,
+  Processes,
+  Removal,
+  ThrowawayFolders,
+} from "./ports.ts";
 import { loadSystem, type System } from "./manifests/manifests.ts";
 import { openRuns, type Runs } from "./runs/runs.ts";
 import { createScriptRunner } from "./script-runner.ts";
@@ -22,6 +33,7 @@ import type { Outcome } from "./outcome.ts";
 
 export type KernelPorts = {
   readonly files: FileSystem;
+  readonly throwawayFolders: ThrowawayFolders;
   readonly folders: Folders;
   readonly removal: Removal;
   readonly inspector: FileInspector;
@@ -68,6 +80,7 @@ function searchPathOf(environment: Environment): string {
 export function nodeKernelPorts(environment: Environment): KernelPorts {
   return {
     files: nodeFileSystem,
+    throwawayFolders: nodeThrowawayFolders,
     folders: nodeFolders,
     removal: nodeRemoval,
     inspector: nodeFileInspector,
@@ -97,7 +110,14 @@ export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel
   const declaredBy = [...system.modes.values()].map((mode) => mode.grants);
   const secrets = await SecretStore.open({ ...storeOptionsOf(options), declaredBy });
   const limits = { toolCallsPerRound: maximumToolCallsPerRound, ...options.limits };
-  const services = { layout, files: ports.files, inspector: ports.inspector, http: ports.http, secrets };
+  const services = {
+    layout,
+    files: ports.files,
+    throwawayFolders: ports.throwawayFolders,
+    inspector: ports.inspector,
+    http: ports.http,
+    secrets,
+  };
   const processes = {
     clock: ports.clock,
     childProcesses: ports.childProcesses,

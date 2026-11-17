@@ -7,9 +7,6 @@ export type FilesWithRemoval = Files & { readonly removal: Removal };
 
 export type MemoryFiles = FilesWithRemoval & { readonly snapshot: () => Readonly<Record<string, string>> };
 
-export const neverUsedByTheAdapter = (): Promise<never> =>
-  Promise.reject(new Error("The adapter never makes folders or links, and never removes a folder whole."));
-
 export function memoryFiles(initial: Readonly<Record<string, string>> = {}): MemoryFiles {
   const contents = new Map(Object.entries(initial).map(([path, text]) => [normalize(path), text]));
   const childNames = (directory: string): readonly string[] => {
@@ -25,9 +22,6 @@ export function memoryFiles(initial: Readonly<Record<string, string>> = {}): Mem
       contents.set(normalize(path), text);
       return Promise.resolve();
     },
-    makeFolder: neverUsedByTheAdapter,
-    link: neverUsedByTheAdapter,
-    removeAll: neverUsedByTheAdapter,
     removal: {
       remove: (path) => {
         contents.delete(normalize(path));

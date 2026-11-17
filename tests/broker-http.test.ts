@@ -3,7 +3,7 @@ import { test } from "node:test";
 import type { Answer } from "../bay/answers.ts";
 import { Broker, type BrokerLimits } from "../bay/broker.ts";
 import type { HttpRequest, HttpResponse } from "../bay/ports.ts";
-import { nodeChildProcesses, nodeFileInspector, nodeFileSystem } from "../bay/node-ports.ts";
+import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, nodeThrowawayFolders } from "../bay/node-ports.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import { fakeClock } from "./fakes.ts";
 import {
@@ -45,6 +45,7 @@ function setup(answer: (request: HttpRequest) => HttpResponse, limits: Partial<B
     }),
     place,
     files: nodeFileSystem,
+    throwawayFolders: nodeThrowawayFolders,
     inspector: nodeFileInspector,
     http,
     secrets,

@@ -4,7 +4,13 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { Broker } from "../bay/broker.ts";
 import type { Effect } from "../bay/contracts.ts";
-import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } from "../bay/node-ports.ts";
+import {
+  nodeChildProcesses,
+  nodeFileInspector,
+  nodeFileSystem,
+  nodeThrowawayFolders,
+  systemClock,
+} from "../bay/node-ports.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import {
   failureOf,
@@ -29,6 +35,7 @@ function brokerFor(root: string, effects: readonly Effect[]): Setup {
     permissions: permissionsIn(root, { effects }),
     place,
     files: nodeFileSystem,
+    throwawayFolders: nodeThrowawayFolders,
     inspector: nodeFileInspector,
     http: scriptedHttp(() => ({ status: 500, headers: {}, body: "" })),
     secrets: new SecretStore({ environment: {}, processes: noProcesses, platform: "linux" }),

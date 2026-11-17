@@ -5,7 +5,13 @@ import { test } from "node:test";
 import type { Answer } from "../bay/answers.ts";
 import { Broker } from "../bay/broker.ts";
 import type { Effect } from "../bay/contracts.ts";
-import { nodeChildProcesses, nodeFileInspector, nodeFileSystem, systemClock } from "../bay/node-ports.ts";
+import {
+  nodeChildProcesses,
+  nodeFileInspector,
+  nodeFileSystem,
+  nodeThrowawayFolders,
+  systemClock,
+} from "../bay/node-ports.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import {
   failureOf,
@@ -34,6 +40,7 @@ async function withThrowawayBroker(effects: readonly Effect[], run: (setup: Setu
       permissions: permissionsIn(root, { effects, throwawayPaths: [join(root, "scratch/copies")] }),
       place,
       files: nodeFileSystem,
+      throwawayFolders: nodeThrowawayFolders,
       inspector: nodeFileInspector,
       http: scriptedHttp(() => ({ status: 500, headers: {}, body: "" })),
       secrets: new SecretStore({ environment: {}, processes: noProcesses, platform: "linux" }),

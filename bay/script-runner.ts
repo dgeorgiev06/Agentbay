@@ -11,6 +11,7 @@ import type {
   FileSystem,
   Http,
   Processes,
+  ThrowawayFolders,
 } from "./ports.ts";
 import type { EventSink, Json, ScriptRequest, ScriptRunner, Spend, StepOutcome } from "./contracts.ts";
 import { mayRemoveFiles, writableFolders } from "./effect-rule.ts";
@@ -26,6 +27,7 @@ export type ScriptRunnerLimits = {
 export type ScriptRunnerOptions = {
   readonly layout: Layout;
   readonly files: FileSystem;
+  readonly throwawayFolders: ThrowawayFolders;
   readonly inspector: FileInspector;
   readonly http: Http;
   readonly secrets: SecretStore;
@@ -320,6 +322,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
       permissions: request.permissions,
       place: request.place,
       files: options.files,
+      throwawayFolders: options.throwawayFolders,
       inspector: options.inspector,
       http: options.http,
       secrets: options.secrets,

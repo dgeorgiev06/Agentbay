@@ -8,6 +8,7 @@ import {
   nodeFileInspector,
   nodeFileSystem,
   nodeProcesses,
+  nodeThrowawayFolders,
   systemClock,
 } from "../bay/node-ports.ts";
 import { SecretStore } from "../bay/secrets.ts";
@@ -38,6 +39,7 @@ async function withCommandBroker(
       permissions: permissionsIn(root, { effects: everyEffect, commands: ["node -e"], secrets: ["BROKER_TOKEN"] }),
       place,
       files: nodeFileSystem,
+      throwawayFolders: nodeThrowawayFolders,
       inspector: nodeFileInspector,
       http: scriptedHttp(() => ({ status: 200, headers: {}, body: "" })),
       secrets: await SecretStore.open({

@@ -11,9 +11,10 @@ import {
   nodeFileInspector,
   nodeFileSystem,
   nodeProcesses,
+  nodeThrowawayFolders,
   systemClock,
 } from "../bay/node-ports.ts";
-import type { ChildProcesses, FileInspector, FileSystem, Http, Processes } from "../bay/ports.ts";
+import type { ChildProcesses, FileInspector, FileSystem, Http, Processes, ThrowawayFolders } from "../bay/ports.ts";
 import { scriptCommand } from "../bay/script-runner.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import {
@@ -30,6 +31,7 @@ import {
 
 type Ports = {
   readonly files: FileSystem;
+  readonly throwawayFolders: ThrowawayFolders;
   readonly inspector: FileInspector;
   readonly http: Http;
   readonly childProcesses: ChildProcesses;
@@ -46,10 +48,8 @@ const brokenPorts = (): Ports => ({
     list: broken,
     exists: broken,
     writeAtomic: broken,
-    makeFolder: broken,
-    link: broken,
-    removeAll: broken,
   },
+  throwawayFolders: { makeFolder: broken, link: broken, removeAll: broken },
   inspector: { realPath: broken, isLink: broken, entries: broken },
   http: { request: broken },
   childProcesses: {
@@ -64,6 +64,7 @@ const brokenPorts = (): Ports => ({
 
 const workingPorts = (): Ports => ({
   files: nodeFileSystem,
+  throwawayFolders: nodeThrowawayFolders,
   inspector: nodeFileInspector,
   http: scriptedHttp(() => ({ status: 200, headers: {}, body: "fine" })),
   childProcesses: nodeChildProcesses,

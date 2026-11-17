@@ -43,7 +43,7 @@ const olderList: ModeList = { ...list, commands: [{ ...leaving, effects: ["read"
 
 const olderGiven: TrustGiven = { list: olderList, hash: listHashOf(olderList), ...trustGiving };
 
-const laterGiving = { at: "2026-11-19T09:40:00.000Z", by: "a test" } as const;
+const laterGiving = { at: "2026-11-19T09:40:00.000Z", by: "a test", scripts: {} } as const;
 
 const unreadableText = "{";
 

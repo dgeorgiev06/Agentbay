@@ -235,8 +235,7 @@ a file the same agent can rewrite, and it is not in git, so it is weaker evidenc
   owner of that checkout sees the first-time card for each. Trust belongs to one person's checkout on one machine.
 - After a withdrawal or a change, the next load grants the mode nothing from its list. A step that asks for a
   command gets the refusal of section 4 and its action fails with that sentence. The owner decides and calls
-  again. Other modes, and this mode's actions that run no command, go on. A script step that is already running
-  holds its grants and finishes with them.
+  again. Other modes go on, and so do this mode's actions that run no command. A running script keeps its grants.
 - A harness session that started earlier keeps the system its tool server loaded (`bay/mcp.ts:26-33`), and its
   steps keep the commands in `.agentbay/steps.json`, until the session ends or `bay build` runs. The handler says
   "Run bay build" for that reason. B does not shorten this further.
@@ -254,18 +253,18 @@ a file the same agent can rewrite, and it is not in git, so it is weaker evidenc
 
 Slices 2 to 5 have disjoint scopes and form one wave after slice 1; slice 6 follows slice 3. The card of slice 3
 is proven on the real thing (P-19): a terminal session and a chat session, each held once by the owner.
-Deleted: `commandProblems` and `throwawayPlaceProblems` (`policy.ts:245-257`, `:285-297`), the clause "only a
-mode under the kit's components/base/ may list commands" in four sentences, and the tier filter of
-`checkBaseCommands`. Estimated size: about 330 kernel lines added (the card and its difference are half), 25 removed.
+Deleted: `commandProblems` and `throwawayPlaceProblems` (`policy.ts:245-297`), the clause "only a mode under the
+kit's components/base/ may list commands" in four sentences, and the tier filter of `checkBaseCommands`. Estimated
+size: about 330 kernel lines added (the card and its difference are half), 25 removed.
 
 ## 10. What B trades away
 
 B weakens no property that holds today. It makes three choices for the owner's ease that cost defence.
 
 1. **Chat may give trust.** Only when the owner lists chat under `approvals.from`; without that, only a terminal.
-   With it, the session agent can give trust by quoting words. This is the trust the owner already places in the
-   coordinator for approvals, extended to something that outlasts a run. The coordinator may also edit
-   `approvals.from` itself (adapter `README.md:32`). An owner who works from a phone has no other channel.
+   With it, the session agent can give trust by quoting words, as it can approve today, and this trust outlasts a
+   run. The coordinator may also edit `approvals.from` itself (adapter `README.md:32`). An owner who works from a
+   phone has no other channel.
 2. **The record is not in git**, so it leaves no trace outside the machine. **A mode that waits is a warning, not
    an error**: the project keeps working, and a warning is easier to miss.
 
@@ -278,5 +277,4 @@ B weakens no property that holds today. It makes three choices for the owner's e
   starting words of ADR 20 item 4 shown once above them. A changed list shows only the difference and does fit.
 - It does not make scripts bind, does not cover an action's effects, and does not close the kit's
   `components/base/` to the session agent (frame, row c). The fingerprint's cost per `bay check` is not measured.
-- It does not record trust as an event of a run (S5): giving trust belongs to no run. The file is the record.
-  Not verified: that a 44-column card survives the owner's chat client.
+- Trust is no event of a run (S5): the file is its record. Not verified: the card in the owner's chat client.

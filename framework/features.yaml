@@ -58,7 +58,7 @@ features:
       - vocabulary
       - safety
   safety:
-    purpose: Turns a mode's grants and an action's effects into what is allowed, by one rule.
+    purpose: Turns a mode's manifest into its grants.
     entry:
       - bay/policy.ts
     private: []
@@ -76,8 +76,8 @@ features:
       - safety
   broker:
     purpose:
-      Every request for a database, file, secret, host or event passes through here. Runs a mode's script in a
-      confined child process and gives it the toolbox.
+      Every request for a database, file, secret, host or event passes through here, and it applies grants and
+      effects. Runs a mode's script in a confined child process and gives it the toolbox.
     entry:
       - bay/broker/broker.ts
       - bay/broker/script-runner.ts

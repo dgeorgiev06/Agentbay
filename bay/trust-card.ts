@@ -1,5 +1,12 @@
 import type { Effect, GrantedCommand, ModeList, TrustGiven } from "./contracts.ts";
-import { listChanges, listHashOf, shown, type CommandChange, type ListChanges } from "./trust.ts";
+import {
+  listChanges,
+  listHashOf,
+  shown,
+  type CommandChange,
+  type ListChanges,
+  type ScriptFileChange,
+} from "./trust.ts";
 
 export type FirstCard = {
   readonly list: ModeList;
@@ -10,6 +17,12 @@ export type ChangedList = {
   readonly list: ModeList;
   readonly given: TrustGiven;
   readonly changedScripts: number;
+};
+
+export type ChangedScripts = {
+  readonly given: TrustGiven;
+  readonly changes: readonly ScriptFileChange[];
+  readonly hash: string;
 };
 
 type Rooms = {
@@ -260,6 +273,30 @@ export function differenceCard(change: ChangedList): readonly string[] {
     ...paragraph(scriptsSentence(change.changedScripts)),
     "",
     hashLine(listHashOf(list)),
+  ];
+}
+
+const scriptMarkers: Readonly<Record<ScriptFileChange["change"], string>> = {
+  added: "+",
+  removed: "-",
+  changed: "~",
+};
+
+export function scriptsCard(card: ChangedScripts): readonly string[] {
+  const { given, changes } = card;
+  return [
+    ...paragraph(`The script files of the mode ${shown(given.list.mode)} changed. Its list is as you trusted it.`),
+    ...paragraph(trustedWhen(given)),
+    "",
+    ...changes.flatMap(({ path, change }) =>
+      hanging([scriptMarkers[change], shown(path)], { first: "  ", rest: "    " }),
+    ),
+    "",
+    ...paragraph(
+      "Its scripts choose the arguments of its commands. The listed words still bound what any script can run.",
+    ),
+    "",
+    hashLine(card.hash),
   ];
 }
 

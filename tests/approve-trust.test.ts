@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { stat } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { KernelPorts } from "../bay/kernel.ts";
 import { layoutOf } from "../bay/layout.ts";
 import { loadSystem } from "../bay/manifests/manifests.ts";
 import { nodeFileSystem } from "../bay/node-ports.ts";
+import { isRecord } from "../bay/json.ts";
 import { bay, fakeTerminal } from "./cli-fixture.ts";
 import { kit, makeProject, type Project, type ProjectOptions } from "./project-fixture.ts";
 
@@ -133,7 +134,12 @@ test("where the shell is not a terminal, bay approve --trust prints the card, sa
 
 const scriptHash = "0d73a05028df8331cd285684598d5d32f0ab709593574ddb02022b1df87220ae";
 
-function recordWith(by: string): string {
+const firstScripts: Readonly<Record<string, string>> = { "scripts/vet.ts": scriptHash };
+
+const trustDay = "2026-11-17T14:02:00.000Z";
+
+function recordWith(by: string, scripts = firstScripts, day = trustDay): string {
+  const scriptLines = Object.entries(scripts).map(([path, hash]) => `        "${path}": "${hash}"`);
   return [
     "{",
     '  "version": 1,',
@@ -188,9 +194,9 @@ function recordWith(by: string): string {
     "      },",
     `      "hash": "${goHash}",`,
     '      "scripts": {',
-    `        "scripts/vet.ts": "${scriptHash}"`,
+    scriptLines.join(",\n"),
     "      },",
-    '      "at": "2026-11-17T14:02:00.000Z",',
+    `      "at": "${day}",`,
     `      "by": ${JSON.stringify(by)}`,
     "    }",
     "  }",
@@ -237,48 +243,59 @@ test("at a terminal, anything but yes changes nothing and says so", async () => 
   });
 });
 
+async function assertChatOff(project: Project, hash: string): Promise<void> {
+  const ran = await bay(trustArgv(project, "--via", "chat", "--hash", hash, "--quote", "yes, trust go-toolchain"));
+  assert.equal(ran.exitCode, 1);
+  assert.equal(
+    ran.output,
+    [
+      "Trust from chat is off: approvals.from in agentbay.config.yaml lists terminal.",
+      "  fix: The owner answers the card at a terminal: bay approve --trust go-toolchain. Only the owner changes " +
+        "approvals.from.",
+    ].join("\n"),
+  );
+}
+
 test("from chat, trust is refused when the config does not list chat, whatever the hash and the words", async () => {
   await withGoToolchain({}, async (project) => {
-    const ran = await bay(trustArgv(project, "--via", "chat", "--hash", goHash, "--quote", "yes, trust go-toolchain"));
-    assert.equal(ran.exitCode, 1);
-    assert.equal(
-      ran.output,
-      [
-        "Trust from chat is off: approvals.from in agentbay.config.yaml lists terminal.",
-        "  fix: The owner answers the card at a terminal: bay approve --trust go-toolchain. Only the owner changes " +
-          "approvals.from.",
-      ].join("\n"),
-    );
+    await assertChatOff(project, goHash);
     assert.equal(await recordText(project), undefined);
   });
 });
 
+function chatRefusals(hash: string): readonly (readonly [readonly string[], string])[] {
+  const quote = "yes, trust go-toolchain";
+  const otherHash = "b4385d2b5acb3c998484d53e632789fc661722c3c18743f99a75c94ed61403ed";
+  return [
+    [
+      ["--hash", otherHash, "--quote", quote],
+      `The hash ${otherHash} is not the hash on the card for the mode go-toolchain now, so nothing changed.\n` +
+        "  fix: Show the owner the card again: bay approve --trust go-toolchain.",
+    ],
+    [
+      ["--hash", hash.slice(0, 12), "--quote", quote],
+      `The hash ${hash.slice(0, 12)} is the short form on the card; trust from chat needs the full hash.\n` +
+        "  fix: The full hash is printed when bay approve --trust go-toolchain runs where its input is not a terminal.",
+    ],
+    [
+      ["--hash", hash, "--quote", "yes, trust it"],
+      'The owner\'s words "yes, trust it" do not name the mode go-toolchain; an answer from chat counts only in ' +
+        "words that name the mode.\n" +
+        "  fix: Ask the owner to answer the card in words that name go-toolchain.",
+    ],
+  ];
+}
+
+async function assertChatRefusals(project: Project, hash: string): Promise<void> {
+  for (const [more, output] of chatRefusals(hash)) {
+    const ran = await bay(trustArgv(project, "--via", "chat", ...more));
+    assert.deepEqual([ran.exitCode, ran.output], [1, output]);
+  }
+}
+
 test("from chat, trust is refused for the hash of another list, for the short hash, and for words that do not name the mode", async () => {
   await withGoToolchain({ approvalsFrom: ["terminal", "chat"] }, async (project) => {
-    const quote = "yes, trust go-toolchain";
-    const otherHash = "b4385d2b5acb3c998484d53e632789fc661722c3c18743f99a75c94ed61403ed";
-    const cases: readonly (readonly [readonly string[], string])[] = [
-      [
-        ["--hash", otherHash, "--quote", quote],
-        `The hash ${otherHash} is not the hash on the card for the mode go-toolchain now, so nothing changed.\n` +
-          "  fix: Show the owner the card again: bay approve --trust go-toolchain.",
-      ],
-      [
-        ["--hash", goHash.slice(0, 12), "--quote", quote],
-        "The hash 95f6a0ecfe02 is the short form on the card; trust from chat needs the full hash.\n" +
-          "  fix: The full hash is printed when bay approve --trust go-toolchain runs where its input is not a terminal.",
-      ],
-      [
-        ["--hash", goHash, "--quote", "yes, trust it"],
-        'The owner\'s words "yes, trust it" do not name the mode go-toolchain; an answer from chat counts only in ' +
-          "words that name the mode.\n" +
-          "  fix: Ask the owner to answer the card in words that name go-toolchain.",
-      ],
-    ];
-    for (const [more, output] of cases) {
-      const ran = await bay(trustArgv(project, "--via", "chat", ...more));
-      assert.deepEqual([ran.exitCode, ran.output], [1, output]);
-    }
+    await assertChatRefusals(project, goHash);
     assert.equal(await recordText(project), undefined);
   });
 });
@@ -352,11 +369,9 @@ test("after the list changed, the card shows the difference, and yes puts the ne
   });
 });
 
-test("a changed script file is not part of the list: the trust stands and the hash does not change", async () => {
+test("with no script file changed, a trusted mode is already trusted; a changed script file leaves the trust standing", async () => {
   await withGoToolchain({}, async (project) => {
     await bay(trustArgv(project), atTerminal("yes"));
-    await project.write(`${folder}/scripts/vet.ts`, "export const changed = true;\n");
-    assert.equal(await listTrustState(project), "trusted");
     const again = await bay(trustArgv(project), atTerminal("yes"));
     assert.equal(again.exitCode, 1);
     assert.equal(
@@ -364,6 +379,8 @@ test("a changed script file is not part of the list: the trust stands and the ha
       "The mode go-toolchain is already trusted for this list. You trusted it on 2026-11-17, as the owner at the " +
         "terminal. Nothing changed.",
     );
+    await project.write(`${folder}/scripts/vet.ts`, "export const changed = true;\n");
+    assert.equal(await listTrustState(project), "trusted");
   });
 });
 
@@ -625,5 +642,193 @@ test("the difference card says how chat gave the trust, shows a removed folder, 
         "hash 04e0b3abcd40",
       ].join("\n"),
     );
+  });
+});
+
+const scriptsCardHash = "0e987b02af54fd559cd199ef0e3c691cd5c84517a9a1fe595d6b962c468e0e89";
+
+const scriptsCard = [
+  "The script files of the mode go-toolchain",
+  "changed. Its list is as you trusted it.",
+  "You trusted it on 2026-11-17, as the owner",
+  "at the terminal.",
+  "",
+  "  + scripts/bench.ts",
+  "  - scripts/old.ts",
+  "  ~ scripts/vet.ts",
+  "",
+  "Its scripts choose the arguments of its",
+  "commands. The listed words still bound what",
+  "any script can run.",
+  "",
+  `hash ${scriptsCardHash.slice(0, 12)}`,
+].join("\n");
+
+const oldScriptHash = "e55565fcdf34f5adbc4b7d09c1ade36d89caddaa146c9f22e778a87837e486ce";
+
+const changedScriptHash = "c2afd79205356c37783dffe4ddbbc245f7986509e949d312cbbc3009670c4349";
+
+const scriptsAfter: Readonly<Record<string, string>> = {
+  "scripts/bench.ts": scriptHash,
+  "scripts/vet.ts": changedScriptHash,
+};
+
+async function withChangedScripts(options: ProjectOptions, body: (project: Project) => Promise<void>): Promise<void> {
+  await withGoToolchain(options, async (project) => {
+    await project.write(`${folder}/scripts/old.ts`, "export const old = true;\n");
+    const given = await bay(trustArgv(project), atTerminal("yes"));
+    assert.equal(given.exitCode, 0, given.output);
+    await project.write(`${folder}/scripts/vet.ts`, "export const changed = true;\n");
+    await project.write(`${folder}/scripts/bench.ts`, "export {};\n");
+    await rm(join(project.root, folder, "scripts/old.ts"));
+    await body(project);
+  });
+}
+
+const firstRecord = recordWith("owner at the terminal", {
+  "scripts/old.ts": oldScriptHash,
+  "scripts/vet.ts": scriptHash,
+});
+
+test("after a trusted mode's script files changed, bay approve --trust prints a short card of them and, where the shell is not a terminal, changes nothing", async () => {
+  await withChangedScripts({}, async (project) => {
+    const ran = await bay(trustArgv(project));
+    assert.equal(ran.exitCode, 1);
+    assert.equal(
+      ran.output,
+      `${scriptsCard}\n\nNothing changed. Trust is the owner's to give: at a terminal, or, if agentbay.config.yaml ` +
+        `lists chat under approvals.from, with --hash ${scriptsCardHash} --via chat --quote "<the owner's exact words>".`,
+    );
+    assert.equal(await recordText(project), firstRecord);
+  });
+});
+
+const nextDay: Partial<KernelPorts> = { clock: { now: () => new Date("2026-11-18T09:30:00.000Z") } };
+
+async function manifestFindings(project: Project): Promise<readonly unknown[]> {
+  const ran = await bay(["check", "--json", "--project", project.root]);
+  assert.ok(isRecord(ran.json) && Array.isArray(ran.json.findings), ran.output);
+  const findings: readonly unknown[] = ran.json.findings;
+  return findings.filter((finding) => isRecord(finding) && finding.file === `${folder}/mode.yaml`);
+}
+
+type ShownCommand = {
+  readonly name: string;
+  readonly words: string;
+  readonly effects: string;
+  readonly line: number;
+};
+
+function trustedFinding({ name, words, effects, line }: ShownCommand): unknown {
+  return {
+    severity: "warning",
+    file: `${folder}/mode.yaml`,
+    path: `/resources/commands/${name}`,
+    line,
+    message:
+      `Mode go-toolchain, trusted on 2026-11-18 by the owner at the terminal, lists the command ${name}, which runs ` +
+      `${words} and which the mode says has the effects: ${effects}; a listed command can run code the agent wrote.`,
+    fix:
+      "Withdraw with bay approve --trust go-toolchain --reject unless the mode cannot work without the command. " +
+      "The kernel believes the effects a mode lists and cannot check them.",
+  };
+}
+
+test("yes at a terminal records the script files as they are now, with the same list and hash, and bay check no longer reports them", async () => {
+  await withChangedScripts({}, async (project) => {
+    const changes = { terminal: fakeTerminal({ interactive: true, answer: "yes" }), ports: nextDay };
+    const ran = await bay(trustArgv(project), changes);
+    assert.deepEqual(changes.terminal.asked, [`${scriptsCard}\nType yes to record that you read them: `]);
+    assert.deepEqual(
+      [ran.exitCode, ran.output],
+      [0, "The script files of go-toolchain are recorded as you read them. Its list is trusted as before."],
+    );
+    assert.equal(
+      await recordText(project),
+      recordWith("owner at the terminal", scriptsAfter, "2026-11-18T09:30:00.000Z"),
+    );
+    assert.equal(await listTrustState(project), "trusted");
+    assert.deepEqual(await manifestFindings(project), [
+      trustedFinding({ name: "vet", words: "go vet ./...", effects: "read", line: 23 }),
+      trustedFinding({ name: "build", words: "go build ./...", effects: "read, write", line: 29 }),
+      trustedFinding({ name: "run-tests", words: "go test -json", effects: "read, write, network", line: 36 }),
+    ]);
+    const again = await bay(trustArgv(project), atTerminal("yes"));
+    assert.deepEqual(
+      [again.exitCode, again.output],
+      [
+        1,
+        "The mode go-toolchain is already trusted for this list. You trusted it on 2026-11-18, as the owner at the " +
+          "terminal. Nothing changed.",
+      ],
+    );
+  });
+});
+
+test("at a terminal, anything but yes leaves the script files as they were recorded", async () => {
+  await withChangedScripts({}, async (project) => {
+    for (const answer of ["y", "no", "", "yes, record them"]) {
+      const ran = await bay(trustArgv(project), atTerminal(answer));
+      assert.deepEqual([ran.exitCode, ran.output], [1, "Not confirmed; nothing changed."], answer);
+    }
+    assert.equal(await recordText(project), firstRecord);
+  });
+});
+
+test("from chat, the script files are recorded only under the rules that give trust", async () => {
+  await withChangedScripts({}, async (project) => {
+    await assertChatOff(project, scriptsCardHash);
+    assert.equal(await recordText(project), firstRecord);
+  });
+  await withChangedScripts({ approvalsFrom: ["terminal", "chat"] }, async (project) => {
+    await assertChatRefusals(project, scriptsCardHash);
+    assert.equal(await recordText(project), firstRecord);
+    const stale = await bay(trustArgv(project, "--via", "chat", "--hash", goHash, "--quote", "yes, go-toolchain"));
+    assert.equal(stale.exitCode, 1);
+    assert.equal(await recordText(project), firstRecord);
+    const quote = "Yes, I read the go-toolchain scripts";
+    const ran = await bay(trustArgv(project, "--via", "chat", "--hash", scriptsCardHash, "--quote", quote), {
+      ports,
+    });
+    assert.equal(ran.exitCode, 0, ran.output);
+    assert.equal(
+      await recordText(project),
+      recordWith(`owner via chat, quoted: ${JSON.stringify(quote)}`, scriptsAfter),
+    );
+  });
+});
+
+test("a script file whose name is longer than the card is broken across lines and never cut", async () => {
+  const long = `scripts/${"long-name-".repeat(6)}of-a-script.ts`;
+  await withGoToolchain({}, async (project) => {
+    assert.equal((await bay(trustArgv(project), atTerminal("yes"))).exitCode, 0);
+    await project.write(`${folder}/${long}`, "export {};\n");
+    const card = (await bay(trustArgv(project))).output.split("\n\nNothing changed.")[0] ?? "";
+    assert.deepEqual(
+      card.split("\n").filter((line) => Array.from(line).length > 44),
+      [],
+    );
+    const joined = card
+      .split("\n")
+      .map((line) => line.trim())
+      .join("");
+    assert.ok(joined.includes(long), card);
+  });
+});
+
+test("bay check --json carries a waiting mode's finding in the shape every finding has", async () => {
+  await withGoToolchain({}, async (project) => {
+    assert.deepEqual(await manifestFindings(project), [
+      {
+        severity: "warning",
+        file: `${folder}/mode.yaml`,
+        path: "/resources",
+        line: 20,
+        message:
+          "Mode go-toolchain lists 3 commands and 1 throwaway folder, and the owner does not trust the list of mode " +
+          "go-toolchain, so none of it is granted.",
+        fix: "The owner reads the list and decides: bay approve --trust go-toolchain",
+      },
+    ]);
   });
 });

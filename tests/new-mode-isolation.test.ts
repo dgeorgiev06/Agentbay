@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, lstatSync } from "node:fs";
-import { appendFile, copyFile, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { appendFile, rm } from "node:fs/promises";
+import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { forgetfulStore, memoryStore, memoryStoreFiles, parrot, parrotFiles, type ModeFiles } from "./made-up-modes.ts";
-import { kit } from "./project-fixture.ts";
+import { addMode, copyOfTheKit, failedTests, type ModeFiles } from "./kit-copy.ts";
+import { forgetfulStore, memoryStore, memoryStoreFiles, parrot, parrotFiles } from "./made-up-modes.ts";
 
 type Ran = {
   readonly status: number | null;
@@ -34,33 +32,8 @@ function git(...parameters: readonly string[]): string {
   return execFileSync("git", [...identity, ...parameters], { cwd: copy, encoding: "utf8" });
 }
 
-function kitFiles(): readonly string[] {
-  const listed = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], {
-    cwd: kit,
-    encoding: "utf8",
-  });
-  return listed
-    .split("\0")
-    .filter((file) => file !== "" && existsSync(join(kit, file)) && !lstatSync(join(kit, file)).isSymbolicLink());
-}
-
-async function copyOfTheKit(): Promise<string> {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "agentbay-kit-copy-")));
-  for (const file of kitFiles()) {
-    await mkdir(dirname(join(root, file)), { recursive: true });
-    await copyFile(join(kit, file), join(root, file));
-  }
-  await symlink(join(kit, "node_modules"), join(root, "node_modules"));
-  return root;
-}
-
-async function addMode(name: string, files: ModeFiles): Promise<void> {
-  assert.equal(existsSync(join(copy, modesFolder, name)), false, `the kit already holds ${modesFolder}/${name}`);
-  for (const [path, text] of Object.entries(files)) {
-    const file = join(copy, modesFolder, name, path);
-    await mkdir(dirname(file), { recursive: true });
-    await writeFile(file, text, "utf8");
-  }
+function added(name: string, files: ModeFiles): Promise<void> {
+  return addMode(copy, join(modesFolder, name), files);
 }
 
 function findings(): readonly string[] {
@@ -83,19 +56,15 @@ function changedPaths(): readonly string[] {
     .map((line) => line.slice(3));
 }
 
-function failedTests(output: string): readonly string[] {
-  return [...output.matchAll(/^\s*not ok \d+ - (.+)$/gm)].map((match) => match[1] ?? "");
-}
-
 before(async () => {
-  copy = await copyOfTheKit();
+  copy = await copyOfTheKit("kit-copy");
   git("init", "-q");
   await appendFile(join(copy, ".git/info/exclude"), "node_modules\n", "utf8");
   git("add", "-A");
   git("commit", "-q", "-m", "the kit as it is");
   findingsBefore = findings();
-  await addMode(parrot, parrotFiles);
-  await addMode(memoryStore, memoryStoreFiles(memoryStore, "keeps every item"));
+  await added(parrot, parrotFiles);
+  await added(memoryStore, memoryStoreFiles(memoryStore, "keeps every item"));
 });
 
 after(async () => {
@@ -139,7 +108,7 @@ test("the kit's type check and both dead-code runs accept the two modes", () => 
 });
 
 test("an items store that loses an item is accepted by bay check, and fails the shared test's first case", async () => {
-  await addMode(forgetfulStore, memoryStoreFiles(forgetfulStore, "loses an item"));
+  await added(forgetfulStore, memoryStoreFiles(forgetfulStore, "loses an item"));
   assert.deepEqual(newFindings(), []);
   const own = join(modesFolder, forgetfulStore, "tests", `${forgetfulStore}.test.ts`);
   const firstCase = "put then get returns the same items, in the order asked, and names the ids it does not hold";

@@ -12,7 +12,7 @@ import {
 import { createScriptRunner, type ScriptRunnerOptions } from "./script-runner.ts";
 import { openStep } from "./step-broker.ts";
 
-export type Broker = {
+type Broker = {
   readonly scripts: ScriptRunner;
   readonly forStep: (place: StepPlace, permissions: Permissions) => StepBroker;
 };
@@ -25,7 +25,7 @@ export type StepBroker = {
   readonly close: () => void;
 };
 
-export type Reach = {
+type Reach = {
   readonly writableFolders: readonly string[];
   readonly commands: readonly string[];
 };

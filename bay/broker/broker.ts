@@ -1,6 +1,7 @@
 import type { Answer, RefusalWording } from "../answers.ts";
 import type { Effect, Permissions, ScriptRunner, StepPlace } from "../contracts.ts";
 import type { OperationName, Results } from "./operations.ts";
+import { lackedEffect } from "./command-operations.ts";
 import { type ActionAt, type EntryRequests, missingEffectRefusal, type Need, writableFolders } from "./rule.ts";
 import { createScriptRunner, type ScriptRunnerOptions } from "./script-runner.ts";
 import { openStep } from "./step-broker.ts";
@@ -23,8 +24,6 @@ type Reach = {
   readonly commands: readonly string[];
 };
 
-const everyEffect: readonly Effect[] = ["read", "write", "network", "spend", "delete"];
-
 const reportsDollars: Need = { effect: "spend", because: "Reporting dollars an agent spent needs the spend effect" };
 
 export function createBroker(services: ScriptRunnerOptions): Broker {
@@ -38,10 +37,12 @@ export function createBroker(services: ScriptRunnerOptions): Broker {
 }
 
 export function reachOf(permissions: Permissions): Reach {
-  const runsAnyCommand = everyEffect.every((effect) => permissions.actionEffects.includes(effect));
+  const runnable = permissions.grants.commands.filter(
+    (command) => lackedEffect(command, permissions.actionEffects) === undefined,
+  );
   return {
     writableFolders: writableFolders(permissions),
-    commands: runsAnyCommand ? permissions.grants.commands.map((command) => command.words.join(" ")) : [],
+    commands: runnable.map((command) => command.words.join(" ")),
   };
 }
 

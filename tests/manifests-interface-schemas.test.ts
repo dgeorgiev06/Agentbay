@@ -16,6 +16,7 @@ const greeting: Interface = {
   version: 1,
   actions: {
     greet: { input: "greeting/greet-input.json", output: "greeting/greet-output.json", effects: ["read"] },
+    introduce: { input: "greeting/introduce-input.json", output: "greeting/introduce-output.json", effects: [] },
   },
 };
 
@@ -41,6 +42,10 @@ const greetOutput = {
   properties: { text: { type: "string" } },
 };
 
+const introduceInput = { type: "object", required: ["to"], properties: { to: { type: "string" } } };
+
+const introduceOutput = { type: "object", required: ["introduced"], properties: { introduced: { type: "string" } } };
+
 const partInput = { type: "object", required: ["until"], properties: { until: { type: "string" } } };
 
 const partOutput = { type: "object", required: ["said"], properties: { said: { type: "boolean" } } };
@@ -65,12 +70,18 @@ const wave = {
   run: [{ script: "scripts/wave.ts" }],
 };
 
+const introduce = {
+  description: "When someone is to be introduced.",
+  effects: [],
+  run: [{ script: "scripts/introduce.ts" }],
+};
+
 const greeter = {
   name: "greeter",
   version: "1.0.0",
   description: "Greets, parts and waves.",
   implements: ["greeting@1", "farewell@1"],
-  actions: { greet, part, wave },
+  actions: { greet, part, wave, introduce },
 };
 
 function json(value: unknown): string {
@@ -82,6 +93,8 @@ function kitFiles(): Record<string, string> {
     [greetingFile]: yamlText(greeting),
     "components/base/interfaces/greeting/greet-input.json": json(greetInput),
     "components/base/interfaces/greeting/greet-output.json": json(greetOutput),
+    "components/base/interfaces/greeting/introduce-input.json": json(introduceInput),
+    "components/base/interfaces/greeting/introduce-output.json": json(introduceOutput),
     "components/base/interfaces/farewell.yaml": yamlText(farewell),
     "components/base/interfaces/farewell/part-input.json": json(partInput),
     "components/base/interfaces/farewell/part-output.json": json(partOutput),
@@ -91,6 +104,7 @@ function kitFiles(): Record<string, string> {
     "components/modes/greeter/scripts/greet.ts": "",
     "components/modes/greeter/scripts/part.ts": "",
     "components/modes/greeter/scripts/wave.ts": "",
+    "components/modes/greeter/scripts/introduce.ts": "",
     "agentbay.config.yaml": yamlText({ bindings: {}, adapter: "local", modes: ["greeter"] }),
   };
 }
@@ -162,7 +176,7 @@ test("bay actions lists an action that its interface names with the interface's 
 
 test("an action that its interface names and that gives input or output is an error with a fix", async () => {
   const greetWithSchemas = { ...greet, input: "schemas/wave-input.json", output: "schemas/wave-output.json" };
-  const problems = await problemsOf(withGreeter({ actions: { greet: greetWithSchemas, part, wave } }));
+  const problems = await problemsOf(withGreeter({ actions: { greet: greetWithSchemas, part, wave, introduce } }));
   assert.deepEqual(problems, [
     {
       file: greeterFile,
@@ -181,6 +195,15 @@ test("an action that its interface names and that gives input or output is an er
       fix: "Remove output from greet; an action that an interface names takes its input and output from the interface.",
     },
   ]);
+});
+
+test("an action takes the schemas that its interface gives for it, not those of another action", async () => {
+  const system = await systemOf(kitFiles());
+  const target = system.action("greeter.introduce");
+  assert.ok(target.ok, JSON.stringify(target));
+  assert.equal(target.value.input.file, "/kit/components/base/interfaces/greeting/introduce-input.json");
+  assert.deepEqual(target.value.input.json, introduceInput);
+  assert.deepEqual(target.value.output.json, introduceOutput);
 });
 
 test("an action that no interface names keeps its own input and output", async () => {
@@ -207,7 +230,7 @@ test("a mode that implements two interfaces takes each action's schemas from the
 
 test("an action that no interface names and gives no input is an error with a fix", async () => {
   const waveWithoutInput = { description: wave.description, output: wave.output, effects: wave.effects, run: wave.run };
-  const problems = await problemsOf(withGreeter({ actions: { greet, part, wave: waveWithoutInput } }));
+  const problems = await problemsOf(withGreeter({ actions: { greet, part, wave: waveWithoutInput, introduce } }));
   assert.deepEqual(problems, [
     {
       file: greeterFile,
@@ -272,4 +295,13 @@ test("an inspected mode checks an example of an action against the schema of the
     [{ file: example, path: "/output/waved", message: 'output.waved must be a whole number, but it is "no".' }],
   );
   assert.deepEqual(await folder.schemaProblems({}, { action: "nothing", direction: "input", file: example }), []);
+});
+
+test("an inspected mode checks an example against the interface's schema even when the action gives its own", async () => {
+  const greetWithSchemas = { ...greet, input: "schemas/wave-input.json", output: "schemas/wave-output.json" };
+  const folder = await greeterFolder(withGreeter({ actions: { greet: greetWithSchemas, part, wave, introduce } }));
+  const example = "/kit/components/modes/greeter/tests/greet.example.json";
+  assert.deepEqual(await folder.schemaProblems({}, { action: "greet", direction: "input", file: example }), [
+    { file: example, path: "/input", message: "input is missing the required field name.", fix: "Add name." },
+  ]);
 });

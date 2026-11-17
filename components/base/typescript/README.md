@@ -1,6 +1,6 @@
 # typescript
 
-The mode `typescript` implements `toolchain@1`. It checks and tests TypeScript code in a checkout, and it holds the configuration that holds agentbay code to its code standards.
+The mode `typescript` implements `toolchain@1`. It checks and tests TypeScript code in a checkout, and it holds the lint and format configuration that is its standard for TypeScript code. The kit uses that configuration as any project would.
 
 ## Actions
 
@@ -29,13 +29,12 @@ The mode lists exactly the commands its scripts run, in `resources.commands`. Ea
 
 ## Configuration
 
-`mode.yaml` lists these files under `extraFiles`, so the mode-folder layout accepts them at the top of the folder. The scripts in the root `package.json` pass them with `--config`, so no copy sits at the repository root. `tsconfig.json` stays at the root because the compiler and the type-checked lint rules look for it there.
+`mode.yaml` lists these files under `extraFiles`, so the mode-folder layout accepts them at the top of the folder. The scripts in the root `package.json` pass them with `--config`, so no copy sits at the repository root. `tsconfig.json` stays at the root because the compiler and the type-checked lint rules look for it there. The kit's dead-code configuration, `knip.json`, is not part of this mode: it names the kit's own entry files, so it sits at the kit's root and `npm run deadcode` passes it with `--config`.
 
 | File | Used by | Enforces |
 |---|---|---|
 | `eslint.config.js` | `npm run lint` | typescript-eslint `strictTypeChecked`; no `any`; no non-null `!`; private members never reassigned are `readonly`; no type assertion except `as const`; every `switch` over a union is exhaustive; exported functions state their parameter and return types; at most three parameters; complexity at most 10; no nested ternary; no reassigned parameter; no default export; no `enum`; no class `extends`; no `@ts-ignore`, `@ts-expect-error` or `@ts-nocheck`; inline `eslint-disable` comments have no effect and are reported, and `--max-warnings 0` fails on them; files under `components/` import from `bay/` only `bay/sdk.ts`, import no file of another mode folder (`components/<tier>/<mode>/`, checked to six folder levels inside a mode) and use no dynamic `import()`; files under `adapters/` import from `bay/` only `bay/sdk.ts` and `bay/adapter.ts`; files under `bay/` other than `cli.ts` and `mcp.ts` import neither `cli.ts`, `mcp.ts` nor anything under `adapters/` |
 | `prettier.json` | `npm run format:check` | Prettier with a line width of 120 |
-| `knip.json` | `npm run deadcode` | No unused file, export or dependency. Test files are the entry points until `bay/cli.ts` exists. Exported types used in their own file are allowed; unused exported types are allowed in `bay/generated/` and in `bay/ports.ts`, whose git, process and HTTP ports later slices use |
 | `practices.md` | builders and reviewers; `describe` names it | The TypeScript practices TS-01 to TS-17 |
 
 Not enforced here: import cycles and files that only re-export (they need an eslint plugin, so `bay check` will do it), and comment lines in kit code (a `bay check` measure).

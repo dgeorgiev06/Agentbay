@@ -1,6 +1,4 @@
 import { createHash } from "node:crypto";
-import { basename, dirname, join, resolve } from "node:path/posix";
-import { type AgentQueryOutcome, runAgentQuery } from "./agent-query.ts";
 import { type Answer, errorLine, failed, granted, listed, manifestOf, refused } from "../answers.ts";
 import type {
   ChildProcesses,
@@ -15,7 +13,6 @@ import type {
   ThrowawayFolders,
 } from "../ports.ts";
 import type { Effect, EventSink, Json, ModeGrants, Permissions, StepPlace } from "../contracts.ts";
-import type { DatabaseResult, Migration } from "./database.ts";
 import { DatabaseProcess } from "./database-process.ts";
 import {
   type ActionAt,
@@ -25,31 +22,19 @@ import {
   commandRefusal,
   effectRefusal,
   type BrokerOperation,
-  changesDataAllowed,
   type SpendAmounts,
 } from "./effect-rule.ts";
-import { checkPath, type PathCheck, type Purpose } from "./file-access.ts";
+import { checkPath } from "./file-access.ts";
+import { databaseEntries, type DatabaseOperationName } from "./database-operations.ts";
+import { dataFolder, fileEntries, type FileOperationName } from "./file-operations.ts";
 import { checkUrl, type Hop, loggedHeaders, nextRequest, redirectTarget, type UrlCheck } from "./http-access.ts";
 import { isInsideOrEqual, pathIn, shownPath, type Layout } from "../layout.ts";
 import type { SecretStore } from "../secrets.ts";
 import { isJsonRecord } from "../protocol-json.ts";
-import { leadingKeyword, readKeywords, writeKeywords } from "./sql-statements.ts";
-import { type Reading, shapes } from "./operations.ts";
-import type {
-  AgentQueryResult,
-  CommandOutput,
-  CommandRan,
-  CommandRequest,
-  ExecuteResult,
-  Row,
-  SqlParameters,
-} from "../sdk.ts";
+import type { AgentQueryLimits, Entries, Step } from "./rule.ts";
+import type { CommandOutput, CommandRan, CommandRequest } from "../sdk.ts";
 
-export type BrokerLimits = {
-  readonly agentQueryRows: number;
-  readonly agentQueryCellCharacters: number;
-  readonly agentQueryResultBytes: number;
-  readonly agentQueryMilliseconds: number;
+export type BrokerLimits = AgentQueryLimits & {
   readonly httpRequestBytes: number;
   readonly httpResponseBytes: number;
   readonly httpRedirects: number;
@@ -88,38 +73,7 @@ const defaultBrokerLimits: BrokerLimits = {
   commandOutputCharacters: 64 * 1024,
 };
 
-const dataFolder = ".agentbay";
-
-type ThrowawayOperation = Extract<
-  BrokerOperation,
-  { readonly kind: "files.makeFolder" | "files.link" | "files.remove" }
->;
-
-type ThrowawayPlace = {
-  readonly path: string;
-  readonly checked: "itself" | "folder";
-};
-
-const migrationName = /^\d{4}-[^/]+\.sql$/;
-
-const partitionName = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
-
-const longestPartitionName = 64;
-
 const brokerKinds: readonly string[] = ["refused", "http", "redacted", "command", "throwaway"];
-
-type Expected<T> = {
-  readonly keyword: string;
-  readonly reads: (value: Json) => Reading<T>;
-};
-
-function redactedParameters(parameters: SqlParameters, redact: (text: string) => string): SqlParameters {
-  const redacted = (value: Json): Json => (typeof value === "string" ? redact(value) : value);
-  if (Array.isArray(parameters)) {
-    return parameters.map(redacted);
-  }
-  return Object.fromEntries(Object.entries(parameters).map(([name, value]) => [name, redacted(value)]));
-}
 
 const noAmounts: SpendAmounts = { items: 0, usd: 0, tokens: 0 };
 
@@ -149,6 +103,8 @@ function spendingRefusal(spending: Json): Answer<never> {
   });
 }
 
+type EntryName = FileOperationName | DatabaseOperationName;
+
 export class Broker {
   readonly #options: BrokerOptions;
   readonly #grants: ModeGrants;
@@ -156,169 +112,40 @@ export class Broker {
   readonly #limits: BrokerLimits;
   readonly #databases = new Map<string, DatabaseProcess>();
   #unnamedMigration: Promise<Answer<readonly string[]>> | undefined;
+  readonly entries: Entries<EntryName>;
 
   constructor(options: BrokerOptions) {
     this.#options = options;
     this.#grants = options.permissions.grants;
     this.#effects = options.permissions.actionEffects;
     this.#limits = { ...defaultBrokerLimits, ...options.limits };
+    const step = this.#step();
+    this.entries = { ...fileEntries(step), ...databaseEntries(step) };
   }
 
-  #partitionFile(partition: string | undefined): Answer<string> {
-    const databaseFile = this.#grants.databaseFile;
-    if (partition === undefined) {
-      return granted(databaseFile);
-    }
-    if (partition.length > longestPartitionName || !partitionName.test(partition)) {
-      return refused({
-        resource: "db",
-        asked: `${this.#asking} for the database partition ${JSON.stringify(partition)}`,
-        declared:
-          `a partition name is kebab-case, at most ${String(longestPartitionName)} characters, ` +
-          "with no dots or path separators",
-        change: "Name the partition with lowercase letters, digits and single dashes, such as feed-briefing.",
-      });
-    }
-    return granted(join(dirname(databaseFile), `${this.#grants.mode}--${partition}.db`));
-  }
-
-  migrate(partition?: string): Promise<Answer<readonly string[]>> {
-    return this.#guarded({ kind: "db.migrate" }, () => this.#migrateNow(partition));
-  }
-
-  execute(sql: string, parameters: SqlParameters = [], partition?: string): Promise<Answer<ExecuteResult>> {
-    return this.#guarded({ kind: "db.execute", sql }, async () => {
-      const file = this.#partitionFile(partition);
-      if (!file.ok) {
-        return file;
-      }
-      const keyword = leadingKeyword(sql);
-      if (![...readKeywords, ...writeKeywords].includes(keyword)) {
-        return this.#statementRefusal(keyword, [...readKeywords, ...writeKeywords]);
-      }
-      const migrated = await this.#migratedFirst(partition);
-      if (!migrated.ok) {
-        return migrated;
-      }
-      const writable = changesDataAllowed(this.#effects);
-      const stored = await this.#storedParameters(parameters);
-      const order = { method: "execute" as const, sql, parameters: stored, writable };
-      const result = await this.#databaseOf(file.value).request(order);
-      return this.#databaseAnswer(result, { keyword, reads: shapes["db.execute"].result });
-    });
-  }
-
-  query(sql: string, parameters: SqlParameters = [], partition?: string): Promise<Answer<readonly Row[]>> {
-    return this.#guarded({ kind: "db.query", sql }, async () => {
-      const file = this.#partitionFile(partition);
-      if (!file.ok) {
-        return file;
-      }
-      const keyword = leadingKeyword(sql);
-      if (!readKeywords.includes(keyword)) {
-        return this.#statementRefusal(keyword, readKeywords);
-      }
-      const migrated = await this.#migratedFirst(partition);
-      if (!migrated.ok) {
-        return migrated;
-      }
-      const result = await this.#databaseOf(file.value).request({ method: "query", sql, parameters });
-      return this.#databaseAnswer(result, { keyword, reads: shapes["db.query"].result });
-    });
-  }
-
-  agentQuery(sql: string, partition?: string): Promise<Answer<AgentQueryResult>> {
-    return this.#guarded({ kind: "db.agentQuery" }, async () => {
-      const file = this.#partitionFile(partition);
-      if (!file.ok) {
-        return file;
-      }
-      const migrated = await this.#migratedFirst(partition);
-      if (!migrated.ok) {
-        return migrated;
-      }
-      if (!(await this.#options.files.exists(file.value))) {
-        return failed(`The mode ${this.#grants.mode} has no database yet; run its migrations first.`);
-      }
-      return this.#agentQueryAnswer(await this.#runAgentQuery(file.value, sql));
-    });
-  }
-
-  readFile(path: string): Promise<Answer<string>> {
-    return this.#guarded({ kind: "files.read", path: this.#shown(path) }, async () => {
-      const checked = await this.#checkedPath(path, "read");
-      if (!checked.ok) {
-        return checked;
-      }
-      const text = await this.#options.files.readText(checked.value);
-      return text === undefined ? failed(`The file ${checked.value} does not exist.`) : granted(text);
-    });
-  }
-
-  writeFile(path: string, text: string): Promise<Answer<null>> {
-    return this.#guarded({ kind: "files.write", path: this.#shown(path) }, async () => {
-      const checked = await this.#checkedPath(path, "write");
-      if (!checked.ok) {
-        return checked;
-      }
-      const redacted = this.#options.secrets.redactKnownValues(text);
-      if (redacted !== text) {
-        await this.#append("redacted", {
-          step: this.#options.place.stepKey,
-          file: checked.value,
-          message: "A secret's value was removed from the text before the file was written.",
-        });
-      }
-      await this.#options.files.writeAtomic(checked.value, redacted);
-      return granted(null);
-    });
-  }
-
-  listFiles(path: string): Promise<Answer<readonly string[]>> {
-    return this.#guarded({ kind: "files.list", path: this.#shown(path) }, async () => {
-      const checked = await this.#checkedPath(path, "read");
-      if (!checked.ok) {
-        return checked;
-      }
-      return granted(await this.#options.files.list(checked.value));
-    });
-  }
-
-  makeFolder(path: string): Promise<Answer<null>> {
-    const operation = { kind: "files.makeFolder" as const, path: this.#shown(path) };
-    return this.#throwawayChange(operation, { path, checked: "itself" }, async (full) => {
-      if (await this.#isTaken(full)) {
-        return failed(`The folder ${operation.path} already exists.`);
-      }
-      await this.#options.throwawayFolders.makeFolder(full);
-      await this.#recordThrowaway({ did: "made the folder", path: operation.path });
-      return granted(null);
-    });
-  }
-
-  link(path: string, target: string): Promise<Answer<null>> {
-    const operation = { kind: "files.link" as const, path: this.#shown(path), target: this.#shown(target) };
-    return this.#throwawayChange(operation, { path, checked: "folder" }, async (full) => {
-      const leadsTo = this.#linkTarget(operation, target);
-      if (!leadsTo.ok) {
-        return leadsTo;
-      }
-      if (await this.#isTaken(full)) {
-        return failed(`The path ${operation.path} already exists.`);
-      }
-      await this.#options.throwawayFolders.link(full, leadsTo.value);
-      await this.#recordThrowaway({ did: "made a link", path: operation.path, target: operation.target });
-      return granted(null);
-    });
-  }
-
-  remove(path: string): Promise<Answer<null>> {
-    const operation = { kind: "files.remove" as const, path: this.#shown(path) };
-    return this.#throwawayChange(operation, { path, checked: "folder" }, async (full) => {
-      await this.#options.throwawayFolders.removeAll(full);
-      await this.#recordThrowaway({ did: "removed", path: operation.path });
-      return granted(null);
-    });
+  #step(): Step {
+    const options = this.#options;
+    const { layout, inspector } = options;
+    return {
+      asking: { grants: this.#grants, effects: this.#effects, at: this.#at, layout, inspector },
+      doing: {
+        stepKey: options.place.stepKey,
+        files: options.files,
+        throwawayFolders: options.throwawayFolders,
+        inspector,
+        scrubber: options.secrets,
+        clock: options.clock,
+        childProcesses: options.childProcesses,
+        limits: this.#limits,
+        record: (kind, detail) => this.#append(kind, detail),
+        databaseOf: (file) => this.#databaseOf(file),
+        migratedOnce: (migrate) => {
+          this.#unnamedMigration ??= migrate();
+          return this.#unnamedMigration;
+        },
+      },
+      settled: (answer, detail) => this.#settle(answer, detail),
+    };
   }
 
   secret(name: string): Promise<Answer<string>> {
@@ -480,97 +307,6 @@ export class Broker {
     return { text: scrubbed.slice(-limit), cut };
   }
 
-  #shown(path: string): string {
-    return shownPath(this.#options.layout, resolve(this.#options.layout.project, path));
-  }
-
-  async #migrateNow(partition: string | undefined): Promise<Answer<readonly string[]>> {
-    const file = this.#partitionFile(partition);
-    if (!file.ok) {
-      return file;
-    }
-    const migrations = resolve(this.#grants.modeFolder, this.#grants.migrationsFolder);
-    if (!isInsideOrEqual(migrations, this.#grants.modeFolder)) {
-      return refused({
-        resource: "db",
-        asked: `${this.#asking} to run the migrations in ${migrations}`,
-        declared: `migrations must lie inside the mode's folder ${this.#grants.modeFolder}`,
-        change: `Point resources.db.migrations in ${manifestOf(this.#grants)} at a folder of the mode.`,
-      });
-    }
-    const ordered = await this.#migrationsIn(migrations);
-    if (!ordered.ok) {
-      return ordered;
-    }
-    if (ordered.value.length === 0 && !(await this.#options.files.exists(file.value))) {
-      return granted([]);
-    }
-    const appliedAt = this.#options.clock.now().toISOString();
-    const order = { method: "migrate" as const, migrations: ordered.value, appliedAt };
-    const result = await this.#databaseOf(file.value).request(order);
-    return this.#databaseAnswer(result, { keyword: "migrate", reads: shapes["db.migrate"].result });
-  }
-
-  async #migrationsIn(migrations: string): Promise<Answer<readonly Migration[]>> {
-    const shown = shownPath(this.#options.layout, migrations);
-    try {
-      const names = (await this.#options.files.list(migrations)).filter((name) => name.endsWith(".sql"));
-      const misnamed = names.filter((name) => !migrationName.test(name));
-      if (misnamed.length > 0) {
-        return failed(`Migration files are named NNNN-name.sql; rename ${misnamed.join(", ")}.`);
-      }
-      const ordered: Migration[] = [];
-      for (const name of names.sort()) {
-        ordered.push({ name, sql: (await this.#options.files.readText(`${migrations}/${name}`)) ?? "" });
-      }
-      return granted(ordered);
-    } catch (error) {
-      return failed(`The broker could not read the migrations in ${shown}: ${errorLine(error)}`);
-    }
-  }
-
-  #runAgentQuery(databaseFile: string, sql: string): Promise<AgentQueryOutcome> {
-    const limits = this.#limits;
-    return runAgentQuery(this.#options.childProcesses, {
-      databaseFile,
-      sql,
-      limits: {
-        rows: limits.agentQueryRows,
-        resultBytes: limits.agentQueryResultBytes,
-        milliseconds: limits.agentQueryMilliseconds,
-      },
-    });
-  }
-
-  #agentQueryAnswer(outcome: AgentQueryOutcome): Answer<AgentQueryResult> {
-    const rows = String(this.#limits.agentQueryRows);
-    const milliseconds = String(this.#limits.agentQueryMilliseconds);
-    const rules =
-      "agent queries run one read-only select over the mode's own database, where every table is readable, " +
-      `return at most ${rows} rows and stop at the time limit of ${milliseconds} ms`;
-    const change = "Send one select statement, narrowed with where, limit or an aggregate.";
-    switch (outcome.status) {
-      case "done":
-        return granted(this.#redactedResult(outcome.value));
-      case "refused":
-        return refused({
-          resource: "db",
-          asked: `An agent's query was refused (${outcome.reason})`,
-          declared: rules,
-          change,
-        });
-      case "timed-out":
-        return refused({
-          resource: "db",
-          asked: "An agent's query was still running and was killed",
-          declared: rules,
-          change,
-        });
-      case "failed":
-        return failed(outcome.message);
-    }
-  }
-
   async #sendFollowingRedirects(request: HttpRequest): Promise<Answer<HttpResponse>> {
     const size = Buffer.byteLength(request.body ?? "");
     if (size > this.#limits.httpRequestBytes) {
@@ -608,14 +344,6 @@ export class Broker {
     this.#databases.clear();
   }
 
-  #migratedFirst(partition: string | undefined): Promise<Answer<readonly string[]>> {
-    if (partition !== undefined) {
-      return Promise.resolve(granted([]));
-    }
-    this.#unnamedMigration ??= this.#migrateNow(undefined);
-    return this.#unnamedMigration;
-  }
-
   #databaseOf(file: string): DatabaseProcess {
     const known = this.#databases.get(file);
     if (known !== undefined) {
@@ -628,17 +356,6 @@ export class Broker {
     });
     this.#databases.set(file, database);
     return database;
-  }
-
-  async #storedParameters(parameters: SqlParameters): Promise<SqlParameters> {
-    const stored = redactedParameters(parameters, (text) => this.#options.secrets.redact(text));
-    if (JSON.stringify(stored) !== JSON.stringify(parameters)) {
-      await this.#append("redacted", {
-        step: this.#options.place.stepKey,
-        message: "Text that looks like a secret was removed from the values of a statement before it was stored.",
-      });
-    }
-    return stored;
   }
 
   async #append(kind: string, detail: Json): Promise<void> {
@@ -673,174 +390,6 @@ export class Broker {
       change: secrets.redact(answer.change),
       message,
     };
-  }
-
-  #redactedResult(result: AgentQueryResult): AgentQueryResult {
-    const secrets = this.#options.secrets;
-    const longest = this.#limits.agentQueryCellCharacters;
-    const shown = (cell: Json): Json => {
-      const redacted = secrets.redactJson(cell);
-      if (typeof redacted !== "string" || redacted.length <= longest) {
-        return redacted;
-      }
-      const cut = String(redacted.length - longest);
-      return `${redacted.slice(0, longest)}…[cut ${cut} characters; select less with substr()]`;
-    };
-    return { columns: result.columns, rows: result.rows.map((row) => row.map(shown)) };
-  }
-
-  #statementRefusal<T>(keyword: string, allowed: readonly string[]): Answer<T> {
-    return refused({
-      resource: "db",
-      asked: `${this.#asking} to run a statement that starts with "${keyword}"`,
-      declared: `this call runs only ${allowed.join(", ")} statements on the mode's own database`,
-      change: "No manifest line allows attach, detach, vacuum, pragma or transaction statements; use plain SQL.",
-    });
-  }
-
-  #databaseAnswer<T>(result: DatabaseResult<Json>, expected: Expected<T>): Answer<T> {
-    const place = this.#options.place;
-    const keyword = expected.keyword;
-    switch (result.status) {
-      case "done": {
-        const value = expected.reads(result.value);
-        return value.ok ? granted(value.value) : failed("The database process gave an answer of the wrong shape.");
-      }
-      case "missing":
-        return failed(`The mode ${this.#grants.mode} has no database yet; run its migrations first.`);
-      case "writes-on-read-only":
-        return refused({
-          resource: "db",
-          asked: `${this.#asking} in action ${place.action} to run a write statement (it starts with "${keyword}")`,
-          declared: `the action ${place.action} declares the effects: ${listed(this.#effects, "none")}`,
-          change: `To allow it, add write to actions.${place.action}.effects in ${manifestOf(this.#grants)}.`,
-        });
-      case "several-statements":
-        return refused({
-          resource: "db",
-          asked: `${this.#asking} to run more than one statement in one call`,
-          declared: "the broker runs exactly one statement per call",
-          change: "Send each statement in its own call.",
-        });
-      case "error":
-        return failed(`The statement failed: ${result.message}`);
-    }
-  }
-
-  #throwawayChange(
-    operation: ThrowawayOperation,
-    place: ThrowawayPlace,
-    change: (full: string) => Promise<Answer<null>>,
-  ): Promise<Answer<null>> {
-    return this.#guarded(operation, async () => {
-      const checked = await this.#throwawayPlace(operation, place);
-      return checked.ok ? change(checked.value) : checked;
-    });
-  }
-
-  async #recordThrowaway(detail: { readonly did: string; readonly path: string; readonly target?: string }) {
-    await this.#append("throwaway", { step: this.#options.place.stepKey, ...detail });
-  }
-
-  async #isTaken(path: string): Promise<boolean> {
-    const inspector = this.#options.inspector;
-    return (await inspector.realPath(path)) !== undefined || (await inspector.isLink(path));
-  }
-
-  #linkTarget(operation: ThrowawayOperation, target: string): Answer<string> {
-    const layout = this.#options.layout;
-    const full = resolve(layout.project, target);
-    const data = pathIn(layout, "project", dataFolder);
-    if (isInsideOrEqual(full, layout.project) && !isInsideOrEqual(full, data)) {
-      return granted(full);
-    }
-    return refused({
-      resource: "files",
-      asked: `${this.#asking} to ${describedOperation(operation)}`,
-      declared: `a link may lead only to a path of the project outside ${dataFolder}/`,
-      change: "Link to a file or folder of the project instead.",
-    });
-  }
-
-  #outsideThrowaway(asked: string): Answer<never> {
-    const shown = this.#grants.throwawayPaths.map((folder) => shownPath(this.#options.layout, folder));
-    return refused({
-      resource: "files",
-      asked,
-      declared:
-        `the mode ${this.#grants.mode} keeps throwaway folders only in: ${listed(shown, "nothing")}, ` +
-        "and never removes one of them whole",
-      change: `To allow it, name a folder that holds the path under resources.files.throwaway in ${manifestOf(this.#grants)}.`,
-    });
-  }
-
-  async #throwawayPlace(operation: ThrowawayOperation, place: ThrowawayPlace): Promise<Answer<string>> {
-    const layout = this.#options.layout;
-    const full = resolve(layout.project, place.path);
-    const permitted = this.#grants.throwawayPaths;
-    const asked = `${this.#asking} to ${describedOperation(operation)}`;
-    if (!permitted.some((folder) => full !== folder && isInsideOrEqual(full, folder))) {
-      return this.#outsideThrowaway(asked);
-    }
-    const checked = place.checked === "itself" ? full : dirname(full);
-    const check = await checkPath(this.#options.inspector, { layout, path: checked, permitted, purpose: "write" });
-    switch (check.status) {
-      case "allowed":
-        return granted(full);
-      case "outside":
-        return this.#outsideThrowaway(asked);
-      case "through-link":
-        return refused({
-          resource: "files",
-          asked,
-          declared: `a link on that path leads to ${check.realPath}, outside the throwaway folders`,
-          change: "Remove the link: the broker makes and removes nothing through a link.",
-        });
-      case "linked-component":
-        return refused({
-          resource: "files",
-          asked,
-          declared: `${basename(check.link)} on that path is a link, and the broker makes and removes nothing through a link`,
-          change: `Replace the link ${check.link} with a real folder.`,
-        });
-    }
-  }
-
-  async #checkedPath(path: string, purpose: Purpose): Promise<Answer<string>> {
-    const permitted = purpose === "read" ? this.#grants.readPaths : this.#grants.writePaths;
-    const check = await checkPath(this.#options.inspector, { layout: this.#options.layout, path, permitted, purpose });
-    return check.status === "allowed" ? granted(check.path) : this.#pathRefusal(check, purpose);
-  }
-
-  #pathRefusal(check: Exclude<PathCheck, { readonly status: "allowed" }>, purpose: Purpose): Answer<string> {
-    const layout = this.#options.layout;
-    const permitted = purpose === "read" ? this.#grants.readPaths : this.#grants.writePaths;
-    const shown = permitted.map((path) => shownPath(layout, path));
-    const asked = `${this.#asking} to ${purpose} ${check.path}`;
-    const manifestLine = `resources.files.${purpose} in ${manifestOf(this.#grants)}`;
-    switch (check.status) {
-      case "outside":
-        return refused({
-          resource: "files",
-          asked,
-          declared: `the mode ${this.#grants.mode} may ${purpose} only: ${listed(shown, "nothing")}`,
-          change: `To allow it, add ${shownPath(layout, check.path)} under ${manifestLine}.`,
-        });
-      case "through-link":
-        return refused({
-          resource: "files",
-          asked,
-          declared: `a link on that path leads to ${check.realPath}, outside the permitted paths`,
-          change: "Remove the link: a mode may not reach files through a link that leaves its folders.",
-        });
-      case "linked-component":
-        return refused({
-          resource: "files",
-          asked,
-          declared: `${basename(check.link)} on that path is a link, and the broker writes through no link`,
-          change: `Replace the link ${check.link} with a real folder or file.`,
-        });
-    }
   }
 
   #urlRefusal(check: Exclude<UrlCheck, { readonly status: "allowed" }>, redirected: boolean): Answer<never> {

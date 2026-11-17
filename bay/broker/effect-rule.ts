@@ -10,16 +10,6 @@ export type SpendAmounts = {
 };
 
 export type BrokerOperation =
-  | { readonly kind: "db.migrate" }
-  | { readonly kind: "db.execute"; readonly sql: string }
-  | { readonly kind: "db.query"; readonly sql: string }
-  | { readonly kind: "db.agentQuery" }
-  | { readonly kind: "files.read"; readonly path: string }
-  | { readonly kind: "files.list"; readonly path: string }
-  | { readonly kind: "files.write"; readonly path: string }
-  | { readonly kind: "files.makeFolder"; readonly path: string }
-  | { readonly kind: "files.link"; readonly path: string; readonly target: string }
-  | { readonly kind: "files.remove"; readonly path: string }
   | { readonly kind: "secrets.get"; readonly name: string }
   | { readonly kind: "http.request"; readonly method: HttpRequest["method"]; readonly url: string }
   | { readonly kind: "events.emit"; readonly eventKind: string }
@@ -35,9 +25,15 @@ export type ActionAt = {
   readonly manifest: string;
 };
 
-type Need = {
+export type Need = {
   readonly effect: Effect;
   readonly because: string;
+};
+
+export type Needing = {
+  readonly resource: Resource;
+  readonly doing: string;
+  readonly needs: readonly Need[];
 };
 
 const deletingWords: readonly string[] = ["delete", "drop", "truncate"];
@@ -48,9 +44,9 @@ const changesData: Need = { effect: "write", because: "A statement that changes 
 
 const deletesData: Need = { effect: "delete", because: "A statement that deletes needs the delete effect" };
 
-const writesFiles: Need = { effect: "write", because: "Writing a file needs the write effect" };
+export const writesFiles: Need = { effect: "write", because: "Writing a file needs the write effect" };
 
-const removesFiles: Need = { effect: "delete", because: "Removing a file or folder needs the delete effect" };
+export const removesFiles: Need = { effect: "delete", because: "Removing a file or folder needs the delete effect" };
 
 const usesNetwork: Need = { effect: "network", because: "A request over the network needs the network effect" };
 
@@ -67,7 +63,7 @@ function deletes(sql: string): boolean {
   return statementWords(sql).some((word) => deletingWords.includes(word));
 }
 
-function statementNeeds(sql: string): readonly Need[] {
+export function statementNeeds(sql: string): readonly Need[] {
   if (deletes(sql)) {
     return [changesData, deletesData];
   }
@@ -84,16 +80,6 @@ type OperationRule = {
 };
 
 const operationRules: { readonly [Kind in BrokerOperation["kind"]]: OperationRule } = {
-  "db.migrate": { resource: "db", needs: [] },
-  "db.execute": { resource: "db", needs: [] },
-  "db.query": { resource: "db", needs: [] },
-  "db.agentQuery": { resource: "db", needs: [] },
-  "files.read": { resource: "files", needs: [] },
-  "files.list": { resource: "files", needs: [] },
-  "files.write": { resource: "files", needs: [writesFiles] },
-  "files.makeFolder": { resource: "files", needs: [writesFiles] },
-  "files.link": { resource: "files", needs: [writesFiles] },
-  "files.remove": { resource: "files", needs: [writesFiles, removesFiles] },
   "secrets.get": { resource: "secrets", needs: [] },
   "http.request": { resource: "http", needs: [usesNetwork] },
   "events.emit": { resource: "events", needs: [] },
@@ -103,9 +89,6 @@ const operationRules: { readonly [Kind in BrokerOperation["kind"]]: OperationRul
 };
 
 function contentNeeds(operation: BrokerOperation): readonly Need[] {
-  if (operation.kind === "db.execute" || operation.kind === "db.query") {
-    return statementNeeds(operation.sql);
-  }
   if (operation.kind === "spend") {
     return isSpending(operation.amounts) ? [spends] : [];
   }
@@ -117,24 +100,6 @@ function contentNeeds(operation: BrokerOperation): readonly Need[] {
 
 function needsOf(operation: BrokerOperation): readonly Need[] {
   return [...operationRules[operation.kind].needs, ...contentNeeds(operation)];
-}
-
-type DatabaseOperation = Extract<BrokerOperation, { readonly kind: `db.${string}` }>;
-
-function isDatabaseOperation(operation: BrokerOperation): operation is DatabaseOperation {
-  return operationRules[operation.kind].resource === "db";
-}
-
-function describedDatabaseOperation(operation: DatabaseOperation): string {
-  switch (operation.kind) {
-    case "db.migrate":
-      return "run the migrations";
-    case "db.execute":
-    case "db.query":
-      return `run a statement that starts with "${leadingKeyword(operation.sql)}"`;
-    case "db.agentQuery":
-      return "run an agent's query";
-  }
 }
 
 type SpendingOperation = Extract<BrokerOperation, { readonly kind: "spend" | "skill.submit" }>;
@@ -149,36 +114,9 @@ function describedSpending(operation: SpendingOperation): string {
     : `report spending ${String(operation.usd)} US dollars`;
 }
 
-type FileOperation = Extract<BrokerOperation, { readonly kind: `files.${string}` }>;
-
-function isFileOperation(operation: BrokerOperation): operation is FileOperation {
-  return operationRules[operation.kind].resource === "files";
-}
-
-function describedFileOperation(operation: FileOperation): string {
-  switch (operation.kind) {
-    case "files.read":
-    case "files.list":
-    case "files.write":
-      return `${operation.kind.slice("files.".length)} ${operation.path}`;
-    case "files.makeFolder":
-      return `make the folder ${operation.path}`;
-    case "files.link":
-      return `link ${operation.path} to ${operation.target}`;
-    case "files.remove":
-      return `remove ${operation.path}`;
-  }
-}
-
 export function describedOperation(operation: BrokerOperation): string {
-  if (isDatabaseOperation(operation)) {
-    return describedDatabaseOperation(operation);
-  }
   if (isSpendingOperation(operation)) {
     return describedSpending(operation);
-  }
-  if (isFileOperation(operation)) {
-    return describedFileOperation(operation);
   }
   switch (operation.kind) {
     case "secrets.get":
@@ -192,8 +130,30 @@ export function describedOperation(operation: BrokerOperation): string {
   }
 }
 
+function askedTo(doing: string, at: ActionAt): string {
+  return `The step ${at.stepKey} of action ${at.action} asked to ${doing}`;
+}
+
 export function askedSentence(operation: BrokerOperation, at: ActionAt): string {
-  return `The step ${at.stepKey} of action ${at.action} asked to ${describedOperation(operation)}`;
+  return askedTo(describedOperation(operation), at);
+}
+
+export function missingEffectRefusal(
+  needing: Needing,
+  effects: readonly Effect[],
+  at: ActionAt,
+): RefusalWording | undefined {
+  const missing = needing.needs.find((need) => !effects.includes(need.effect));
+  if (missing === undefined) {
+    return undefined;
+  }
+  const declared = effects.length === 0 ? "none" : effects.join(", ");
+  return {
+    resource: needing.resource,
+    asked: askedTo(needing.doing, at),
+    declared: `the action ${at.action} declares the effects: ${declared}`,
+    change: `${missing.because}; to allow it, add ${missing.effect} to actions.${at.action}.effects in ${at.manifest}.`,
+  };
 }
 
 export function effectRefusal(
@@ -201,17 +161,12 @@ export function effectRefusal(
   effects: readonly Effect[],
   at: ActionAt,
 ): RefusalWording | undefined {
-  const missing = needsOf(operation).find((need) => !effects.includes(need.effect));
-  if (missing === undefined) {
-    return undefined;
-  }
-  const declared = effects.length === 0 ? "none" : effects.join(", ");
-  return {
+  const needing = {
     resource: operationRules[operation.kind].resource,
-    asked: askedSentence(operation, at),
-    declared: `the action ${at.action} declares the effects: ${declared}`,
-    change: `${missing.because}; to allow it, add ${missing.effect} to actions.${at.action}.effects in ${at.manifest}.`,
+    doing: describedOperation(operation),
+    needs: needsOf(operation),
   };
+  return missingEffectRefusal(needing, effects, at);
 }
 
 export function writableFolders(permissions: Permissions): readonly string[] {

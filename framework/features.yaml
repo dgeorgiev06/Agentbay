@@ -98,6 +98,9 @@ features:
       - bay/broker/sql-statements.ts
       - bay/broker/folder-links.ts
       - bay/broker/operations.ts
+      - bay/broker/rule.ts
+      - bay/broker/file-operations.ts
+      - bay/broker/database-operations.ts
     may_import:
       - vocabulary
       - safety

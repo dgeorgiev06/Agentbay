@@ -68,6 +68,8 @@ type Started = {
   readonly state: RunState;
 };
 
+type Running = Started & { readonly answering: Answering };
+
 const defaultScriptRunnerLimits: ScriptRunnerLimits = { outputBytes: 4 * 1024 * 1024 };
 
 const bayFolder = fileURLToPath(new URL("..", import.meta.url));
@@ -119,27 +121,26 @@ function seconds(milliseconds: number): string {
 }
 
 type Answering = {
-  readonly [Name in OperationName]: (request: Requests[Name], started: Started) => Promise<Answer<Results[Name]>>;
+  readonly [Name in OperationName]: (request: Requests[Name]) => Promise<Answer<Results[Name]>>;
 };
 
-const answering: Answering = {
-  "db.execute": (request, { broker }) => broker.execute(request.sql, request.parameters, request.partition),
-  "db.query": (request, { broker }) => broker.query(request.sql, request.parameters, request.partition),
-  "db.migrate": (request, { broker }) => broker.migrate(request.partition),
-  "db.agentQuery": (request, { broker }) => broker.agentQuery(request.sql, request.partition),
-  "files.read": (request, { broker }) => broker.readFile(request.path),
-  "files.list": (request, { broker }) => broker.listFiles(request.path),
-  "files.write": (request, { broker }) => broker.writeFile(request.path, request.text),
-  "files.makeFolder": (request, { broker }) => broker.makeFolder(request.path),
-  "files.link": (request, { broker }) => broker.link(request.path, request.target),
-  "files.remove": (request, { broker }) => broker.remove(request.path),
-  "secrets.get": (request, { broker }) => broker.secret(request.name),
-  "http.request": (request, { broker }) => broker.request(request),
-  "events.emit": (request, { broker }) => broker.emit(request.kind, request.detail),
-  call: (request, started) => calledAnswer(started, request),
-  spend: (request, started) => spentAnswer(started, request.spending),
-  "commands.run": (request, { broker }) => broker.runCommand(request),
-};
+type AnsweredByTheClass = Omit<Answering, keyof Broker["entries"]>;
+
+function answeredByTheClass(started: Started): AnsweredByTheClass {
+  const { broker } = started;
+  return {
+    "secrets.get": (request) => broker.secret(request.name),
+    "http.request": (request) => broker.request(request),
+    "events.emit": (request) => broker.emit(request.kind, request.detail),
+    call: (request) => calledAnswer(started, request),
+    spend: (request) => spentAnswer(started, request.spending),
+    "commands.run": (request) => broker.runCommand(request),
+  };
+}
+
+function answeringFor(started: Started): Answering {
+  return { ...started.broker.entries, ...answeredByTheClass(started) };
+}
 
 async function calledAnswer(started: Started, request: Requests["call"]): Promise<Answer<Json>> {
   try {
@@ -165,10 +166,10 @@ async function spentAnswer(started: Started, spending: Json): Promise<Answer<nul
 }
 
 function answerFor<Name extends OperationName>(
-  started: Started,
+  running: Running,
   asked: AskedFor<Name>,
 ): Promise<Answer<Results[Name]>> {
-  return answering[asked.operation](asked.request, started);
+  return running.answering[asked.operation](asked.request);
 }
 
 function endReason(end: ChildEnd, limits: { readonly milliseconds: number; readonly outputBytes: number }): string {
@@ -261,8 +262,8 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
     };
   }
 
-  function heard(started: Started, child: Child, line: string): void {
-    const { state } = started;
+  function heard(running: Running, child: Child, line: string): void {
+    const { state } = running;
     const message = childMessageOf(line);
     const stop = (reason: string): void => {
       state.stopped ??= reason;
@@ -275,17 +276,17 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
     switch (message.type) {
       case "request":
         state.inFlight.push(
-          answerFor(started, message.asked).then((answer) => {
+          answerFor(running, message.asked).then((answer) => {
             child.send(JSON.stringify({ type: "answer", id: message.id, answer }));
           }),
         );
         return;
       case "unreadable-request":
-        state.inFlight.push(options.events.append(misreadingEvent(started, message)));
+        state.inFlight.push(options.events.append(misreadingEvent(running, message)));
         stop(shownToAuthor({ side: "request", problem: message.problem }));
         return;
       case "unread-answer":
-        state.inFlight.push(options.events.append(misreadingEvent(started, message)));
+        state.inFlight.push(options.events.append(misreadingEvent(running, message)));
         return;
       case "done":
       case "failed":
@@ -296,6 +297,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
 
   async function runChild(started: Started, milliseconds: number): Promise<StepOutcome> {
     const { request, state, broker } = started;
+    const running = { ...started, answering: answeringFor(started) };
     const startTime = options.clock.now();
     const startedAt = startTime.getTime();
     const childRequest: ChildRequest = {
@@ -307,7 +309,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
       maximumOutputBytes: limits.outputBytes,
     };
     const child = options.childProcesses.start(childRequest, (line) => {
-      heard(started, child, line);
+      heard(running, child, line);
     });
     child.send(JSON.stringify(startMessage(request, startTime)));
     const end = await child.ended;

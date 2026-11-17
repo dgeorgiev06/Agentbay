@@ -4,8 +4,8 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { Answer } from "../bay/answers.ts";
-import { runAgentQuery } from "../bay/agent-query.ts";
-import { Broker } from "../bay/broker.ts";
+import { runAgentQuery } from "../bay/broker/agent-query.ts";
+import { Broker } from "../bay/broker/broker.ts";
 import type { Effect, ModeGrants } from "../bay/contracts.ts";
 import {
   nodeChildProcesses,

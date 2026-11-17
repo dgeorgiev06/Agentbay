@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { failed, granted, listed, manifestOf, refused } from "../bay/answers.ts";
-import { checkPath } from "../bay/file-access.ts";
+import { checkPath } from "../bay/broker/file-access.ts";
 import { isInsideOrEqual, layoutOf } from "../bay/layout.ts";
-import { checkUrl, loggedHeaders, nextRequest, redirectTarget } from "../bay/http-access.ts";
+import { checkUrl, loggedHeaders, nextRequest, redirectTarget } from "../bay/broker/http-access.ts";
 import { isJson, isJsonRecord, parsedLine } from "../bay/protocol-json.ts";
-import { childMessageOf, parentMessageOf } from "../bay/script-protocol.ts";
+import { childMessageOf, parentMessageOf } from "../bay/broker/script-protocol.ts";
 import { scrubSecretPatterns } from "../bay/secret-patterns.ts";
-import { isOneStatement, leadingKeyword } from "../bay/sql-statements.ts";
+import { isOneStatement, leadingKeyword } from "../bay/broker/sql-statements.ts";
 import type { FileInspector } from "../bay/ports.ts";
 import { grantsIn } from "./broker-fixture.ts";
 

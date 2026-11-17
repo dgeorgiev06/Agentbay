@@ -1,4 +1,4 @@
-import type { HttpRequest, HttpResponse } from "./ports.ts";
+import type { HttpRequest, HttpResponse } from "../ports.ts";
 
 export type UrlCheck =
   | { readonly status: "allowed"; readonly url: URL }

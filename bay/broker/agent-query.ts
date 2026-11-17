@@ -1,8 +1,8 @@
 import { fileURLToPath } from "node:url";
-import type { ChildEnd, ChildProcesses } from "./ports.ts";
-import type { Json } from "./contracts.ts";
-import { isJson, parsedLine } from "./protocol-json.ts";
-import { isRecord } from "./json.ts";
+import type { ChildEnd, ChildProcesses } from "../ports.ts";
+import type { Json } from "../contracts.ts";
+import { isJson, parsedLine } from "../protocol-json.ts";
+import { isRecord } from "../json.ts";
 
 export type AgentQueryLimits = {
   readonly rows: number;

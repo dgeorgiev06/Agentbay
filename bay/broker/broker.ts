@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path/posix";
 import { type AgentQueryOutcome, type AgentQueryResult, runAgentQuery } from "./agent-query.ts";
-import { type Answer, errorLine, failed, granted, listed, manifestOf, refused } from "./answers.ts";
+import { type Answer, errorLine, failed, granted, listed, manifestOf, refused } from "../answers.ts";
 import type {
   ChildProcesses,
   Clock,
@@ -13,7 +13,7 @@ import type {
   ProcessOutput,
   Processes,
   ThrowawayFolders,
-} from "./ports.ts";
+} from "../ports.ts";
 import type {
   CommandOutput,
   CommandRan,
@@ -24,7 +24,7 @@ import type {
   ModeGrants,
   Permissions,
   StepPlace,
-} from "./contracts.ts";
+} from "../contracts.ts";
 import type { DatabaseResult, ExecuteResult, Migration, Row, SqlParameters } from "./database.ts";
 import { DatabaseProcess } from "./database-process.ts";
 import {
@@ -40,9 +40,9 @@ import {
 } from "./effect-rule.ts";
 import { checkPath, type PathCheck, type Purpose } from "./file-access.ts";
 import { checkUrl, type Hop, loggedHeaders, nextRequest, redirectTarget, type UrlCheck } from "./http-access.ts";
-import { isInsideOrEqual, pathIn, shownPath, type Layout } from "./layout.ts";
-import type { SecretStore } from "./secrets.ts";
-import { isJsonRecord } from "./protocol-json.ts";
+import { isInsideOrEqual, pathIn, shownPath, type Layout } from "../layout.ts";
+import type { SecretStore } from "../secrets.ts";
+import { isJsonRecord } from "../protocol-json.ts";
 import { leadingKeyword, readKeywords, writeKeywords } from "./sql-statements.ts";
 
 export type BrokerLimits = {

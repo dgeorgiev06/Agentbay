@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { Broker } from "../bay/broker.ts";
+import { Broker } from "../bay/broker/broker.ts";
 import type { Effect } from "../bay/contracts.ts";
 import {
   nodeChildProcesses,

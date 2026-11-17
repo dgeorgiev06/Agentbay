@@ -12,7 +12,7 @@ import {
   nodeThrowawayFolders,
   systemClock,
 } from "../bay/node-ports.ts";
-import { createScriptRunner } from "../bay/script-runner.ts";
+import { createScriptRunner } from "../bay/broker/script-runner.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import { kitFolder, noProcesses, place, recordingSink, scriptedHttp, writeProjectFile } from "./broker-fixture.ts";
 import { grantsWith } from "./grants-fixture.ts";

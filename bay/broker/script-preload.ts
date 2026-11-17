@@ -28,7 +28,7 @@ const availableBuiltins: ReadonlySet<string> = new Set([
   "zlib",
 ]);
 
-const sdkUrl = new URL("sdk.ts", import.meta.url).href;
+const sdkUrl = new URL("../sdk.ts", import.meta.url).href;
 
 const networkGlobals: readonly string[] = ["fetch", "WebSocket", "EventSource"];
 

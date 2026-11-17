@@ -1,6 +1,6 @@
 import { basename, dirname, join, relative, resolve } from "node:path/posix";
-import { homeFolder, homeOf, isInsideOrEqual, type Layout } from "./layout.ts";
-import type { FileInspector } from "./ports.ts";
+import { homeFolder, homeOf, isInsideOrEqual, type Layout } from "../layout.ts";
+import type { FileInspector } from "../ports.ts";
 
 export type Purpose = "read" | "write";
 

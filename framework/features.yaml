@@ -29,7 +29,6 @@ features:
       - bay/node-ports.ts
     private:
       - bay/owner-only.ts
-      - bay/folder-links.ts
     may_import:
       - vocabulary
   manifests:
@@ -62,9 +61,7 @@ features:
     purpose: Turns a mode's grants and an action's effects into what is allowed, by one rule.
     entry:
       - bay/policy.ts
-    private:
-      - bay/effect-rule.ts
-      - bay/sql-statements.ts
+    private: []
     may_import:
       - vocabulary
   secrets:
@@ -78,34 +75,31 @@ features:
       - manifests
       - safety
   broker:
-    purpose: Every request for a database, file, secret, host or event passes through here.
+    purpose:
+      Every request for a database, file, secret, host or event passes through here. Runs a mode's script in a
+      confined child process and gives it the toolbox.
     entry:
-      - bay/broker.ts
+      - bay/broker/broker.ts
+      - bay/broker/script-runner.ts
+      - bay/sdk.ts
     private:
-      - bay/file-access.ts
-      - bay/http-access.ts
-      - bay/database.ts
-      - bay/database-child.ts
-      - bay/database-process.ts
-      - bay/agent-query.ts
-      - bay/query-child.ts
+      - bay/broker/file-access.ts
+      - bay/broker/http-access.ts
+      - bay/broker/database.ts
+      - bay/broker/database-child.ts
+      - bay/broker/database-process.ts
+      - bay/broker/agent-query.ts
+      - bay/broker/query-child.ts
+      - bay/broker/script-host.ts
+      - bay/broker/script-preload.ts
+      - bay/broker/script-protocol.ts
+      - bay/broker/effect-rule.ts
+      - bay/broker/sql-statements.ts
+      - bay/broker/folder-links.ts
     may_import:
       - vocabulary
       - safety
       - secrets
-  scripts:
-    purpose: Runs a mode's script in a confined child process and gives it the toolbox.
-    entry:
-      - bay/script-runner.ts
-      - bay/sdk.ts
-    private:
-      - bay/script-host.ts
-      - bay/script-preload.ts
-      - bay/script-protocol.ts
-    may_import:
-      - vocabulary
-      - safety
-      - broker
   runs:
     purpose: Advances a run step by step, durably - waiting, resuming, budgets, approvals, undo.
     entry:
@@ -131,7 +125,7 @@ features:
       - manifests
       - safety
       - secrets
-      - scripts
+      - broker
   agent-tools:
     purpose: The tools a harness's agent may call during a skill step, and the server that offers them.
     entry:
@@ -179,6 +173,7 @@ features:
       - vocabulary
       - manifests
       - safety
+      - broker
   kernel:
     purpose: Puts the features together into one running kernel.
     entry:
@@ -191,7 +186,6 @@ features:
       - safety
       - secrets
       - broker
-      - scripts
       - runs
       - agent-tools
       - harness

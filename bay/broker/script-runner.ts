@@ -1,6 +1,6 @@
 import { resolve } from "node:path/posix";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { type Answer, errorLine, failed, granted, manifestOf, refused } from "./answers.ts";
+import { type Answer, errorLine, failed, granted, manifestOf, refused } from "../answers.ts";
 import { Broker, type BrokerLimits } from "./broker.ts";
 import type {
   ChildEnd,
@@ -12,13 +12,13 @@ import type {
   Http,
   Processes,
   ThrowawayFolders,
-} from "./ports.ts";
-import type { EventSink, Json, ScriptRequest, ScriptRunner, Spend, StepOutcome } from "./contracts.ts";
+} from "../ports.ts";
+import type { EventSink, Json, ScriptRequest, ScriptRunner, Spend, StepOutcome } from "../contracts.ts";
 import { mayRemoveFiles, writableFolders } from "./effect-rule.ts";
 import { escapingLinks } from "./folder-links.ts";
-import { isInsideOrEqual, shownPath, type Layout } from "./layout.ts";
+import { isInsideOrEqual, shownPath, type Layout } from "../layout.ts";
 import { type ChildMessage, childMessageOf, removalAllowedArgument, type ResourceRequest } from "./script-protocol.ts";
-import type { SecretStore } from "./secrets.ts";
+import type { SecretStore } from "../secrets.ts";
 
 export type ScriptRunnerLimits = {
   readonly outputBytes: number;
@@ -59,16 +59,16 @@ type Started = {
 
 const defaultScriptRunnerLimits: ScriptRunnerLimits = { outputBytes: 4 * 1024 * 1024 };
 
-const bayFolder = fileURLToPath(new URL(".", import.meta.url));
+const bayFolder = fileURLToPath(new URL("..", import.meta.url));
 
-const hostFile = `${bayFolder}script-host.ts`;
+const hostFile = `${bayFolder}broker/script-host.ts`;
 
-const preloadFile = `${bayFolder}script-preload.ts`;
+const preloadFile = `${bayFolder}broker/script-preload.ts`;
 
 const filesTheHostReads: readonly string[] = [
   hostFile,
   preloadFile,
-  `${bayFolder}script-protocol.ts`,
+  `${bayFolder}broker/script-protocol.ts`,
   `${bayFolder}protocol-json.ts`,
   `${bayFolder}sdk.ts`,
 ];

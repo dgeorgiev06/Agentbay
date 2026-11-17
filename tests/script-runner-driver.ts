@@ -6,7 +6,7 @@ import {
   nodeThrowawayFolders,
   systemClock,
 } from "../bay/node-ports.ts";
-import { createScriptRunner } from "../bay/script-runner.ts";
+import { createScriptRunner } from "../bay/broker/script-runner.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import { noProcesses, permissionsIn, place, projectLayout, recordingSink, scriptedHttp } from "./broker-fixture.ts";
 

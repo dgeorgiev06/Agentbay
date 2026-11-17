@@ -3,7 +3,7 @@ import { errors, type CheckContext, type Finding, type KitTree, type ModeFolder 
 import { importSpecifiers, type ImportSpecifier } from "./import-scanner.ts";
 import { isInsideOrEqual, pathIn, shownPath, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
-import { sdkSpecifier } from "./script-protocol.ts";
+import { sdkSpecifier } from "./broker/script-protocol.ts";
 import type { Problem } from "./outcome.ts";
 
 type SourceFile = {

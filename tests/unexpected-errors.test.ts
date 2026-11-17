@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { stringify } from "yaml";
 import type { Json } from "../bay/contracts.ts";
-import { DatabaseProcess } from "../bay/database-process.ts";
+import { DatabaseProcess } from "../bay/broker/database-process.ts";
 import { fieldOf, parseJson, textField } from "../bay/json.ts";
 import { lastResortHandler } from "../bay/last-resort.ts";
 import { replyTo } from "../bay/mcp-server.ts";
@@ -16,7 +16,7 @@ import {
   nodeThrowawayFolders,
   systemClock,
 } from "../bay/node-ports.ts";
-import { createScriptRunner } from "../bay/script-runner.ts";
+import { createScriptRunner } from "../bay/broker/script-runner.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import type { ChildProcesses } from "../bay/ports.ts";
 import { callKernelTool } from "../bay/tools.ts";

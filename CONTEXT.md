@@ -24,6 +24,7 @@ One meaning per word. Briefs, plans, code names and reviews use these words and 
 | **Budget** | A limit on a run: items, dollars, tokens, minutes. | quota |
 | **Toolbox** | `bay/sdk.ts`. The only kernel file mode code may import. | SDK internals, helpers |
 | **Test toolbox** | `tests/test-toolbox.ts`. The only kit file a mode's tests may import besides the toolbox. It opens a project, calls actions, answers skill steps and reads runs, and never hands out the kernel. | mode harness, test helpers |
+| **Shared test** | `<name>/tests/shared.ts` beside an interface: what every mode that implements it must do, through the interface's actions only. Each implementing mode runs it from its own tests. | contract test, conformance suite |
 | **Operation** | One thing a script or an agent's tool asks the broker to do, such as `files.read` or `commands.run`. Each has one entry in the broker's table: its request, its result and their guards. | call, request kind, broker method |
 | **Toolchain** | A mode that implements `toolchain@1` for one language: it names the language's files and practices, runs its checks in a checkout, and runs its tests there. | language mode, linter |
 | **Verdict** | What a toolchain says of one check or one test run: `passed`, `failed` or `inconclusive`. Inconclusive means nothing is known, and it is never a pass. | result, status |

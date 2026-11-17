@@ -6,7 +6,15 @@ import { layoutOf } from "../bay/layout.ts";
 import type { Outcome } from "../bay/outcome.ts";
 import type { FileSystem } from "../bay/ports.ts";
 import { listOf } from "../bay/policy.ts";
-import { listHashOf, readTrustRecord, recordWithTrust, recordWithoutTrust, type TrustRecord } from "../bay/trust.ts";
+import {
+  changedScriptFiles,
+  listHashOf,
+  readTrustRecord,
+  recordWithTrust,
+  recordWithoutTrust,
+  scriptFilesOf,
+  type TrustRecord,
+} from "../bay/trust.ts";
 import { modeNamed } from "./broker-fixture.ts";
 import { fakeFileSystem } from "./fakes.ts";
 
@@ -112,6 +120,7 @@ const given: TrustGiven = {
     throwaway: [],
   },
   hash: "06e3676b6374dd765d50e0d9fedfcdc08612ecba5927e85753cb13db48b17863",
+  scripts: {},
   at: "2026-11-17T14:02:00.000Z",
   by: "a test",
 };
@@ -139,6 +148,7 @@ const givenText = [
   '        "throwaway": []',
   "      },",
   `      "hash": "${given.hash}",`,
+  '      "scripts": {},',
   '      "at": "2026-11-17T14:02:00.000Z",',
   '      "by": "a test"',
   "    }",
@@ -147,7 +157,7 @@ const givenText = [
   "",
 ].join("\n");
 
-const giving = { at: "2026-11-17T14:02:00.000Z", by: "a test" };
+const giving = { scripts: {}, at: "2026-11-17T14:02:00.000Z", by: "a test" };
 
 test("adding trust to an empty record gives the file text with that one entry: the list whole, its hash, when and how", () => {
   assert.equal(recordWithTrust(emptyRecord, given.list, giving), givenText);
@@ -213,6 +223,14 @@ test("a trust record that lacks a field is refused with a sentence for each fiel
           "The trust record .agentbay/trust.json has no field modes.go-toolchain.hash, so no list it holds is granted.",
         fix,
       },
+      {
+        file: ".agentbay/trust.json",
+        path: "/modes/go-toolchain/scripts",
+        message:
+          "The trust record .agentbay/trust.json has no field modes.go-toolchain.scripts, " +
+          "so no list it holds is granted.",
+        fix,
+      },
     ],
   });
   assert.deepEqual(await recordRead("{}"), {
@@ -234,13 +252,14 @@ test("a trust record that lacks a field is refused with a sentence for each fiel
   });
 });
 
-test("a trust record whose entry lacks when or how the trust was given is refused", async () => {
+test("a trust record whose entry lacks its script files, or when or how the trust was given, is refused", async () => {
   const entry = { list: given.list, hash: given.hash };
   const message = (field: string): string =>
     `The trust record .agentbay/trust.json has no field modes.go-toolchain.${field}, so no list it holds is granted.`;
   assert.deepEqual(await recordRead(JSON.stringify({ version: 1, modes: { "go-toolchain": entry } })), {
     ok: false,
     problems: [
+      { file: ".agentbay/trust.json", path: "/modes/go-toolchain/scripts", message: message("scripts"), fix },
       { file: ".agentbay/trust.json", path: "/modes/go-toolchain/at", message: message("at"), fix },
       { file: ".agentbay/trust.json", path: "/modes/go-toolchain/by", message: message("by"), fix },
     ],
@@ -250,7 +269,9 @@ test("a trust record whose entry lacks when or how the trust was given is refuse
 test("a trust record with a field of the wrong kind is refused with its sentence", async () => {
   const record = {
     version: 2,
-    modes: { "go-toolchain": { ...given, by: 7, list: { ...given.list, throwaway: "x" } } },
+    modes: {
+      "go-toolchain": { ...given, by: 7, scripts: { "scripts/vet.ts": 7 }, list: { ...given.list, throwaway: "x" } },
+    },
   };
   assert.deepEqual(await recordRead(JSON.stringify(record)), {
     ok: false,
@@ -267,6 +288,14 @@ test("a trust record with a field of the wrong kind is refused with its sentence
         message:
           "The field modes.go-toolchain.list.throwaway of the trust record .agentbay/trust.json is not a list of texts, " +
           "so no list it holds is granted.",
+        fix,
+      },
+      {
+        file: ".agentbay/trust.json",
+        path: "/modes/go-toolchain/scripts",
+        message:
+          "The field modes.go-toolchain.scripts of the trust record .agentbay/trust.json is not a map of script files " +
+          "to their hashes, so no list it holds is granted.",
         fix,
       },
       {
@@ -325,4 +354,46 @@ test("a trust record the file system cannot read is refused with its sentence", 
     await readTrustRecord(unreadable, project),
     refusal("", "The trust record .agentbay/trust.json cannot be read, so no list it holds is granted."),
   );
+});
+
+const folder = "/home/owner/realty/components/modes/go-toolchain";
+
+const modeFiles = {
+  [`${folder}/mode.yaml`]: "name: go-toolchain",
+  [`${folder}/scripts/vet.ts`]: "export {};",
+  [`${folder}/skills/build/SKILL.md`]: "# Build",
+  [`${folder}/tests/vet.test.ts`]: "test",
+};
+
+const modePaths = ["mode.yaml", "scripts/vet.ts", "skills/build/SKILL.md", "tests/vet.test.ts"];
+
+test("the script files of a mode are every file in its folder outside tests/ but its mode.yaml, each with the hash of its text", async () => {
+  assert.deepEqual(await scriptFilesOf(fakeFileSystem(modeFiles), folder, modePaths), {
+    "scripts/vet.ts": "8568995a3a393c2f03dd3ae8fcb0631c54835277fdacc0a883d1ca73e8fc19cb",
+    "skills/build/SKILL.md": "2e0a468f3399da43854d3ed5dccbd2e4e8eb8dc324ea7706af127eb9503cc109",
+  });
+});
+
+test("the script files change when a file's text changes, or one is added or removed, and not when mode.yaml, a test or a file outside the mode changes", async () => {
+  const before = await scriptFilesOf(fakeFileSystem(modeFiles), folder, modePaths);
+  const after = async (files: Record<string, string>, paths: readonly string[]): Promise<readonly string[]> =>
+    changedScriptFiles(before, await scriptFilesOf(fakeFileSystem({ ...modeFiles, ...files }), folder, paths));
+  assert.deepEqual(await after({ [`${folder}/scripts/vet.ts`]: "export const x = 1;" }, modePaths), ["scripts/vet.ts"]);
+  assert.deepEqual(await after({ [`${folder}/scripts/run.ts`]: "export {};" }, [...modePaths, "scripts/run.ts"]), [
+    "scripts/run.ts",
+  ]);
+  assert.deepEqual(await after({}, ["mode.yaml", "scripts/vet.ts"]), ["skills/build/SKILL.md"]);
+  const unchanged = {
+    [`${folder}/mode.yaml`]: "name: go-toolchain\nversion: 2.0.0",
+    [`${folder}/tests/vet.test.ts`]: "changed",
+    "/home/owner/realty/components/modes/other/scripts/vet.ts": "changed",
+  };
+  assert.deepEqual(await after(unchanged, modePaths), []);
+});
+
+test("the hash of a mode's list does not cover its script files", () => {
+  const trusted = recordWithTrust(emptyRecord, goToolchain, { ...giving, scripts: { "scripts/vet.ts": "a" } });
+  const other = recordWithTrust(emptyRecord, goToolchain, { ...giving, scripts: { "scripts/vet.ts": "b" } });
+  const hashes = [trusted, other].map((text) => /"hash": "([0-9a-f]{64})"/.exec(text)?.[1]);
+  assert.deepEqual(hashes, [goToolchainHash, goToolchainHash]);
 });

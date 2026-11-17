@@ -84,6 +84,14 @@ test("the terminal reads a line and all of stdin", async () => {
   assert.equal(await all, '{"text":"x"}');
 });
 
+test("the terminal's question is answered with nothing when its input ends", { timeout: 5000 }, async () => {
+  const input = new PassThrough();
+  const terminal = streamTerminal({ input, output: new PassThrough() });
+  const answer = terminal.ask("Type yes: ");
+  input.end();
+  assert.equal(await answer, "");
+});
+
 const dreamSkill = [
   "---",
   "name: dream",

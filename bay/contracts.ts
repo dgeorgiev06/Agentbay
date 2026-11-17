@@ -29,9 +29,12 @@ export type ModeList = {
   readonly throwaway: readonly string[];
 };
 
+export type ScriptFiles = Readonly<Record<string, string>>;
+
 export type TrustGiven = {
   readonly list: ModeList;
   readonly hash: string;
+  readonly scripts: ScriptFiles;
   readonly at: string;
   readonly by: string;
 };

@@ -403,7 +403,7 @@ test("forge gets no forge rights when the project is not the kit", () => {
 
 function trustedRulingFor(entry: ModeEntry): ReturnType<typeof grantsOf> {
   const list = listOf(entry.manifest);
-  const given = { list, hash: listHashOf(list), at: "2026-11-17T14:02:00.000Z", by: "a test" };
+  const given = { list, hash: listHashOf(list), scripts: {}, at: "2026-11-17T14:02:00.000Z", by: "a test" };
   return grantsOf({
     manifest: entry.manifest,
     home: entry.home ?? "kit",

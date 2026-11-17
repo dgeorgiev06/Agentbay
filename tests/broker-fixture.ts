@@ -16,6 +16,7 @@ import type {
   Processes,
 } from "../bay/ports.ts";
 import { layoutOf, type Layout } from "../bay/layout.ts";
+import { grantsWith } from "./grants-fixture.ts";
 
 export const kitFolder = fileURLToPath(new URL("..", import.meta.url));
 
@@ -100,19 +101,15 @@ export type PermissionChanges = Partial<ModeGrants> & { readonly effects?: reado
 
 export function grantsIn(root: string, overrides: Partial<ModeGrants> = {}): ModeGrants {
   const modeFolder = join(root, "components", "modes", "notes");
-  return {
+  return grantsWith({
     mode: "notes",
     modeFolder,
     databaseFile: join(root, ".agentbay", "data", "notes.db"),
     migrationsFolder: join(modeFolder, "migrations"),
     readPaths: [modeFolder, join(root, "notes-in"), join(root, "notes-out")],
     writePaths: [join(root, "notes-out")],
-    throwawayPaths: [],
-    secrets: [],
-    hosts: [],
-    commands: [],
     ...overrides,
-  };
+  });
 }
 
 export function permissionsIn(root: string, changes: PermissionChanges = {}): Permissions {

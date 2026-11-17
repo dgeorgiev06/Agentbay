@@ -1,27 +1,41 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
 import { test } from "node:test";
-import { stringify } from "yaml";
-import { openModeProject, type ModeProject } from "./test-toolbox.ts";
+import { makeProject } from "./project-fixture.ts";
+import { openModeProject, type ModeProject, type Run } from "./test-toolbox.ts";
 
 const toolboxFile = new URL("./test-toolbox.ts", import.meta.url);
 
-const fakeSource = {
-  bindings: {},
-  adapter: "claude-code" as const,
-  modes: ["fake-source", "store"],
-  settings: { "fake-source": { baseDate: "2026-11-15T12:00:00.000Z", pageSize: 10, costPerItemUsd: 0.002 } },
+const config = {
+  bindings: { "greeting-source": "greeter" },
+  adapter: "claude-code",
+  settings: { writer: { signature: "Yours, the writer" } },
 };
 
 async function withProject(body: (project: ModeProject) => Promise<void>): Promise<void> {
-  const project = await openModeProject(fakeSource);
+  const beside = await makeProject();
+  const project = await openModeProject(config, { project: beside.root });
   try {
     await body(project);
   } finally {
     await project.close();
+    await beside.remove();
   }
+}
+
+type WaitingTask = {
+  readonly token: string;
+  readonly round: number;
+  readonly feedback: readonly string[];
+};
+
+function waitingTaskOf(run: Run): WaitingTask {
+  if (run.state.status !== "waiting" || run.state.waiting.reason !== "skill") {
+    assert.fail(`expected the run to wait for a skill, got ${JSON.stringify(run.state)}`);
+  }
+  const task = run.state.waiting.task;
+  assert.ok(task.token !== undefined, "the task carries no token");
+  return { token: task.token, round: task.round, feedback: task.feedback };
 }
 
 function exportedNames(text: string): readonly string[] {
@@ -42,9 +56,8 @@ test("the test toolbox exports these names and no others", async () => {
   assert.deepEqual(text.match(/^export\b(?! (?:async function|function|type|const) \w+)/gm), null);
 });
 
-test("an opened project offers these operations and no others", async () => {
-  const project = await openModeProject(fakeSource);
-  try {
+test("a project opened with the modes of a project beside the kit offers these operations and no others", async () => {
+  await withProject(async (project) => {
     assert.deepEqual(Object.keys(project).sort(), [
       "answer",
       "answerRefusal",
@@ -62,9 +75,8 @@ test("an opened project offers these operations and no others", async () => {
       "runs",
       "setTime",
     ]);
-  } finally {
-    await project.close();
-  }
+    assert.deepEqual(await project.output("greeter.fetch", { name: "Ada" }), { greeting: "Hello, Ada" });
+  });
 });
 
 const innerFiles = ["../bay/kernel.ts", "../bay/runs/runs.ts", "../bay/ports.ts"];
@@ -97,94 +109,86 @@ test("no type the test toolbox declares names the kernel, the runs entry, the br
 
 test("a refused call is a refusal, never an output or a failure, and an accepted call is no refusal", async () => {
   await withProject(async (project) => {
-    assert.equal(
-      await project.refusal("fake-source.fetch", {}),
-      "input is missing the required field selector. input is missing the required field cursor.",
-    );
-    await assert.rejects(project.output("fake-source.fetch", {}), /missing the required field selector/);
-    await assert.rejects(project.failure("fake-source.fetch", {}), /missing the required field selector/);
-    await assert.rejects(project.refusal("fake-source.describe", {}), /expected fake-source.describe to be refused/);
-    await assert.rejects(project.failure("fake-source.describe", {}), /expected the run to fail/);
+    assert.equal(await project.refusal("greeter.fetch", {}), "input is missing the required field name.");
+    await assert.rejects(project.output("greeter.fetch", {}), /missing the required field name/);
+    await assert.rejects(project.failure("greeter.fetch", {}), /missing the required field name/);
+    await assert.rejects(project.refusal("greeter.fetch", { name: "Ada" }), /expected greeter.fetch to be refused/);
+    await assert.rejects(project.failure("greeter.fetch", { name: "Ada" }), /expected the run to fail/);
   });
 });
 
 test("runs lists each run with its id and where it stands", async () => {
   await withProject(async (project) => {
     assert.deepEqual(await project.runs(), []);
-    const run = await project.run("fake-source.describe", {});
+    const run = await project.run("greeter.fetch", { name: "Ada" });
     assert.deepEqual(await project.runs(), [{ id: run.id, status: "done" }]);
+  });
+});
+
+test("a skill step is answered as the agent would: a refused answer is a refusal, a checked one comes back", async () => {
+  await withProject(async (project) => {
+    const first = waitingTaskOf(await project.run("writer.compose", { name: "Ada" }));
+    assert.equal(await project.answerRefusal(first.token, {}), "output is missing the required field text.");
+    await assert.rejects(project.answer(first.token, {}), /missing the required field text/);
+    const second = waitingTaskOf(await project.answer(first.token, { text: "short" }));
+    assert.deepEqual([second.round, second.feedback], [2, ["The note has 5 characters; write at least 20."]]);
+    const done = await project.answer(second.token, { text: "Hello, Ada, and welcome back." });
+    assert.deepEqual(done.state, {
+      status: "done",
+      output: { text: "Hello, Ada, and welcome back.", saved: "out/notes/note.txt" },
+    });
+  });
+});
+
+test("an answer that is accepted is no refusal", async () => {
+  await withProject(async (project) => {
+    const first = waitingTaskOf(await project.run("writer.compose", { name: "Ada" }));
+    await assert.rejects(project.answerRefusal(first.token, { text: "short" }), /expected the answer to be refused/);
+  });
+});
+
+test("a run that waits for budget goes on when its budget is extended", async () => {
+  await withProject(async (project) => {
+    const run = await project.run("greeter.tally", { name: "Ada" });
+    assert.equal(run.state.status === "waiting" ? run.state.waiting.reason : run.state.status, "budget");
+    const extended = await project.extend(run.id, { tokens: 10 });
+    assert.deepEqual(extended.state, { status: "done", output: { greeting: "Hello, Ada" } });
+    assert.equal(extended.spent.tokens, 10);
+  });
+});
+
+test("a workflow is started with its input and goes on when the owner approves what it shows", async () => {
+  await withProject(async (project) => {
+    const review = await project.runWorkflow("writer", "workflows/review.yaml", { name: "Ada" });
+    if (review.state.status !== "waiting" || review.state.waiting.reason !== "approval") {
+      assert.fail(`expected an approval, got ${JSON.stringify(review.state)}`);
+    }
+    const shown = review.state.waiting;
+    assert.deepEqual(shown.content, { greeting: "Hello, Ada" });
+    const decision = { stepKey: shown.stepKey, hash: shown.hash, verdict: "approve" as const, by: "the owner" };
+    const done = await project.approve(review.id, decision);
+    assert.equal(done.state.status, "done");
   });
 });
 
 test("a mode's database is reached through the broker, with the rules a script's call has", async () => {
   await withProject(async (project) => {
-    const partition = project.partition("store", "owner");
-    assert.deepEqual(await partition.query("select 1 as one"), {
+    const partition = project.partition("writer", "owner");
+    assert.deepEqual(await partition.query("select text from notes"), {
       ok: false,
       kind: "failed",
-      message: "The mode store has no database yet; run its migrations first.",
+      message: "The mode writer has no database yet; run its migrations first.",
     });
-    assert.deepEqual(await partition.migrate(), { ok: true, value: ["0001-items.sql"] });
+    assert.deepEqual(await partition.migrate(), { ok: true, value: ["0001-notes.sql"] });
     const refused = await partition.query("select 1; select 2");
     assert.equal(
       refused.ok ? "" : refused.message,
-      [
-        "The step test-toolbox asked to run more than one statement in one call,",
+      "The step test-toolbox asked to run more than one statement in one call, " +
         "but the broker runs exactly one statement per call. Send each statement in its own call.",
-      ].join(" "),
     );
-    assert.deepEqual(await partition.query("select count(*) as n from items"), { ok: true, value: [{ n: 0 }] });
+    assert.deepEqual(await partition.query("select text from notes"), {
+      ok: true,
+      value: [{ text: "The first note." }],
+    });
   });
-});
-
-async function writeProjectMode(project: string): Promise<void> {
-  const folder = join(project, "components/modes/echo");
-  const manifest = {
-    name: "echo",
-    version: "1.0.0",
-    description: "Gives back the text it is given.",
-    actions: {
-      say: {
-        description: "When a test wants its text back.",
-        input: "schemas/text.json",
-        output: "schemas/text.json",
-        effects: ["read"],
-        run: [{ script: "scripts/say.ts" }],
-      },
-    },
-  };
-  const schema = {
-    type: "object",
-    additionalProperties: false,
-    required: ["text"],
-    properties: { text: { type: "string" } },
-  };
-  const files = {
-    "mode.yaml": stringify(manifest),
-    "schemas/text.json": `${JSON.stringify(schema)}\n`,
-    "scripts/say.ts":
-      'import { defineScript } from "agentbay/sdk";\n\nexport const run = defineScript(async (input) => input);\n',
-  };
-  for (const [path, text] of Object.entries(files)) {
-    await mkdir(dirname(join(folder, path)), { recursive: true });
-    await writeFile(join(folder, path), text, "utf8");
-  }
-}
-
-test("a project beside the kit opens its own modes from its components folder", async () => {
-  const beside = await realpath(await mkdtemp(join(tmpdir(), "agentbay-beside-")));
-  try {
-    await writeProjectMode(beside);
-    const project = await openModeProject(
-      { bindings: {}, adapter: "claude-code", modes: ["echo"] },
-      { project: beside },
-    );
-    try {
-      assert.deepEqual(await project.output("echo.say", { text: "hello" }), { text: "hello" });
-    } finally {
-      await project.close();
-    }
-  } finally {
-    await rm(beside, { recursive: true, force: true });
-  }
 });

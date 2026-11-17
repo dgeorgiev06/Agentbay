@@ -292,7 +292,7 @@ test("ask answers from the store and its check refuses an id the store does not 
 
 test("the daily workflow syncs, waits for the digest skill, then for approval of the digest", async () => {
   await withBriefing({}, async (project) => {
-    const started = await project.runWorkflow("feed-briefing", "workflows/daily.yaml");
+    const started = await project.runWorkflow("feed-briefing", "workflows/daily.yaml", {});
     const waiting = waitingSkillOf(started);
     const selection = waiting.input;
     const ids = new Set(itemIdsOf(selection));

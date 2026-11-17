@@ -79,7 +79,7 @@ export type ModeProject = {
   readonly output: (reference: string, input: Json, options?: CallOptions) => Promise<Json>;
   readonly failure: (reference: string, input: Json, options?: CallOptions) => Promise<string>;
   readonly refusal: (reference: string, input: Json) => Promise<string>;
-  readonly runWorkflow: (mode: string, path: string) => Promise<Run>;
+  readonly runWorkflow: (mode: string, path: string, input: Json) => Promise<Run>;
   readonly answer: (token: string, output: Json) => Promise<Run>;
   readonly answerRefusal: (token: string, output: Json) => Promise<string>;
   readonly approve: (runId: string, decision: Decision) => Promise<Run>;
@@ -236,7 +236,7 @@ async function projectIn(root: string, opening: Opening): Promise<ModeProject> {
     output: async (reference, input, options) => outputOf(await run(reference, input, options)),
     failure: async (reference, input, options) => reasonOf(await run(reference, input, options)),
     refusal: async (reference, input) => refusalOf(await started(reference, input), reference),
-    runWorkflow: async (mode, path) => accepted(await runs.start({ workflow: { mode, path } }, {})),
+    runWorkflow: async (mode, path, input) => accepted(await runs.start({ workflow: { mode, path } }, input)),
     answer: async (token, output) => accepted(await runs.submit(token, { output, spent: nothingSpent })),
     answerRefusal: async (token, output) =>
       refusalOf(await runs.submit(token, { output, spent: nothingSpent }), "the answer"),

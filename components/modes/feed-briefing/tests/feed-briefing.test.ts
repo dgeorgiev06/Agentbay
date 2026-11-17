@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Json } from "../../../../bay/sdk.ts";
-import { openModeProject, runOf, type ModeProject } from "../../../../tests/mode-harness.ts";
+import { openModeProject, type ModeProject } from "../../../../tests/test-toolbox.ts";
 import { fieldsOf, listOf, textOf } from "../scripts/lib/json.ts";
 
 const baseDate = "2026-11-15T12:00:00.000Z";
@@ -73,8 +73,7 @@ function waitingSkillOf(run: Awaited<ReturnType<ModeProject["run"]>>): WaitingSk
 }
 
 async function submitted(project: ModeProject, waiting: WaitingSkill, output: Json): ReturnType<ModeProject["run"]> {
-  const spent = { items: 0, usd: 0, tokens: 0, minutes: 0 };
-  return runOf(await project.kernel.runs.submit(waiting.token, { output, spent }));
+  return project.answer(waiting.token, output);
 }
 
 function outputOf(run: Awaited<ReturnType<ModeProject["run"]>>): Json {
@@ -167,7 +166,7 @@ test("with a budget smaller than one page the run waits for budget and stores no
     }
     assert.equal(run.state.waiting.reason, "budget");
     assert.equal(await storedCount(project), 0);
-    const resumed = runOf(await project.kernel.runs.extend(run.id, { usd: 1 }));
+    const resumed = await project.extend(run.id, { usd: 1 });
     assert.equal(fieldsOf(outputOf(resumed)).added, 30);
     assert.equal(resumed.spent.usd, 0.03);
     assert.equal(await storedCount(project), 30);
@@ -226,13 +225,7 @@ test("the check refuses no citations, long summaries, copied text and changed co
       { title: "Too long", summary: Array.from({ length: 61 }, () => "word").join(" "), cites: ["fake:1001"] },
     ];
     const draft = { ...fieldsOf(draftFor(waiting.input, themes)), selectorChanged: true };
-    const run = await project.kernel.runs.submit(waiting.token, {
-      output: draft,
-      spent: { items: 0, usd: 0, tokens: 0, minutes: 0 },
-    });
-    if (run.ok) {
-      assert.fail(`the schema should refuse a theme with no citation, got ${JSON.stringify(run.value.state)}`);
-    }
+    await project.answerRefusal(waiting.token, draft);
     const withOneCite = themes.map((theme, index) => (index === 0 ? { ...theme, cites: ["fake:1002"] } : theme));
     const back = waitingSkillOf(
       await submitted(project, waiting, { ...draft, themes: withOneCite, notes: "word ".repeat(81) }),
@@ -299,8 +292,7 @@ test("ask answers from the store and its check refuses an id the store does not 
 
 test("the daily workflow syncs, waits for the digest skill, then for approval of the digest", async () => {
   await withBriefing({}, async (project) => {
-    const runs = project.kernel.runs;
-    const started = runOf(await runs.start({ workflow: { mode: "feed-briefing", path: "workflows/daily.yaml" } }, {}));
+    const started = await project.runWorkflow("feed-briefing", "workflows/daily.yaml", {});
     const waiting = waitingSkillOf(started);
     const selection = waiting.input;
     const ids = new Set(itemIdsOf(selection));
@@ -320,7 +312,7 @@ test("the daily workflow syncs, waits for the digest skill, then for approval of
       "themes",
     ]);
     const decision = { stepKey: shown.stepKey, hash: shown.hash, verdict: "approve" as const, by: "the owner" };
-    const done = runOf(await runs.approve(approval.id, decision));
+    const done = await project.approve(approval.id, decision);
     assert.deepEqual(done.state, { status: "done", output: shown.content });
   });
 });

@@ -209,6 +209,23 @@ test("a project script imports the SDK only as agentbay/sdk, never by a path to 
   }
 });
 
+test("a project mode's test may import the kit's test toolbox by a path to the kit, and no other kit file", async () => {
+  const testFile = `${journalFolder}/tests/write.test.ts`;
+  const importing = (path: string): string => `import { openModeProject } from "../../../../../kit/tests/${path}";\n`;
+  const allowed = separateFiles({
+    "agentbay.config.yaml": yamlText(config),
+    ...journalFiles(sdkScript),
+    [testFile]: importing("test-toolbox.ts"),
+  });
+  withoutFinding(await checkFake(allowed, separate), "imports");
+  const other = separateFiles({
+    "agentbay.config.yaml": yamlText(config),
+    ...journalFiles(sdkScript),
+    [testFile]: importing("project-fixture.ts"),
+  });
+  findFinding(await checkFake(other, separate), testFile, "which resolves to kit:tests/project-fixture.ts");
+});
+
 function journalManifest(descriptionLines: readonly string[]): string {
   return [
     "name: journal",

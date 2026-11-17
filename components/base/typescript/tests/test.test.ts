@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import type { Json } from "../../../../bay/sdk.ts";
-import type { ModeProject } from "../../../../tests/mode-harness.ts";
+import type { ModeProject } from "../../../../tests/test-toolbox.ts";
 import {
   commandsRun,
   openToolchainProject,

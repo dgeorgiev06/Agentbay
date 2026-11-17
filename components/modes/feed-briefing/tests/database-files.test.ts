@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
-import { openModeProject } from "../../../../tests/mode-harness.ts";
+import { openModeProject } from "../../../../tests/test-toolbox.ts";
 
 const config = {
   bindings: { "items-source": "fake-source", "items-store": "store" },

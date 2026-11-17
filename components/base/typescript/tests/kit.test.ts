@@ -4,7 +4,7 @@ import { cp, mkdir, realpath, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import type { ModeProject } from "../../../../tests/mode-harness.ts";
+import type { ModeProject } from "../../../../tests/test-toolbox.ts";
 import { listed, openToolchainProject, withoutSeconds } from "./checkouts.ts";
 
 let project: ModeProject;

@@ -3,7 +3,7 @@ import { lstat, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import { commitFiles, git, openRepositoryProject, writeFiles } from "./repository.ts";
-import type { ModeProject } from "../../../../tests/mode-harness.ts";
+import type { ModeProject } from "../../../../tests/test-toolbox.ts";
 
 const folder = ".forge/worktrees/done";
 

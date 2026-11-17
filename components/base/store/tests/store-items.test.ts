@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import type { Json } from "../../../../bay/sdk.ts";
-import { openModeProject, type ModeProject } from "../../../../tests/mode-harness.ts";
+import { openModeProject, type ModeProject } from "../../../../tests/test-toolbox.ts";
 import { fieldsOf, listOf, textOf } from "../scripts/lib/json.ts";
 import { putItems } from "../scripts/lib/put.ts";
 import { upsertItem } from "../scripts/lib/statements.ts";

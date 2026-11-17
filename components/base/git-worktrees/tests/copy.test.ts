@@ -3,7 +3,7 @@ import { lstat, readdir, readFile, readlink } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import { commitFiles, openRepositoryProject, writeFiles } from "./repository.ts";
-import type { ModeProject } from "../../../../tests/mode-harness.ts";
+import type { ModeProject } from "../../../../tests/test-toolbox.ts";
 
 async function filesUnder(folder: string): Promise<readonly string[]> {
   const entries = await readdir(folder, { recursive: true, withFileTypes: true });

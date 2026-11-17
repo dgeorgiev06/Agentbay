@@ -27,7 +27,8 @@ function secondsOf(milliseconds: number): number {
 }
 
 export async function runTimed(context: ScriptContext, timed: Timed): Promise<Finished> {
-  const answer = await context.commands.run(timed);
+  const { name, folder, timeLimitSeconds } = timed;
+  const answer = await context.commands.run({ name, arguments: timed.arguments, folder, timeLimitSeconds });
   if (!answer.ok) {
     return { ending: { how: "not-started", reason: answer.message }, seconds: 0, stdout: "", stderr: "" };
   }

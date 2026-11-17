@@ -315,8 +315,7 @@ function answerRefusalResult(refusal: AnswerRefusal): CommandResult {
 
 async function changedScripts(kernel: Kernel, folder: string, given: TrustGiven): Promise<number> {
   const now = await scriptFilesNow(kernel, folder);
-  const changes = scriptFileChanges(given.scripts, now);
-  return changes.added.length + changes.removed.length + changes.changed.length;
+  return scriptFileChanges(given.scripts, now).length;
 }
 
 async function scriptFilesNow(kernel: Kernel, folder: string): Promise<TrustGiven["scripts"]> {

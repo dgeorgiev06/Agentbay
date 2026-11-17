@@ -13,7 +13,7 @@ import {
   recordWithoutTrust,
   scriptFileChanges,
   scriptFilesOf,
-  type ScriptFileChanges,
+  type ScriptFileChange,
   type TrustRecord,
 } from "../bay/trust.ts";
 import { modeNamed } from "./broker-fixture.ts";
@@ -377,29 +377,23 @@ test("the script files of a mode are every file in its folder outside tests/ but
 
 test("the script files change when a file's text changes, or one is added or removed, and not when mode.yaml, a test or a file outside the mode changes", async () => {
   const before = await scriptFilesOf(fakeFileSystem(modeFiles), folder, modePaths);
-  const after = async (files: Record<string, string>, paths: readonly string[]): Promise<ScriptFileChanges> =>
+  const after = async (files: Record<string, string>, paths: readonly string[]): Promise<readonly ScriptFileChange[]> =>
     scriptFileChanges(before, await scriptFilesOf(fakeFileSystem({ ...modeFiles, ...files }), folder, paths));
-  assert.deepEqual(await after({ [`${folder}/scripts/vet.ts`]: "export const x = 1;" }, modePaths), {
-    added: [],
-    removed: [],
-    changed: ["scripts/vet.ts"],
-  });
-  assert.deepEqual(await after({ [`${folder}/scripts/run.ts`]: "export {};" }, [...modePaths, "scripts/run.ts"]), {
-    added: ["scripts/run.ts"],
-    removed: [],
-    changed: [],
-  });
-  assert.deepEqual(await after({}, ["mode.yaml", "scripts/vet.ts"]), {
-    added: [],
-    removed: ["skills/build/SKILL.md"],
-    changed: [],
-  });
+  assert.deepEqual(await after({ [`${folder}/scripts/vet.ts`]: "export const x = 1;" }, modePaths), [
+    { path: "scripts/vet.ts", change: "changed" },
+  ]);
+  assert.deepEqual(await after({ [`${folder}/scripts/run.ts`]: "export {};" }, [...modePaths, "scripts/run.ts"]), [
+    { path: "scripts/run.ts", change: "added" },
+  ]);
+  assert.deepEqual(await after({}, ["mode.yaml", "scripts/vet.ts"]), [
+    { path: "skills/build/SKILL.md", change: "removed" },
+  ]);
   const unchanged = {
     [`${folder}/mode.yaml`]: "name: go-toolchain\nversion: 2.0.0",
     [`${folder}/tests/vet.test.ts`]: "changed",
     "/home/owner/realty/components/modes/other/scripts/vet.ts": "changed",
   };
-  assert.deepEqual(await after(unchanged, modePaths), { added: [], removed: [], changed: [] });
+  assert.deepEqual(await after(unchanged, modePaths), []);
 });
 
 test("the hash of a mode's list does not cover its script files", () => {

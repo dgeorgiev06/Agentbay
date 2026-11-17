@@ -132,17 +132,12 @@ async function scriptsWarnings(
   given: TrustGiven,
 ): Promise<readonly Problem[]> {
   const now = await scriptFilesOf(context.files, mode.folder, mode.files);
-  const changes = scriptFileChanges(given.scripts, now);
-  const files = [
-    ...changes.added.map((path) => [path, "added"] as const),
-    ...changes.removed.map((path) => [path, "removed"] as const),
-    ...changes.changed.map((path) => [path, "changed"] as const),
-  ].sort(([first], [second]) => (first < second ? -1 : 1));
+  const files = scriptFileChanges(given.scripts, now);
   if (files.length === 0) {
     return [];
   }
   const name = mode.manifest.name;
-  const named = files.map(([path, change]) => `${shown(path)} ${change}`).join(", ");
+  const named = files.map(({ path, change }) => `${shown(path)} ${change}`).join(", ");
   return [
     mode.at([], {
       message:

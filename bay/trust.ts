@@ -36,10 +36,9 @@ export type ListChanges = {
   readonly folders: FolderChanges;
 };
 
-export type ScriptFileChanges = {
-  readonly added: readonly string[];
-  readonly removed: readonly string[];
-  readonly changed: readonly string[];
+export type ScriptFileChange = {
+  readonly path: string;
+  readonly change: "added" | "removed" | "changed";
 };
 
 export type RecordPorts = {
@@ -158,14 +157,23 @@ function hashIn(scripts: ScriptFiles, path: string): string | undefined {
   return Object.hasOwn(scripts, path) ? scripts[path] : undefined;
 }
 
-export function scriptFileChanges(before: ScriptFiles, now: ScriptFiles): ScriptFileChanges {
+function scriptFileChange(
+  path: string,
+  before: string | undefined,
+  now: string | undefined,
+): readonly ScriptFileChange[] {
+  if (before === now) {
+    return [];
+  }
+  if (before === undefined) {
+    return [{ path, change: "added" }];
+  }
+  return [{ path, change: now === undefined ? "removed" : "changed" }];
+}
+
+export function scriptFileChanges(before: ScriptFiles, now: ScriptFiles): readonly ScriptFileChange[] {
   const paths = [...new Set([...Object.keys(before), ...Object.keys(now)])].sort();
-  const differing = paths.filter((path) => hashIn(before, path) !== hashIn(now, path));
-  return {
-    added: differing.filter((path) => hashIn(before, path) === undefined),
-    removed: differing.filter((path) => hashIn(now, path) === undefined),
-    changed: differing.filter((path) => hashIn(before, path) !== undefined && hashIn(now, path) !== undefined),
-  };
+  return paths.flatMap((path) => scriptFileChange(path, hashIn(before, path), hashIn(now, path)));
 }
 
 function sameWords(first: readonly string[], second: readonly string[]): boolean {

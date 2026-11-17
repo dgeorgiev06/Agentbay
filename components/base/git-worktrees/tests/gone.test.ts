@@ -110,3 +110,18 @@ test("set-aside says plainly that a worktree it made no longer exists", async ()
     await project.close();
   }
 });
+
+test("apply says plainly that a copy it made no longer exists", async () => {
+  const project = await openRepositoryProject();
+  try {
+    await copyAndLose(project);
+    const patch = "diff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n@@ -1 +1 @@\n-A\n+B\n";
+    assert.equal(
+      await project.failure("git-worktrees.apply", { folder: copy, patch }),
+      "The folder .forge/copies/lost was made by this mode but no longer exists, so the mode does not apply a " +
+        "patch to it.",
+    );
+  } finally {
+    await project.close();
+  }
+});

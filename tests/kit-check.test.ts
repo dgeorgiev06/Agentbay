@@ -31,9 +31,8 @@ test("the real bay check on the kit itself reports no errors, the two size warni
     ];
   const listed = listedBy("typescript");
   const listedGit = listedBy("git-worktrees");
-  const git =
-    "git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false " +
-    "--attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+  const unattributed = "git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false";
+  const git = `${unattributed} --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904`;
   const committing = `${git} -c user.name=agentbay-git-worktrees -c user.email=git-worktrees@agentbay.invalid -c gc.auto=0`;
   assert.deepEqual(findings, [
     listedGit(12, `${git} rev-parse --verify --quiet --end-of-options`),
@@ -63,6 +62,8 @@ test("the real bay check on the kit itself reports no errors, the two size warni
     listedGit(29, `${committing} merge --abort`),
     listedGit(30, `${git} add --all --`),
     listedGit(31, `${committing} commit --quiet --no-verify --no-gpg-sign --file=- --end-of-options`),
+    listedGit(32, `${unattributed} --work-tree=. check-attr -z filter --`),
+    listedGit(33, `${unattributed} --work-tree=. apply --end-of-options`),
     listed(9, "npm run generate:check --"),
     listed(10, "npm run typecheck --"),
     listed(11, "npm run lint --"),

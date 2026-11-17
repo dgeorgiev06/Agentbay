@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ApplyRequest",
+  "description": "Which copy to change, and the patch to apply to it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["folder", "patch"],
+  "properties": {
+    "folder": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*(/\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+      "maxLength": 1000,
+      "description": "A copy this mode made, relative to the project, such as .forge/copies/my-copy. Never a worktree."
+    },
+    "patch": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000000,
+      "description": "A patch as git diff writes it. Each path it names is relative to the copy, has no .., and is letters, digits, dots, dashes and underscores in folders."
+    }
+  }
+}

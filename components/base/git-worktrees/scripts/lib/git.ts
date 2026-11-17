@@ -22,6 +22,8 @@ const committer: readonly string[] = [
 
 const makesCommits: readonly string[] = ["merge", "commit"];
 
+const readsTheCopysAttributes: readonly string[] = ["apply", "check-attr"];
+
 const timeLimitSeconds = 300;
 
 export type GitEnd = {
@@ -50,7 +52,8 @@ function refuseInOwnersCheckout(folder: string, subcommand: string): void {
 }
 
 function optionsFor(subcommand: string): readonly string[] {
-  return [...protections, ...emptyAttributes, ...(makesCommits.includes(subcommand) ? committer : [])];
+  const attributes = readsTheCopysAttributes.includes(subcommand) ? [] : emptyAttributes;
+  return [...protections, ...attributes, ...(makesCommits.includes(subcommand) ? committer : [])];
 }
 
 export type Fed = {
@@ -153,7 +156,7 @@ export async function branchExists(context: ScriptContext, branch: string): Prom
 
 const repositoryScopes: readonly string[] = ["local", "worktree"];
 
-async function refuseRepositoryFilters(context: ScriptContext, folder: string): Promise<void> {
+export async function refuseRepositoryFilters(context: ScriptContext, folder: string): Promise<void> {
   const ended = await git(context, folder, [
     "config",
     "--show-scope",

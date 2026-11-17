@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ApplyResponse",
+  "description": "The paths the patch changed in the copy.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["folder", "paths"],
+  "properties": {
+    "folder": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "The copy's folder, relative to the project."
+    },
+    "paths": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "string",
+        "maxLength": 1000,
+        "description": "A path relative to the copy."
+      },
+      "description": "Each path the patch added, changed, deleted or renamed, in the order the patch names them."
+    }
+  }
+}

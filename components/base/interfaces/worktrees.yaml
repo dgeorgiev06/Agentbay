@@ -33,3 +33,7 @@ actions:
     input: worktrees/set-aside-request.json
     output: worktrees/set-aside-response.json
     effects: [read, write, network, spend, delete]
+  apply:
+    input: worktrees/apply-request.json
+    output: worktrees/apply-response.json
+    effects: [read, write, network, spend, delete]

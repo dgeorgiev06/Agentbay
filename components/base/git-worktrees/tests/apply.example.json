@@ -1,0 +1,10 @@
+{
+  "input": {
+    "folder": ".forge/copies/mail-source-check",
+    "patch": "diff --git a/bay/sdk.ts b/bay/sdk.ts\n--- a/bay/sdk.ts\n+++ b/bay/sdk.ts\n@@ -1 +1 @@\n-export const answer = 41;\n+export const answer = 42;\n"
+  },
+  "output": {
+    "folder": ".forge/copies/mail-source-check",
+    "paths": ["bay/sdk.ts"]
+  }
+}

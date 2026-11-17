@@ -348,6 +348,18 @@ test("a project's mode the test trusts runs its listed command and one it does n
   }
 });
 
+test("a test that trusts two modes of a project runs a listed command of each", async () => {
+  const beside = await projectWithSayingModes();
+  const project = await openModeProject(config, { project: beside.root, trusted: ["echoer", "chimer"] });
+  try {
+    assert.deepEqual(await project.output("echoer.say", {}), { said: "said by echoer\n" });
+    assert.deepEqual(await project.output("chimer.say", {}), { said: "said by chimer\n" });
+  } finally {
+    await project.close();
+    await beside.remove();
+  }
+});
+
 test("without trusted, a project's mode loads and its listed command is refused with the broker's sentence and a sentence for the test's author", async () => {
   const beside = await projectWithSayingModes();
   const project = await openModeProject(config, { project: beside.root });

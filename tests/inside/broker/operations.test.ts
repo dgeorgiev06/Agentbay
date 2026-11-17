@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Json } from "../../../bay/contracts.ts";
 import { type OperationName, type Requests, type Results, shapes } from "../../../bay/broker/operations.ts";
+import { refusedRequests, refusedResults } from "./operation-refusals.ts";
 
 type Examples = {
   readonly [Name in OperationName]: {
@@ -9,8 +10,6 @@ type Examples = {
     readonly results: readonly [Required<Results[Name]> & Json, Results[Name] & Json];
   };
 };
-
-type Malformed = { readonly value: Json; readonly problem: string };
 
 const ran = {
   end: { how: "exited", exitCode: 0 },
@@ -136,61 +135,6 @@ const examples: Examples = {
   },
 };
 
-const malformedRequests: { readonly [Name in OperationName]: Malformed } = {
-  "db.execute": {
-    value: { sql: "delete from items", parameters: "everything" },
-    problem: "The field parameters is missing or is not a list or a mapping.",
-  },
-  "db.query": {
-    value: { sql: "select 1", parameters: [], partition: 3 },
-    problem: "The field partition is given but is not text.",
-  },
-  "db.migrate": { value: {}, problem: "The field partition is missing or is not text." },
-  "db.agentQuery": { value: { sql: "select 1" }, problem: "The field partition is missing or is not text." },
-  "files.read": { value: "notes-in/a.txt", problem: "The value is not a mapping." },
-  "files.list": { value: { path: ["notes-in"] }, problem: "The field path is missing or is not text." },
-  "files.write": { value: { path: "notes-out/a.txt" }, problem: "The field text is missing or is not text." },
-  "files.makeFolder": { value: { folder: ".forge/copies/k3" }, problem: "The field path is missing or is not text." },
-  "files.link": { value: { path: "a", target: null }, problem: "The field target is missing or is not text." },
-  "files.remove": { value: null, problem: "The value is not a mapping." },
-  "secrets.get": { value: { name: 7 }, problem: "The field name is missing or is not text." },
-  "http.request": {
-    value: { method: "TRACE", url: "https://api.example.com", headers: {} },
-    problem: "The field method is missing or is not one of GET, POST, PUT, PATCH, DELETE.",
-  },
-  "events.emit": { value: { kind: "briefed" }, problem: "The field detail is missing or is not a JSON value." },
-  call: { value: { input: {} }, problem: "The field reference is missing or is not text." },
-  spend: { value: { usd: 1 }, problem: "The field spending is missing or is not a JSON value." },
-  "commands.run": {
-    value: { command: ["git", "status"], folder: ".", timeLimitSeconds: 30, input: 1 },
-    problem: "The field input is given but is not text.",
-  },
-};
-
-const malformedResults: { readonly [Name in Exclude<OperationName, "call">]: Malformed } = {
-  "db.execute": { value: { changes: 1 }, problem: "The value is not a count of changes with the last row id." },
-  "db.query": { value: [{ id: 1 }, 2], problem: "The value is not a list of rows." },
-  "db.migrate": { value: ["0001-items.sql", 2], problem: "The value is not a list of text." },
-  "db.agentQuery": { value: { columns: ["id"], rows: [1] }, problem: "The value is not columns with rows." },
-  "files.read": { value: null, problem: "The value is not text." },
-  "files.list": { value: "a.txt", problem: "The value is not a list of text." },
-  "files.write": { value: true, problem: "The value is not null." },
-  "files.makeFolder": { value: "", problem: "The value is not null." },
-  "files.link": { value: {}, problem: "The value is not null." },
-  "files.remove": { value: 0, problem: "The value is not null." },
-  "secrets.get": { value: ["made-up-value"], problem: "The value is not text." },
-  "http.request": {
-    value: { status: 200, headers: { "x-count": 3 }, body: "" },
-    problem: "The value is not a response with a status, headers and a body.",
-  },
-  "events.emit": { value: "emitted", problem: "The value is not null." },
-  spend: { value: { usd: 1 }, problem: "The value is not null." },
-  "commands.run": {
-    value: { ...ran, end: { how: "exited" } },
-    problem: "The value is not a command's end, time and output.",
-  },
-};
-
 const operationNames: readonly OperationName[] = [
   "db.execute",
   "db.query",
@@ -248,10 +192,11 @@ for (const name of operationNames) {
     roundTrip(name, examples[name]);
   });
 
-  test(`${name}: a malformed request is refused with a sentence`, () => {
-    const malformed = malformedRequests[name];
-    assert.deepEqual(shapes[name].request(malformed.value), { ok: false, problem: malformed.problem });
-  });
+  for (const refused of refusedRequests[name]) {
+    test(`${name}: a request with ${refused.what} is refused with a sentence`, () => {
+      assert.deepEqual(shapes[name].request(refused.value), { ok: false, problem: refused.problem });
+    });
+  }
 }
 
 function hasResultThatCanBeMalformed(name: OperationName): name is Exclude<OperationName, "call"> {
@@ -259,10 +204,11 @@ function hasResultThatCanBeMalformed(name: OperationName): name is Exclude<Opera
 }
 
 for (const name of operationNames.filter(hasResultThatCanBeMalformed)) {
-  test(`${name}: a malformed result is refused with a sentence`, () => {
-    const malformed = malformedResults[name];
-    assert.deepEqual(shapes[name].result(malformed.value), { ok: false, problem: malformed.problem });
-  });
+  for (const refused of refusedResults[name]) {
+    test(`${name}: a result with ${refused.what} is refused with a sentence`, () => {
+      assert.deepEqual(shapes[name].result(refused.value), { ok: false, problem: refused.problem });
+    });
+  }
 }
 
 test("call: every JSON value is a result, so no result of a call is malformed", () => {

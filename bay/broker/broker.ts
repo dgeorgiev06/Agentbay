@@ -29,6 +29,7 @@ import {
   type SpendAmounts,
 } from "./effect-rule.ts";
 import { checkPath, type PathCheck, type Purpose } from "./file-access.ts";
+import { databaseEntries, type DatabaseOperationName } from "./database-operations.ts";
 import { dataFolder, fileEntries, type FileOperationName } from "./file-operations.ts";
 import { checkUrl, type Hop, loggedHeaders, nextRequest, redirectTarget, type UrlCheck } from "./http-access.ts";
 import { isInsideOrEqual, pathIn, shownPath, type Layout } from "../layout.ts";
@@ -145,7 +146,7 @@ function spendingRefusal(spending: Json): Answer<never> {
   });
 }
 
-type EntryName = FileOperationName;
+type EntryName = FileOperationName | DatabaseOperationName;
 
 export class Broker {
   readonly #options: BrokerOptions;
@@ -162,7 +163,7 @@ export class Broker {
     this.#effects = options.permissions.actionEffects;
     this.#limits = { ...defaultBrokerLimits, ...options.limits };
     const step = this.#step();
-    this.entries = { ...fileEntries(step) };
+    this.entries = { ...fileEntries(step), ...databaseEntries(step) };
   }
 
   #step(): Step {

@@ -56,6 +56,20 @@ const deleteNeeded = `Removing a file or folder needs the delete effect; to allo
 
 const throwawayOnly = `To allow it, name a folder that holds the path under resources.files.throwaway in ${manifest}.`;
 
+const changesData = `A statement that changes data needs the write effect; to allow it, add write to actions.look.effects in ${manifest}.`;
+
+const deletesData = `A statement that deletes needs the delete effect; to allow it, add delete to actions.look.effects in ${manifest}.`;
+
+const kebabPartition = "Name the partition with lowercase letters, digits and single dashes, such as feed-briefing.";
+
+const plainSql = "No manifest line allows attach, detach, vacuum, pragma or transaction statements; use plain SQL.";
+
+const migrationsOfTheMode = `Point resources.db.migrations in ${manifest} at a folder of the mode.`;
+
+const outsideMigrations = (root: string): Partial<ModeGrants> => ({
+  migrationsFolder: join(root, "components/base/store/migrations"),
+});
+
 const every: readonly Effect[] = ["read", "write", "delete"];
 
 const writing: readonly Effect[] = ["read", "write"];
@@ -293,6 +307,156 @@ const proofs: Proofs = {
         effects: every,
         value: null,
         recorded: [throwaway("removed", "scratch/old/a.txt")],
+      },
+    ],
+  },
+  "db.execute": {
+    withoutEffect: [
+      {
+        ask: (broker) => broker.entries["db.execute"]({ sql: "insert into notes (text) values ('a')", parameters: [] }),
+        effects: ["read"],
+        change: changesData,
+      },
+      {
+        ask: (broker) => broker.entries["db.execute"]({ sql: "delete from notes", parameters: [] }),
+        effects: writing,
+        change: deletesData,
+      },
+    ],
+    outsideGrant: [
+      {
+        ask: (broker) =>
+          broker.entries["db.execute"]({
+            sql: "insert into notes (text) values ('a')",
+            parameters: [],
+            partition: "Feed.Briefing",
+          }),
+        effects: every,
+        change: kebabPartition,
+      },
+      {
+        ask: (broker) => broker.entries["db.execute"]({ sql: "pragma journal_mode = delete", parameters: [] }),
+        effects: every,
+        change: plainSql,
+      },
+    ],
+    allowed: [
+      {
+        ask: (broker) =>
+          broker.entries["db.execute"]({ sql: "insert into notes (text) values (?)", parameters: ["a"] }),
+        effects: writing,
+        value: { changes: 1, lastInsertRowid: 1 },
+        recorded: [],
+      },
+      {
+        ask: (broker) =>
+          broker.entries["db.execute"]({
+            sql: "insert into notes (text) values (?)",
+            parameters: [`token ${secretValue}`],
+          }),
+        effects: writing,
+        value: { changes: 1, lastInsertRowid: 1 },
+        recorded: [
+          {
+            kind: "redacted",
+            detail: {
+              step: "look.0",
+              message: "Text that looks like a secret was removed from the values of a statement before it was stored.",
+            },
+          },
+        ],
+      },
+    ],
+  },
+  "db.query": {
+    withoutEffect: [
+      {
+        ask: (broker) => broker.entries["db.query"]({ sql: "insert into notes (text) values ('a')", parameters: [] }),
+        effects: [],
+        change: changesData,
+      },
+      {
+        ask: (broker) =>
+          broker.entries["db.query"]({ sql: "with gone as (select 1) delete from notes", parameters: [] }),
+        effects: ["read"],
+        change: changesData,
+      },
+    ],
+    outsideGrant: [
+      {
+        ask: (broker) => broker.entries["db.query"]({ sql: "select 1", parameters: [], partition: "../other" }),
+        effects: every,
+        change: kebabPartition,
+      },
+      {
+        ask: (broker) => broker.entries["db.query"]({ sql: "update notes set text = 'b'", parameters: [] }),
+        effects: every,
+        change: plainSql,
+      },
+    ],
+    allowed: [
+      {
+        ask: (broker) => broker.entries["db.query"]({ sql: "select count(*) as n from notes", parameters: [] }),
+        effects: [],
+        value: [{ n: 0 }],
+        recorded: [],
+      },
+      {
+        ask: (broker) => broker.entries["db.query"]({ sql: "select 1 as one", parameters: [] }),
+        effects: [],
+        value: [{ one: 1 }],
+        recorded: [],
+      },
+    ],
+  },
+  "db.migrate": {
+    withoutEffect: "needs no effect",
+    outsideGrant: [
+      { ask: (broker) => broker.entries["db.migrate"]({ partition: "Alpha" }), effects: every, change: kebabPartition },
+      {
+        ask: (broker) => broker.entries["db.migrate"]({ partition: "alpha" }),
+        effects: every,
+        grants: outsideMigrations,
+        change: migrationsOfTheMode,
+      },
+    ],
+    allowed: [
+      {
+        ask: (broker) => broker.entries["db.migrate"]({ partition: "alpha" }),
+        effects: [],
+        value: ["0001-notes.sql"],
+        recorded: [],
+      },
+      { ask: (broker) => broker.entries["db.migrate"]({}), effects: [], value: ["0001-notes.sql"], recorded: [] },
+    ],
+  },
+  "db.agentQuery": {
+    withoutEffect: "needs no effect",
+    outsideGrant: [
+      {
+        ask: (broker) => broker.entries["db.agentQuery"]({ sql: "select 1", partition: "a".repeat(65) }),
+        effects: every,
+        change: kebabPartition,
+      },
+      {
+        ask: (broker) => broker.entries["db.agentQuery"]({ sql: "select 1" }),
+        effects: every,
+        grants: outsideMigrations,
+        change: migrationsOfTheMode,
+      },
+    ],
+    allowed: [
+      {
+        ask: (broker) => broker.entries["db.agentQuery"]({ sql: "select count(*) as n from notes" }),
+        effects: [],
+        value: { columns: ["n"], rows: [[0]] },
+        recorded: [],
+      },
+      {
+        ask: (broker) => broker.entries["db.agentQuery"]({ sql: "select 1 as one" }),
+        effects: [],
+        value: { columns: ["one"], rows: [[1]] },
+        recorded: [],
       },
     ],
   },

@@ -129,10 +129,6 @@ type AnsweredByTheClass = Omit<Answering, keyof Broker["entries"]>;
 function answeredByTheClass(started: Started): AnsweredByTheClass {
   const { broker } = started;
   return {
-    "db.execute": (request) => broker.execute(request.sql, request.parameters, request.partition),
-    "db.query": (request) => broker.query(request.sql, request.parameters, request.partition),
-    "db.migrate": (request) => broker.migrate(request.partition),
-    "db.agentQuery": (request) => broker.agentQuery(request.sql, request.partition),
     "secrets.get": (request) => broker.secret(request.name),
     "http.request": (request) => broker.request(request),
     "events.emit": (request) => broker.emit(request.kind, request.detail),

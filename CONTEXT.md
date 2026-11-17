@@ -20,6 +20,9 @@ One meaning per word. Briefs, plans, code names and reviews use these words and 
 | **Effect** | What an action may do to the world: `read`, `write`, `network`, `spend`, `delete`. Declared per action. | permission (see Grant) |
 | **Grant** | What a mode may reach: its database, paths, secrets, hosts, commands. Declared in `resources:`. | permission, capability |
 | **Throwaway folder** | A folder named under a mode's `resources.files.throwaway`. The kernel makes folders and links in it and removes files and folders from it for that mode; the mode's scripts never read or write its files, and its commands fill it. | scratch, temp folder |
+| **List** (a mode's) | The commands a mode lists, each by name with its words and effects, the words its commands start with, and its throwaway folders, taken together. A base mode's list is granted to it; any other mode's list is granted only while the owner trusts it. | allow-list, command list, permissions |
+| **Trust** | The owner's statement that one named mode outside the kit's `components/base/` may have its list, bound to that exact list by its hash. A changed list is not trusted until the owner trusts it again. Trust stops a mode's script and an agent inside a run's step from granting commands to themselves; it does not stop an agent that has the owner's shell. | allow-list, permission, approval (an approval is a step of a run) |
+| **Trust record** | The file `.agentbay/trust.json`: for each mode the owner trusts, the list as trusted, its hash, when and how the trust was given. The kernel reads it at each load, and no mode may name it. | trust file, trust store, allow-list |
 | **Approval** | A workflow step that waits for the owner and is bound to the content shown. | gate |
 | **Budget** | A limit on a run: items, dollars, tokens, minutes. | quota |
 | **Toolbox** | `bay/sdk.ts`. The only kernel file mode code may import. | SDK internals, helpers |

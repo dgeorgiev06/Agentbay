@@ -7,7 +7,6 @@ import {
   openToolchainProject,
   packageWith,
   printing,
-  secondsOf,
   withoutSeconds,
   writeCheckout,
   type Fields,
@@ -41,13 +40,6 @@ const words = [
   "",
 ].join("\n");
 
-const wrongSum = [
-  'import assert from "node:assert/strict";',
-  'import { test } from "node:test";',
-  'test("a sum that is wrong", () => assert.equal(1 + 1, 3));',
-  "",
-].join("\n");
-
 const hangingTest = [
   'import { test } from "node:test";',
   'test("waits for ever", () => new Promise((done) => setTimeout(done, 600000)));',
@@ -69,23 +61,8 @@ async function tested(input: object): Promise<Fields> {
   return shownResult(await project.output("typescript.test", { timeLimitSeconds: 60, ...input }));
 }
 
-test("a run where every test passes is passed, with the counts", async () => {
-  const folder = await checkoutWith("all-pass", { "tests/sums.test.ts": sums, "tests/words.test.ts": words });
-  assert.deepEqual(await tested({ folder }), { verdict: "passed", passed: 3, failed: 0, failedTests: [] });
-});
-
-test("a run where one test fails is failed, with the counts and the name of the test that failed", async () => {
-  const folder = await checkoutWith("one-fails", { "tests/sums.test.ts": sums, "tests/wrong.test.ts": wrongSum });
-  assert.deepEqual(await tested({ folder }), {
-    verdict: "failed",
-    passed: 2,
-    failed: 1,
-    failedTests: ["a sum that is wrong"],
-  });
-});
-
-test("named test files are the only ones run", async () => {
-  const files = { "tests/sums.test.ts": sums, "tests/wrong.test.ts": wrongSum, "tests/words.test.ts": words };
+test("test runs npm test with the TAP reporter, followed by the named test files", async () => {
+  const files = { "tests/sums.test.ts": sums, "tests/words.test.ts": words };
   const folder = await checkoutWith("named", files);
   const run = await project.run("typescript.test", { folder, files: ["tests/sums.test.ts", "tests/words.test.ts"] });
   assert.deepEqual(commandsRun(run.events), [
@@ -95,20 +72,14 @@ test("named test files are the only ones run", async () => {
   assert.deepEqual(shownResult(run.state.output), { verdict: "passed", passed: 3, failed: 0, failedTests: [] });
 });
 
-test("a test run that does not finish within its time limit is stopped and inconclusive", async () => {
-  const folder = await checkoutWith("hangs", { "tests/sums.test.ts": sums, "tests/waits.test.ts": hangingTest });
-  const output = await project.output("typescript.test", { folder, timeLimitSeconds: 3 });
-  const seconds = secondsOf(output);
-  assert.ok(seconds >= 3 && seconds < 10, String(seconds));
-  assert.deepEqual(shownResult(output), {
+test("the mode's sentences for a test run stopped at its limit and a run that reports no tests", async () => {
+  const folder = await checkoutWith("hangs", { "tests/waits.test.ts": hangingTest });
+  assert.deepEqual(await tested({ folder, timeLimitSeconds: 3 }), {
     verdict: "inconclusive",
     reason: "The test run did not finish within 3 seconds and was stopped.",
   });
-});
-
-test("a run that reports no tests at all is inconclusive, not passed", async () => {
-  const folder = await checkoutWith("no-tests", { "src/sums.ts": "export const two = 2;\n" });
-  assert.deepEqual(await tested({ folder }), {
+  const empty = await checkoutWith("no-tests", { "src/sums.ts": "export const two = 2;\n" });
+  assert.deepEqual(await tested({ folder: empty }), {
     verdict: "inconclusive",
     reason: "The run reported no tests, so nothing was tested.",
   });

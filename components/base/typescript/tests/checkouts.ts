@@ -36,6 +36,10 @@ export function failingWith(text: string, exitCode: number): string {
 
 export const hanging = 'node -e "setTimeout(() => {}, 600000)"';
 
+export function hangingAfter(text: string): string {
+  return `node -e "console.log('${text}'); setTimeout(() => {}, 600000)"`;
+}
+
 export function npmHeader(name: string, script: string): string {
   return `\n> ${name}\n> ${script}\n\n`;
 }
@@ -44,11 +48,6 @@ export type Fields = { readonly [key: string]: Json };
 
 function isFields(value: Json): value is Fields {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-export function secondsOf(value: Json): number {
-  assert.ok(isFields(value) && typeof value.seconds === "number", JSON.stringify(value));
-  return value.seconds;
 }
 
 export function withoutSeconds(value: Json): Fields {

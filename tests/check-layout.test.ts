@@ -144,3 +144,16 @@ test("the interfaces folder holds only interface files and their schema folders"
   );
   findFinding(report, `${folder}/notes/readme.txt`, "holds readme.txt, which is not a .json schema");
 });
+
+test("an interface's schema folder may hold its shared test, tests/shared.ts, and no other file that is not a schema", async () => {
+  const folder = "components/base/interfaces";
+  const report = await check({
+    ...cleanFiles(),
+    [`${folder}/notes/tests/shared.ts`]: "",
+    [`${folder}/notes/tests/helper.ts`]: "",
+    [`${folder}/notes/shared.ts`]: "",
+  });
+  withoutFinding(report, "holds tests/shared.ts");
+  findFinding(report, `${folder}/notes/tests/helper.ts`, "holds tests/helper.ts, which is not a .json schema");
+  findFinding(report, `${folder}/notes/shared.ts`, "holds shared.ts, which is not a .json schema");
+});

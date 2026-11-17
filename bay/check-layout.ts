@@ -11,6 +11,7 @@ import {
   type Wording,
 } from "./check-context.ts";
 import { isRecord } from "./json.ts";
+import { sharedTestFile } from "./check-imports.ts";
 import type { Problem } from "./outcome.ts";
 
 type JsonFile =
@@ -242,7 +243,7 @@ function interfaceEntryProblem(folder: string, file: string, interfaceNames: rea
       fix: `A schema folder is named after its interface file; rename the folder or add ${first}.yaml.`,
     });
   }
-  return file.endsWith(".json")
+  return file.endsWith(".json") || rest.join("/") === sharedTestFile
     ? undefined
     : fileProblem(path, {
         message: `The schema folder ${folder}/${first} holds ${rest.join("/")}, which is not a .json schema.`,

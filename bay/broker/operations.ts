@@ -125,12 +125,17 @@ function misfitAt(path: FieldPath, given: Json | undefined, expected: string): R
   return { ok: false, misfit: { found: given === undefined ? "missing" : "unlike", path, expected } };
 }
 
-function fieldsOf(value: Json, taken: readonly string[]): Reading<Fields> {
-  if (!isJsonRecord(value)) {
-    return misfitAt([], value, "a mapping");
-  }
-  const unknown = Object.keys(value).find((name) => !taken.includes(name));
-  return unknown === undefined ? read(value) : { ok: false, misfit: { found: "unknown", path: [unknown], taken } };
+function takingFields<Value>(
+  taken: readonly string[],
+  reads: (fields: Fields) => Reading<Value>,
+): (value: Json) => Reading<Value> {
+  return (value) => {
+    if (!isJsonRecord(value)) {
+      return misfitAt([], value, "a mapping");
+    }
+    const unknown = Object.keys(value).find((name) => !taken.includes(name));
+    return unknown === undefined ? reads(value) : { ok: false, misfit: { found: "unknown", path: [unknown], taken } };
+  };
 }
 
 function listAt<Item extends Json>(
@@ -156,103 +161,70 @@ function textMappingAt(path: FieldPath, value: Json | undefined): Reading<{ read
   return misfitAt([...path, name], item, "text");
 }
 
-function statementRequestOf(value: Json): Reading<StatementRequest> {
-  const fields = fieldsOf(value, ["sql", "parameters", "partition"]);
-  if (!fields.ok) {
-    return fields;
-  }
-  const { sql, parameters, partition } = fields.value;
-  if (!isText(sql)) {
-    return misfitAt(["sql"], sql, "text");
-  }
-  if (!isParameters(parameters)) {
-    return misfitAt(["parameters"], parameters, "a list or a mapping");
-  }
-  if (partition === undefined) {
-    return read({ sql, parameters });
-  }
-  return isText(partition) ? read({ sql, parameters, partition }) : misfitAt(["partition"], partition, "text");
-}
+const statementRequestOf = takingFields(
+  ["sql", "parameters", "partition"],
+  ({ sql, parameters, partition }): Reading<StatementRequest> => {
+    if (!isText(sql)) {
+      return misfitAt(["sql"], sql, "text");
+    }
+    if (!isParameters(parameters)) {
+      return misfitAt(["parameters"], parameters, "a list or a mapping");
+    }
+    if (partition === undefined) {
+      return read({ sql, parameters });
+    }
+    return isText(partition) ? read({ sql, parameters, partition }) : misfitAt(["partition"], partition, "text");
+  },
+);
 
-function migrateRequestOf(value: Json): Reading<Requests["db.migrate"]> {
-  const fields = fieldsOf(value, ["partition"]);
-  if (!fields.ok) {
-    return fields;
-  }
-  const { partition } = fields.value;
-  return isText(partition) ? read({ partition }) : misfitAt(["partition"], partition, "text");
-}
+const migrateRequestOf = takingFields(["partition"], ({ partition }): Reading<Requests["db.migrate"]> =>
+  isText(partition) ? read({ partition }) : misfitAt(["partition"], partition, "text"),
+);
 
-function agentQueryRequestOf(value: Json): Reading<Requests["db.agentQuery"]> {
-  const fields = fieldsOf(value, ["sql", "partition"]);
-  if (!fields.ok) {
-    return fields;
-  }
-  const { sql, partition } = fields.value;
-  if (!isText(sql)) {
-    return misfitAt(["sql"], sql, "text");
-  }
-  if (partition === undefined) {
-    return read({ sql });
-  }
-  return isText(partition) ? read({ sql, partition }) : misfitAt(["partition"], partition, "text");
-}
+const agentQueryRequestOf = takingFields(
+  ["sql", "partition"],
+  ({ sql, partition }): Reading<Requests["db.agentQuery"]> => {
+    if (!isText(sql)) {
+      return misfitAt(["sql"], sql, "text");
+    }
+    if (partition === undefined) {
+      return read({ sql });
+    }
+    return isText(partition) ? read({ sql, partition }) : misfitAt(["partition"], partition, "text");
+  },
+);
 
-function pathRequestOf(value: Json): Reading<PathRequest> {
-  const fields = fieldsOf(value, ["path"]);
-  if (!fields.ok) {
-    return fields;
-  }
-  const { path } = fields.value;
-  return isText(path) ? read({ path }) : misfitAt(["path"], path, "text");
-}
+const pathRequestOf = takingFields(["path"], ({ path }): Reading<PathRequest> =>
+  isText(path) ? read({ path }) : misfitAt(["path"], path, "text"),
+);
 
-function writeRequestOf(value: Json): Reading<Requests["files.write"]> {
-  const fields = fieldsOf(value, ["path", "text"]);
-  if (!fields.ok) {
-    return fields;
-  }
-  const { path, text } = fields.value;
+const writeRequestOf = takingFields(["path", "text"], ({ path, text }): Reading<Requests["files.write"]> => {
   if (!isText(path)) {
     return misfitAt(["path"], path, "text");
   }
   return isText(text) ? read({ path, text }) : misfitAt(["text"], text, "text");
-}
+});
 
-function linkRequestOf(value: Json): Reading<Requests["files.link"]> {
-  const fields = fieldsOf(value, ["path", "target"]);
-  if (!fields.ok) {
-    return fields;
-  }
-  const { path, target } = fields.value;
+const linkRequestOf = takingFields(["path", "target"], ({ path, target }): Reading<Requests["files.link"]> => {
   if (!isText(path)) {
     return misfitAt(["path"], path, "text");
   }
   return isText(target) ? read({ path, target }) : misfitAt(["target"], target, "text");
-}
+});
 
-function secretRequestOf(value: Json): Reading<Requests["secrets.get"]> {
-  const fields = fieldsOf(value, ["name"]);
-  if (!fields.ok) {
-    return fields;
-  }
-  const { name } = fields.value;
-  return isText(name) ? read({ name }) : misfitAt(["name"], name, "text");
-}
+const secretRequestOf = takingFields(["name"], ({ name }): Reading<Requests["secrets.get"]> =>
+  isText(name) ? read({ name }) : misfitAt(["name"], name, "text"),
+);
 
-function httpRequestOf(value: Json): Reading<HttpRequest> {
-  const fields = fieldsOf(value, ["method", "url", "headers", "body"]);
-  if (!fields.ok) {
-    return fields;
-  }
-  const { method, url, body } = fields.value;
+const httpRequestOf = takingFields(["method", "url", "headers", "body"], (fields): Reading<HttpRequest> => {
+  const { method, url, body } = fields;
   if (!isHttpMethod(method)) {
     return misfitAt(["method"], method, `one of ${httpMethods.join(", ")}`);
   }
   if (!isText(url)) {
     return misfitAt(["url"], url, "text");
   }
-  const headers = textMappingAt(["headers"], fields.value.headers);
+  const headers = textMappingAt(["headers"], fields.headers);
   if (!headers.ok) {
     return headers;
   }
@@ -260,66 +232,50 @@ function httpRequestOf(value: Json): Reading<HttpRequest> {
     return read({ method, url, headers: headers.value });
   }
   return isText(body) ? read({ method, url, headers: headers.value, body }) : misfitAt(["body"], body, "text");
-}
+});
 
-function emitRequestOf(value: Json): Reading<Requests["events.emit"]> {
-  const fields = fieldsOf(value, ["kind", "detail"]);
-  if (!fields.ok) {
-    return fields;
-  }
-  const { kind, detail } = fields.value;
+const emitRequestOf = takingFields(["kind", "detail"], ({ kind, detail }): Reading<Requests["events.emit"]> => {
   if (!isText(kind)) {
     return misfitAt(["kind"], kind, "text");
   }
   return detail === undefined ? misfitAt(["detail"], detail, "a JSON value") : read({ kind, detail });
-}
+});
 
-function callRequestOf(value: Json): Reading<Requests["call"]> {
-  const fields = fieldsOf(value, ["reference", "input"]);
-  if (!fields.ok) {
-    return fields;
-  }
-  const { reference, input } = fields.value;
+const callRequestOf = takingFields(["reference", "input"], ({ reference, input }): Reading<Requests["call"]> => {
   if (!isText(reference)) {
     return misfitAt(["reference"], reference, "text");
   }
   return input === undefined ? misfitAt(["input"], input, "a JSON value") : read({ reference, input });
-}
+});
 
-function spendRequestOf(value: Json): Reading<Requests["spend"]> {
-  const fields = fieldsOf(value, ["spending"]);
-  if (!fields.ok) {
-    return fields;
-  }
-  const { spending } = fields.value;
-  return spending === undefined ? misfitAt(["spending"], spending, "a JSON value") : read({ spending });
-}
+const spendRequestOf = takingFields(["spending"], ({ spending }): Reading<Requests["spend"]> =>
+  spending === undefined ? misfitAt(["spending"], spending, "a JSON value") : read({ spending }),
+);
 
-function commandRequestOf(value: Json): Reading<CommandRequest> {
-  const fields = fieldsOf(value, ["name", "arguments", "folder", "timeLimitSeconds", "input"]);
-  if (!fields.ok) {
-    return fields;
-  }
-  const { name, folder, timeLimitSeconds, input } = fields.value;
-  if (!isText(name)) {
-    return misfitAt(["name"], name, "text");
-  }
-  const given = listAt(["arguments"], fields.value.arguments, listOfText);
-  if (!given.ok) {
-    return given;
-  }
-  if (!isText(folder)) {
-    return misfitAt(["folder"], folder, "text");
-  }
-  if (typeof timeLimitSeconds !== "number") {
-    return misfitAt(["timeLimitSeconds"], timeLimitSeconds, "a number");
-  }
-  const request = { name, arguments: given.value, folder, timeLimitSeconds };
-  if (input === undefined) {
-    return read(request);
-  }
-  return isText(input) ? read({ ...request, input }) : misfitAt(["input"], input, "text");
-}
+const commandRequestOf = takingFields(
+  ["name", "arguments", "folder", "timeLimitSeconds", "input"],
+  (fields): Reading<CommandRequest> => {
+    const { name, folder, timeLimitSeconds, input } = fields;
+    if (!isText(name)) {
+      return misfitAt(["name"], name, "text");
+    }
+    const given = listAt(["arguments"], fields.arguments, listOfText);
+    if (!given.ok) {
+      return given;
+    }
+    if (!isText(folder)) {
+      return misfitAt(["folder"], folder, "text");
+    }
+    if (typeof timeLimitSeconds !== "number") {
+      return misfitAt(["timeLimitSeconds"], timeLimitSeconds, "a number");
+    }
+    const request = { name, arguments: given.value, folder, timeLimitSeconds };
+    if (input === undefined) {
+      return read(request);
+    }
+    return isText(input) ? read({ ...request, input }) : misfitAt(["input"], input, "text");
+  },
+);
 
 function executeResultOf(value: Json): Reading<ExecuteResult> {
   if (!isJsonRecord(value)) {

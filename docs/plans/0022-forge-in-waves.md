@@ -11,13 +11,13 @@ Date: 2026-11-17. Written by the reviewer, by hand, in the form `docs/adr/0017` 
 
 ## What is still to build, and what each thing must be able to do alone
 
-| Part | What it is | Seen working on its own when |
-|---|---|---|
-| Proof | A base mode, no model. Each kind of proof is a script that gives a verdict: passed, failed or inconclusive | A reviewer calls one kind on a hand-built slice's worktree and reads the verdict |
-| Plan | The form of a plan and a slice, and the script that works out waves | `bay call` on a plan file prints its waves, its longest chain, and refuses overlapping scopes |
-| Named choices | An approval offers named options, and an option can be withheld | A workflow stops with a card whose merge option is missing because evidence is missing |
-| Forge | The stages, skills and workflows. It runs no command | An approved slice goes through build, proof, the merge card and the merge without the reviewer |
-| Before the build | Restate, propose interfaces, plan in waves, challenge, the first card | A request in prose becomes a card that shows interfaces, then a plan |
+| Part             | What it is                                                                                                 | Seen working on its own when                                                                   |
+| ---------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Proof            | A base mode, no model. Each kind of proof is a script that gives a verdict: passed, failed or inconclusive | A reviewer calls one kind on a hand-built slice's worktree and reads the verdict               |
+| Plan             | The form of a plan and a slice, and the script that works out waves                                        | `bay call` on a plan file prints its waves, its longest chain, and refuses overlapping scopes  |
+| Named choices    | An approval offers named options, and an option can be withheld                                            | A workflow stops with a card whose merge option is missing because evidence is missing         |
+| Forge            | The stages, skills and workflows. It runs no command                                                       | An approved slice goes through build, proof, the merge card and the merge without the reviewer |
+| Before the build | Restate, propose interfaces, plan in waves, challenge, the first card                                      | A request in prose becomes a card that shows interfaces, then a plan                           |
 
 ## Design first (P-35)
 
@@ -33,39 +33,39 @@ Output: `docs/designs/proof/` with a frame, three designs, a comparison and a re
 
 Kinds: **I** an interface, merged first, with its schemas and a test any implementation must pass. **C** a capability in one kernel feature. **M** a mode, changing only its folder and its interface (P-34). **D** design, documents only.
 
-| # | Slice | Kind | Write scope | After | Because |
-|---|---|---|---|---|---|
-| D1 | The design round above | D | `docs/designs/proof/`, an ADR | - | - |
-| I1 | `proof@1`: schemas for a request and a verdict, the closed set of kinds, a shared test, a made-up proof that passes it and wrong ones that fail one case each | I | `components/base/interfaces/proof/`, `tests/made-up-proofs*` | D1 | the chosen interface |
-| I2 | The form of a plan and a slice: schemas, examples, a guard | I | `schemas/plan.schema.json`, `schemas/slice.schema.json`, generated types, tests | D1 | the chosen form |
-| C1 | An approval with named choices; a choice can be withheld with its reason; the workflow reads which was taken | C, runs | `bay/runs/`, `bay/commands/approve.ts`, the workflow schema, tests | D1 | the chosen card |
-| C2 | A project says where its map, practices and unchanged-output commands are; modes read them through the toolbox | C, manifests | config schema, `bay/manifests/`, the toolbox, tests | D1 | what proof reads |
-| C3 | The kernel counts rounds of a slice and the times a step asks for tests, and refuses past the limit | C, runs | `bay/runs/`, `bay/broker/` for the count at a command, tests | D1 | `0017` item 10 |
-| T1 | The kit's typescript and git-worktrees modes pass their shared tests from a project that is not the kit; the practices path is true in both places | M | `components/base/typescript/`, `components/base/interfaces/toolchain/`, tests | - | `0018`, before forge builds anything outside the kit |
-| P1 | Proof: the checks pass; a test fails on the base and passes on the slice. Copy, call, remove | M | `components/base/proof/` files for these two kinds | I1 | the interface |
-| P2 | Proof: changes are in scope; files outside are untouched; what changed matches the declaration; size | M | `components/base/proof/` files for these kinds | I1, I2 | the interface; the slice's scope and declaration |
-| P3 | Proof: injected bugs are caught, in a throwaway copy, with a time limit each | M | `components/base/proof/` files for this kind | P1 | it calls the tests the way P1 does |
-| P4 | Proof: output is unchanged, or changed only as the plan says; the real thing was run in a fresh project | M | `components/base/proof/` files for these kinds | I1, C2 | the interface; the project's list of commands |
-| P5 | Proof: no new boundary break, duplicate or dead code; the counts of `0017` item 7 | M | `components/base/proof/` files for these kinds | I1, C2 | the interface; the project's map |
-| W1 | Waves from a plan: order, disjoint scopes, longest chain, builders per wave; a plan where every slice waits is sent back | M | `components/base/forge/` plan scripts | I2 | the form |
-| F1 | Forge: one workflow from an approved slice through a builder in a worktree, proof, the merge card and the merge | M | `components/base/forge/` workflow, skills, cards | P1, P2, C1, W1 | verdicts to show; a card to stop on; a slice to read |
-| F2 | Forge: a slice sent back goes to a fresh builder with the findings; two rounds, then the owner; the card shows spill and cost | M | `components/base/forge/` | F1, C3, P3, P4, P5 | the workflow; the count; the rest of the verdicts |
-| F3 | Forge: restate, propose interfaces, plan in waves, challenge by another model, the first card | M | `components/base/forge/` stages before the build | F1, I2, W1 | the workflow it hands to |
-| F4 | Forge runs a wave: two builders in two worktrees on disjoint scopes, merged in order | M | `components/base/forge/` | F2 | one slice working end to end first |
-| X1 | The todo mode, asked for in prose, built by forge | forge's job | `components/modes/todo/` and its interface | F3, F4, T1 | forge whole |
+| #   | Slice                                                                                                                                                         | Kind         | Write scope                                                                     | After              | Because                                              |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------- | ------------------ | ---------------------------------------------------- |
+| D1  | The design round above                                                                                                                                        | D            | `docs/designs/proof/`, an ADR                                                   | -                  | -                                                    |
+| I1  | `proof@1`: schemas for a request and a verdict, the closed set of kinds, a shared test, a made-up proof that passes it and wrong ones that fail one case each | I            | `components/base/interfaces/proof/`, `tests/made-up-proofs*`                    | D1                 | the chosen interface                                 |
+| I2  | The form of a plan and a slice: schemas, examples, a guard                                                                                                    | I            | `schemas/plan.schema.json`, `schemas/slice.schema.json`, generated types, tests | D1                 | the chosen form                                      |
+| C1  | An approval with named choices; a choice can be withheld with its reason; the workflow reads which was taken                                                  | C, runs      | `bay/runs/`, `bay/commands/approve.ts`, the workflow schema, tests              | D1                 | the chosen card                                      |
+| C2  | A project says where its map, practices and unchanged-output commands are; modes read them through the toolbox                                                | C, manifests | config schema, `bay/manifests/`, the toolbox, tests                             | D1                 | what proof reads                                     |
+| C3  | The kernel counts rounds of a slice and the times a step asks for tests, and refuses past the limit                                                           | C, runs      | `bay/runs/`, `bay/broker/` for the count at a command, tests                    | D1                 | `0017` item 10                                       |
+| T1  | The kit's typescript and git-worktrees modes pass their shared tests from a project that is not the kit; the practices path is true in both places            | M            | `components/base/typescript/`, `components/base/interfaces/toolchain/`, tests   | -                  | `0018`, before forge builds anything outside the kit |
+| P1  | Proof: the checks pass; a test fails on the base and passes on the slice. Copy, call, remove                                                                  | M            | `components/base/proof/` files for these two kinds                              | I1                 | the interface                                        |
+| P2  | Proof: changes are in scope; files outside are untouched; what changed matches the declaration; size                                                          | M            | `components/base/proof/` files for these kinds                                  | I1, I2             | the interface; the slice's scope and declaration     |
+| P3  | Proof: injected bugs are caught, in a throwaway copy, with a time limit each                                                                                  | M            | `components/base/proof/` files for this kind                                    | P1                 | it calls the tests the way P1 does                   |
+| P4  | Proof: output is unchanged, or changed only as the plan says; the real thing was run in a fresh project                                                       | M            | `components/base/proof/` files for these kinds                                  | I1, C2             | the interface; the project's list of commands        |
+| P5  | Proof: no new boundary break, duplicate or dead code; the counts of `0017` item 7                                                                             | M            | `components/base/proof/` files for these kinds                                  | I1, C2             | the interface; the project's map                     |
+| W1  | Waves from a plan: order, disjoint scopes, longest chain, builders per wave; a plan where every slice waits is sent back                                      | M            | `components/base/forge/` plan scripts                                           | I2                 | the form                                             |
+| F1  | Forge: one workflow from an approved slice through a builder in a worktree, proof, the merge card and the merge                                               | M            | `components/base/forge/` workflow, skills, cards                                | P1, P2, C1, W1     | verdicts to show; a card to stop on; a slice to read |
+| F2  | Forge: a slice sent back goes to a fresh builder with the findings; two rounds, then the owner; the card shows spill and cost                                 | M            | `components/base/forge/`                                                        | F1, C3, P3, P4, P5 | the workflow; the count; the rest of the verdicts    |
+| F3  | Forge: restate, propose interfaces, plan in waves, challenge by another model, the first card                                                                 | M            | `components/base/forge/` stages before the build                                | F1, I2, W1         | the workflow it hands to                             |
+| F4  | Forge runs a wave: two builders in two worktrees on disjoint scopes, merged in order                                                                          | M            | `components/base/forge/`                                                        | F2                 | one slice working end to end first                   |
+| X1  | The todo mode, asked for in prose, built by forge                                                                                                             | forge's job  | `components/modes/todo/` and its interface                                      | F3, F4, T1         | forge whole                                          |
 
 Proof's kinds share a folder, so their write scopes are named by file in each brief and checked to be disjoint before two run together. The first of them (P1) lays out the mode's folder and its manifest; P2 runs beside it only after P1's first commit has done that.
 
 ## Waves
 
-| Wave | Slices | Builders | Note |
-|---|---|---|---|
-| 0 | SP1 (the suite's time), then SM1 (three small faults) | 1, then 1 | in flight; SP1 needs a quiet machine |
-| 1 | D1 beside T1 | 2 | D1 writes documents only; the owner chooses at its end |
-| 2 | I1, I2, then C1, C2, C3 | 2 at a time | I1 and I2 first; C1 and C3 both change runs, so they do not run together: C1 beside C2, then C3 |
-| 3 | P1, then P2 beside P4, then P3 beside P5; W1 beside any of them | 2 | from P1 on, the reviewer uses proof on each later slice |
-| 4 | F1, then F2 beside F3, then F4 | 2 | F1 is the first slice forge then carries for itself |
-| 5 | X1 | forge | the first real job |
+| Wave | Slices                                                          | Builders    | Note                                                                                            |
+| ---- | --------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------- |
+| 0    | SP1 (the suite's time), then SM1 (three small faults)           | 1, then 1   | in flight; SP1 needs a quiet machine                                                            |
+| 1    | D1 beside T1                                                    | 2           | D1 writes documents only; the owner chooses at its end                                          |
+| 2    | I1, I2, then C1, C2, C3                                         | 2 at a time | I1 and I2 first; C1 and C3 both change runs, so they do not run together: C1 beside C2, then C3 |
+| 3    | P1, then P2 beside P4, then P3 beside P5; W1 beside any of them | 2           | from P1 on, the reviewer uses proof on each later slice                                         |
+| 4    | F1, then F2 beside F3, then F4                                  | 2           | F1 is the first slice forge then carries for itself                                             |
+| 5    | X1                                                              | forge       | the first real job                                                                              |
 
 Longest chain: D1, I1, P1, P3, F2, F4, X1: seven slices. Eighteen slices in all, about ten sittings of two builders.
 

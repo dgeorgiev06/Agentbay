@@ -13,7 +13,6 @@ import {
   notesMode,
   paths,
   rooted,
-  schemaText,
   storeMode,
   validFiles,
   yamlText,
@@ -165,17 +164,6 @@ test("an implementing mode that lacks an action of its interface is reported", a
   findProblem(await problemsOf(files), paths.store, "Mode store implements items-store@1 but has no action get.");
 });
 
-test("an implementing mode whose input or output schema differs from the interface's is reported", async () => {
-  const files = { ...validFiles(), "components/base/store/schemas/put-input.json": schemaText("something else") };
-  const problem = findProblem(
-    await problemsOf(files),
-    paths.store,
-    "Action put of mode store has the input schema schemas/put-input.json, " +
-      "which differs from items-store/put-input.json that items-store@1 declares.",
-  );
-  assert.equal(problem.path, "/actions/put/input");
-});
-
 test("an implementing mode that declares effects beyond the interface's is reported", async () => {
   const get = storeMode.actions.get;
   assert.ok(get);
@@ -255,7 +243,7 @@ test("referenced schema, script, skill and workflow files that do not exist are 
   findProblem(
     problems,
     paths.store,
-    "Action get of mode store names the output schema schemas/get-output.json, " +
+    "Action remove of mode store names the output schema schemas/get-output.json, " +
       "but components/base/store/schemas/get-output.json does not exist.",
   );
   findProblem(problems, paths.store, "Action put of mode store runs the script scripts/put.ts, but");
@@ -481,8 +469,6 @@ test("a settings schema that is missing or not usable is reported in the mode's 
 test("a skill step's check script that does not exist is reported", async () => {
   const add: Action = {
     description: "When the owner wants a note written.",
-    input: "schemas/add-input.json",
-    output: "schemas/add-output.json",
     effects: ["read", "write"],
     run: [{ skill: "skills/write-note", tier: "fast", checks: ["scripts/length.ts"] }, { call: "items-store.put" }],
   };

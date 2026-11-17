@@ -169,8 +169,8 @@ test("a resource outside the mode folder and its declared paths is reported", as
   const resources = { files: { read: ["notes/"], write: ["out/notes/"] } };
   const manifest = yamlText({ ...notesMode, resources });
   const entries = [
-    "- schemas/add-input.json",
-    "- components/modes/notes/schemas/add-output.json",
+    "- workflows/daily.yaml",
+    "- components/modes/notes/workflows/daily.yaml",
     "- notes/today.md",
     "- out/notes/",
     "- ../store/mode.yaml",
@@ -203,7 +203,7 @@ test("a skill folder that no step names is checked too", async () => {
 test("two modes may each have a skill of the same name", async () => {
   const sameName = "components/base/store/skills/write-note/SKILL.md";
   const storeTools = ["## Tools", "", "- put", ""];
-  const storeResources = ["## Resources", "", "- schemas/put-input.json", ""];
+  const storeResources = ["## Resources", "", "- schemas/put-output.json", ""];
   const order = [sections.input, sections.output, sections.done, sections.instructions, storeTools];
   const report = await check({ ...cleanFiles(), [sameName]: skillText([...order, storeResources, sections.rules]) });
   assertClean(report);

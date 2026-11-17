@@ -165,15 +165,21 @@
       "description": "An action: typed input and output, declared effects and the steps that run it.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["description", "input", "output", "effects", "run"],
+      "required": ["description", "effects", "run"],
       "properties": {
         "description": {
           "description": "One sentence saying when an owner or a mode would use the action.",
           "type": "string",
           "pattern": "\\S"
         },
-        "input": { "description": "The JSON Schema file of the action's input.", "$ref": "#/$defs/relativePath" },
-        "output": { "description": "The JSON Schema file of the action's output.", "$ref": "#/$defs/relativePath" },
+        "input": {
+          "description": "The JSON Schema file of the action's input. Left out when an interface the mode implements names the action, since the interface gives it.",
+          "$ref": "#/$defs/relativePath"
+        },
+        "output": {
+          "description": "The JSON Schema file of the action's output. Left out when an interface the mode implements names the action, since the interface gives it.",
+          "$ref": "#/$defs/relativePath"
+        },
         "effects": {
           "description": "Every effect the action may have, including those of the actions it calls.",
           "type": "array",

@@ -162,14 +162,10 @@ async function exampleSchemaProblems(
   place: ExamplePlace,
   example: Readonly<Record<string, unknown>>,
 ): Promise<readonly Problem[]> {
-  const action = place.mode.manifest.actions[place.action];
-  if (action === undefined) {
-    return [];
-  }
   const problems: Problem[] = [];
-  for (const key of ["input", "output"] as const) {
-    const against = { schema: action[key], file: place.file, under: key };
-    problems.push(...(await place.mode.schemaProblems(example[key], against)));
+  for (const direction of ["input", "output"] as const) {
+    const against = { action: place.action, direction, file: place.file };
+    problems.push(...(await place.mode.schemaProblems(example[direction], against)));
   }
   return problems;
 }

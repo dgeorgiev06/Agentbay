@@ -72,8 +72,12 @@ function projectMode(mode: Mode): Record<string, string> {
   const folder = `/project/components/modes/${mode.name}`;
   const files: Record<string, string> = { [`${folder}/mode.yaml`]: yamlText(mode) };
   for (const action of Object.values(mode.actions)) {
-    files[`${folder}/${action.input}`] = schemaText("input");
-    files[`${folder}/${action.output}`] = schemaText("output");
+    for (const direction of ["input", "output"] as const) {
+      const schema = action[direction];
+      if (schema !== undefined) {
+        files[`${folder}/${schema}`] = schemaText(direction);
+      }
+    }
   }
   return files;
 }

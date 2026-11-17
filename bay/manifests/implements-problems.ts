@@ -1,17 +1,11 @@
-import { dirname, join } from "node:path/posix";
-import { isDeepStrictEqual } from "node:util";
-import type { Interface, Signature } from "../generated/interface.ts";
+import { dirname } from "node:path/posix";
+import type { Interface } from "../generated/interface.ts";
 import { problemAt, type Loaded } from "./spec.ts";
 import type { Problem } from "../outcome.ts";
-import { type SchemaReader, schemaDirections } from "./schemas.ts";
-import { type ModeSource, type Context, type ActionPlace, actionLabel } from "./loaded.ts";
+import { schemaDirections } from "./schemas.ts";
+import { type ModeSource, type Context, type ActionPlace, actionLabel, actionsOf } from "./loaded.ts";
+import { type ImplementedSignature, namingSignatures } from "./action-schemas.ts";
 import { interfaceReference, unknownInterface } from "./interfaces.ts";
-
-type ImplementedSignature = {
-  readonly reference: string;
-  readonly signature: Signature;
-  readonly folder: string;
-};
 
 function extraEffectProblems(place: ActionPlace, implemented: ImplementedSignature): readonly Problem[] {
   const { reference, signature } = implemented;
@@ -26,37 +20,26 @@ function extraEffectProblems(place: ActionPlace, implemented: ImplementedSignatu
     );
 }
 
-async function shapeProblems(
-  readSchema: SchemaReader,
-  place: ActionPlace,
-  implemented: ImplementedSignature,
-): Promise<readonly Problem[]> {
-  const problems: Problem[] = [];
-  for (const direction of schemaDirections) {
-    const ownPath = place.action[direction];
-    const declaredPath = implemented.signature[direction];
-    const own = await readSchema(join(place.mode.folder, ownPath));
-    const declared = await readSchema(join(implemented.folder, declaredPath));
-    if (own.state !== "valid" || declared.state !== "valid" || isDeepStrictEqual(own.schema, declared.schema)) {
-      continue;
+function givenSchemaProblems(place: ActionPlace, implemented: ImplementedSignature): readonly Problem[] {
+  return schemaDirections.flatMap((direction) => {
+    const given = place.action[direction];
+    if (given === undefined) {
+      return [];
     }
-    problems.push(
+    return [
       problemAt(place.mode, ["actions", place.name, direction], {
         message:
-          `${actionLabel(place)} has the ${direction} schema ${ownPath}, ` +
-          `which differs from ${declaredPath} that ${implemented.reference} declares.`,
-        fix: "Make the two schemas the same; an implementation takes and returns exactly what its interface says.",
+          `${actionLabel(place)} gives the ${direction} schema ${given}, ` +
+          `but ${implemented.reference} names ${place.name}.`,
+        fix:
+          `Remove ${direction} from ${place.name}; ` +
+          "an action that an interface names takes its input and output from the interface.",
       }),
-    );
-  }
-  return problems;
+    ];
+  });
 }
 
-async function signatureProblems(
-  readSchema: SchemaReader,
-  mode: ModeSource,
-  definition: Loaded<Interface>,
-): Promise<readonly Problem[]> {
+function signatureProblems(mode: ModeSource, definition: Loaded<Interface>): readonly Problem[] {
   const reference = interfaceReference(definition.value);
   const folder = dirname(definition.file);
   const problems: Problem[] = [];
@@ -66,20 +49,58 @@ async function signatureProblems(
       problems.push(
         problemAt(mode, ["actions"], {
           message: `Mode ${mode.value.name} implements ${reference} but has no action ${name}.`,
-          fix: `Add the action ${name} with the input, output and effects that ${reference} declares.`,
+          fix: `Add the action ${name} with effects that ${reference} allows; it takes its input and output from ${reference}.`,
         }),
       );
       continue;
     }
     const place = { mode, name, action };
     problems.push(...extraEffectProblems(place, { reference, signature, folder }));
-    problems.push(...(await shapeProblems(readSchema, place, { reference, signature, folder })));
+    problems.push(...givenSchemaProblems(place, { reference, signature, folder }));
   }
   return problems;
 }
 
-export async function implementsProblems(context: Context, mode: ModeSource): Promise<readonly Problem[]> {
-  const problems: Problem[] = [];
+function missingSchemaProblems(place: ActionPlace): readonly Problem[] {
+  const modeName = place.mode.value.name;
+  return schemaDirections
+    .filter((direction) => place.action[direction] === undefined)
+    .map((direction) =>
+      problemAt(place.mode, ["actions", place.name], {
+        message:
+          `${actionLabel(place)} gives no ${direction} schema, ` +
+          `and no interface that ${modeName} implements names ${place.name}.`,
+        fix: `Add ${direction}: with the JSON Schema file of the ${direction} of ${place.name}.`,
+      }),
+    );
+}
+
+function namedTwiceProblem(place: ActionPlace, named: readonly ImplementedSignature[]): Problem {
+  const references = named.map((entry) => entry.reference).join(", ");
+  return problemAt(place.mode, ["actions", place.name], {
+    message: `${actionLabel(place)} is named by more than one interface that it implements: ${references}.`,
+    fix:
+      `Keep only one of ${references} in the implements of ${place.mode.value.name}, ` +
+      `or rename ${place.name} in all but one of them.`,
+  });
+}
+
+function schemaSourceProblems(context: Context, mode: ModeSource): readonly Problem[] {
+  const implemented = mode.value.implements ?? [];
+  if (implemented.some((reference) => !context.interfaces.has(reference))) {
+    return [];
+  }
+  return actionsOf(mode).flatMap((place) => {
+    const named = namingSignatures(context, place);
+    if (named.length > 1) {
+      return [namedTwiceProblem(place, named)];
+    }
+    return named.length === 0 ? missingSchemaProblems(place) : [];
+  });
+}
+
+export function implementsProblems(context: Context, mode: ModeSource): readonly Problem[] {
+  const problems: Problem[] = [...schemaSourceProblems(context, mode)];
   for (const [index, reference] of (mode.value.implements ?? []).entries()) {
     const definition = context.interfaces.get(reference);
     if (definition === undefined) {
@@ -87,7 +108,7 @@ export async function implementsProblems(context: Context, mode: ModeSource): Pr
       problems.push(problemAt(mode, ["implements", index], unknownInterface(context, subject, reference)));
       continue;
     }
-    problems.push(...(await signatureProblems(context.readSchema, mode, definition)));
+    problems.push(...signatureProblems(mode, definition));
   }
   return problems;
 }

@@ -35,64 +35,46 @@ resources:
 actions:
   cut:
     description: When a slice needs its own branch and worktree, cut from a commit, under .forge/worktrees/ in the project.
-    input: schemas/cut-request.json
-    output: schemas/cut-response.json
     effects: [read, write, network, spend, delete]
     run:
       - script: scripts/cut.ts
   status:
     description: When a mode or a skill needs to know where a slice's worktree stands, its head, its commits since the base, and its changed and untracked files.
-    input: schemas/status-request.json
-    output: schemas/status-response.json
     effects: [read, write, network, spend, delete]
     run:
       - script: scripts/status.ts
   changed:
     description: When a mode or a skill needs each path that differs between two commits, and whether it was added, changed, deleted or renamed.
-    input: schemas/changed-request.json
-    output: schemas/changed-response.json
     effects: [read, write, network, spend, delete]
     run:
       - script: scripts/changed.ts
   copy:
     description: When a mode needs a throwaway copy of a commit's files under .forge/copies/, with links to ignored folders of the project such as installed packages.
-    input: schemas/copy-request.json
-    output: schemas/copy-response.json
     effects: [read, write, network, spend, delete]
     run:
       - script: scripts/copy.ts
   overlay:
     description: When a copy needs some of its paths as they are at another commit; a path absent there is removed. It never changes a worktree.
-    input: schemas/overlay-request.json
-    output: schemas/overlay-response.json
     effects: [read, write, network, spend, delete]
     run:
       - script: scripts/overlay.ts
   remove:
     description: When a copy is no longer needed, or a slice's worktree is clean and merged; the worktree goes with its branch, and anything else is refused.
-    input: schemas/remove-request.json
-    output: schemas/remove-response.json
     effects: [read, write, network, spend, delete]
     run:
       - script: scripts/remove.ts
   merge:
     description: When a slice's worktree is clean and its branch is to be merged into another branch, with a merge commit made in a worktree of the mode's own; a conflict undoes the merge and names the paths.
-    input: schemas/merge-request.json
-    output: schemas/merge-response.json
     effects: [read, write, network, spend, delete]
     run:
       - script: scripts/merge.ts
   set-aside:
     description: When a slice's worktree has changed or untracked files to keep but not on its branch; they are committed to a new branch forge/wip/<slice>/<n>, and the worktree goes back to its head with no changes.
-    input: schemas/set-aside-request.json
-    output: schemas/set-aside-response.json
     effects: [read, write, network, spend, delete]
     run:
       - script: scripts/set-aside.ts
   apply:
     description: When a copy needs a patch applied to it, all of it or nothing; a path outside the copy is refused before git runs. It never changes a worktree.
-    input: schemas/apply-request.json
-    output: schemas/apply-response.json
     effects: [read, write, network, spend, delete]
     run:
       - script: scripts/apply.ts

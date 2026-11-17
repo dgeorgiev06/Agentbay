@@ -40,8 +40,8 @@ export type Resources = {
 
 export type Action = {
   readonly description: string;
-  readonly input: RelativePath;
-  readonly output: RelativePath;
+  readonly input?: RelativePath;
+  readonly output?: RelativePath;
   readonly effects: ReadonlyArray<Effect>;
   readonly run: ReadonlyArray<Step>;
   readonly undo?: Name;

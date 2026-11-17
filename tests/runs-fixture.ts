@@ -198,18 +198,16 @@ const storeMode: Mode = {
 const storeActions: Readonly<Record<string, Action>> = {
   put: {
     description: "When a mode keeps an item.",
-    input: "schemas/item.json",
-    output: "schemas/receipt.json",
     effects: ["write"],
     run: [{ script: "scripts/put.ts" }],
     undo: "remove",
     budget: { items: 10 },
   },
-  get: scriptAction(["read"], ["get.ts"]),
+  get: { description: "When a test runs scripts.", effects: ["read"], run: [{ script: "scripts/get.ts" }] },
   erase: {
-    ...scriptAction(["write", "delete"], ["erase.ts"]),
-    input: "schemas/item.json",
-    output: "schemas/receipt.json",
+    description: "When a test runs scripts.",
+    effects: ["write", "delete"],
+    run: [{ script: "scripts/erase.ts" }],
   },
   remove: scriptAction(["delete"], ["remove.ts"]),
 };
@@ -303,7 +301,7 @@ function fixtureFiles(changes: Changes): Record<string, string> {
     "components/base/interfaces/items-store.yaml": yamlText(itemsStore),
     ...schemaFiles("components/base/interfaces/items-store", ["anything.json", "item.json", "receipt.json"]),
     "components/base/store/mode.yaml": yamlText(store),
-    ...schemaFiles("components/base/store/schemas", ["anything.json", "item.json", "receipt.json"]),
+    ...schemaFiles("components/base/store/schemas", ["anything.json"]),
     "components/modes/notes/mode.yaml": yamlText(notesMode),
     ...schemaFiles("components/modes/notes/schemas", Object.keys(schemas)),
     "components/modes/notes/skills/draft/SKILL.md": draftSkill,

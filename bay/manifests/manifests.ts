@@ -1,4 +1,4 @@
-import { basename, join } from "node:path/posix";
+import { basename, join, relative } from "node:path/posix";
 import type { Json, ModeGrants } from "../contracts.ts";
 import type { Config } from "../generated/config.ts";
 import type { Interface } from "../generated/interface.ts";
@@ -20,7 +20,8 @@ import {
 } from "./spec.ts";
 import { failedWith, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
 import { type KitLayout, type ModeTier, folderRules, kitLayoutOf, modeInInterfacesProblems } from "./folders.ts";
-import { type SchemaReader, type SchemaSource, schemaReader, valueProblems } from "./schemas.ts";
+import { type SchemaSource, schemaReader, valueProblems } from "./schemas.ts";
+import { schemaFilesOf, signaturesNaming } from "./action-schemas.ts";
 import {
   type ModeRead,
   type ModeSource,
@@ -93,10 +94,15 @@ type LoadedInterface = {
   readonly definition: Interface;
 };
 
+type ActionWithSchemas = Action & {
+  readonly input: string;
+  readonly output: string;
+};
+
 export type ActionTarget = {
   readonly mode: ActiveMode;
   readonly name: string;
-  readonly action: Action;
+  readonly action: ActionWithSchemas;
   readonly caller: string | undefined;
   readonly input: Schema;
   readonly output: Schema;
@@ -183,6 +189,11 @@ export type ListingQuestion = {
   readonly find?: string;
 };
 
+export type InterfaceAction = {
+  readonly reference: string;
+  readonly effects: readonly Effect[];
+};
+
 type NewMode = Extract<NewPart, { readonly mode: string }>;
 
 type NewModePart = Extract<NewPart, { readonly inMode: string }>;
@@ -225,17 +236,16 @@ function schemaOf(source: SchemaSource): Schema {
   };
 }
 
-async function actionSchemasOf(
-  readSchema: SchemaReader,
-  mode: ModeSource,
-): Promise<ReadonlyMap<string, ActionSchemas>> {
+async function actionSchemasOf(context: Context, mode: ModeSource): Promise<ReadonlyMap<string, ActionSchemas>> {
   const actionSchemas = new Map<string, ActionSchemas>();
   for (const place of actionsOf(mode)) {
-    const inputFile = join(mode.folder, place.action.input);
-    const outputFile = join(mode.folder, place.action.output);
+    const files = schemaFilesOf(context, place);
+    if (files === undefined) {
+      continue;
+    }
     actionSchemas.set(place.name, {
-      input: schemaOf({ file: inputFile, schemaFile: await readSchema(inputFile), label: "input" }),
-      output: schemaOf({ file: outputFile, schemaFile: await readSchema(outputFile), label: "output" }),
+      input: schemaOf({ file: files.input, schemaFile: await context.readSchema(files.input), label: "input" }),
+      output: schemaOf({ file: files.output, schemaFile: await context.readSchema(files.output), label: "output" }),
     });
   }
   return actionSchemas;
@@ -277,7 +287,12 @@ function ownAction(mode: ActiveMode, name: string): Outcome<ActionTarget> {
     const known = Object.keys(mode.manifest.actions).join(", ");
     return refused(`Mode ${mode.manifest.name} has no action ${name}; it has: ${known}.`);
   }
-  return succeededWith({ mode, name, action, caller: undefined, input: schemas.input, output: schemas.output });
+  const paths = {
+    input: relative(mode.folder, schemas.input.file),
+    output: relative(mode.folder, schemas.output.file),
+  };
+  const target = { mode, name, action: { ...action, ...paths }, caller: undefined };
+  return succeededWith({ ...target, input: schemas.input, output: schemas.output });
 }
 
 function boundAction(system: System, caller: ActiveMode, call: string): Outcome<ActionTarget> {
@@ -400,7 +415,7 @@ async function buildSystem(context: Context, parts: SystemParts): Promise<System
       lineOf: mode.lineOf,
       workflows: new Map(own),
       settings: settingsOf(parts.config, name),
-      actionSchemas: await actionSchemasOf(context.readSchema, mode),
+      actionSchemas: await actionSchemasOf(context, mode),
       grants,
       skill: (skillName) => skillAnswer(context, mode, skillName),
     });
@@ -540,6 +555,20 @@ export async function placeToWrite(files: FileSystem, layout: Layout, part: NewP
     return placeModePart(files, layout, part);
   }
   return placeInterface(layout, part.interface);
+}
+
+export async function interfaceActionFor(
+  files: FileSystem,
+  layout: Layout,
+  part: NewModePart,
+): Promise<InterfaceAction | undefined> {
+  const mode = (await loadModes(files, layout)).values.find((entry) => basename(entry.folder) === part.inMode);
+  if (mode === undefined) {
+    return undefined;
+  }
+  const interfaces = indexInterfaces((await loadInterfaces(files, layout)).values, layout).index;
+  const [named] = signaturesNaming(interfaces, mode.value.implements ?? [], part.name);
+  return named === undefined ? undefined : { reference: named.reference, effects: named.signature.effects };
 }
 
 function wordsOf(find: string | undefined): readonly string[] {

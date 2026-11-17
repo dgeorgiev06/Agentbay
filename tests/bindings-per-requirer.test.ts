@@ -82,8 +82,6 @@ async function writeEchoer(project: Project): Promise<void> {
   const folder = "components/modes/echoer";
   const fetch = {
     description: "When a mode needs a greeting for a name.",
-    input: "schemas/fetch-input.json",
-    output: "schemas/fetch-output.json",
     effects: ["read"],
     run: [{ script: "scripts/fetch.ts" }],
   };
@@ -94,11 +92,7 @@ async function writeEchoer(project: Project): Promise<void> {
     implements: ["greeting-source@1"],
     actions: { fetch },
   };
-  const interfaceFolder = "components/interfaces/greeting-source";
   await project.write(`${folder}/mode.yaml`, stringify(manifest));
-  for (const schema of ["fetch-input.json", "fetch-output.json"]) {
-    await project.write(`${folder}/schemas/${schema}`, await project.read(`${interfaceFolder}/${schema}`));
-  }
   await project.write(`${folder}/scripts/fetch.ts`, echoScript);
 }
 

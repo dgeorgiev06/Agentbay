@@ -12,64 +12,46 @@ settings: schemas/settings.json
 actions:
   put:
     description: When a mode has new items from a source to keep, each replacing a kept item with the same id.
-    input: schemas/put-request.json
-    output: schemas/put-response.json
     effects: [read, write]
     run:
       - script: scripts/put.ts
   update:
     description: When the owner or a mode changes fields of a local item.
-    input: schemas/update-request.json
-    output: schemas/update-response.json
     effects: [read, write]
     run:
       - script: scripts/update.ts
   delete:
     description: When the owner or a mode wants items removed for good, so that no later put stores them again.
-    input: schemas/delete-request.json
-    output: schemas/delete-response.json
     effects: [read, write, delete]
     run:
       - script: scripts/delete.ts
   get:
     description: When a mode knows the ids of the items it needs and wants them back in that order.
-    input: schemas/get-request.json
-    output: schemas/get-response.json
     effects: [read]
     run:
       - script: scripts/get.ts
   query:
     description: When a mode wants the items that match a selector, with an optional full-text search, newest or oldest first.
-    input: schemas/query-request.json
-    output: schemas/query-response.json
     effects: [read]
     run:
       - script: scripts/query.ts
   sql:
     description: When a skill step needs one read-only select over the calling mode's items that a selector cannot express.
-    input: schemas/sql-request.json
-    output: schemas/sql-response.json
     effects: [read]
     run:
       - script: scripts/sql.ts
   prune:
     description: When the owner wants the items of one source that are older than a given time dropped; local items stay.
-    input: schemas/prune-request.json
-    output: schemas/prune-response.json
     effects: [read, write, delete]
     run:
       - script: scripts/prune.ts
   status:
     description: When the owner or a mode needs counts of the kept items and, for each source, its cursor, last sync and monthly spend.
-    input: schemas/status-request.json
-    output: schemas/status-response.json
     effects: [read]
     run:
       - script: scripts/status.ts
   allowance:
     description: When a mode is about to spend on a source and must know how much of this month's cap is left.
-    input: schemas/allowance-request.json
-    output: schemas/allowance-response.json
     effects: [read]
     run:
       - script: scripts/allowance.ts

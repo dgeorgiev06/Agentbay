@@ -9,15 +9,11 @@ settings: schemas/settings.json
 actions:
   fetch:
     description: When a mode needs the next page of made-up posts after a cursor, for tests and the demo.
-    input: schemas/fetch-request.json
-    output: schemas/fetch-response.json
     effects: [read, network, spend]
     run:
       - script: scripts/fetch.ts
   describe:
     description: When a mode needs the source's name, its kinds, the selector fields it applies itself and what one page costs.
-    input: schemas/describe-request.json
-    output: schemas/describe-response.json
     effects: [read]
     run:
       - script: scripts/describe.ts

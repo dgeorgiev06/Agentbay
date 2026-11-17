@@ -2,7 +2,7 @@ import { dirname, join, relative } from "node:path/posix";
 import { isMap, isScalar, isSeq, parseDocument, type Document } from "yaml";
 import { isProjectTheKit, pathIn, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
-import { placeToWrite, type NewPart } from "./manifests/manifests.ts";
+import { interfaceActionFor, placeToWrite, type InterfaceAction, type NewPart } from "./manifests/manifests.ts";
 import { sdkSpecifier } from "./broker/script-protocol.ts";
 import { failedWith, type Outcome, type Problem } from "./outcome.ts";
 
@@ -149,19 +149,35 @@ function blockMapAt(document: Document, key: string): void {
   document.set(key, document.createNode({}));
 }
 
-function addActionEntry(name: string): ManifestEdit {
+type ActionToWrite = {
+  readonly name: string;
+  readonly named: InterfaceAction | undefined;
+};
+
+function actionEntry(action: ActionToWrite): Readonly<Record<string, unknown>> {
+  const { name, named } = action;
+  const description = `Replace this line with one sentence on when to use ${name}.`;
+  const run = [{ script: `scripts/${name}.ts` }];
+  if (named !== undefined) {
+    return { description, effects: named.effects, run };
+  }
+  return {
+    description,
+    input: `schemas/${name}-input.json`,
+    output: `schemas/${name}-output.json`,
+    effects: ["read"],
+    run,
+  };
+}
+
+function addActionEntry(entry: ActionToWrite): ManifestEdit {
+  const { name } = entry;
   return (document, manifest) => {
     if (document.hasIn(["actions", name])) {
       return problem(manifest, `${manifest} already has an action ${name}.`, "Choose another name.");
     }
     blockMapAt(document, "actions");
-    const action = document.createNode({
-      description: `Replace this line with one sentence on when to use ${name}.`,
-      input: `schemas/${name}-input.json`,
-      output: `schemas/${name}-output.json`,
-      effects: ["read"],
-      run: [{ script: `scripts/${name}.ts` }],
-    });
+    const action = document.createNode(actionEntry(entry));
     const effects = isMap(action) ? action.get("effects", true) : undefined;
     if (isSeq(effects)) {
       effects.flow = true;
@@ -178,7 +194,8 @@ function sdkImportOf(layout: Layout, script: string): string {
   return relative(dirname(pathIn(layout, "project", script)), pathIn(layout, "kit", sdkFile));
 }
 
-function actionFiles(layout: Layout, folder: string, name: string): readonly TemplateUse[] {
+function actionFiles(layout: Layout, folder: string, action: ActionToWrite): readonly TemplateUse[] {
+  const { name, named } = action;
   const script = join(folder, "scripts", `${name}.ts`);
   const schema = (direction: string): TemplateUse => ({
     template: "action/schema.json",
@@ -186,8 +203,7 @@ function actionFiles(layout: Layout, folder: string, name: string): readonly Tem
     slots: { name, direction, title: `${name}-${direction}` },
   });
   return [
-    schema("input"),
-    schema("output"),
+    ...(named === undefined ? [schema("input"), schema("output")] : []),
     { template: "action/script.ts.template", path: script, slots: { sdk: sdkImportOf(layout, script) } },
     { template: "action/example.json", path: join(folder, "tests", `${name}.example.json`), slots: {} },
   ];
@@ -203,9 +219,11 @@ async function inMode(
 }
 
 export async function newAction(workspace: Workspace, mode: string, name: string): Promise<Generated> {
-  return inMode(workspace, { inMode: mode, kind: "action", name }, async (folder) => {
-    const planned = await renderAll(workspace, actionFiles(workspace.layout, folder, name));
-    return withManifest(planned, await editManifest(workspace, folder, addActionEntry(name)));
+  const part = { inMode: mode, kind: "action", name } as const;
+  return inMode(workspace, part, async (folder) => {
+    const named = await interfaceActionFor(workspace.files, workspace.layout, part);
+    const planned = await renderAll(workspace, actionFiles(workspace.layout, folder, { name, named }));
+    return withManifest(planned, await editManifest(workspace, folder, addActionEntry({ name, named })));
   });
 }
 

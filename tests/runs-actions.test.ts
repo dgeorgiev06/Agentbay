@@ -110,8 +110,6 @@ describe("actions", () => {
   test("a called action with an effect the caller lacks cannot be loaded, so no run makes the call", async () => {
     const get: Action = {
       description: "When a test runs scripts.",
-      input: "schemas/anything.json",
-      output: "schemas/anything.json",
       effects: ["read", "write"],
       run: [{ script: "scripts/get.ts" }],
     };

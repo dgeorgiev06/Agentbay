@@ -1,4 +1,3 @@
-import { join } from "node:path/posix";
 import type { Interface } from "../generated/interface.ts";
 import { shownPath, type Home, type Layout } from "../layout.ts";
 import { checkValue } from "./spec.ts";
@@ -15,6 +14,8 @@ import {
 } from "./loaded.ts";
 import { bindingMapProblems, requiresProblems, cycleProblems } from "./binding-problems.ts";
 import { implementsProblems } from "./implements-problems.ts";
+import { schemaFilesOf } from "./action-schemas.ts";
+import type { SchemaDirection } from "./schemas.ts";
 import { actionProblems } from "./action-problems.ts";
 import { referenceProblems } from "./file-references.ts";
 import { modeSettingsProblems, straySettingsProblems } from "./settings-problems.ts";
@@ -27,9 +28,9 @@ export type FolderPlace = {
 };
 
 export type SchemaAgainst = {
-  readonly schema: string;
+  readonly action: string;
+  readonly direction: SchemaDirection;
   readonly file: string;
-  readonly under: string;
 };
 
 export function inactiveNotice(layout: Layout, mode: UnloadedMode): Problem {
@@ -49,7 +50,7 @@ export async function consistencyProblems(context: Context): Promise<readonly Pr
   const problems: Problem[] = [];
   for (const mode of activeModesOf(context)) {
     problems.push(...requiresProblems(context, mode));
-    problems.push(...(await implementsProblems(context, mode)));
+    problems.push(...implementsProblems(context, mode));
     problems.push(...actionsOf(mode).flatMap((place) => actionProblems(context, place)));
     problems.push(...(await modeSettingsProblems(context, mode)));
   }
@@ -71,12 +72,17 @@ export function schemaProblemsOf(
   mode: ModeSource,
 ): (value: unknown, against: SchemaAgainst) => Promise<readonly Problem[]> {
   return async (value, against) => {
-    const schemaFile = await context.readSchema(join(mode.folder, against.schema));
+    const action = Object.hasOwn(mode.value.actions, against.action) ? mode.value.actions[against.action] : undefined;
+    const files = action === undefined ? undefined : schemaFilesOf(context, { mode, name: against.action, action });
+    if (files === undefined) {
+      return [];
+    }
+    const schemaFile = await context.readSchema(files[against.direction]);
     if (schemaFile.state !== "valid") {
       return [];
     }
     const loaded = { file: against.file, value, lineOf: () => undefined };
-    const check = checkValue(schemaFile.schema, value, { loaded, path: [against.under] });
+    const check = checkValue(schemaFile.schema, value, { loaded, path: [against.direction] });
     return check.kind === "checked" ? check.problems : [];
   };
 }

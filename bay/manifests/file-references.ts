@@ -60,13 +60,21 @@ function stepReferences(place: ActionPlace, step: Step, index: number): readonly
 }
 
 function actionReferences(place: ActionPlace): readonly FileReference[] {
-  const schemas = schemaDirections.map((direction) => ({
-    kind: "schema" as const,
-    owner: place.mode,
-    path: ["actions", place.name, direction],
-    file: join(place.mode.folder, place.action[direction]),
-    subject: `${actionLabel(place)} names the ${direction} schema ${place.action[direction]}`,
-  }));
+  const schemas = schemaDirections.flatMap((direction) => {
+    const schema = place.action[direction];
+    if (schema === undefined) {
+      return [];
+    }
+    return [
+      {
+        kind: "schema" as const,
+        owner: place.mode,
+        path: ["actions", place.name, direction],
+        file: join(place.mode.folder, schema),
+        subject: `${actionLabel(place)} names the ${direction} schema ${schema}`,
+      },
+    ];
+  });
   const steps = place.action.run.flatMap((step, index) => stepReferences(place, step, index));
   return [...schemas, ...steps];
 }

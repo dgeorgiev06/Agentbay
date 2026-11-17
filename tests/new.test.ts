@@ -119,6 +119,51 @@ test("newAction writes schemas, a script and an example, and adds the action to 
   assert.match(text(files, "components/modes/notes/scripts/tidy.ts"), /from "\.\.\/\.\.\/\.\.\/\.\.\/bay\/sdk\.ts"/);
 });
 
+test("newAction for an action that an interface of the mode names writes no schemas and takes its effects", async () => {
+  const manifest = [
+    "name: notes",
+    "version: 1.0.0",
+    "description: Writes notes into the store.",
+    "requires:",
+    "  interfaces: [items-store@1]",
+    "implements: [notes@1]",
+    "actions: {}",
+    "",
+  ].join("\n");
+  const initial = { ...cleanFiles(), ...templateFiles(), "components/modes/notes/mode.yaml": manifest };
+  const example = "components/modes/notes/tests/add.example.json";
+  const files = fakeFileSystem(
+    rooted(Object.fromEntries(Object.entries(initial).filter(([path]) => path !== example))),
+  );
+  const workspace = { files, layout };
+  const paths = written(await newAction(workspace, "notes", "add"));
+  assert.deepEqual(paths, [
+    "components/modes/notes/scripts/add.ts",
+    "components/modes/notes/tests/add.example.json",
+    "components/modes/notes/mode.yaml",
+  ]);
+  assert.equal(
+    text(files, "components/modes/notes/mode.yaml"),
+    [
+      "name: notes",
+      "version: 1.0.0",
+      "description: Writes notes into the store.",
+      "requires:",
+      "  interfaces: [ items-store@1 ]",
+      "implements: [ notes@1 ]",
+      "actions:",
+      "  add:",
+      "    description: Replace this line with one sentence on when to use add.",
+      "    effects: [ read, write ]",
+      "    run:",
+      "      - script: scripts/add.ts",
+      "",
+    ].join("\n"),
+  );
+  const report = await checkFake(files);
+  assert.deepEqual(report.findings, [], JSON.stringify(report.findings, null, 2));
+});
+
 test("newAction keeps the comments and the key order of mode.yaml", async () => {
   const manifest = [
     "# The notes mode.",

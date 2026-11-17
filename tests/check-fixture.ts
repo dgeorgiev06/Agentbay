@@ -28,7 +28,7 @@ export const skillSections = {
   ],
   instructions: ["## Instructions", "", "1. Read the request.", "2. Write the note.", ""],
   tools: ["## Tools", "", "- `items-store.put`: stores the note", "- add", "- events", ""],
-  resources: ["## Resources", "", "- schemas/add-input.json", ""],
+  resources: ["## Resources", "", "- workflows/daily.yaml", ""],
   rules: ["## Rules and constraints", "", "Never invent a source.", ""],
 } as const;
 

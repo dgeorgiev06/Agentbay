@@ -40,6 +40,7 @@ Held by: **check** (fails `npm run check`), **review** (the reviewer verifies it
 | P-32 | A step that needs no judgement is a script, not a skill. A skill holds only what a model must decide, in as few words as say it. When a skill step can be replaced by a script that gives the same output, replace it. | design, review |
 | P-33 | A plan is broken into vertical slices that can run side by side. Each slice names what it delivers, its write scope, and the slices it must come after with the reason. Slices with disjoint scopes and no order between them form a wave. An interface two slices meet at is agreed and merged first. | plan |
 | P-34 | A mode slice changes only its mode's folder and its interface. A capability the kernel lacks is its own slice, built first; a builder that lacks one stops and says so. | plan, build, review |
+| P-35 | Interfaces first. Before a plan is cut, the design names each module touched, its one entry and what the entry offers as a caller would use it. An interface two slices meet at is merged first, with a test any implementation must pass. A plan that cannot give its slices narrow write scopes goes back to design. | design, plan |
 | P-19 | Done means proven on the real thing: the command run, the demo walked, the harness session held. A passing type check is not proof. Each brief names the real thing. | review |
 
 ## Work

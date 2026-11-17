@@ -24,6 +24,13 @@ The owner asked that the way of working reached while building agentbay 5 (requi
 | Two builders on disjoint scopes | Waves worked out from the plan (`0017`, item 8) |
 | The audit by a second reviewer | The counts of `0017` item 7 on every merge, and a full audit as a job the owner can ask for |
 
+- **Design comes before the plan, and it is the design of interfaces.** The owner asked for this by name: deep modules, interfaces first. For anything that adds or changes a module, forge's proposal states, before any slice exists:
+  - the modules touched or added, each with the one entry it is used through and what that entry offers, written as the caller would use it;
+  - why each is deep: what sits behind the entry that callers never see, and what would be lost if the module were deleted and its callers did the work themselves (`0006`);
+  - for an interface more than one caller will depend on, three designs made under different constraints (the smallest, the one that fits the commonest caller, the one that places the seams for testing), and the choice between them with its reason;
+  - what the map of modules will say afterwards: the new entry, who may import it, and nothing private reached from outside.
+
+  The owner's first card shows the interfaces, not the files. The plan is then cut along them: an interface is merged first as a slice of its own, with its schemas or types and a test any implementation must pass, and the slices on either side of it run side by side (`0017`, item 8). A plan whose slices cannot be given narrow write scopes goes back to design, because the cause is a module without an entry and more planning will not fix it.
 - Kinds of slice are general: a module of the project (one entry in its map), a capability another slice needs, and the project's own shared files. "A mode of the kit" is the first of these in this project.
 - What stays a model's judgement stays labelled as judgement: whether a design is sound, whether a test asserts the right thing, what needs a model at all.
 

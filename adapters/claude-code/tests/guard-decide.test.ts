@@ -104,6 +104,14 @@ test("when the project is not the kit, the session agent may not write into the 
   }
 });
 
+test("when the kit is reached through a link, a write by the real path into its components/base/ is refused too", () => {
+  const kitBehindALink: GuardSetup = { ...setup, kit: "/linked/kit" };
+  for (const path of ["/k/components/base/new/mode.yaml", "/linked/kit/components/base/new/mode.yaml"]) {
+    const call = { tool: "Write", input: { file_path: path } };
+    assert.deepEqual(asOwner(kitBehindALink, call), baseFolderRefusal("Write", path), path);
+  }
+});
+
 test("when the project is the kit, the session agent writes into components/base/ as before", () => {
   for (const [call] of writesIntoTheBaseFolder) {
     assert.deepEqual(asOwner(kitAsTheProject, call), { verdict: "allow" }, JSON.stringify(call));

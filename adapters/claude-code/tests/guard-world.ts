@@ -95,6 +95,7 @@ export const world = fakeWorld({
     "/p/out/closed": "/p/.agentbay",
     "/p/docs": "/p/.agentbay",
     "/p/kit-base": "/k/components/base",
+    "/linked/kit": "/k",
   },
   broken: ["/p/out/dangling"],
 });

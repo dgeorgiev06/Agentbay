@@ -14,6 +14,7 @@ import {
 import type { HttpRequest, HttpResponse } from "../../../bay/ports.ts";
 import { SecretStore } from "../../../bay/secrets.ts";
 import { fakeClock } from "../../fakes.ts";
+import { grantedCommand } from "../../grants-fixture.ts";
 import {
   exitedProcess,
   noProcesses,
@@ -78,8 +79,7 @@ const networkNeeded = `A request over the network needs the network effect; to a
 
 const spendNeeded = `Spending more than nothing needs the spend effect; to allow it, add spend to actions.look.effects in ${manifest}.`;
 
-const commandNeeds = (effect: Effect): string =>
-  `A command can do anything its program can, so running one needs all five effects; to allow it, add ${effect} to actions.look.effects in ${manifest}.`;
+const commandNeeds = (effect: Effect): string => `To allow it, add ${effect} to actions.look.effects in ${manifest}.`;
 
 const brokerKinds = "Choose another kind for the event.";
 
@@ -118,7 +118,11 @@ const exited = { how: "exited", exitCode: 0 } as const;
 
 const nodeVersion = ["node", "--version"];
 
-const echoing = ["node", "-e", "process.stdin.pipe(process.stdout)"];
+const version = { name: "version", arguments: [] };
+
+const echoingCode = "process.stdin.pipe(process.stdout)";
+
+const echoing = ["node", "-e", echoingCode];
 
 const helloHash = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
 
@@ -714,38 +718,38 @@ const proofs: Proofs = {
   "commands.run": {
     withoutEffect: [
       {
-        ask: (broker) => broker.entries["commands.run"]({ command: nodeVersion, folder: ".", timeLimitSeconds: 30 }),
+        ask: (broker) => broker.entries["commands.run"]({ ...version, folder: ".", timeLimitSeconds: 30 }),
         effects: [],
         change: commandNeeds("read"),
-        detail: { command: nodeVersion, folder: "." },
+        detail: { ...version, folder: "." },
       },
       {
-        ask: (broker) => broker.entries["commands.run"]({ command: nodeVersion, folder: ".", timeLimitSeconds: 30 }),
+        ask: (broker) => broker.entries["commands.run"]({ ...version, folder: ".", timeLimitSeconds: 30 }),
         effects: ["read", "write", "network", "spend"],
         change: commandNeeds("delete"),
-        detail: { command: nodeVersion, folder: "." },
+        detail: { ...version, folder: "." },
       },
     ],
     outsideGrant: [
       {
         ask: (broker) =>
-          broker.entries["commands.run"]({ command: ["git", "status"], folder: ".", timeLimitSeconds: 30 }),
+          broker.entries["commands.run"]({ name: "changes", arguments: [], folder: ".", timeLimitSeconds: 30 }),
         effects: allFive,
         change:
-          `To allow it, add the command's leading arguments under resources.commands in ${manifest}; ` +
-          "only a mode under the kit's components/base/ may list commands.",
-        detail: { command: ["git", "status"], folder: "." },
+          `To allow it, list changes under resources.commands in ${manifest} with the words it runs and its ` +
+          "effects; only a mode under the kit's components/base/ may list commands.",
+        detail: { name: "changes", arguments: [], folder: "." },
       },
       {
-        ask: (broker) => broker.entries["commands.run"]({ command: nodeVersion, folder: "..", timeLimitSeconds: 30 }),
+        ask: (broker) => broker.entries["commands.run"]({ ...version, folder: "..", timeLimitSeconds: 30 }),
         effects: allFive,
         change: projectFolderOnly,
-        detail: { command: nodeVersion, folder: ".." },
+        detail: { ...version, folder: ".." },
       },
     ],
     allowed: [
       {
-        ask: (broker) => broker.entries["commands.run"]({ command: nodeVersion, folder: ".", timeLimitSeconds: 30 }),
+        ask: (broker) => broker.entries["commands.run"]({ ...version, folder: ".", timeLimitSeconds: 30 }),
         effects: allFive,
         value: {
           end: exited,
@@ -758,6 +762,7 @@ const proofs: Proofs = {
             kind: "command",
             detail: {
               step: "look.0",
+              name: "version",
               command: nodeVersion,
               folder: ".",
               end: exited,
@@ -771,7 +776,8 @@ const proofs: Proofs = {
       {
         ask: (broker) =>
           broker.entries["commands.run"]({
-            command: echoing,
+            name: "evaluate",
+            arguments: [echoingCode],
             folder: "notes-in",
             timeLimitSeconds: 30,
             input: "hello",
@@ -788,6 +794,7 @@ const proofs: Proofs = {
             kind: "command",
             detail: {
               step: "look.0",
+              name: "evaluate",
               command: echoing,
               folder: "notes-in",
               end: exited,
@@ -882,7 +889,7 @@ async function asked(asking: Asking): Promise<Asked> {
       throwawayPaths: [join(root, "scratch")],
       secrets: ["API_TOKEN", "SECOND_TOKEN"],
       hosts: ["api.example.com"],
-      commands: ["node --version", "node -e"],
+      commands: [grantedCommand("version", "node --version"), grantedCommand("evaluate", "node -e")],
       ...asking.grants?.(root),
     };
     const broker = openStep({

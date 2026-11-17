@@ -1,28 +1,33 @@
 import { fail, type ScriptContext } from "../../../../../bay/sdk.ts";
 
-const protections: readonly string[] = [
-  "-c",
-  "core.hooksPath=/dev/null",
-  "-c",
-  "core.fsmonitor=false",
-  "-c",
-  "submodule.recurse=false",
-];
+const subcommands = {
+  "commit-of": "rev-parse",
+  "repository-filters": "config",
+  "add-detached-worktree": "worktree",
+  "make-branch": "branch",
+  "switch-branch": "switch",
+  changes: "status",
+  "commits-between": "log",
+  "changed-paths": "diff",
+  "is-ignored": "check-ignore",
+  "paths-at-commit": "ls-tree",
+  "untracked-paths": "ls-files",
+  "restore-paths": "restore",
+  "is-ancestor": "merge-base",
+  "remove-worktree": "worktree",
+  "delete-branch": "branch",
+  "add-worktree": "worktree",
+  "merge-branch": "merge",
+  "abort-merge": "merge",
+  "stage-everything": "add",
+  "commit-staged": "commit",
+  "filters-of-paths": "check-attr",
+  "apply-patch": "apply",
+} as const;
 
-const emptyAttributes: readonly string[] = ["--attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904"];
+export type GitCommand = keyof typeof subcommands;
 
-const committer: readonly string[] = [
-  "-c",
-  "user.name=agentbay-git-worktrees",
-  "-c",
-  "user.email=git-worktrees@agentbay.invalid",
-  "-c",
-  "gc.auto=0",
-];
-
-const makesCommits: readonly string[] = ["merge", "commit"];
-
-const readsTheCopysAttributes: readonly string[] = ["apply", "check-attr"];
+export type GitCall = readonly [GitCommand, ...(readonly string[])];
 
 const timeLimitSeconds = 300;
 
@@ -33,10 +38,6 @@ export type GitEnd = {
 };
 
 const changesTheCheckout: readonly string[] = ["restore", "switch", "merge", "add", "commit", "apply"];
-
-function subcommandOf(gitArguments: readonly string[]): string {
-  return gitArguments.find((argument) => !argument.startsWith("-")) ?? "";
-}
 
 function isUnderForge(folder: string): boolean {
   return folder.startsWith(".forge/") && !folder.split("/").includes("..");
@@ -51,26 +52,21 @@ function refuseInOwnersCheckout(folder: string, subcommand: string): void {
   }
 }
 
-function optionsFor(subcommand: string): readonly string[] {
-  const attributes = readsTheCopysAttributes.includes(subcommand) ? [] : emptyAttributes;
-  return [...protections, ...attributes, ...(makesCommits.includes(subcommand) ? committer : [])];
-}
-
 export type Fed = {
-  readonly gitArguments: readonly string[];
+  readonly call: GitCall;
   readonly input: string;
 };
 
 async function ran(
   context: ScriptContext,
   folder: string,
-  given: { readonly gitArguments: readonly string[]; readonly input?: string },
+  given: { readonly call: GitCall; readonly input?: string },
 ): Promise<GitEnd> {
-  const { gitArguments, input } = given;
-  const subcommand = subcommandOf(gitArguments);
+  const { call, input } = given;
+  const [name, ...gitArguments] = call;
+  const subcommand = subcommands[name];
   refuseInOwnersCheckout(folder, subcommand);
-  const command = ["git", ...optionsFor(subcommand), ...gitArguments];
-  const request = { command, folder, timeLimitSeconds };
+  const request = { name, arguments: gitArguments, folder, timeLimitSeconds };
   const answer = await context.commands.run(input === undefined ? request : { ...request, input });
   if (!answer.ok) {
     return fail(answer.message);
@@ -90,8 +86,8 @@ async function ran(
   }
 }
 
-export function git(context: ScriptContext, folder: string, gitArguments: readonly string[]): Promise<GitEnd> {
-  return ran(context, folder, { gitArguments });
+export function git(context: ScriptContext, folder: string, call: GitCall): Promise<GitEnd> {
+  return ran(context, folder, { call });
 }
 
 export function gitFed(context: ScriptContext, folder: string, fed: Fed): Promise<GitEnd> {
@@ -102,19 +98,15 @@ export function firstLine(text: string): string {
   return text.split("\n").find((line) => line.trim() !== "") ?? "it gave no reason";
 }
 
-export function succeededOutput(ended: GitEnd, gitArguments: readonly string[]): string {
+export function succeededOutput(ended: GitEnd, command: GitCommand): string {
   if (ended.exitCode !== 0) {
-    return fail(`git ${subcommandOf(gitArguments)} failed: ${firstLine(ended.stderr)}`);
+    return fail(`git ${subcommands[command]} failed: ${firstLine(ended.stderr)}`);
   }
   return ended.stdout;
 }
 
-export async function gitSucceeded(
-  context: ScriptContext,
-  folder: string,
-  gitArguments: readonly string[],
-): Promise<string> {
-  return succeededOutput(await git(context, folder, gitArguments), gitArguments);
+export async function gitSucceeded(context: ScriptContext, folder: string, call: GitCall): Promise<string> {
+  return succeededOutput(await git(context, folder, call), call[0]);
 }
 
 export function nulFields(output: string): readonly string[] {
@@ -122,13 +114,7 @@ export function nulFields(output: string): readonly string[] {
 }
 
 export async function commitOf(context: ScriptContext, folder: string, commit: string): Promise<string> {
-  const ended = await git(context, folder, [
-    "rev-parse",
-    "--verify",
-    "--quiet",
-    "--end-of-options",
-    `${commit}^{commit}`,
-  ]);
+  const ended = await git(context, folder, ["commit-of", `${commit}^{commit}`]);
   if (ended.exitCode !== 0) {
     return fail(`There is no commit ${commit} in the repository.`);
   }
@@ -136,7 +122,7 @@ export async function commitOf(context: ScriptContext, folder: string, commit: s
 }
 
 export async function isMerged(context: ScriptContext, branch: string, into: string): Promise<boolean> {
-  const ended = await git(context, ".", ["merge-base", "--is-ancestor", "--end-of-options", branch, into]);
+  const ended = await git(context, ".", ["is-ancestor", branch, into]);
   if (ended.exitCode !== 0 && ended.exitCode !== 1) {
     fail(`git merge-base failed: ${firstLine(ended.stderr)}`);
   }
@@ -144,26 +130,14 @@ export async function isMerged(context: ScriptContext, branch: string, into: str
 }
 
 export async function branchExists(context: ScriptContext, branch: string): Promise<boolean> {
-  const ended = await git(context, ".", [
-    "rev-parse",
-    "--verify",
-    "--quiet",
-    "--end-of-options",
-    `refs/heads/${branch}`,
-  ]);
+  const ended = await git(context, ".", ["commit-of", `refs/heads/${branch}`]);
   return ended.exitCode === 0;
 }
 
 const repositoryScopes: readonly string[] = ["local", "worktree"];
 
 export async function refuseRepositoryFilters(context: ScriptContext, folder: string): Promise<void> {
-  const ended = await git(context, folder, [
-    "config",
-    "--show-scope",
-    "--name-only",
-    "--get-regexp",
-    "^(filter\\.|merge\\..*\\.driver$)",
-  ]);
+  const ended = await git(context, folder, ["repository-filters"]);
   if (ended.exitCode !== 0 && ended.exitCode !== 1) {
     fail(`git config failed: ${firstLine(ended.stderr)}`);
   }

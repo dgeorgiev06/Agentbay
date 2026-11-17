@@ -7,7 +7,7 @@ import { defineRequestScript } from "./lib/request.ts";
 const noFilter: readonly string[] = ["unspecified", "unset"];
 
 async function refuseFiltered(context: ScriptContext, folder: string, paths: readonly string[]): Promise<void> {
-  const listed = await gitSucceeded(context, folder, ["--work-tree=.", "check-attr", "-z", "filter", "--", ...paths]);
+  const listed = await gitSucceeded(context, folder, ["filters-of-paths", ...paths]);
   const fields = nulFields(listed);
   for (let index = 0; index + 2 < fields.length; index += 3) {
     const path = fields[index] ?? "";
@@ -28,10 +28,7 @@ export const run = defineRequestScript(async (request, context) => {
   await madeCopy(context, folder, "apply a patch to");
   await refuseRepositoryFilters(context, ".");
   await refuseFiltered(context, folder, paths);
-  const applied = await gitFed(context, folder, {
-    gitArguments: ["--work-tree=.", "apply", "--end-of-options"],
-    input: patch,
-  });
+  const applied = await gitFed(context, folder, { call: ["apply-patch"], input: patch });
   if (applied.exitCode !== 0) {
     fail(`The patch does not apply to the copy, so nothing was changed: ${firstLine(applied.stderr)}`);
   }

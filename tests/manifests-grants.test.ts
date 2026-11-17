@@ -226,15 +226,15 @@ const brokenProjects: readonly Broken[] = [
   },
   {
     rule: "a command in a mode outside the kit's components/base",
-    files: briefingWith({ commands: ["node --test"] }),
+    files: briefingWith({ commands: { tests: { run: "node --test", effects: ["read"] } } }),
     layout,
     problem: {
       file: briefingFile,
-      path: "/resources/commands/0",
-      line: 21,
+      path: "/resources/commands/tests",
+      line: 22,
       message:
-        "Mode briefing lists the command node --test; a listed command can run code the agent wrote. " +
-        "Only a mode under the kit's components/base/ may list commands.",
+        "Mode briefing lists the command tests, which runs node --test; a listed command can run code the agent " +
+        "wrote. Only a mode under the kit's components/base/ may list commands.",
       fix: "Remove the command from components/modes/briefing/mode.yaml; a skill step's checks belong in script steps.",
     },
   },

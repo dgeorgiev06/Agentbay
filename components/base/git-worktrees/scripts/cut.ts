@@ -14,7 +14,7 @@ export const run = defineRequestScript(async (request, context) => {
   if (await branchExists(context, branch)) {
     fail(`The branch ${branch} already exists, so the slice ${slice} is not cut again.`);
   }
-  const added = await git(context, ".", ["worktree", "add", "--detach", "--end-of-options", folder, commit]);
+  const added = await git(context, ".", ["add-detached-worktree", folder, commit]);
   if (added.exitCode !== 0) {
     fail(
       added.stderr.includes("already exists")
@@ -23,7 +23,7 @@ export const run = defineRequestScript(async (request, context) => {
     );
   }
   await recordFolder(context, folder, { kind: "worktree", branch });
-  await gitSucceeded(context, ".", ["branch", "--end-of-options", branch, commit]);
-  await gitSucceeded(context, folder, ["switch", "--end-of-options", branch]);
+  await gitSucceeded(context, ".", ["make-branch", branch, commit]);
+  await gitSucceeded(context, folder, ["switch-branch", branch]);
   return { folder, branch, commit };
 });

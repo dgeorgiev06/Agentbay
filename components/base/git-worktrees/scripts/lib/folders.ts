@@ -36,14 +36,7 @@ export async function madeFolder(context: ScriptContext, folder: string): Promis
 }
 
 export async function folderExists(context: ScriptContext, folder: string): Promise<boolean> {
-  const listed = await gitSucceeded(context, ".", [
-    "ls-files",
-    "-z",
-    "--others",
-    "--directory",
-    "--end-of-options",
-    folder,
-  ]);
+  const listed = await gitSucceeded(context, ".", ["untracked-paths", folder]);
   return listed === `${folder}/\0`;
 }
 

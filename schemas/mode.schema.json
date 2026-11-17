@@ -83,6 +83,25 @@
       "type": "string",
       "pattern": "^(?!/)(?!(.*/)?\\.\\.(/|$)).+$"
     },
+    "listedCommand": {
+      "description": "A command a mode lists: the words it runs and the effects it can have.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run", "effects"],
+      "properties": {
+        "run": {
+          "description": "The words the command runs: the program, then its fixed arguments, separated by spaces. A script names the command and gives only the arguments that follow these words.",
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "effects": {
+          "description": "Every effect the command can have, at least one; an action may run the command only if it declares each of them.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/effect" }
+        }
+      }
+    },
     "effect": {
       "description": "A kind of effect an action may have.",
       "type": "string",
@@ -154,10 +173,10 @@
           "items": { "type": "string", "minLength": 1, "description": "A host name." }
         },
         "commands": {
-          "description": "Command prefixes the mode's scripts and skill steps may run, compared argument by argument. Only a mode under the kit's components/base/ may list them, and only an action that declares all five effects may run them.",
-          "type": "array",
-          "uniqueItems": true,
-          "items": { "type": "string", "minLength": 1, "description": "A command prefix: the program, then any leading arguments, separated by spaces." }
+          "description": "Commands the mode's scripts and skill steps may run, each under a kebab-case name of the mode's own that says what the command is for. Only a mode under the kit's components/base/ may list them. The effects of a command are the mode author's claim of what it can do: the kernel believes them and cannot check them, and bay check shows each command and its effects to the owner.",
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/name" },
+          "additionalProperties": { "$ref": "#/$defs/listedCommand" }
         }
       }
     },

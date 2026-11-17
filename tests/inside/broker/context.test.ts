@@ -68,7 +68,7 @@ function fittingAnswers(): Recording {
   return recording((operation) => ({ ok: true, value: fitting[operation] }));
 }
 
-const command = { command: ["git", "status"], folder: ".", timeLimitSeconds: 30 };
+const command = { name: "changes", arguments: ["--short"], folder: ".", timeLimitSeconds: 30 };
 
 const httpRequest = { method: "GET" as const, url: "https://api.example.com/x", headers: {} };
 
@@ -123,7 +123,7 @@ test("each member of the context asks for its own operation with the request bui
     ["secrets.get", { name: "API_TOKEN" }],
     ["http.request", { method: "GET", url: "https://api.example.com/x", headers: {} }],
     ["events.emit", { kind: "noted", detail: { day: "2026-11-17" } }],
-    ["commands.run", { command: ["git", "status"], folder: ".", timeLimitSeconds: 30 }],
+    ["commands.run", { name: "changes", arguments: ["--short"], folder: ".", timeLimitSeconds: 30 }],
     ["call", { reference: "items-store.put", input: { day: "2026-11-17" } }],
     ["spend", { spending: { items: 2, usd: 0.25 } }],
   ]);

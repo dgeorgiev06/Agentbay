@@ -23,8 +23,7 @@ export const run = defineRequestScript(async (request, context) => {
   await madeWorktree(context, folder, "look at");
   const base = await safeCommitOf(context, folder, request.text("base"));
   const head = await commitOf(context, folder, "HEAD");
-  const log = ["log", "-z", "--reverse", "--no-show-signature", "--no-color", "--format=%H%x20%s", "--end-of-options"];
-  const commits = commitsOf(await gitSucceeded(context, folder, [...log, `${base}..${head}`]));
+  const commits = commitsOf(await gitSucceeded(context, folder, ["commits-between", `${base}..${head}`]));
   const changes = await changesIn(context, folder);
   return { head, commits, clean: isClean(changes), changed: changes.changed, untracked: changes.untracked };
 });

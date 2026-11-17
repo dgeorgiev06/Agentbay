@@ -1,4 +1,4 @@
-import type { ModeGrants } from "../bay/contracts.ts";
+import type { Effect, GrantedCommand, ModeGrants } from "../bay/contracts.ts";
 
 const noGrants: ModeGrants = {
   mode: "",
@@ -13,6 +13,12 @@ const noGrants: ModeGrants = {
   commands: [],
 };
 
+const everyEffect: readonly Effect[] = ["read", "write", "network", "spend", "delete"];
+
 export function grantsWith(fields: Partial<ModeGrants>): ModeGrants {
   return { ...noGrants, ...fields };
+}
+
+export function grantedCommand(name: string, run: string, effects: readonly Effect[] = everyEffect): GrantedCommand {
+  return { name, words: run.split(" "), effects };
 }

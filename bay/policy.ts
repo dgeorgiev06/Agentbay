@@ -1,6 +1,6 @@
 import { isAbsolute, join, normalize } from "node:path/posix";
-import type { ModeGrants } from "./contracts.ts";
-import type { Mode } from "./generated/mode.ts";
+import type { GrantedCommand, ModeGrants } from "./contracts.ts";
+import type { ListedCommand, Mode } from "./generated/mode.ts";
 import { isInsideOrEqual, isProjectTheKit, pathIn, shownPath, type Home, type Layout } from "./layout.ts";
 
 export type OtherMode = {
@@ -137,7 +137,7 @@ type DeclaredResources = {
   readonly throwaway: readonly string[];
   readonly secrets: readonly string[];
   readonly hosts: readonly string[];
-  readonly commands: readonly string[];
+  readonly commands: readonly (readonly [string, ListedCommand])[];
   readonly migrations: string;
 };
 
@@ -154,7 +154,7 @@ function declaredResources(manifest: Mode): DeclaredResources {
     ...declaredFiles(manifest),
     secrets: resources.secrets ?? [],
     hosts: resources.network ?? [],
-    commands: resources.commands ?? [],
+    commands: Object.entries(resources.commands ?? {}),
     migrations: resources.db?.migrations ?? "migrations",
   };
 }
@@ -247,12 +247,38 @@ function commandProblems(request: GrantRequest): readonly GrantProblem[] {
     return [];
   }
   const { manifest, layout } = request;
-  return declaredResources(manifest).commands.map((command, index) => ({
-    at: ["resources", "commands", index],
+  return declaredResources(manifest).commands.map(([name, command]) => ({
+    at: ["resources", "commands", name],
     message:
-      `Mode ${manifest.name} lists the command ${command}; a listed command can run code the agent wrote. ` +
-      `Only a mode under the kit's ${baseTier}/ may list commands.`,
+      `Mode ${manifest.name} lists the command ${name}, which runs ${command.run}; ` +
+      `a listed command can run code the agent wrote. Only a mode under the kit's ${baseTier}/ may list commands.`,
     fix: `Remove the command from ${shownPath(layout, manifestFile(request))}; a skill step's checks belong in script steps.`,
+  }));
+}
+
+function commandEffectProblems(request: GrantRequest): readonly GrantProblem[] {
+  const { manifest, layout } = request;
+  return declaredResources(manifest).commands.flatMap(([name, command]) =>
+    command.effects.length > 0
+      ? []
+      : [
+          {
+            at: ["resources", "commands", name, "effects"],
+            message: `The command ${name} of mode ${manifest.name} lists no effects, and a command has at least one.`,
+            fix:
+              `List under resources.commands.${name}.effects in ${shownPath(layout, manifestFile(request))} ` +
+              "each effect the command can have: read, write, network, spend or delete. " +
+              "The kernel believes the list and cannot check it.",
+          },
+        ],
+  );
+}
+
+function grantedCommands(declared: DeclaredResources): readonly GrantedCommand[] {
+  return declared.commands.map(([name, command]) => ({
+    name,
+    words: command.run.split(/\s+/).filter((word) => word !== ""),
+    effects: [...command.effects],
   }));
 }
 
@@ -326,7 +352,7 @@ function grantsOfMode(request: GrantRequest): ModeGrants {
     throwawayPaths: projectPaths(layout, declared.throwaway),
     secrets: [...declared.secrets],
     hosts: [...declared.hosts],
-    commands: [...declared.commands],
+    commands: grantedCommands(declared),
   };
 }
 
@@ -336,6 +362,7 @@ export function grantsOf(request: GrantRequest): GrantRuling {
     ...secretProblems(request.manifest),
     ...hostProblems(request.manifest),
     ...commandProblems(request),
+    ...commandEffectProblems(request),
     ...throwawayPlaceProblems(request),
     ...throwawayOverlapProblems(request),
   ];

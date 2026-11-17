@@ -117,8 +117,8 @@ const examples: Examples = {
   },
   "commands.run": {
     requests: [
-      { command: ["git", "status"], folder: ".", timeLimitSeconds: 30, input: "y\n" },
-      { command: ["git", "rev-parse", "HEAD"], folder: ".forge/copies/k3", timeLimitSeconds: 0.5 },
+      { name: "changes", arguments: [], folder: ".", timeLimitSeconds: 30, input: "y\n" },
+      { name: "commit-of", arguments: ["HEAD"], folder: ".forge/copies/k3", timeLimitSeconds: 0.5 },
     ],
     results: [
       ran,

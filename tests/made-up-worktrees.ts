@@ -224,27 +224,28 @@ export function isIgnored(path: string, ignored: readonly string[]): boolean {
   return ignored.some((entry) => path === entry || path.startsWith(entry + "/"));
 }
 
-async function ended(context: ScriptContext, folder: string, command: readonly string[], input?: string): Promise<Ended> {
-  const request = { command, folder, timeLimitSeconds };
+async function ended(context: ScriptContext, folder: string, call: readonly string[], input?: string): Promise<Ended> {
+  const [name = "", ...given] = call;
+  const request = { name, arguments: given, folder, timeLimitSeconds };
   const ran = await answered(context.commands.run(input === undefined ? request : { ...request, input }));
   const exitCode = ran.end.how === "exited" ? ran.end.exitCode : -1;
   return { exitCode, stdout: ran.stdout.text, stderr: ran.stderr.text };
 }
 
-async function ranWell(context: ScriptContext, folder: string, command: readonly string[], input?: string): Promise<string> {
-  const end = await ended(context, folder, command, input);
+async function ranWell(context: ScriptContext, folder: string, call: readonly string[], input?: string): Promise<string> {
+  const end = await ended(context, folder, call, input);
   if (end.exitCode !== 0) {
-    return fail(command.join(" ") + " failed in " + folder + ": " + end.stderr.trim());
+    return fail(call.join(" ") + " failed in " + folder + ": " + end.stderr.trim());
   }
   return end.stdout;
 }
 
 export async function folderExists(context: ScriptContext, folder: string): Promise<boolean> {
-  return (await ended(context, ".", ["ls", "-d", "--", folder])).exitCode === 0;
+  return (await ended(context, ".", ["folder-exists", folder])).exitCode === 0;
 }
 
 export async function filesIn(context: ScriptContext, folder: string, ignored: readonly string[]): Promise<Files> {
-  const listed = (await ranWell(context, folder, ["find", ".", "-type", "f", "-print0"]))
+  const listed = (await ranWell(context, folder, ["list-files"]))
     .split("\0")
     .filter((path) => path !== "")
     .map((path) => path.slice(2))
@@ -252,7 +253,7 @@ export async function filesIn(context: ScriptContext, folder: string, ignored: r
     .sort();
   const files: Record<string, string> = {};
   for (const path of listed) {
-    files[path] = await ranWell(context, folder, ["cat", "--", path]);
+    files[path] = await ranWell(context, folder, ["read-file", path]);
   }
   return files;
 }
@@ -261,9 +262,9 @@ export async function place(context: ScriptContext, folder: string, files: Files
   for (const [path, text] of Object.entries(files)) {
     const slash = path.lastIndexOf("/");
     if (slash > 0) {
-      await ranWell(context, folder, ["mkdir", "-p", "--", path.slice(0, slash)]);
+      await ranWell(context, folder, ["make-folder", path.slice(0, slash)]);
     }
-    await ranWell(context, folder, ["tee", "--", path], text);
+    await ranWell(context, folder, ["write-file", path], text);
   }
 }
 
@@ -295,7 +296,7 @@ export async function madeAs(context: ScriptContext, folder: string, kind: Kind)
 }
 
 export async function branchOf(context: ScriptContext, folder: string): Promise<string> {
-  return (await ranWell(context, folder, ["cat", "--", marker])).trim();
+  return (await ranWell(context, folder, ["read-file", marker])).trim();
 }
 
 export async function worktreeState(context: ScriptContext, folder: string): Promise<WorktreeState> {
@@ -495,11 +496,11 @@ resources:
     write: [.shelf]
     throwaway: [.forge/worktrees/, .forge/copies/]
   commands:
-    - find . -type f -print0
-    - cat --
-    - tee --
-    - mkdir -p --
-    - ls -d --
+    list-files: { run: find . -type f -print0, effects: [read, write, network, spend, delete] }
+    read-file: { run: cat --, effects: [read, write, network, spend, delete] }
+    write-file: { run: tee --, effects: [read, write, network, spend, delete] }
+    make-folder: { run: mkdir -p --, effects: [read, write, network, spend, delete] }
+    folder-exists: { run: ls -d --, effects: [read, write, network, spend, delete] }
 actions:
   cut:
     description: When a test needs a slice's worktree and branch cut from a commit on the shelf.

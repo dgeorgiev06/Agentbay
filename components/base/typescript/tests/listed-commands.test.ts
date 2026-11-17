@@ -26,21 +26,24 @@ function warningsOf(file: string): readonly (readonly unknown[])[] {
     .map((finding) => [fieldOf(finding, "severity"), fieldOf(finding, "line"), fieldOf(finding, "message")]);
 }
 
-function listedAt(line: number, command: string): readonly unknown[] {
+const everyEffect = "read, write, network, spend, delete";
+
+function listedAt(line: number, name: string, run: string): readonly unknown[] {
   return [
     "warning",
     line,
-    `Mode typescript lists the command ${command}; a listed command can run code the agent wrote.`,
+    `Mode typescript lists the command ${name}, which runs ${run} and which the mode says has the effects: ` +
+      `${everyEffect}; a listed command can run code the agent wrote.`,
   ];
 }
 
 test("bay check on the kit warns once for each command the typescript mode lists, and for nothing else", () => {
   assert.deepEqual(warningsOf(manifest), [
-    listedAt(9, "npm run generate:check --"),
-    listedAt(10, "npm run typecheck --"),
-    listedAt(11, "npm run lint --"),
-    listedAt(12, "npm run format:check --"),
-    listedAt(13, "npm run deadcode --"),
-    listedAt(14, "npm test -- --test-reporter=tap"),
+    listedAt(10, "check-generated-types", "npm run generate:check --"),
+    listedAt(13, "check-types", "npm run typecheck --"),
+    listedAt(16, "lint", "npm run lint --"),
+    listedAt(19, "check-format", "npm run format:check --"),
+    listedAt(22, "find-dead-code", "npm run deadcode --"),
+    listedAt(25, "run-tests", "npm test -- --test-reporter=tap"),
   ]);
 });

@@ -6,7 +6,7 @@ import { defineRequestScript } from "./lib/request.ts";
 
 async function refuseUnignored(context: ScriptContext, links: readonly string[]): Promise<void> {
   for (const link of links) {
-    const checked = await git(context, ".", ["check-ignore", "--quiet", "--end-of-options", link]);
+    const checked = await git(context, ".", ["is-ignored", link]);
     if (checked.exitCode === 1) {
       fail(`The path ${link} is not ignored by git in the project, so the copy does not link to it.`);
     }

@@ -24,6 +24,10 @@ function lines(...texts: readonly string[]): string {
   return `${texts.join("\n")}\n`;
 }
 
+function everyEffectOf(run: string): object {
+  return { run, effects: effectsOfARun };
+}
+
 function manifestOf(name: string): string {
   const action = (description: string, script: string, effects: readonly string[]): object => ({
     description,
@@ -36,7 +40,10 @@ function manifestOf(name: string): string {
     description: "Checks and tests Tally, a made-up language; a toolchain@1 that a test adds to a copy of the kit.",
     implements: ["toolchain@1"],
     resources: {
-      commands: [...checkNames.map((check) => `sh checks/${check}.sh`), "sh run-tests.sh"],
+      commands: {
+        ...Object.fromEntries(checkNames.map((check) => [`check-${check}`, everyEffectOf(`sh checks/${check}.sh`)])),
+        "run-tests": everyEffectOf("sh run-tests.sh"),
+      },
     },
     extraFiles: ["practices.md"],
     actions: {
@@ -88,9 +95,11 @@ function stoppedReason(limit: number): string {
   return "It did not finish within " + String(limit) + " seconds and was stopped.";
 }
 
-export async function ran(context: ScriptContext, command: readonly string[], request: Request): Promise<Ran> {
+export type Named = { readonly name: string; readonly arguments: readonly string[] };
+
+export async function ran(context: ScriptContext, named: Named, request: Request): Promise<Ran> {
   const limit = request.timeLimitSeconds;
-  const answer = await context.commands.run({ command, folder: request.folder, timeLimitSeconds: limit });
+  const answer = await context.commands.run({ ...named, folder: request.folder, timeLimitSeconds: limit });
   if (!answer.ok) {
     const reason = "It could not be started: " + answer.message;
     return { seconds: 0, stdout: "", stderr: "", ending: { kind: "unknown", reason } };
@@ -176,7 +185,7 @@ const checkScript = lines(
   "  }",
   "  const verdicts = [];",
   "  for (const name of checks.filter((check) => asked.includes(check))) {",
-  '    verdicts.push(checkVerdict(name, await ran(context, ["sh", "checks/" + name + ".sh"], request)));',
+  '    verdicts.push(checkVerdict(name, await ran(context, { name: "check-" + name, arguments: [] }, request)));',
   "  }",
   "  return { verdicts };",
   "});",
@@ -188,7 +197,7 @@ const testScript = lines(
   "",
   "export const run = defineScript(async (input, context) => {",
   '  const request = requestOf(input, "files");',
-  '  return testResult(await ran(context, ["sh", "run-tests.sh", ...(request.names ?? [])], request));',
+  '  return testResult(await ran(context, { name: "run-tests", arguments: request.names ?? [] }, request));',
   "});",
 );
 

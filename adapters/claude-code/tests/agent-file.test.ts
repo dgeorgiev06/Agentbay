@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Layout } from "../../../bay/adapter.ts";
+import type { Layout, SkillAgent } from "../../../bay/adapter.ts";
 import { agentFileText, toolsFor } from "../agent-file.ts";
 import { bayCommand, coordinatorBlock } from "../coordinator.ts";
 import { decide, type Decision } from "../guard-decide.ts";
@@ -74,6 +74,35 @@ test("a step whose actions do not declare every effect gets no Bash, no commands
   const steps: unknown = JSON.parse(stepsFileText(layout, [buildAgent]));
   assert.ok(typeof steps === "object" && steps !== null && "agents" in steps);
   assert.ok(JSON.stringify(steps.agents).includes('"commands":["node --test","git status"]'));
+});
+
+function withListedCommands(effects: SkillAgent["effects"]): SkillAgent {
+  const commands = [
+    { name: "changes", words: ["git", "status"], effects: ["read"] },
+    { name: "commit-staged", words: ["git", "commit"], effects: ["read", "write"] },
+  ] as const;
+  return { ...buildAgent, effects, grants: { ...buildAgent.grants, commands } };
+}
+
+function stepCommands(agent: SkillAgent): readonly string[] {
+  const reading = readPolicy(stepsFileText(layout, [agent]), project);
+  assert.ok(reading.kind === "read", JSON.stringify(reading));
+  return reading.policy.agents.get(agent.agent)?.commands ?? ["no rules for the agent"];
+}
+
+test("a step is given the commands whose effects its action declares: read alone gives the read-only ones", () => {
+  const readOnly = withListedCommands(["read"]);
+  assert.ok(toolsFor(readOnly).includes("Bash"));
+  assert.ok(
+    agentFileText(readOnly, project).includes("\n- Run only commands that start with `git status`, with plain"),
+  );
+  assert.deepEqual(stepCommands(readOnly), ["git status"]);
+  const everything = withListedCommands(everyEffect);
+  assert.ok(agentFileText(everything, project).includes("start with `git status`, `git commit`, with plain"));
+  assert.deepEqual(stepCommands(everything), ["git status", "git commit"]);
+  const nothing = withListedCommands(["write"]);
+  assert.ok(!toolsFor(nothing).includes("Bash"));
+  assert.deepEqual(stepCommands(nothing), []);
 });
 
 test("no combination of paths and commands gives a step an agent-starting, web or unlisted tool", () => {

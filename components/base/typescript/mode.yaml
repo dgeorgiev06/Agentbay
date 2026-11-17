@@ -6,12 +6,24 @@ implements: [toolchain@1]
 
 resources:
   commands:
-    - npm run generate:check --
-    - npm run typecheck --
-    - npm run lint --
-    - npm run format:check --
-    - npm run deadcode --
-    - npm test -- --test-reporter=tap
+    check-generated-types:
+      run: npm run generate:check --
+      effects: [read, write, network, spend, delete]
+    check-types:
+      run: npm run typecheck --
+      effects: [read, write, network, spend, delete]
+    lint:
+      run: npm run lint --
+      effects: [read, write, network, spend, delete]
+    check-format:
+      run: npm run format:check --
+      effects: [read, write, network, spend, delete]
+    find-dead-code:
+      run: npm run deadcode --
+      effects: [read, write, network, spend, delete]
+    run-tests:
+      run: npm test -- --test-reporter=tap
+      effects: [read, write, network, spend, delete]
 
 extraFiles: [eslint.config.js, prettier.json, practices.md]
 

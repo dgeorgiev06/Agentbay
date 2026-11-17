@@ -43,9 +43,9 @@ async function refuseUnlessRemovable(context: ScriptContext, worktree: Worktree)
 
 async function removeWorktree(context: ScriptContext, worktree: Worktree): Promise<void> {
   await refuseUnlessRemovable(context, worktree);
-  await gitSucceeded(context, ".", ["worktree", "remove", "--end-of-options", worktree.folder]);
+  await gitSucceeded(context, ".", ["remove-worktree", worktree.folder]);
   await forgetFolder(context, worktree.folder);
-  await gitSucceeded(context, ".", ["branch", "-d", "--end-of-options", worktree.branch]);
+  await gitSucceeded(context, ".", ["delete-branch", worktree.branch]);
 }
 
 function forgottenReason(folder: string, made: Made): string {

@@ -38,6 +38,8 @@ export const kit = "/kit";
 
 export const layout: Layout = { kit, project, configFile: `${project}/agentbay.config.yaml` };
 
+const everyEffect: SkillAgent["effects"] = ["read", "write", "network", "spend", "delete"];
+
 type AgentShape = {
   readonly mode: string;
   readonly skill: string;
@@ -66,7 +68,11 @@ export function skillAgent(shape: AgentShape): SkillAgent {
       migrationsFolder: `${modeFolder}/migrations`,
       readPaths: shape.read,
       writePaths: shape.write,
-      commands: shape.commands,
+      commands: shape.commands.map((run, index) => ({
+        name: `command-${String(index + 1)}`,
+        words: run.split(" "),
+        effects: everyEffect,
+      })),
     }),
     effects: shape.effects ?? (shape.write.length > 0 ? ["read", "write"] : ["read"]),
   };

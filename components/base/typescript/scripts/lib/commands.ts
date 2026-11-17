@@ -14,7 +14,8 @@ export type Finished = {
 };
 
 export type Timed = {
-  readonly command: readonly string[];
+  readonly name: string;
+  readonly arguments: readonly string[];
   readonly folder: string;
   readonly timeLimitSeconds: number;
 };
@@ -32,10 +33,6 @@ export async function runTimed(context: ScriptContext, timed: Timed): Promise<Fi
   }
   const { end, milliseconds, stdout, stderr } = answer.value;
   return { ending: end, seconds: secondsOf(milliseconds), stdout: stdout.text, stderr: stderr.text };
-}
-
-export function npmRun(script: string): readonly string[] {
-  return ["npm", "run", script, "--"];
 }
 
 function isMissingScript(finished: Finished, script: string): boolean {

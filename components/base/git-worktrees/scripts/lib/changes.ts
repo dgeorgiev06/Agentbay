@@ -38,6 +38,5 @@ export function isClean(changes: Changes): boolean {
 }
 
 export async function changesIn(context: ScriptContext, folder: string): Promise<Changes> {
-  const status = ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=all", "--"];
-  return changesOf(await gitSucceeded(context, folder, status));
+  return changesOf(await gitSucceeded(context, folder, ["changes"]));
 }

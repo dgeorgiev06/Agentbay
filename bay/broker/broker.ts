@@ -1,14 +1,8 @@
 import type { Answer, RefusalWording } from "../answers.ts";
 import type { Effect, Permissions, ScriptRunner, StepPlace } from "../contracts.ts";
 import type { OperationName, Results } from "./operations.ts";
-import {
-  type ActionAt,
-  type EntryRequests,
-  missingEffectRefusal,
-  type Need,
-  runsCommands,
-  writableFolders,
-} from "./rule.ts";
+import { lackedEffect } from "./command-operations.ts";
+import { type ActionAt, type EntryRequests, missingEffectRefusal, type Need, writableFolders } from "./rule.ts";
 import { createScriptRunner, type ScriptRunnerOptions } from "./script-runner.ts";
 import { openStep } from "./step-broker.ts";
 
@@ -43,10 +37,12 @@ export function createBroker(services: ScriptRunnerOptions): Broker {
 }
 
 export function reachOf(permissions: Permissions): Reach {
-  const runsAnyCommand = runsCommands.every((need) => permissions.actionEffects.includes(need.effect));
+  const runnable = permissions.grants.commands.filter(
+    (command) => lackedEffect(command, permissions.actionEffects) === undefined,
+  );
   return {
     writableFolders: writableFolders(permissions),
-    commands: runsAnyCommand ? permissions.grants.commands : [],
+    commands: runnable.map((command) => command.words.join(" ")),
   };
 }
 

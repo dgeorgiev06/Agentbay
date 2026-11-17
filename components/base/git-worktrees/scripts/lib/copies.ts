@@ -14,6 +14,5 @@ export async function restoreInto(
   context: ScriptContext,
   copy: { readonly folder: string; readonly commit: string; readonly paths: readonly string[] },
 ): Promise<void> {
-  const restore = ["--work-tree=.", "restore", "--worktree", "--source", copy.commit, "--", ...copy.paths];
-  await gitSucceeded(context, copy.folder, restore);
+  await gitSucceeded(context, copy.folder, ["restore-paths", copy.commit, "--", ...copy.paths]);
 }

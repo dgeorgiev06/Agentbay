@@ -57,7 +57,7 @@ function twoTextCases(fields: Fields): readonly Refused[] {
 
 const httpRequest = { method: "POST", url: "https://api.example.com/items", headers: {}, body: "x" };
 
-const commandRequest = { command: ["git", "status"], folder: ".", timeLimitSeconds: 30, input: "y\n" };
+const commandRequest = { name: "changes", arguments: ["--short"], folder: ".", timeLimitSeconds: 30, input: "y\n" };
 
 export const refusedRequests: { readonly [Name in OperationName]: readonly Refused[] } = {
   "db.execute": statementCases("insert into items (title) values ('a')"),
@@ -120,9 +120,11 @@ export const refusedRequests: { readonly [Name in OperationName]: readonly Refus
   ],
   "commands.run": [
     { what: "not a mapping", value: ["git", "status"], problem: notAMapping },
-    missing(commandRequest, "command", "The field command is missing or is not a list of text."),
-    given(commandRequest, { command: "git status" }, "The field command is missing or is not a list of text."),
-    given(commandRequest, { command: ["git", 1] }, "The field command is missing or is not a list of text."),
+    missing(commandRequest, "name", "The field name is missing or is not text."),
+    given(commandRequest, { name: ["changes"] }, "The field name is missing or is not text."),
+    missing(commandRequest, "arguments", "The field arguments is missing or is not a list of text."),
+    given(commandRequest, { arguments: "--short" }, "The field arguments is missing or is not a list of text."),
+    given(commandRequest, { arguments: ["--short", 1] }, "The field arguments is missing or is not a list of text."),
     missing(commandRequest, "folder", "The field folder is missing or is not text."),
     given(commandRequest, { folder: ["."] }, "The field folder is missing or is not text."),
     missing(commandRequest, "timeLimitSeconds", "The field timeLimitSeconds is missing or is not a number."),

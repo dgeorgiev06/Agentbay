@@ -17,6 +17,8 @@ export type InterfaceReference = string;
 
 export type RelativePath = string;
 
+export type ListedCommand = { readonly run: string; readonly effects: ReadonlyArray<Effect> };
+
 export type Effect = "read" | "write" | "network" | "spend" | "delete";
 
 export type Budget = {
@@ -35,7 +37,7 @@ export type Resources = {
   };
   readonly secrets?: ReadonlyArray<string>;
   readonly network?: ReadonlyArray<string>;
-  readonly commands?: ReadonlyArray<string>;
+  readonly commands?: Readonly<Record<string, ListedCommand>>;
 };
 
 export type Action = {

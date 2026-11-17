@@ -2,17 +2,36 @@ import { stringify } from "yaml";
 
 import type { ModeFiles } from "./kit-copy.ts";
 
-export type TallyVariant = "stops a check at its limit" | "passes a check stopped at its limit";
+export type TallyVariant =
+  | "stops a check at its limit"
+  | "passes a check stopped at its limit"
+  | "writes its build output beside the folder"
+  | "writes its build output in the project's root"
+  | "builds only into a folder with no build output";
 
 export const tally = "tally";
 
 export const wrongTally = "tally-wrong";
 
+export const besideTally = "tally-beside";
+
+export const rootTally = "tally-root";
+
+export const onceTally = "tally-once";
+
 const sdkFromScripts = "../../../../bay/sdk.ts";
 
 const sdkFromLibrary = "../../../../../bay/sdk.ts";
 
-const checkNames = ["spelling", "line-length"];
+const checkNames = ["spelling", "line-length", "build"];
+
+const buildCommands: Readonly<Record<TallyVariant, string>> = {
+  "stops a check at its limit": "sh build.sh build -p",
+  "passes a check stopped at its limit": "sh build.sh build -p",
+  "writes its build output beside the folder": "sh build.sh ../build -p",
+  "writes its build output in the project's root": "sh build.sh ../../build -p",
+  "builds only into a folder with no build output": "sh build.sh build",
+};
 
 const effectsOfARun = ["read", "write", "network", "spend", "delete"];
 
@@ -28,7 +47,7 @@ function everyEffectOf(run: string): object {
   return { run, effects: effectsOfARun };
 }
 
-function manifestOf(name: string): string {
+function manifestOf(name: string, variant: TallyVariant): string {
   const action = (description: string, script: string, effects: readonly string[]): object => ({
     description,
     effects,
@@ -41,7 +60,9 @@ function manifestOf(name: string): string {
     implements: ["toolchain@1"],
     resources: {
       commands: {
-        ...Object.fromEntries(checkNames.map((check) => [`check-${check}`, everyEffectOf(`sh checks/${check}.sh`)])),
+        "check-spelling": everyEffectOf("sh checks/spelling.sh"),
+        "check-line-length": everyEffectOf("sh checks/line-length.sh"),
+        "check-build": everyEffectOf(buildCommands[variant]),
         "run-tests": everyEffectOf("sh run-tests.sh"),
       },
     },
@@ -215,6 +236,15 @@ const testWords: Readonly<Record<Outcome, string>> = {
   "does not end": "hang",
 };
 
+const builder = [
+  'out="$1"',
+  "shift",
+  'mkdir "$@" "$out" || exit 1',
+  'echo "built from src/main.tally" > "$out/$(basename "$PWD").out"',
+  "exec sh checks/build.sh",
+  "",
+].join("\n");
+
 const runner = [
   'if [ "$#" -eq 0 ]; then set -- $(find tests -name "*.test.tally" 2>/dev/null | sort); fi',
   "status=0",
@@ -247,6 +277,7 @@ export function tallyCheckout(wanted: Wanted): Files {
     [...file.map(testLineOf), ""].join("\n"),
   ]);
   return {
+    "build.sh": builder,
     "run-tests.sh": runner,
     "src/main.tally": "pass the source\n",
     ...Object.fromEntries(checks),
@@ -295,9 +326,9 @@ const examples = {
 
 export function tallyFiles(name: string, variant: TallyVariant): ModeFiles {
   const chosen =
-    variant === "stops a check at its limit" ? library : library.replace(stoppedLine, passedWhenStoppedLine);
+    variant === "passes a check stopped at its limit" ? library.replace(stoppedLine, passedWhenStoppedLine) : library;
   return {
-    "mode.yaml": manifestOf(name),
+    "mode.yaml": manifestOf(name, variant),
     "README.md": lines(
       `# ${name}`,
       "",

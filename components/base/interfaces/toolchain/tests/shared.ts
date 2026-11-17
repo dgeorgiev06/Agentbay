@@ -53,6 +53,7 @@ type Toolchain = {
   readonly failure: (action: string, input: Fields) => Promise<string>;
   readonly write: (label: string, wanted: Wanted) => Promise<string>;
   readonly filesIn: (folder: string) => Promise<Files>;
+  readonly outside: (folder: string) => Promise<Files>;
 };
 
 type Case = {
@@ -77,6 +78,8 @@ const unknownCheck = "no-such-check";
 const missingFolder = "checkouts/nowhere";
 
 const givenReason = "a reason is given";
+
+const kernelStateFolder = ".agentbay";
 
 const sums: WantedTestFile = [
   { name: "one and one make two", outcome: "passes" },
@@ -418,14 +421,35 @@ const cases: readonly Case[] = [
     },
   },
   {
-    name: "check and test write nothing into the checkout that its own checks and tests did not write",
+    name: "check and test write nothing outside the folder they are given, anywhere in the project",
     run: async (toolchain) => {
       const description = await toolchain.describe();
-      const folder = await toolchain.write("untouched", allPassing(description, [sums, wrongSum]));
-      const before = await toolchain.filesIn(folder);
+      const folder = await toolchain.write("written-only-inside", allPassing(description, [sums, wrongSum]));
+      const before = await toolchain.outside(folder);
       await toolchain.check({ folder });
       await toolchain.test({ folder });
-      assert.deepEqual(await toolchain.filesIn(folder), before);
+      assert.deepEqual(await toolchain.outside(folder), before);
+    },
+  },
+  {
+    name: "a second check and test on the same folder, after the first wrote there, give the same verdicts",
+    run: async (toolchain) => {
+      const description = await toolchain.describe();
+      const [first = ""] = description.checks;
+      const wanted = { checks: wantedChecks(description.checks, { [first]: "fails" }), testFiles: [sums, wrongSum] };
+      const folder = await toolchain.write("called-twice", wanted);
+      const expected = {
+        verdicts: [
+          { name: first, verdict: "failed", lastLine: lineOf(first) },
+          ...description.checks.slice(1).map(passed),
+        ],
+        test: { verdict: "failed", passed: 2, failed: 1, failedTests: ["a sum that is wrong"] },
+      };
+      for (const call of ["first", "second"]) {
+        const verdicts = verdictsOf(await toolchain.check({ folder })).map(shownVerdict);
+        const test = shownTestResult(await toolchain.test({ folder }));
+        assert.deepEqual({ call, verdicts, test }, { call, ...expected });
+      }
     },
   },
 ];
@@ -438,6 +462,31 @@ async function filesUnder(root: string, folder: string): Promise<Record<string, 
       Object.assign(found, await filesUnder(root, path));
     } else {
       found[relative(root, path)] = await readFile(path, "utf8");
+    }
+  }
+  return found;
+}
+
+function isInside(folder: string, path: string): boolean {
+  return path === folder || path.startsWith(`${folder}/`);
+}
+
+async function shownEntry(root: string, path: string): Promise<string> {
+  return isInside(kernelStateFolder, relative(root, path)) ? "" : readFile(path, "utf8");
+}
+
+async function entriesOutside(root: string, folder: string, skipped: string): Promise<Record<string, string>> {
+  const found: Record<string, string> = {};
+  for (const entry of await readdir(folder, { withFileTypes: true })) {
+    const path = join(folder, entry.name);
+    if (path === skipped) {
+      continue;
+    }
+    if (entry.isDirectory()) {
+      found[`${relative(root, path)}/`] = "";
+      Object.assign(found, await entriesOutside(root, path, skipped));
+    } else {
+      found[relative(root, path)] = await shownEntry(root, path);
     }
   }
   return found;
@@ -461,6 +510,7 @@ function toolchainFor(project: ModeProject, underTest: ToolchainUnderTest, index
       return folder;
     },
     filesIn: (folder) => filesUnder(join(project.root, folder), join(project.root, folder)),
+    outside: (folder) => entriesOutside(project.root, project.root, join(project.root, folder)),
   };
 }
 

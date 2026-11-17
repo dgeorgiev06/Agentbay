@@ -9,6 +9,7 @@ import {
   type Requests,
   type ScriptStart,
   shapes,
+  shownToAuthor,
 } from "./operations.ts";
 
 export const removalAllowedArgument = "--agentbay-may-remove-files";
@@ -27,8 +28,8 @@ export type ChildLine =
 
 export type ChildMessage =
   | { readonly type: "request"; readonly id: number; readonly asked: AskedFor<OperationName> }
-  | { readonly type: "unreadable-request"; readonly operation: OperationName; readonly problem: string }
-  | { readonly type: "unread-answer"; readonly operation: OperationName; readonly problem: string }
+  | { readonly type: "unreadable-request"; readonly operation: OperationName; readonly sentence: string }
+  | { readonly type: "unread-answer"; readonly operation: OperationName; readonly sentence: string }
   | Final;
 
 export type StartMessage = { readonly type: "start"; readonly input: Json } & ScriptStart;
@@ -64,12 +65,23 @@ function requestMessageOf(id: number, operation: OperationName, value: Json): Ch
   if (reading.ok) {
     return { type: "request", id, asked: reading.value };
   }
-  return { type: "unreadable-request", operation, problem: reading.problem };
+  return {
+    type: "unreadable-request",
+    operation,
+    sentence: shownToAuthor({ side: "request", operation, misfit: reading.misfit }),
+  };
 }
 
 function unreadAnswerOf(operation: OperationName, value: Json): ChildMessage | undefined {
   const reading = shapes[operation].result(value);
-  return reading.ok ? undefined : { type: "unread-answer", operation, problem: reading.problem };
+  if (reading.ok) {
+    return undefined;
+  }
+  return {
+    type: "unread-answer",
+    operation,
+    sentence: shownToAuthor({ side: "result", operation, misfit: reading.misfit }),
+  };
 }
 
 function finalMessageOf(fields: Fields): Final | undefined {

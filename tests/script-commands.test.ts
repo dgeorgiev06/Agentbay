@@ -424,12 +424,27 @@ async function stoppedBy(request: Json): Promise<Json> {
   }
 }
 
-test("a request whose name is not text, or whose arguments are not a list of texts, stops the script", async () => {
-  const stopped = { status: "failed", reason: "The script sent a line that is not a valid message." };
+test("a request whose name is not text, or whose arguments are not a list of texts, stops the script with the field's sentence", async () => {
+  const stopped = (reason: string): Json => ({ status: "failed", reason });
   const asked = { folder: ".", timeLimitSeconds: 30 };
-  assert.deepEqual(await stoppedBy({ ...asked, name: "version", arguments: ["--version", 1] }), stopped);
-  assert.deepEqual(await stoppedBy({ ...asked, name: "version", arguments: "--version" }), stopped);
-  assert.deepEqual(await stoppedBy({ ...asked, name: "version" }), stopped);
-  assert.deepEqual(await stoppedBy({ ...asked, name: ["version"], arguments: [] }), stopped);
-  assert.deepEqual(await stoppedBy({ ...asked, arguments: [] }), stopped);
+  assert.deepEqual(
+    await stoppedBy({ ...asked, name: "version", arguments: ["--version", 1] }),
+    stopped("The field arguments[1] in the request for commands.run is not text."),
+  );
+  assert.deepEqual(
+    await stoppedBy({ ...asked, name: "version", arguments: "--version" }),
+    stopped("The field arguments in the request for commands.run is not a list of text."),
+  );
+  assert.deepEqual(
+    await stoppedBy({ ...asked, name: "version" }),
+    stopped("The field arguments is missing from the request for commands.run. It must be a list of text."),
+  );
+  assert.deepEqual(
+    await stoppedBy({ ...asked, name: ["version"], arguments: [] }),
+    stopped("The field name in the request for commands.run is not text."),
+  );
+  assert.deepEqual(
+    await stoppedBy({ ...asked, arguments: [] }),
+    stopped("The field name is missing from the request for commands.run. It must be text."),
+  );
 });

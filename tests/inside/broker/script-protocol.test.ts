@@ -16,7 +16,7 @@ test("a request is read by the guard of the operation it names", () => {
     type: "request",
     id: 1,
     operation: "http.request",
-    request: { method: "GET", url: "https://api.example.com/x", headers: {}, extra: true },
+    request: { method: "GET", url: "https://api.example.com/x", headers: {} },
   });
   assert.deepEqual(childMessageOf(line), {
     type: "request",
@@ -30,7 +30,7 @@ test("a request is read by the guard of the operation it names", () => {
   });
 });
 
-test("a request its operation's guard refuses is read as unreadable, with the guard's sentence", () => {
+test("a request its operation's guard refuses is read as unreadable, with the sentence its author reads", () => {
   const trace = JSON.stringify({
     type: "request",
     id: 1,
@@ -40,26 +40,39 @@ test("a request its operation's guard refuses is read as unreadable, with the gu
   assert.deepEqual(childMessageOf(trace), {
     type: "unreadable-request",
     operation: "http.request",
-    problem: "The field method is missing or is not one of GET, POST, PUT, PATCH, DELETE.",
+    sentence: "The field method in the request for http.request is not one of GET, POST, PUT, PATCH, DELETE.",
   });
   assert.deepEqual(childMessageOf('{"type":"request","id":1,"operation":"files.read","request":{"path":3}}'), {
     type: "unreadable-request",
     operation: "files.read",
-    problem: "The field path is missing or is not text.",
+    sentence: "The field path in the request for files.read is not text.",
+  });
+  const extra = JSON.stringify({
+    type: "request",
+    id: 1,
+    operation: "http.request",
+    request: { method: "GET", url: "https://api.example.com/x", headers: {}, extra: true },
+  });
+  assert.deepEqual(childMessageOf(extra), {
+    type: "unreadable-request",
+    operation: "http.request",
+    sentence:
+      "The field extra in the request for http.request is not one it takes. " +
+      "It takes the fields method, url, headers and body.",
   });
   assert.deepEqual(childMessageOf('{"type":"request","id":1,"operation":"spend"}'), {
     type: "unreadable-request",
     operation: "spend",
-    problem: "The value is not a mapping.",
+    sentence: "The request for spend is not a mapping.",
   });
 });
 
-test("an answer the child could not read is reported with the table's sentence for it", () => {
+test("an answer the child could not read is reported with the sentence its author reads", () => {
   const line = JSON.stringify({ type: "unread-answer", operation: "http.request", value: { status: null } });
   assert.deepEqual(childMessageOf(line), {
     type: "unread-answer",
     operation: "http.request",
-    problem: "The value is not a response with a status, headers and a body.",
+    sentence: "The field status in the answer to http.request is not a number.",
   });
 });
 

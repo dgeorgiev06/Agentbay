@@ -10,6 +10,7 @@ import {
 } from "./check-context.ts";
 import { type Binds, importSpecifiers, type ImportSpecifier } from "./import-scanner.ts";
 import { isInsideOrEqual, pathIn, shownPath, type Layout } from "./layout.ts";
+import { listOf } from "./policy.ts";
 import type { FileSystem } from "./ports.ts";
 import { sdkSpecifier } from "./protocol-json.ts";
 import type { Problem } from "./outcome.ts";
@@ -174,6 +175,18 @@ function filesTestsTakeValuesFrom(mode: ModeFolder, sources: readonly SourceFile
   return new Set(valueImports.map((entry) => resolved(entry.file, entry.text)));
 }
 
+function secondArgumentOf(mode: LoadedModeFolder): string {
+  const name = mode.manifest.name;
+  const list = listOf(mode.manifest);
+  const listsSomething = list.commands.length > 0 || list.throwaway.length > 0;
+  const isBase = mode.home === "kit" && mode.tier === "base";
+  const fields = [
+    ...(mode.home === "project" ? ["project: import.meta.dirname"] : []),
+    ...(listsSomething && !isBase ? [`trusted: ["${name}"]`] : []),
+  ];
+  return fields.length === 0 ? "" : ` and, as its second argument, { ${fields.join(", ")} }`;
+}
+
 function unrunSharedTestProblems(found: SharedTestsOfMode, sources: readonly SourceFile[]): readonly Problem[] {
   const { layout, mode, sharedTests } = found;
   const run = filesTestsTakeValuesFrom(mode, sources);
@@ -188,7 +201,8 @@ function unrunSharedTestProblems(found: SharedTestsOfMode, sources: readonly Sou
           "mode runs, so nothing shows that the mode does what the interface means.",
         fix:
           `Add a test file under ${mode.label}/tests/ that imports the function ` +
-          `${relative(join(mode.folder, "tests"), file)} exports and calls it with { mode: "${name}" }. ` +
+          `${relative(join(mode.folder, "tests"), file)} exports and calls it with { mode: "${name}" }` +
+          `${secondArgumentOf(mode)}. ` +
           "An import of its types alone, or of the file for its side effects, runs nothing.",
       }),
     );

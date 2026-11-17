@@ -90,23 +90,31 @@ async function writtenConfig(project: ModeProject): Promise<unknown> {
 test("a folder inside a project opens that project, its config under the one given, and again when it is reopened", async () => {
   const beside = await makeProject();
   const inside = join(beside.root, "components/modes/writer/tests");
-  const projectConfig = { ...config, adapter: "fake", modes: ["store"] };
-  await beside.write("agentbay.config.yaml", stringify(projectConfig));
-  const given = { bindings: {}, adapter: "claude-code", settings: { writer: { signature: "From the test" } } };
-  let project = await openModeProject({ ...given, modes: ["git-worktrees"] }, { project: inside });
+  const source = { baseDate: "2026-11-15T12:00:00Z", pageSize: 2 };
+  const settings = { ...config.settings, "fake-source": source };
+  await beside.write("agentbay.config.yaml", stringify({ ...config, adapter: "fake", modes: ["store"], settings }));
+  const given = {
+    bindings: {},
+    adapter: "claude-code",
+    settings: { writer: { signature: "From the test" }, "fake-source": { pageSize: 5 } },
+  };
+  let project = await openModeProject({ ...given, modes: ["fake-source"] }, { project: inside });
   try {
     assert.deepEqual(await writtenConfig(project), {
       bindings: { "greeting-source": "greeter" },
       adapter: "claude-code",
-      settings: { writer: { signature: "From the test" } },
-      modes: ["store", "git-worktrees"],
+      settings: {
+        writer: { signature: "From the test" },
+        "fake-source": { baseDate: "2026-11-15T12:00:00Z", pageSize: 5 },
+      },
+      modes: ["store", "fake-source"],
     });
     assert.deepEqual(await project.output("greeter.fetch", { name: "Ada" }), { greeting: "Hello, Ada" });
     project = await project.reopen({ bindings: {}, adapter: "claude-code" });
     assert.deepEqual(await writtenConfig(project), {
       bindings: { "greeting-source": "greeter" },
       adapter: "claude-code",
-      settings: { writer: { signature: "Yours, the writer" } },
+      settings: { writer: { signature: "Yours, the writer" }, "fake-source": source },
       modes: ["store"],
     });
     const run = await project.run("writer.compose", { name: "Ada" });

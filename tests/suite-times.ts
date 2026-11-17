@@ -16,6 +16,11 @@ type Tally = {
   readonly failed: number;
 };
 
+type Summary = {
+  readonly file: string | undefined;
+  readonly counts: Tally;
+};
+
 type Ended = {
   readonly name: string;
   readonly file?: string;
@@ -34,13 +39,10 @@ function isWholeFile(name: string, file: string): boolean {
   return resolve(root, name) === file;
 }
 
-function counted(ended: Ended, failed: number): void {
-  const { file, name, details } = ended;
-  if (file === undefined || isWholeFile(name, file) || details.type === "suite") {
-    return;
+function tallied(summary: Summary): void {
+  if (summary.file !== undefined) {
+    tallies.set(summary.file, { tests: summary.counts.tests, failed: summary.counts.failed });
   }
-  const tally = tallies.get(file) ?? noTests;
-  tallies.set(file, { tests: tally.tests + 1, failed: tally.failed + failed });
 }
 
 function timed(ended: Ended): void {
@@ -70,13 +72,7 @@ const started = performance.now();
 
 const stream = run({ concurrency: 1 });
 
-stream.on("test:pass", (data) => {
-  counted(data, 0);
-});
-
-stream.on("test:fail", (data) => {
-  counted(data, 1);
-});
+stream.on("test:summary", tallied);
 
 stream.on("test:complete", timed);
 

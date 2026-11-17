@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { parse, stringify } from "yaml";
-import { makeProject } from "./project-fixture.ts";
+import { isRecord } from "../bay/json.ts";
+import { kit, makeProject, type Project } from "./project-fixture.ts";
 import { openModeProject, type ModeProject, type Run } from "./test-toolbox.ts";
 
 const toolboxFile = new URL("./test-toolbox.ts", import.meta.url);
@@ -52,9 +53,9 @@ test("the test toolbox exports these names and no others", async () => {
     "CallOptions",
     "Decision",
     "ModeProject",
-    "ProjectFolder",
     "ProjectOptions",
     "Run",
+    "TestProject",
     "openModeProject",
   ]);
   assert.deepEqual(text.match(/^export\b(?! (?:async function|function|type|const) \w+)/gm), null);
@@ -255,4 +256,174 @@ test("a mode's database is reached through the broker, with the rules a script's
       value: [{ text: "The first note." }],
     });
   });
+});
+
+const openedAt = "2026-11-17T09:30:00.000Z";
+
+function refusedSay(mode: string): string {
+  return (
+    "The step 0 of action say asked to run the listed command say with [] in ., but the owner does not trust the " +
+    `list of mode ${mode}, so none of its commands or throwaway folders is granted. The owner reads the list and ` +
+    `decides with: bay approve --trust ${mode}.`
+  );
+}
+
+function sayingManifest(name: string, words: string): string {
+  const any = "schemas/any.json";
+  return stringify({
+    name,
+    version: "1.0.0",
+    description: "Runs one listed command and gives back what it printed.",
+    resources: { commands: { say: { run: words, effects: ["read"] } } },
+    actions: {
+      say: {
+        description: "When a test needs what the listed command prints.",
+        input: any,
+        output: any,
+        effects: ["read"],
+        run: [{ script: "scripts/say.ts" }],
+      },
+    },
+  });
+}
+
+const sayScript = [
+  'import { defineScript, fail } from "agentbay/sdk";',
+  "",
+  "export const run = defineScript(async (_input, context) => {",
+  '  const answer = await context.commands.run({ name: "say", arguments: [], folder: ".", timeLimitSeconds: 30 });',
+  "  return answer.ok ? { said: answer.value.stdout.text } : fail(answer.message);",
+  "});",
+  "",
+].join("\n");
+
+async function projectWithSayingModes(): Promise<Project> {
+  const beside = await makeProject();
+  for (const name of ["echoer", "chimer"]) {
+    await beside.write(`components/modes/${name}/mode.yaml`, sayingManifest(name, `echo said by ${name}`));
+    await beside.write(`components/modes/${name}/schemas/any.json`, "{}\n");
+    await beside.write(`components/modes/${name}/scripts/say.ts`, sayScript);
+  }
+  return beside;
+}
+
+async function filesUnder(folder: string): Promise<Readonly<Record<string, string>>> {
+  try {
+    const paths = await readdir(folder, { recursive: true, withFileTypes: true });
+    const files = paths.filter((entry) => entry.isFile()).map((entry) => join(entry.parentPath, entry.name));
+    const read = files.map(async (file): Promise<readonly [string, string]> => [file, await readFile(file, "utf8")]);
+    return Object.fromEntries(await Promise.all(read));
+  } catch {
+    return {};
+  }
+}
+
+async function kernelFolders(beside: Project): Promise<unknown> {
+  return [await filesUnder(join(kit, ".agentbay")), await filesUnder(join(beside.root, ".agentbay"))];
+}
+
+test("a project's mode the test trusts runs its listed command and one it does not name is refused, and the record that a test trusted it is in the temporary project alone", async () => {
+  const beside = await projectWithSayingModes();
+  const before = await kernelFolders(beside);
+  const project = await openModeProject(config, { project: beside.root, trusted: ["echoer"], startAt: openedAt });
+  try {
+    assert.deepEqual(await project.output("echoer.say", {}), { said: "said by echoer\n" });
+    assert.equal(await project.failure("chimer.say", {}), refusedSay("chimer"));
+    const record: unknown = JSON.parse(await readFile(join(project.root, ".agentbay/trust.json"), "utf8"));
+    const given = isRecord(record) && isRecord(record.modes) ? record.modes.echoer : undefined;
+    assert.ok(isRecord(given), JSON.stringify(record));
+    assert.deepEqual(Object.keys(isRecord(record) && isRecord(record.modes) ? record.modes : {}), ["echoer"]);
+    assert.deepEqual(given.list, {
+      mode: "echoer",
+      commands: [{ name: "say", words: ["echo", "said", "by", "echoer"], effects: ["read"] }],
+      commandsStartWith: [],
+      throwaway: [],
+    });
+    assert.deepEqual([given.at, given.by], [openedAt, "a test"]);
+    assert.deepEqual(Object.keys(isRecord(given.scripts) ? given.scripts : {}), ["schemas/any.json", "scripts/say.ts"]);
+    assert.deepEqual(await kernelFolders(beside), before);
+  } finally {
+    await project.close();
+    await beside.remove();
+  }
+});
+
+test("a test that trusts two modes of a project runs a listed command of each", async () => {
+  const beside = await projectWithSayingModes();
+  const project = await openModeProject(config, { project: beside.root, trusted: ["echoer", "chimer"] });
+  try {
+    assert.deepEqual(await project.output("echoer.say", {}), { said: "said by echoer\n" });
+    assert.deepEqual(await project.output("chimer.say", {}), { said: "said by chimer\n" });
+  } finally {
+    await project.close();
+    await beside.remove();
+  }
+});
+
+test("without trusted, a project's mode loads and its listed command is refused with the broker's sentence and a sentence for the test's author", async () => {
+  const beside = await projectWithSayingModes();
+  const project = await openModeProject(config, { project: beside.root });
+  try {
+    assert.equal(await project.failure("echoer.say", {}), refusedSay("echoer"));
+    await assert.rejects(project.output("echoer.say", {}), (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.ok(error.message.includes(refusedSay("echoer")), error.message);
+      assert.ok(
+        error.message.endsWith(
+          "A test runs the commands of a mode outside the kit's components/base/ only when it trusts the mode. " +
+            'Name it where the test opens the project: { project: import.meta.dirname, trusted: ["echoer"] }.',
+        ),
+        error.message,
+      );
+      return true;
+    });
+    await assert.rejects(readFile(join(project.root, ".agentbay/trust.json"), "utf8"), { code: "ENOENT" });
+  } finally {
+    await project.close();
+    await beside.remove();
+  }
+});
+
+test("a mode whose list changes after the project is opened is refused at its next command, since the test trusted the list it had then", async () => {
+  const beside = await projectWithSayingModes();
+  let project = await openModeProject(config, { project: beside.root, trusted: ["echoer"], startAt: openedAt });
+  try {
+    assert.deepEqual(await project.output("echoer.say", {}), { said: "said by echoer\n" });
+    await writeFile(
+      join(project.root, "components/modes/echoer/mode.yaml"),
+      sayingManifest("echoer", "echo changed"),
+      "utf8",
+    );
+    project = await project.reopen(config);
+    assert.equal(
+      await project.failure("echoer.say", {}),
+      "The step 0 of action say asked to run the listed command say with [] in ., but the list of mode echoer is " +
+        "not the list the owner trusted on 2026-11-17, so none of its commands or throwaway folders is granted. " +
+        "The owner reads what changed and decides with: bay approve --trust echoer.",
+    );
+  } finally {
+    await project.close();
+    await beside.remove();
+  }
+});
+
+test("trusted that names no mode of the project, a mode of the kit's base folder, or a mode that lists nothing fails the test's setup with a sentence", async () => {
+  const beside = await projectWithSayingModes();
+  const opened = (trusted: readonly string[]): Promise<ModeProject> =>
+    openModeProject({ ...config, modes: ["typescript"] }, { project: beside.root, trusted });
+  try {
+    await assert.rejects(opened(["echoer", "nosuch"]), {
+      message: "trusted names nosuch, but the project the test opened has no active mode nosuch.",
+    });
+    await assert.rejects(opened(["typescript"]), {
+      message:
+        "trusted names typescript, but typescript is a mode of the kit's components/base/, " +
+        "whose list is granted with no trust.",
+    });
+    await assert.rejects(opened(["greeter"]), {
+      message: "trusted names greeter, but greeter lists no command and no throwaway folder, so it needs no trust.",
+    });
+  } finally {
+    await beside.remove();
+  }
 });

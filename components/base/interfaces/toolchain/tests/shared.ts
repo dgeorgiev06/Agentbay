@@ -4,7 +4,7 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { openModeProject, type ModeProject, type ProjectFolder } from "../../../../../tests/test-toolbox.ts";
+import { openModeProject, type ModeProject, type TestProject } from "../../../../../tests/test-toolbox.ts";
 
 export type Files = Readonly<Record<string, string>>;
 
@@ -529,13 +529,13 @@ function toolchainFor(project: ModeProject, underTest: ToolchainUnderTest, setti
   };
 }
 
-export function testToolchain(underTest: ToolchainUnderTest, projectFolder: ProjectFolder = {}): void {
+export function testToolchain(underTest: ToolchainUnderTest, testProject: TestProject = {}): void {
   const { mode } = underTest;
   const foldersSetAside = new Set<string>();
   let project: ModeProject;
   let asOpened: Files;
   before(async () => {
-    project = await openModeProject({ bindings: {}, adapter: "claude-code", modes: [mode] }, projectFolder);
+    project = await openModeProject({ bindings: {}, adapter: "claude-code", modes: [mode] }, testProject);
     await mkdir(join(project.root, checkoutsFolder));
     asOpened = await entriesOutside(project.root, project.root, foldersSetAside);
   });

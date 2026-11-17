@@ -6,6 +6,21 @@ export const shelf = "shelf";
 
 export const wrongShelf = "shelf-wrong";
 
+export const casesThatNeedMergeSetAsideOrApply: readonly string[] = [
+  "apply changes exactly the paths a patch names in the copy, and gives them in the patch's order",
+  "a removed line that starts with two dashes is content, not a path the patch names",
+  "merge makes a merge commit on the target whose parents are the target's old head and the slice's head, and a " +
+    "second merge says it is already merged",
+  "a target with no commits of its own still gets a merge commit with two parents",
+  "a conflict is refused naming the conflicting path; the target, the slice's branch and its worktree are as they " +
+    "were, and the same merge can be tried again",
+  "set-aside commits every changed, deleted and untracked file to forge/wip/<slice>/1 on the worktree's head, and " +
+    "leaves the worktree clean with its ignored files",
+  "set-aside never reuses a branch name: a taken number is skipped, and each earlier branch is as it was",
+  "set-aside with nothing but ignored files does nothing, makes no branch, and keeps the ignored files",
+  "the owner's checked-out branch, its files and its uncommitted work are as they were after every action",
+];
+
 const examples: readonly string[] = [
   "cut",
   "status",

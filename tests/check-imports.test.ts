@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { check, cleanFiles, findFinding, withoutFinding } from "./check-fixture.ts";
+import { stringify } from "yaml";
+import { check, checkFake, cleanFiles, findFinding, withoutFinding } from "./check-fixture.ts";
+import { fakeFileSystem } from "./fakes.ts";
+import { rooted, separateLayout } from "./system-fixture.ts";
 
 const script = "components/modes/notes/scripts/tidy.ts";
 
@@ -84,6 +87,80 @@ test("a mode that implements an interface with a shared test, and has no test th
   assert.equal(finding.severity, "error");
   findFinding(report, storeScript, `which resolves to ${storeShared}`);
   withoutFinding(report, "Mode notes implements");
+});
+
+function keeperManifest(commands: Readonly<Record<string, unknown>>): string {
+  return stringify({
+    name: "keeper",
+    version: "1.0.0",
+    description: "Keeps items.",
+    implements: ["items-store@1"],
+    resources: { commands },
+    actions: {},
+  });
+}
+
+const tidyCommand = { tidy: { run: "echo tidy", effects: ["read"] } };
+
+const keeperManifestFile = "components/modes/keeper/mode.yaml";
+
+async function keeperBesideTheKit(commands: Readonly<Record<string, unknown>>): ReturnType<typeof check> {
+  const files = {
+    ...rooted({ ...cleanFiles(), [storeShared]: sharedTestText }),
+    "/project/agentbay.config.yaml": stringify({ adapter: "fake", bindings: {} }),
+    [`/project/${keeperManifestFile}`]: keeperManifest(commands),
+  };
+  return checkFake(fakeFileSystem(files), separateLayout);
+}
+
+function keeperFix(from: string, secondArgument: string): string {
+  return (
+    "Add a test file under components/modes/keeper/tests/ that imports the function " +
+    `${from} exports and calls it with { mode: "keeper" } and, as its second argument, ${secondArgument}. ` +
+    "An import of its types alone, or of the file for its side effects, runs nothing."
+  );
+}
+
+const fromTheProject = "../../../../../kit/components/base/interfaces/items-store/tests/shared.ts";
+
+test("a mode in a project beside the kit that lists a command, and runs no shared test, is told to give its project and to trust it", async () => {
+  const report = await keeperBesideTheKit(tidyCommand);
+  const finding = findFinding(report, keeperManifestFile, "no test of the mode runs");
+  assert.equal(finding.fix, keeperFix(fromTheProject, '{ project: import.meta.dirname, trusted: ["keeper"] }'));
+});
+
+test("a mode in a project beside the kit that lists nothing, and runs no shared test, is told to give its project only", async () => {
+  const report = await keeperBesideTheKit({});
+  const finding = findFinding(report, keeperManifestFile, "no test of the mode runs");
+  assert.equal(finding.fix, keeperFix(fromTheProject, "{ project: import.meta.dirname }"));
+});
+
+test("a mode of the kit outside components/base/ that lists a command, and runs no shared test, is told to trust it", async () => {
+  const report = await check({
+    ...cleanFiles(),
+    [storeShared]: sharedTestText,
+    [keeperManifestFile]: keeperManifest(tidyCommand),
+  });
+  const finding = findFinding(report, keeperManifestFile, "no test of the mode runs");
+  assert.equal(
+    finding.fix,
+    keeperFix("../../../base/interfaces/items-store/tests/shared.ts", '{ trusted: ["keeper"] }'),
+  );
+});
+
+test("a mode of the kit's components/base/ that lists a command, and runs no shared test, is told no second argument", async () => {
+  const baseKeeper = "components/base/keeper/mode.yaml";
+  const report = await check({
+    ...cleanFiles(),
+    [storeShared]: sharedTestText,
+    [baseKeeper]: keeperManifest(tidyCommand),
+  });
+  assert.equal(
+    findFinding(report, baseKeeper, "no test of the mode runs").fix,
+    "Add a test file under components/base/keeper/tests/ that imports the function " +
+      '../../interfaces/items-store/tests/shared.ts exports and calls it with { mode: "keeper" }. ' +
+      "An import of its types alone, or of the file for its side effects, runs nothing.",
+  );
 });
 
 test("a mode whose test imports only types from the shared test with import type does not run it", async () => {

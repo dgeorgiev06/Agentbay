@@ -13,7 +13,7 @@ resources:
     - npm run deadcode --
     - npm test -- --test-reporter=tap
 
-extraFiles: [eslint.config.js, knip.json, prettier.json, practices.md]
+extraFiles: [eslint.config.js, prettier.json, practices.md]
 
 actions:
   describe:

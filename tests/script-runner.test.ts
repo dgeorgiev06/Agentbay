@@ -863,8 +863,8 @@ test("spend that is negative or not a number is refused", async () => {
 test("a script sees the caller and the skill input the engine gives it, and none when it gives none", async () => {
   await withProject(async (root) => {
     const body = "  return { caller: context.caller ?? null, skillInput: context.skillInput ?? null };";
-    const given = await attempt(root, body, { caller: "feed-briefing", skillInput: { items: ["a:1"] } });
-    assert.deepEqual(outputOf(given), { caller: "feed-briefing", skillInput: { items: ["a:1"] } });
+    const given = await attempt(root, body, { caller: "briefing", skillInput: { items: ["a:1"] } });
+    assert.deepEqual(outputOf(given), { caller: "briefing", skillInput: { items: ["a:1"] } });
     const none = await attempt(root, body);
     assert.deepEqual(outputOf(none), { caller: null, skillInput: null });
   });

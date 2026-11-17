@@ -5,6 +5,7 @@ import { loadKernel, nodeKernelPorts, type Kernel, type KernelLimits, type Kerne
 import { kit, makeProject, type Project, type ProjectOptions } from "./project-fixture.ts";
 
 export type KernelSetup = {
+  readonly kit?: string;
   readonly limits?: Partial<KernelLimits>;
   readonly environment?: Readonly<Record<string, string>>;
   readonly ports?: Partial<KernelPorts>;
@@ -15,7 +16,7 @@ export const testEnvironment = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
 export async function openKernel(project: Project, setup: KernelSetup = {}): Promise<Kernel> {
   const environment = { ...testEnvironment, ...setup.environment };
   const loaded = await loadKernel({
-    layout: layoutOf({ kit, project: project.root }),
+    layout: layoutOf({ kit: setup.kit ?? kit, project: project.root }),
     ports: { ...nodeKernelPorts(environment), ...setup.ports },
     environment,
     platform: "linux",

@@ -128,12 +128,12 @@ test("bay actions --find with no match says so and exits 0", async () => {
 
 test("bay actions with an unknown mode exits 1 with the sentence that names the active modes", async () => {
   await withProject(async (project) => {
-    const message = "There is no active mode store. The active modes are greeter, writer.";
+    const message = "There is no active mode journal. The active modes are greeter, writer.";
     const fix = "Name one of them, or leave the mode out to list them.";
-    const text = await bay(["actions", "store", "--project", project.root]);
+    const text = await bay(["actions", "journal", "--project", project.root]);
     assert.equal(text.exitCode, 1);
     assert.equal(text.output, `${message}\n  fix: ${fix}`);
-    const json = await bay(["actions", "store", "--project", project.root, "--json"]);
+    const json = await bay(["actions", "journal", "--project", project.root, "--json"]);
     assert.equal(json.exitCode, 1);
     assert.deepEqual(json.json, { ok: false, problems: [{ file: "", path: "", message, fix }] });
   });
@@ -205,11 +205,11 @@ test("bay call --tool actions takes no token and gives the same answers as bay a
       const listed = await bay(["actions", ...argv, "--project", project.root, "--json"]);
       assert.deepEqual(called.json, { ok: true, result: withoutOk(listed.json) });
     }
-    const unknown = await bay(["call", "--tool", "actions", '{"mode":"store"}', "--project", project.root]);
+    const unknown = await bay(["call", "--tool", "actions", '{"mode":"journal"}', "--project", project.root]);
     assert.equal(unknown.exitCode, 1);
     assert.equal(
       unknown.output,
-      "There is no active mode store. The active modes are greeter, writer.\n" +
+      "There is no active mode journal. The active modes are greeter, writer.\n" +
         "  fix: Name one of them, or leave the mode out to list them.",
     );
   });

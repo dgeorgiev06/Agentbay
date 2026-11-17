@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { PassThrough } from "node:stream";
 import { test } from "node:test";
 import { parse, stringify } from "yaml";
@@ -81,22 +84,59 @@ test("the terminal reads a line and all of stdin", async () => {
   assert.equal(await all, '{"text":"x"}');
 });
 
+const dreamSkill = [
+  "---",
+  "name: dream",
+  "description: Dreams; a skill of a kit mode that no project lists.",
+  "metadata:",
+  "  output: schemas/anything.json",
+  "---",
+  "",
+  ...["Input", "Output", "Definition of done", "Instructions", "Tools", "Resources", "Rules and constraints"].flatMap(
+    (section) => [`## ${section}`, "", "- Nothing.", ""],
+  ),
+].join("\n");
+
+function sleepingMode(name: string, step: Readonly<Record<string, string>>): string {
+  const action = {
+    description: "When a test needs an action of a kit mode that no project lists.",
+    input: "schemas/anything.json",
+    output: "schemas/anything.json",
+    effects: ["read"],
+    run: [step],
+  };
+  return stringify({ name, version: "1.0.0", description: "A kit mode no project lists.", actions: { rest: action } });
+}
+
+async function kitOfSleepingModes(): Promise<string> {
+  const kit = await realpath(await mkdtemp(join(tmpdir(), "agentbay-kit-")));
+  const files = {
+    "components/modes/sleeper/mode.yaml": sleepingMode("sleeper", { skill: "skills/dream", tier: "fast" }),
+    "components/modes/sleeper/skills/dream/SKILL.md": dreamSkill,
+    "components/modes/sleeper/schemas/anything.json": '{ "type": "object" }\n',
+    "components/base/napper/mode.yaml": sleepingMode("napper", { script: "scripts/nap.ts" }),
+    "components/base/napper/schemas/anything.json": '{ "type": "object" }\n',
+    "components/base/napper/scripts/nap.ts": "",
+  };
+  for (const [path, text] of Object.entries(files)) {
+    await mkdir(dirname(join(kit, path)), { recursive: true });
+    await writeFile(join(kit, path), text, "utf8");
+  }
+  return kit;
+}
+
 test("planAgents plans agents only for the active modes, each pointing at its skill file by absolute path", async () => {
   const project = await makeProject();
-  const kernel = await openKernel(project);
+  const kit = await kitOfSleepingModes();
+  const kernel = await openKernel(project, { kit });
   const active = await planAgents(kernel.system);
   assert.ok(active.ok, active.ok ? "" : JSON.stringify(active.problems));
   assert.deepEqual(
     active.value.map((agent) => agent.skillFile),
     [`${project.root}/components/modes/writer/skills/draft/SKILL.md`],
   );
-  assert.deepEqual(Array.from(kernel.system.inactive).sort(), [
-    "fake-source",
-    "feed-briefing",
-    "git-worktrees",
-    "store",
-    "typescript",
-  ]);
+  assert.deepEqual(Array.from(kernel.system.inactive).sort(), ["napper", "sleeper"]);
   kernel.close();
   await project.remove();
+  await rm(kit, { recursive: true, force: true });
 });

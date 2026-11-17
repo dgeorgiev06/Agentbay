@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { parse, stringify } from "yaml";
 import type { Json, RunEvent, Spend, StepPlace } from "../bay/contracts.ts";
 import type { Config } from "../bay/generated/config.ts";
@@ -21,10 +22,13 @@ export type CallOptions = {
   readonly caller?: string;
 };
 
-export type ProjectOptions = {
+export type ProjectFolder = {
+  readonly project?: string;
+};
+
+export type ProjectOptions = ProjectFolder & {
   readonly startAt?: string;
   readonly callers?: readonly string[];
-  readonly project?: string;
 };
 
 type Task = {
@@ -95,12 +99,17 @@ type SettableClock = Clock & {
   readonly set: (time: string) => void;
 };
 
+type Fields = Readonly<Record<string, unknown>>;
+
 type Opening = {
   readonly config: Config;
+  readonly projectConfig: Fields | undefined;
   readonly clock: SettableClock;
 };
 
 const calledInterface = "items-store";
+
+const configFile = "agentbay.config.yaml";
 
 const nothingSpent: Spend = { items: 0, usd: 0, tokens: 0, minutes: 0 };
 
@@ -201,21 +210,66 @@ function calledAs(reference: string, caller: string): string {
   return `${caller}.${reference.slice(prefix.length)}`;
 }
 
+function projectRootAt(folder: string): string {
+  const parent = dirname(folder);
+  if (existsSync(join(folder, configFile))) {
+    return folder;
+  }
+  assert.notEqual(parent, folder, `no folder at or above the one given holds ${configFile}`);
+  return projectRootAt(parent);
+}
+
+async function configOf(project: string): Promise<Fields> {
+  const config: unknown = parse(await readFile(join(project, configFile), "utf8"));
+  return isRecord(config) ? config : {};
+}
+
+function fieldsAt(fields: Fields, key: string): Fields {
+  const value = fields[key];
+  return isRecord(value) ? value : {};
+}
+
+function namesAt(fields: Fields, key: string): readonly string[] {
+  const value = fields[key];
+  return Array.isArray(value) ? value.filter((name): name is string => typeof name === "string") : [];
+}
+
+function settingsOver(projectSettings: Fields, given: Fields): Fields {
+  const modes = new Set([...Object.keys(projectSettings), ...Object.keys(given)]);
+  return Object.fromEntries(
+    [...modes].map((mode) => [mode, { ...fieldsAt(projectSettings, mode), ...fieldsAt(given, mode) }]),
+  );
+}
+
+function configOver(projectConfig: Fields, given: Config): Fields {
+  const modes = [...new Set([...namesAt(projectConfig, "modes"), ...(given.modes ?? [])])];
+  return {
+    ...projectConfig,
+    ...given,
+    bindings: { ...fieldsAt(projectConfig, "bindings"), ...given.bindings },
+    settings: settingsOver(fieldsAt(projectConfig, "settings"), given.settings ?? {}),
+    modes,
+  };
+}
+
 export async function openModeProject(config: Config, options: ProjectOptions = {}): Promise<ModeProject> {
   const root = await realpath(await mkdtemp(join(tmpdir(), "agentbay-modes-")));
   execFileSync("git", ["init", "-q"], { cwd: root });
-  if (options.project !== undefined) {
-    await cp(join(options.project, "components"), join(root, "components"), { recursive: true });
+  const project = options.project === undefined ? undefined : projectRootAt(resolve(options.project));
+  if (project !== undefined) {
+    await cp(join(project, "components"), join(root, "components"), { recursive: true });
   }
   for (const caller of options.callers ?? []) {
     await writeCallingMode(root, caller);
   }
-  return projectIn(root, { config, clock: settableClock(options.startAt) });
+  const projectConfig = project === undefined ? undefined : await configOf(project);
+  return projectIn(root, { config, projectConfig, clock: settableClock(options.startAt) });
 }
 
 async function projectIn(root: string, opening: Opening): Promise<ModeProject> {
-  const { config, clock } = opening;
-  await writeFile(join(root, "agentbay.config.yaml"), stringify(config), "utf8");
+  const { config, projectConfig, clock } = opening;
+  const written = projectConfig === undefined ? config : configOver(projectConfig, config);
+  await writeFile(join(root, configFile), stringify(written), "utf8");
   const loaded = await loadKernel({
     layout: layoutOf({ kit, project: root }),
     ports: { ...nodeKernelPorts(testEnvironment), clock },
@@ -248,7 +302,7 @@ async function projectIn(root: string, opening: Opening): Promise<ModeProject> {
     setTime: clock.set,
     reopen: async (changed) => {
       kernel.close();
-      return projectIn(root, { config: changed, clock });
+      return projectIn(root, { config: changed, projectConfig, clock });
     },
     close: async () => {
       kernel.close();

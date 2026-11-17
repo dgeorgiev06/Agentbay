@@ -157,6 +157,7 @@ function fakeTwoReplacements(path: string, folder: string): readonly Replacement
     "tests/items-source.test.ts": [
       ['mode: "fake-source"', 'mode: "fake-two"'],
       ["../../../base/interfaces/items-source/tests/shared.ts", relative(join(project, folder, "tests"), shared)],
+      ["\n});\n", "\n}, { project: import.meta.dirname });\n"],
     ],
   };
   return [...everyFile, ...(byFile[path] ?? [])];

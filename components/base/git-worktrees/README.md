@@ -37,10 +37,34 @@ Every command starts with the same options, so no code from the repository runs:
 
 `apply` and `check-attr` run without `--attr-source`: git 2.43 crashes when `apply` is given it. A copy's own attributes are read instead, and `apply` refuses a path they give a filter.
 
-Each listed prefix ends with `--end-of-options` or `--` where git allows it, so a script cannot add an option such as `--force` or `--output`. The kernel runs each command with only `PATH`, so git reads no user configuration.
+The words of each listed command end with `--end-of-options` or `--` where git allows it, so an argument a script adds cannot be an option such as `--force` or `--output`. Three commands end otherwise. `repository-filters` ends with its pattern, and git reads every later argument as a value pattern. `abort-merge` ends with `--abort`, and git refuses any later argument. `restore-paths` ends with `--source`, so a script's first argument is the commit and git reads a later argument that starts with a dash as an option. The kernel runs each command with only `PATH`, so git reads no user configuration.
+
+`changes` runs `status` with `--no-optional-locks`, so it does not rewrite the index. `changed-paths` runs `diff-tree`, which compares two commits and never reads or writes the index.
 
 `merge` and `commit` also get `-c user.name=agentbay-git-worktrees -c user.email=git-worktrees@agentbay.invalid`, so every commit the mode makes says it made it and no configuration of the owner's is read for it, and `-c gc.auto=0`, so no background clean-up starts. They add `--no-verify` and `--no-gpg-sign`, and `merge` adds `--no-verify-signatures`, so no signing program named in the repository's configuration runs. A commit message and a patch reach git on its standard input.
 
 No command that changes files or the checked-out branch (`restore`, `switch`, `merge`, `add`, `commit`, `apply`) runs outside `.forge/`. One guard in `scripts/lib/git.ts` refuses it before it runs, so the owner's checkout, index and uncommitted work are never changed.
 
 A throwaway copy is made by the kernel, which makes its folder under `.forge/copies/` (the mode's `resources.files.throwaway`), and filled by `git restore` with the copy as its work tree. The project's index is not changed.
+
+## Effects
+
+Each listed command says the effects it can have with any arguments a script adds after its words, not only with the ones the mode's scripts pass. Each action declares the effects of every command its script can run and of every other thing it asks the kernel for. These are the mode's claims: `bay check` shows each one to the owner, and the kernel believes them and cannot check them.
+
+| Action | Effects | Why |
+|---|---|---|
+| `status`, `changed` | read | They run only commands that read. |
+| `cut` | read, write, delete | It runs `switch-branch`. |
+| `remove`, `merge`, `set-aside`, `apply` | read, write, delete | They remove worktrees, branches, files or rows of the mode's database. |
+| `copy`, `overlay` | read, write, network, spend, delete | They run `restore-paths`. |
+
+| Command | Effects | Why |
+|---|---|---|
+| `commit-of`, `repository-filters`, `changes`, `commits-between`, `changed-paths`, `is-ignored`, `paths-at-commit`, `untracked-paths`, `is-ancestor`, `filters-of-paths` | read | git only reads the repository and the files. |
+| `add-detached-worktree`, `add-worktree`, `make-branch` | read, write | They make a folder and files, or a branch. Without `--force` they refuse to replace one. |
+| `switch-branch`, `merge-branch`, `abort-merge`, `apply-patch` | read, write, delete | They can remove files from a worktree or a copy. |
+| `remove-worktree`, `delete-branch` | read, write, delete | They remove a worktree or a branch. |
+| `stage-everything`, `commit-staged` | read, write, delete | They can remove entries from the index. |
+| `restore-paths` | read, write, network, spend, delete | A script can add an option after the commit. `--staged` writes the project's index, and `--recurse-submodules` runs git in each submodule, where a filter named in the submodule's own configuration can run any program. |
+
+In a partial clone git fetches a missing object from the clone's remote when a command needs it, whatever its words. The effects above do not cover that, and the mode does not refuse a partial clone.

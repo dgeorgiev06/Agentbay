@@ -90,14 +90,16 @@ async function writtenConfig(project: ModeProject): Promise<unknown> {
 test("a folder inside a project opens that project, its config under the one given, and again when it is reopened", async () => {
   const beside = await makeProject();
   const inside = join(beside.root, "components/modes/writer/tests");
+  const projectConfig = { ...config, adapter: "fake", modes: ["store"] };
+  await beside.write("agentbay.config.yaml", stringify(projectConfig));
   const given = { bindings: {}, adapter: "claude-code", settings: { writer: { signature: "From the test" } } };
-  let project = await openModeProject({ ...given, modes: ["store"] }, { project: inside });
+  let project = await openModeProject({ ...given, modes: ["git-worktrees"] }, { project: inside });
   try {
     assert.deepEqual(await writtenConfig(project), {
       bindings: { "greeting-source": "greeter" },
       adapter: "claude-code",
       settings: { writer: { signature: "From the test" } },
-      modes: ["store"],
+      modes: ["store", "git-worktrees"],
     });
     assert.deepEqual(await project.output("greeter.fetch", { name: "Ada" }), { greeting: "Hello, Ada" });
     project = await project.reopen({ bindings: {}, adapter: "claude-code" });
@@ -105,7 +107,7 @@ test("a folder inside a project opens that project, its config under the one giv
       bindings: { "greeting-source": "greeter" },
       adapter: "claude-code",
       settings: { writer: { signature: "Yours, the writer" } },
-      modes: [],
+      modes: ["store"],
     });
     const run = await project.run("writer.compose", { name: "Ada" });
     assert.equal(run.state.status === "waiting" ? run.state.waiting.reason : run.state.status, "skill");

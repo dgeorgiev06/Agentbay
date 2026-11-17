@@ -21,7 +21,7 @@ import {
 import { failedWith, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
 import { type KitLayout, type ModeTier, folderRules, kitLayoutOf, modeInInterfacesProblems } from "./folders.ts";
 import { type SchemaSource, schemaReader, valueProblems } from "./schemas.ts";
-import { schemaFilesOf } from "./action-schemas.ts";
+import { schemaFilesOf, signaturesNaming } from "./action-schemas.ts";
 import {
   type ModeRead,
   type ModeSource,
@@ -187,6 +187,11 @@ export type ActionsListing =
 export type ListingQuestion = {
   readonly mode?: string;
   readonly find?: string;
+};
+
+export type InterfaceAction = {
+  readonly reference: string;
+  readonly effects: readonly Effect[];
 };
 
 type NewMode = Extract<NewPart, { readonly mode: string }>;
@@ -550,6 +555,20 @@ export async function placeToWrite(files: FileSystem, layout: Layout, part: NewP
     return placeModePart(files, layout, part);
   }
   return placeInterface(layout, part.interface);
+}
+
+export async function interfaceActionFor(
+  files: FileSystem,
+  layout: Layout,
+  part: NewModePart,
+): Promise<InterfaceAction | undefined> {
+  const mode = (await loadModes(files, layout)).values.find((entry) => basename(entry.folder) === part.inMode);
+  if (mode === undefined) {
+    return undefined;
+  }
+  const interfaces = indexInterfaces((await loadInterfaces(files, layout)).values, layout).index;
+  const [named] = signaturesNaming(interfaces, mode.value.implements ?? [], part.name);
+  return named === undefined ? undefined : { reference: named.reference, effects: named.signature.effects };
 }
 
 function wordsOf(find: string | undefined): readonly string[] {

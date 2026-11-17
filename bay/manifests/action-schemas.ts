@@ -1,5 +1,6 @@
 import { dirname, join } from "node:path/posix";
-import type { Signature } from "../generated/interface.ts";
+import type { Interface, Signature } from "../generated/interface.ts";
+import type { Loaded } from "./spec.ts";
 import type { Context, ActionPlace } from "./loaded.ts";
 
 export type ImplementedSignature = {
@@ -13,15 +14,23 @@ type SchemaFiles = {
   readonly output: string;
 };
 
-export function namingSignatures(context: Context, place: ActionPlace): readonly ImplementedSignature[] {
-  return (place.mode.value.implements ?? []).flatMap((reference) => {
-    const definition = context.interfaces.get(reference);
-    if (definition === undefined || !Object.hasOwn(definition.value.actions, place.name)) {
+export function signaturesNaming(
+  interfaces: ReadonlyMap<string, Loaded<Interface>>,
+  implemented: readonly string[],
+  action: string,
+): readonly ImplementedSignature[] {
+  return implemented.flatMap((reference) => {
+    const definition = interfaces.get(reference);
+    if (definition === undefined || !Object.hasOwn(definition.value.actions, action)) {
       return [];
     }
-    const signature = definition.value.actions[place.name];
+    const signature = definition.value.actions[action];
     return signature === undefined ? [] : [{ reference, signature, folder: dirname(definition.file) }];
   });
+}
+
+export function namingSignatures(context: Context, place: ActionPlace): readonly ImplementedSignature[] {
+  return signaturesNaming(context.interfaces, place.mode.value.implements ?? [], place.name);
 }
 
 export function schemaFilesOf(context: Context, place: ActionPlace): SchemaFiles | undefined {

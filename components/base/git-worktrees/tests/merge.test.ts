@@ -70,6 +70,20 @@ test("a clean merge makes a merge commit with two parents on the target, and the
   }
 });
 
+test("a target with no commits of its own still gets a merge commit, not a fast-forward", async () => {
+  const project = await openRepositoryProject();
+  try {
+    const sliceHead = await sliceWithCommit(project, { "feature.txt": "feature\n" });
+    git(project, ".", ["branch", "integration", "main"]);
+    const output = await project.output("git-worktrees.merge", { folder, into: "integration" });
+    const commit = git(project, ".", ["rev-parse", "integration"]).trim();
+    assert.deepEqual(output, { how: "merged", branch: "forge/feature", into: "integration", commit });
+    assert.equal(git(project, ".", ["log", "-1", "--format=%P", "integration"]), `${project.base} ${sliceHead}\n`);
+  } finally {
+    await project.close();
+  }
+});
+
 test("a conflict is refused with the paths named; the target, the slice's branch and the worktrees are as they were", async () => {
   const project = await openRepositoryProject();
   try {

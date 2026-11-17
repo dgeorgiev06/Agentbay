@@ -28,9 +28,6 @@ function checkedPath(path: string): string {
 }
 
 function withoutPrefix(named: string): string {
-  if (named.startsWith("/")) {
-    return refused(named, "is absolute");
-  }
   const slash = named.indexOf("/");
   const path = checkedPath(slash < 0 ? named : named.slice(slash + 1));
   refuseOutside(named);

@@ -33,6 +33,17 @@ test("arguments that look like options come after the listed words, which stay f
   });
 });
 
+test("a command runs the words its mode's commands start with, then its own words, then the script's arguments", async () => {
+  const mode = { startWith: "node -p", commands: { show: { run: `${showingArguments} --` } } };
+  await withCommandKernel(mode, async (kernel) => {
+    const ran = await ranCommands(kernel, [{ name: "show", arguments: ["--force", "one"] }]);
+    assert.equal(stdoutText(ran.answers[0] ?? null), '["--force","one"]\n');
+    assert.deepEqual(ranWords(eventsOfKind(ran.run, "command")), [
+      ["node", "-p", showingArguments, "--", "--force", "one"],
+    ]);
+  });
+});
+
 test("without -- at the end of the listed words, the same argument becomes an option of the program", async () => {
   const listed = { show: { run: `node -p ${showingArguments}` } };
   await withCommandKernel({ commands: listed }, async (kernel) => {

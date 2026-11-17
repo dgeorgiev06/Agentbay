@@ -1,6 +1,6 @@
 import { isAbsolute, join, normalize } from "node:path/posix";
 import type { GrantedCommand, ModeGrants } from "./contracts.ts";
-import type { ListedCommand, Mode } from "./generated/mode.ts";
+import type { Mode } from "./generated/mode.ts";
 import { isInsideOrEqual, isProjectTheKit, pathIn, shownPath, type Home, type Layout } from "./layout.ts";
 
 export type OtherMode = {
@@ -137,7 +137,7 @@ type DeclaredResources = {
   readonly throwaway: readonly string[];
   readonly secrets: readonly string[];
   readonly hosts: readonly string[];
-  readonly commands: readonly (readonly [string, ListedCommand])[];
+  readonly commands: readonly GrantedCommand[];
   readonly migrations: string;
 };
 
@@ -148,13 +148,27 @@ function declaredFiles(manifest: Mode): DeclaredFiles {
   return { read: files.read ?? [], write: files.write ?? [], throwaway: files.throwaway ?? [] };
 }
 
+function wordsOf(text: string): readonly string[] {
+  return text.split(/\s+/).filter((word) => word !== "");
+}
+
+export function listedCommandsOf(manifest: Mode): readonly GrantedCommand[] {
+  const resources = manifest.resources ?? {};
+  const startWords = wordsOf(resources.commandsStartWith ?? "");
+  return Object.entries(resources.commands ?? {}).map(([name, command]) => ({
+    name,
+    words: [...startWords, ...wordsOf(command.run)],
+    effects: [...command.effects],
+  }));
+}
+
 function declaredResources(manifest: Mode): DeclaredResources {
   const resources = manifest.resources ?? {};
   return {
     ...declaredFiles(manifest),
     secrets: resources.secrets ?? [],
     hosts: resources.network ?? [],
-    commands: Object.entries(resources.commands ?? {}),
+    commands: listedCommandsOf(manifest),
     migrations: resources.db?.migrations ?? "migrations",
   };
 }
@@ -247,10 +261,10 @@ function commandProblems(request: GrantRequest): readonly GrantProblem[] {
     return [];
   }
   const { manifest, layout } = request;
-  return declaredResources(manifest).commands.map(([name, command]) => ({
+  return declaredResources(manifest).commands.map(({ name, words }) => ({
     at: ["resources", "commands", name],
     message:
-      `Mode ${manifest.name} lists the command ${name}, which runs ${command.run}; ` +
+      `Mode ${manifest.name} lists the command ${name}, which runs ${words.join(" ")}; ` +
       `a listed command can run code the agent wrote. Only a mode under the kit's ${baseTier}/ may list commands.`,
     fix: `Remove the command from ${shownPath(layout, manifestFile(request))}; a skill step's checks belong in script steps.`,
   }));
@@ -258,8 +272,8 @@ function commandProblems(request: GrantRequest): readonly GrantProblem[] {
 
 function commandEffectProblems(request: GrantRequest): readonly GrantProblem[] {
   const { manifest, layout } = request;
-  return declaredResources(manifest).commands.flatMap(([name, command]) =>
-    command.effects.length > 0
+  return declaredResources(manifest).commands.flatMap(({ name, effects }) =>
+    effects.length > 0
       ? []
       : [
           {
@@ -274,12 +288,41 @@ function commandEffectProblems(request: GrantRequest): readonly GrantProblem[] {
   );
 }
 
-function grantedCommands(declared: DeclaredResources): readonly GrantedCommand[] {
-  return declared.commands.map(([name, command]) => ({
-    name,
-    words: command.run.split(/\s+/).filter((word) => word !== ""),
-    effects: [...command.effects],
-  }));
+function startWordsGiven(manifest: Mode): string {
+  const startWords = wordsOf(manifest.resources?.commandsStartWith ?? "").join(" ");
+  return `Mode ${manifest.name} gives ${startWords} as the words every command it lists starts with`;
+}
+
+function startWordsPlaceProblems(request: GrantRequest): readonly GrantProblem[] {
+  const { manifest, layout } = request;
+  if (manifest.resources?.commandsStartWith === undefined || isBaseMode(request)) {
+    return [];
+  }
+  return [
+    {
+      at: ["resources", "commandsStartWith"],
+      message:
+        `${startWordsGiven(manifest)}; a listed command can run code the agent wrote. ` +
+        `Only a mode under the kit's ${baseTier}/ may list commands.`,
+      fix: `Remove commandsStartWith from ${shownPath(layout, manifestFile(request))}; a skill step's checks belong in script steps.`,
+    },
+  ];
+}
+
+function startWordsWithoutCommandsProblems(request: GrantRequest): readonly GrantProblem[] {
+  const { manifest, layout } = request;
+  if (manifest.resources?.commandsStartWith === undefined || declaredResources(manifest).commands.length > 0) {
+    return [];
+  }
+  return [
+    {
+      at: ["resources", "commandsStartWith"],
+      message: `${startWordsGiven(manifest)}, and lists no command.`,
+      fix:
+        `List the commands under resources.commands in ${shownPath(layout, manifestFile(request))}, ` +
+        "or remove commandsStartWith.",
+    },
+  ];
 }
 
 function throwawayPlaceProblems(request: GrantRequest): readonly GrantProblem[] {
@@ -352,7 +395,7 @@ function grantsOfMode(request: GrantRequest): ModeGrants {
     throwawayPaths: projectPaths(layout, declared.throwaway),
     secrets: [...declared.secrets],
     hosts: [...declared.hosts],
-    commands: grantedCommands(declared),
+    commands: declared.commands,
   };
 }
 
@@ -361,6 +404,8 @@ export function grantsOf(request: GrantRequest): GrantRuling {
     ...pathProblems(request),
     ...secretProblems(request.manifest),
     ...hostProblems(request.manifest),
+    ...startWordsPlaceProblems(request),
+    ...startWordsWithoutCommandsProblems(request),
     ...commandProblems(request),
     ...commandEffectProblems(request),
     ...throwawayPlaceProblems(request),

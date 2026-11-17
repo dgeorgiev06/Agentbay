@@ -43,6 +43,7 @@ export type Listed = {
 };
 
 export type CommandMode = {
+  readonly startWith?: string;
   readonly commands: Readonly<Record<string, Listed>>;
   readonly effects?: readonly Effect[];
   readonly tier?: "base" | "modes";
@@ -75,7 +76,11 @@ export async function makeCommandKit(mode: CommandMode): Promise<CommandKit> {
     name: "command-prober",
     version: "1.0.0",
     description: "Runs the commands a test asks for.",
-    resources: { commands: listedCommands(mode.commands), secrets: [secretName] },
+    resources: {
+      ...(mode.startWith === undefined ? {} : { commandsStartWith: mode.startWith }),
+      commands: listedCommands(mode.commands),
+      secrets: [secretName],
+    },
     actions: {
       go: {
         description: "When a test runs commands.",

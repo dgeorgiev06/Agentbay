@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { agentCommands, type SkillAgent } from "../bay/adapter.ts";
-import type { Effect } from "../bay/contracts.ts";
-import { grantsIn } from "./broker-fixture.ts";
+import type { Effect, ModeGrants } from "../bay/contracts.ts";
+import { layoutOf } from "../bay/layout.ts";
+import { grantsOf } from "../bay/policy.ts";
+import { grantsIn, modeNamed } from "./broker-fixture.ts";
 import { grantedCommand } from "./grants-fixture.ts";
 
 const commands = [
@@ -12,7 +14,7 @@ const commands = [
   grantedCommand("fetch", "git fetch", ["read", "network"]),
 ];
 
-function agentWith(effects: readonly Effect[]): SkillAgent {
+function agentWith(effects: readonly Effect[], grants: ModeGrants = grantsIn("/project", { commands })): SkillAgent {
   return {
     agent: "agentbay-notes-draft",
     mode: "notes",
@@ -21,7 +23,7 @@ function agentWith(effects: readonly Effect[]): SkillAgent {
     description: "Drafts a note.",
     tier: "fast",
     kernelTools: [],
-    grants: grantsIn("/project", { commands }),
+    grants,
     effects,
   };
 }
@@ -37,5 +39,34 @@ test("an agent is given the commands whose effects its action declares, no more 
     "git commit --quiet",
     "git worktree remove",
     "git fetch",
+  ]);
+});
+
+function grantsOfManifest(resources: Parameters<typeof modeNamed>[1]): ModeGrants {
+  const ruling = grantsOf({
+    manifest: modeNamed("notes", resources),
+    home: "kit",
+    folder: "/project/components/base/notes",
+    layout: layoutOf({ kit: "/project", project: "/project" }),
+    otherModes: [],
+  });
+  assert.ok(ruling.ok, JSON.stringify(ruling));
+  return ruling.value;
+}
+
+test("an agent is given each command as the words its mode's commands start with, then its own words", () => {
+  const grants = grantsOfManifest({
+    commandsStartWith: "git -c core.hooksPath=/dev/null",
+    commands: {
+      changes: { run: "status --porcelain --", effects: ["read"] },
+      "remove-worktree": { run: "worktree remove --end-of-options", effects: ["read", "delete"] },
+    },
+  });
+  assert.deepEqual(agentCommands(agentWith(["read"], grants)), [
+    "git -c core.hooksPath=/dev/null status --porcelain --",
+  ]);
+  assert.deepEqual(agentCommands(agentWith(["read", "delete"], grants)), [
+    "git -c core.hooksPath=/dev/null status --porcelain --",
+    "git -c core.hooksPath=/dev/null worktree remove --end-of-options",
   ]);
 });

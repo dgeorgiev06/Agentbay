@@ -403,7 +403,7 @@ test("only a mode under the kit's components/base may list commands", () => {
     {
       at: ["resources", "commands", "tests"],
       message:
-        "Mode briefing lists the command tests, which runs node  --test; a listed command can run code the agent " +
+        "Mode briefing lists the command tests, which runs node --test; a listed command can run code the agent " +
         "wrote. Only a mode under the kit's components/base/ may list commands.",
       fix: "Remove the command from components/modes/briefing/mode.yaml; a skill step's checks belong in script steps.",
     },
@@ -429,6 +429,85 @@ test("a listed command with no effects is refused with a fix, in any mode", () =
       fix:
         "List under resources.commands.tests.effects in components/base/briefing/mode.yaml each effect the command " +
         "can have: read, write, network, spend or delete. The kernel believes the list and cannot check it.",
+    },
+  ]);
+});
+
+test("a mode's commands start with the words it gives once, and a mode that gives none is unchanged", () => {
+  const sharing: Mode = {
+    ...briefing,
+    resources: {
+      commandsStartWith: "git  -c core.hooksPath=/dev/null",
+      commands: {
+        changes: { run: "status --porcelain --", effects: ["read"] },
+        "make-branch": { run: "branch  --end-of-options", effects: ["read", "write"] },
+      },
+    },
+  };
+  const plain: Mode = {
+    ...store,
+    resources: { commands: { changes: { run: "git status --porcelain --", effects: ["read"] } } },
+  };
+  const modes: Modes = [
+    { folder: "/project/components/base/briefing", manifest: sharing },
+    { folder: "/project/components/base/store", manifest: plain },
+  ];
+  assert.deepEqual(grantsFor(modes, "briefing").commands, [
+    {
+      name: "changes",
+      words: ["git", "-c", "core.hooksPath=/dev/null", "status", "--porcelain", "--"],
+      effects: ["read"],
+    },
+    {
+      name: "make-branch",
+      words: ["git", "-c", "core.hooksPath=/dev/null", "branch", "--end-of-options"],
+      effects: ["read", "write"],
+    },
+  ]);
+  assert.deepEqual(grantsFor(modes, "store").commands, [
+    { name: "changes", words: ["git", "status", "--porcelain", "--"], effects: ["read"] },
+  ]);
+});
+
+test("a mode outside components/base that gives the words its commands start with is refused for each", () => {
+  const sharing: Mode = {
+    ...briefing,
+    resources: {
+      commandsStartWith: "git -c core.hooksPath=/dev/null",
+      commands: { changes: { run: "status --porcelain --", effects: ["read"] } },
+    },
+  };
+  const outside: Modes = [{ folder: "/project/components/modes/briefing", manifest: sharing }];
+  assert.deepEqual(problemsFor(outside, "briefing"), [
+    {
+      at: ["resources", "commandsStartWith"],
+      message:
+        "Mode briefing gives git -c core.hooksPath=/dev/null as the words every command it lists starts with; " +
+        "a listed command can run code the agent wrote. Only a mode under the kit's components/base/ may list commands.",
+      fix: "Remove commandsStartWith from components/modes/briefing/mode.yaml; a skill step's checks belong in script steps.",
+    },
+    {
+      at: ["resources", "commands", "changes"],
+      message:
+        "Mode briefing lists the command changes, which runs git -c core.hooksPath=/dev/null status --porcelain --; " +
+        "a listed command can run code the agent wrote. Only a mode under the kit's components/base/ may list commands.",
+      fix: "Remove the command from components/modes/briefing/mode.yaml; a skill step's checks belong in script steps.",
+    },
+  ]);
+});
+
+test("a mode that gives the words its commands start with and lists no command is refused, in any mode", () => {
+  const sharing: Mode = { ...briefing, resources: { commandsStartWith: "git -c core.hooksPath=/dev/null" } };
+  const base: Modes = [{ folder: "/project/components/base/briefing", manifest: sharing }];
+  assert.deepEqual(problemsFor(base, "briefing"), [
+    {
+      at: ["resources", "commandsStartWith"],
+      message:
+        "Mode briefing gives git -c core.hooksPath=/dev/null as the words every command it lists starts with, " +
+        "and lists no command.",
+      fix:
+        "List the commands under resources.commands in components/base/briefing/mode.yaml, " +
+        "or remove commandsStartWith.",
     },
   ]);
 });

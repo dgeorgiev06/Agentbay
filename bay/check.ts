@@ -16,6 +16,7 @@ import { checkSkills } from "./check-skills.ts";
 import { isProjectTheKit, shownPath, type Layout } from "./layout.ts";
 import type { FileSystem } from "./ports.ts";
 import { inspectSystem } from "./manifests/manifests.ts";
+import { listedCommandsOf } from "./policy.ts";
 import type { Problem } from "./outcome.ts";
 
 export type CheckPorts = {
@@ -30,12 +31,11 @@ export type CheckReport = {
 };
 
 function commandProblems(mode: LoadedModeFolder): readonly Problem[] {
-  const commands = Object.entries(mode.manifest.resources?.commands ?? {});
-  return commands.map(([name, command]) =>
+  return listedCommandsOf(mode.manifest).map(({ name, words, effects }) =>
     mode.at(["resources", "commands", name], {
       message:
-        `Mode ${mode.manifest.name} lists the command ${name}, which runs ${command.run} and which the mode says ` +
-        `has the effects: ${listed(command.effects, "none")}; a listed command can run code the agent wrote.`,
+        `Mode ${mode.manifest.name} lists the command ${name}, which runs ${words.join(" ")} and which the mode says ` +
+        `has the effects: ${listed(effects, "none")}; a listed command can run code the agent wrote.`,
       fix:
         "Remove the command unless the mode cannot work without it. If it stays, review its words and its effects: " +
         "the kernel believes the effects a mode lists and cannot check them.",

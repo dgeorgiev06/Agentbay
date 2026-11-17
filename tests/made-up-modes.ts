@@ -8,6 +8,8 @@ export const parrot = "parrot";
 
 export const memoryStore = "memory-store";
 
+export const forgetfulStore = "forgetful-store";
+
 const sdkFromScripts = "../../../../bay/sdk.ts";
 
 const testToolboxFromTests = "../../../../tests/test-toolbox.ts";
@@ -466,21 +468,9 @@ function memoryScript(action: string): string {
 
 function memoryTest(name: string): string {
   return lines(
-    'import assert from "node:assert/strict";',
-    'import { test } from "node:test";',
-    `import { openModeProject } from "${testToolboxFromTests}";`,
+    'import { testItemsStore } from "../../../base/interfaces/items-store/tests/shared.ts";',
     "",
-    'const item = { id: "local:a", kind: "note", source: "local", at: "2026-11-02T09:00:00Z", title: null, text: "x", url: null, author: null, labels: [], data: {} };',
-    "",
-    `test("${name} gives back what was put", async () => {`,
-    `  const project = await openModeProject({ bindings: { "items-store": "${name}" }, adapter: "claude-code", modes: ["${name}"] }, { callers: ["reader"] });`,
-    "  try {",
-    '    await project.output("items-store.put", { source: "local", kinds: ["note"], items: [item] }, { caller: "reader" });',
-    '    assert.deepEqual(await project.output("items-store.get", { ids: ["local:a"] }, { caller: "reader" }), { items: [item], missing: [] });',
-    "  } finally {",
-    "    await project.close();",
-    "  }",
-    "});",
+    `testItemsStore({ mode: "${name}" });`,
   );
 }
 

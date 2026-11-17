@@ -5,7 +5,7 @@ import { appendFile, copyFile, mkdir, mkdtemp, realpath, rm, symlink, writeFile 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
-import { memoryStore, memoryStoreFiles, parrot, parrotFiles, type ModeFiles } from "./made-up-modes.ts";
+import { forgetfulStore, memoryStore, memoryStoreFiles, parrot, parrotFiles, type ModeFiles } from "./made-up-modes.ts";
 import { kit } from "./project-fixture.ts";
 
 type Ran = {
@@ -135,4 +135,14 @@ test("the kit's type check and both dead-code runs accept the two modes", () => 
     const unused = ran(process.execPath, [knip, "--config", "knip.json", "--no-config-hints", ...production]);
     assert.equal(unused.status, 0, unused.output);
   }
+});
+
+test("an items store that loses an item is accepted by bay check, and fails the shared test's first case", async () => {
+  await addMode(forgetfulStore, memoryStoreFiles(forgetfulStore, "loses an item"));
+  assert.deepEqual(newFindings(), []);
+  const own = join(modesFolder, forgetfulStore, "tests", `${forgetfulStore}.test.ts`);
+  const firstCase = "put then get returns the same items, in the order asked, and names the ids it does not hold";
+  const tested = ran(process.execPath, ["--test", `--test-name-pattern=${firstCase}`, own]);
+  assert.equal(tested.status, 1, tested.output);
+  assert.deepEqual(failedTests(tested.output), [`items-store@1, ${forgetfulStore}: ${firstCase}`]);
 });

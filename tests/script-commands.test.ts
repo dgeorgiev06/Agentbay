@@ -204,6 +204,25 @@ test("a command past its time limit is stopped with what it started, and the scr
   });
 });
 
+test("a command reads the input the script gives on its standard input, and the event records the input's hash", async () => {
+  await withCommandKernel({ commands: ["node -e"] }, async (kernel) => {
+    const shouting =
+      "let text = ''; process.stdin.setEncoding('utf8').on('data', (part) => { text += part; })" +
+      ".on('end', () => process.stdout.write(`[${text.toUpperCase()}]`))";
+    const ran = await ranCommands(kernel, [
+      { command: ["node", "-e", shouting], input: "set aside\n" },
+      { command: ["node", "-e", shouting] },
+    ]);
+    assert.deepEqual(stdoutOf(ran.answers[0] ?? null), { text: "[SET ASIDE\n]", cut: false });
+    assert.deepEqual(stdoutOf(ran.answers[1] ?? null), { text: "[]", cut: false });
+    const details = eventsOfKind(ran.run, "command").map((event) => event.detail);
+    assert.deepEqual(
+      details.map((detail) => fieldOf(detail, "inputHash") ?? "none"),
+      [hashOfText("set aside\n"), "none"],
+    );
+  });
+});
+
 test("a command's environment holds PATH and nothing else of the kernel's", async () => {
   const environment = { AGENTBAY_MADE_UP: "made-up-value", [`AGENTBAY_SECRET_${secretName}`]: secretValue };
   await withCommandKernel(

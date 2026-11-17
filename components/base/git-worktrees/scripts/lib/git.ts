@@ -7,8 +7,22 @@ const protections: readonly string[] = [
   "core.fsmonitor=false",
   "-c",
   "submodule.recurse=false",
-  "--attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904",
 ];
+
+const emptyAttributes: readonly string[] = ["--attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904"];
+
+const committer: readonly string[] = [
+  "-c",
+  "user.name=agentbay-git-worktrees",
+  "-c",
+  "user.email=git-worktrees@agentbay.invalid",
+  "-c",
+  "gc.auto=0",
+];
+
+const makesCommits: readonly string[] = ["merge", "commit"];
+
+const readsTheCopysAttributes: readonly string[] = ["apply", "check-attr"];
 
 const timeLimitSeconds = 300;
 
@@ -18,18 +32,51 @@ export type GitEnd = {
   readonly stderr: string;
 };
 
+const changesTheCheckout: readonly string[] = ["restore", "switch", "merge", "add", "commit", "apply"];
+
 function subcommandOf(gitArguments: readonly string[]): string {
   return gitArguments.find((argument) => !argument.startsWith("-")) ?? "";
 }
 
-export async function git(context: ScriptContext, folder: string, gitArguments: readonly string[]): Promise<GitEnd> {
-  const command = ["git", ...protections, ...gitArguments];
-  const answer = await context.commands.run({ command, folder, timeLimitSeconds });
+function isUnderForge(folder: string): boolean {
+  return folder.startsWith(".forge/") && !folder.split("/").includes("..");
+}
+
+function refuseInOwnersCheckout(folder: string, subcommand: string): void {
+  if (changesTheCheckout.includes(subcommand) && !isUnderForge(folder)) {
+    fail(
+      `The mode runs git ${subcommand} only in a folder under .forge/, not in ${folder}, ` +
+        "so that the owner's checkout is never changed.",
+    );
+  }
+}
+
+function optionsFor(subcommand: string): readonly string[] {
+  const attributes = readsTheCopysAttributes.includes(subcommand) ? [] : emptyAttributes;
+  return [...protections, ...attributes, ...(makesCommits.includes(subcommand) ? committer : [])];
+}
+
+export type Fed = {
+  readonly gitArguments: readonly string[];
+  readonly input: string;
+};
+
+async function ran(
+  context: ScriptContext,
+  folder: string,
+  given: { readonly gitArguments: readonly string[]; readonly input?: string },
+): Promise<GitEnd> {
+  const { gitArguments, input } = given;
+  const subcommand = subcommandOf(gitArguments);
+  refuseInOwnersCheckout(folder, subcommand);
+  const command = ["git", ...optionsFor(subcommand), ...gitArguments];
+  const request = { command, folder, timeLimitSeconds };
+  const answer = await context.commands.run(input === undefined ? request : { ...request, input });
   if (!answer.ok) {
     return fail(answer.message);
   }
   const { end, stdout, stderr } = answer.value;
-  const named = `git ${subcommandOf(gitArguments)}`;
+  const named = `git ${subcommand}`;
   switch (end.how) {
     case "timed-out":
       return fail(`${named} did not finish within ${String(timeLimitSeconds)} seconds and was stopped.`);
@@ -43,8 +90,23 @@ export async function git(context: ScriptContext, folder: string, gitArguments: 
   }
 }
 
-function firstLine(text: string): string {
+export function git(context: ScriptContext, folder: string, gitArguments: readonly string[]): Promise<GitEnd> {
+  return ran(context, folder, { gitArguments });
+}
+
+export function gitFed(context: ScriptContext, folder: string, fed: Fed): Promise<GitEnd> {
+  return ran(context, folder, fed);
+}
+
+export function firstLine(text: string): string {
   return text.split("\n").find((line) => line.trim() !== "") ?? "it gave no reason";
+}
+
+export function succeededOutput(ended: GitEnd, gitArguments: readonly string[]): string {
+  if (ended.exitCode !== 0) {
+    return fail(`git ${subcommandOf(gitArguments)} failed: ${firstLine(ended.stderr)}`);
+  }
+  return ended.stdout;
 }
 
 export async function gitSucceeded(
@@ -52,11 +114,7 @@ export async function gitSucceeded(
   folder: string,
   gitArguments: readonly string[],
 ): Promise<string> {
-  const ended = await git(context, folder, gitArguments);
-  if (ended.exitCode !== 0) {
-    return fail(`git ${subcommandOf(gitArguments)} failed: ${firstLine(ended.stderr)}`);
-  }
-  return ended.stdout;
+  return succeededOutput(await git(context, folder, gitArguments), gitArguments);
 }
 
 export function nulFields(output: string): readonly string[] {
@@ -77,6 +135,14 @@ export async function commitOf(context: ScriptContext, folder: string, commit: s
   return ended.stdout.trim();
 }
 
+export async function isMerged(context: ScriptContext, branch: string, into: string): Promise<boolean> {
+  const ended = await git(context, ".", ["merge-base", "--is-ancestor", "--end-of-options", branch, into]);
+  if (ended.exitCode !== 0 && ended.exitCode !== 1) {
+    fail(`git merge-base failed: ${firstLine(ended.stderr)}`);
+  }
+  return ended.exitCode === 0;
+}
+
 export async function branchExists(context: ScriptContext, branch: string): Promise<boolean> {
   const ended = await git(context, ".", [
     "rev-parse",
@@ -90,8 +156,14 @@ export async function branchExists(context: ScriptContext, branch: string): Prom
 
 const repositoryScopes: readonly string[] = ["local", "worktree"];
 
-async function refuseRepositoryFilters(context: ScriptContext, folder: string): Promise<void> {
-  const ended = await git(context, folder, ["config", "--show-scope", "--name-only", "--get-regexp", "^filter\\."]);
+export async function refuseRepositoryFilters(context: ScriptContext, folder: string): Promise<void> {
+  const ended = await git(context, folder, [
+    "config",
+    "--show-scope",
+    "--name-only",
+    "--get-regexp",
+    "^(filter\\.|merge\\..*\\.driver$)",
+  ]);
   if (ended.exitCode !== 0 && ended.exitCode !== 1) {
     fail(`git config failed: ${firstLine(ended.stderr)}`);
   }
@@ -103,7 +175,8 @@ async function refuseRepositoryFilters(context: ScriptContext, folder: string): 
   if (named.length > 0) {
     fail(
       `The repository's own configuration names ${named.join(", ")}. ` +
-        "git could run such a filter's command, so the mode does nothing in this repository until it is removed.",
+        "git could run the command of such a filter or merge driver, so the mode does nothing in this repository " +
+        "until it is removed.",
     );
   }
 }

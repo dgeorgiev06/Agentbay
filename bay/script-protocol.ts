@@ -102,10 +102,12 @@ function commandRequestOf(value: Json | undefined): CommandRequest | undefined {
   if (!isJsonRecord(value) || !isTexts(value.command) || !isText(value.folder)) {
     return undefined;
   }
-  const timeLimitSeconds = value.timeLimitSeconds;
-  return typeof timeLimitSeconds === "number"
-    ? { command: value.command, folder: value.folder, timeLimitSeconds }
-    : undefined;
+  const { timeLimitSeconds, input } = value;
+  if (typeof timeLimitSeconds !== "number" || (input !== undefined && !isText(input))) {
+    return undefined;
+  }
+  const request = { command: value.command, folder: value.folder, timeLimitSeconds };
+  return input === undefined ? request : { ...request, input };
 }
 
 function partitionRequestOf(fields: Fields): ResourceRequest | undefined {

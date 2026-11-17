@@ -1,4 +1,5 @@
 import { fail, type ScriptContext } from "../../../../../bay/sdk.ts";
+import { gitSucceeded } from "./git.ts";
 
 export type Made = { readonly kind: "worktree"; readonly branch: string } | { readonly kind: "copy" };
 
@@ -8,6 +9,10 @@ export function worktreeFolder(slice: string): string {
 
 export function copyFolder(name: string): string {
   return `.forge/copies/${name}`;
+}
+
+export function targetFolder(into: string): string {
+  return `.forge/targets/${into}`;
 }
 
 export function sliceBranch(slice: string): string {
@@ -30,6 +35,28 @@ export async function madeFolder(context: ScriptContext, folder: string): Promis
   return row.kind === "copy" ? { kind: "copy" } : undefined;
 }
 
+export async function folderExists(context: ScriptContext, folder: string): Promise<boolean> {
+  const listed = await gitSucceeded(context, ".", [
+    "ls-files",
+    "-z",
+    "--others",
+    "--directory",
+    "--end-of-options",
+    folder,
+  ]);
+  return listed === `${folder}/\0`;
+}
+
+export function goneSentence(folder: string): string {
+  return `The folder ${folder} was made by this mode but no longer exists`;
+}
+
+async function refuseGone(context: ScriptContext, folder: string, doing: string): Promise<void> {
+  if (!(await folderExists(context, folder))) {
+    fail(`${goneSentence(folder)}, so the mode does not ${doing} it.`);
+  }
+}
+
 export async function madeWorktree(context: ScriptContext, folder: string, doing: string): Promise<string> {
   const made = await madeFolder(context, folder);
   if (made === undefined) {
@@ -38,6 +65,7 @@ export async function madeWorktree(context: ScriptContext, folder: string, doing
   if (made.kind === "copy") {
     return fail(`The folder ${folder} is a copy, not a worktree, so the mode does not ${doing} it.`);
   }
+  await refuseGone(context, folder, doing);
   return made.branch;
 }
 
@@ -49,6 +77,7 @@ export async function madeCopy(context: ScriptContext, folder: string, doing: st
   if (made.kind === "worktree") {
     fail(`The folder ${folder} is a worktree, not a copy, so the mode does not ${doing} it.`);
   }
+  await refuseGone(context, folder, doing);
 }
 
 async function executed(context: ScriptContext, sql: string, parameters: readonly (string | null)[]): Promise<void> {

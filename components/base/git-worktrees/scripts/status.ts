@@ -1,5 +1,5 @@
 import { fail } from "../../../../bay/sdk.ts";
-import { changesIn } from "./lib/changes.ts";
+import { changesIn, isClean } from "./lib/changes.ts";
 import { madeWorktree } from "./lib/folders.ts";
 import { commitOf, gitSucceeded, nulFields, safeCommitOf } from "./lib/git.ts";
 import { defineRequestScript } from "./lib/request.ts";
@@ -25,6 +25,6 @@ export const run = defineRequestScript(async (request, context) => {
   const head = await commitOf(context, folder, "HEAD");
   const log = ["log", "-z", "--reverse", "--no-show-signature", "--no-color", "--format=%H%x20%s", "--end-of-options"];
   const commits = commitsOf(await gitSucceeded(context, folder, [...log, `${base}..${head}`]));
-  const { changed, untracked } = await changesIn(context, folder);
-  return { head, commits, clean: changed.length === 0 && untracked.length === 0, changed, untracked };
+  const changes = await changesIn(context, folder);
+  return { head, commits, clean: isClean(changes), changed: changes.changed, untracked: changes.untracked };
 });

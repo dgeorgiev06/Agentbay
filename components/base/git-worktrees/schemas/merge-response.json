@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MergeResponse",
+  "description": "The merge commit, or that the slice's branch was already merged.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["how", "branch", "into", "commit"],
+      "description": "The slice's branch was merged with a merge commit.",
+      "properties": {
+        "how": {
+          "const": "merged",
+          "description": "The slice's branch was merged with a merge commit."
+        },
+        "branch": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "The slice's branch."
+        },
+        "into": {
+          "type": "string",
+          "maxLength": 255,
+          "description": "The branch it was merged into."
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+          "description": "The merge commit, in full. Its parents are the branch's old head and the slice's head."
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["how", "branch", "into", "commit"],
+      "description": "The slice's branch was already merged, so no commit was made.",
+      "properties": {
+        "how": {
+          "const": "already-merged",
+          "description": "The slice's branch was already merged, so no commit was made."
+        },
+        "branch": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "The slice's branch."
+        },
+        "into": {
+          "type": "string",
+          "maxLength": 255,
+          "description": "The branch it was merged into."
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+          "description": "The head of the branch it was merged into, unchanged, in full."
+        }
+      }
+    }
+  ]
+}

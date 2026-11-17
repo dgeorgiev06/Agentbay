@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "RemoveResponse",
-  "description": "What was removed.",
+  "description": "What was removed, or that a record was forgotten.",
   "oneOf": [
     {
       "type": "object",
@@ -39,6 +39,28 @@
           "type": "string",
           "maxLength": 300,
           "description": "The branch that was deleted."
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["folder", "kind", "reason"],
+      "description": "The folder was made by this mode but no longer exists, so its record was forgotten.",
+      "properties": {
+        "folder": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "The folder whose record was forgotten, relative to the project."
+        },
+        "kind": {
+          "const": "forgotten",
+          "description": "The record was forgotten; nothing was removed."
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "A sentence that says the folder no longer exists, and for a worktree that its branch is kept."
         }
       }
     }

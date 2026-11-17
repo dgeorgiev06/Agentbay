@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path/posix";
 import { type AgentQueryOutcome, type AgentQueryResult, runAgentQuery } from "./agent-query.ts";
 import { type Answer, errorLine, failed, granted, listed, manifestOf, refused } from "./answers.ts";
@@ -373,7 +374,7 @@ export class Broker {
       if (!folder.ok) {
         return folder;
       }
-      return this.#ranCommand(request.command, folder.value, milliseconds.value);
+      return this.#ranCommand(request, folder.value, milliseconds.value);
     });
   }
 
@@ -441,7 +442,8 @@ export class Broker {
     return granted(real);
   }
 
-  async #ranCommand(command: readonly string[], folder: string, milliseconds: number): Promise<Answer<CommandRan>> {
+  async #ranCommand(request: CommandRequest, folder: string, milliseconds: number): Promise<Answer<CommandRan>> {
+    const { command, input } = request;
     const [program, ...rest] = command;
     if (program === undefined) {
       return failed("The command is empty.");
@@ -454,6 +456,7 @@ export class Broker {
       directory: folder,
       environment: { PATH: this.#options.commandSearchPath },
       timeoutMilliseconds: milliseconds,
+      ...(input === undefined ? {} : { input }),
     });
     const took = clock.now().getTime() - startedAt;
     await this.#append("command", {
@@ -462,6 +465,7 @@ export class Broker {
       folder: shownPath(this.#options.layout, folder),
       end: result.end,
       milliseconds: took,
+      ...(input === undefined ? {} : { inputHash: createHash("sha256").update(input, "utf8").digest("hex") }),
       stdoutHash: result.stdout.hash,
       stderrHash: result.stderr.hash,
     });

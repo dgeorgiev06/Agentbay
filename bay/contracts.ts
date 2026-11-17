@@ -37,6 +37,7 @@ export type CommandRequest = {
   readonly command: readonly string[];
   readonly folder: string;
   readonly timeLimitSeconds: number;
+  readonly input?: string;
 };
 
 export type CommandEnd =

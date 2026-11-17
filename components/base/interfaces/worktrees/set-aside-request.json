@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SetAsideRequest",
+  "description": "Which slice's worktree to set the changed and untracked files of aside.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["folder"],
+  "properties": {
+    "folder": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*(/\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+      "maxLength": 1000,
+      "description": "A worktree this mode made, relative to the project, such as .forge/worktrees/my-slice."
+    }
+  }
+}

@@ -1,8 +1,8 @@
 import { fail, type ScriptContext } from "../../../../bay/sdk.ts";
-import { changesIn } from "./lib/changes.ts";
+import { changesIn, isClean } from "./lib/changes.ts";
 import { throwawayChanged } from "./lib/copies.ts";
-import { forgetFolder, madeFolder } from "./lib/folders.ts";
-import { git, gitSucceeded, safeCommitOf } from "./lib/git.ts";
+import { folderExists, forgetFolder, goneSentence, madeFolder, type Made } from "./lib/folders.ts";
+import { gitSucceeded, isMerged, safeCommitOf } from "./lib/git.ts";
 import { defineRequestScript } from "./lib/request.ts";
 
 type Worktree = {
@@ -10,14 +10,6 @@ type Worktree = {
   readonly branch: string;
   readonly into: string;
 };
-
-async function isMerged(context: ScriptContext, branch: string, into: string): Promise<boolean> {
-  const ended = await git(context, ".", ["merge-base", "--is-ancestor", "--end-of-options", branch, into]);
-  if (ended.exitCode !== 0 && ended.exitCode !== 1) {
-    fail(`git merge-base failed: ${ended.stderr.trim()}`);
-  }
-  return ended.exitCode === 0;
-}
 
 function keptReason(worktree: Worktree, found: { readonly dirty: boolean; readonly merged: boolean }): string {
   const { folder, branch, into } = worktree;
@@ -36,8 +28,7 @@ function keptReason(worktree: Worktree, found: { readonly dirty: boolean; readon
 async function refuseUnlessRemovable(context: ScriptContext, worktree: Worktree): Promise<void> {
   const { folder, branch, into } = worktree;
   await safeCommitOf(context, folder, into);
-  const { changed, untracked } = await changesIn(context, folder);
-  const dirty = changed.length > 0 || untracked.length > 0;
+  const dirty = !isClean(await changesIn(context, folder));
   const merged = await isMerged(context, branch, into);
   if (dirty || !merged) {
     fail(keptReason(worktree, { dirty, merged }));
@@ -57,11 +48,20 @@ async function removeWorktree(context: ScriptContext, worktree: Worktree): Promi
   await gitSucceeded(context, ".", ["branch", "-d", "--end-of-options", worktree.branch]);
 }
 
+function forgottenReason(folder: string, made: Made): string {
+  const forgotten = `${goneSentence(folder)}, so the mode forgets it.`;
+  return made.kind === "worktree" ? `${forgotten} Its branch ${made.branch} is kept.` : forgotten;
+}
+
 export const run = defineRequestScript(async (request, context) => {
   const folder = request.text("folder");
   const made = await madeFolder(context, folder);
   if (made === undefined) {
     return fail(`The folder ${folder} was not made by this mode, so the mode does not remove it.`);
+  }
+  if (!(await folderExists(context, folder))) {
+    await forgetFolder(context, folder);
+    return { folder, kind: "forgotten", reason: forgottenReason(folder, made) };
   }
   if (made.kind === "copy") {
     await throwawayChanged(context.files.remove(folder));

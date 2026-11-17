@@ -1,6 +1,6 @@
 name: git-worktrees
 version: 1.0.0
-description: Makes a worktree and branch for each slice, says where it stands, and makes throwaway copies of commits, running git so that no code from the repository runs.
+description: Makes a worktree and branch for each slice, says where it stands, merges it and sets its work aside, and makes throwaway copies of commits and applies patches to them, running git so that no code from the repository runs.
 
 implements: [worktrees@1]
 
@@ -10,7 +10,7 @@ resources:
     throwaway: [.forge/copies/]
   commands:
     - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 rev-parse --verify --quiet --end-of-options
-    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 config --show-scope --name-only --get-regexp ^filter\.
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 config --show-scope --name-only --get-regexp ^(filter\.|merge\..*\.driver$)
     - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 worktree add --detach --end-of-options
     - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 branch --end-of-options
     - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 switch --end-of-options
@@ -19,10 +19,18 @@ resources:
     - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 diff --name-status -z -M --no-ext-diff --no-textconv --no-color --no-relative --end-of-options
     - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 check-ignore --quiet --end-of-options
     - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 ls-tree -z --name-only --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 ls-files -z --others --directory --end-of-options
     - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --work-tree=. restore --worktree --source
     - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 merge-base --is-ancestor --end-of-options
     - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 worktree remove --end-of-options
     - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 branch -d --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 worktree add --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 -c user.name=agentbay-git-worktrees -c user.email=git-worktrees@agentbay.invalid -c gc.auto=0 merge --no-ff --no-edit --no-stat --no-verify --no-gpg-sign --no-verify-signatures --no-autostash --no-rerere-autoupdate --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 -c user.name=agentbay-git-worktrees -c user.email=git-worktrees@agentbay.invalid -c gc.auto=0 merge --abort
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 add --all --
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 -c user.name=agentbay-git-worktrees -c user.email=git-worktrees@agentbay.invalid -c gc.auto=0 commit --quiet --no-verify --no-gpg-sign --file=- --end-of-options
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --work-tree=. check-attr -z filter --
+    - git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false --work-tree=. apply --end-of-options
 
 actions:
   cut:
@@ -67,3 +75,24 @@ actions:
     effects: [read, write, network, spend, delete]
     run:
       - script: scripts/remove.ts
+  merge:
+    description: When a slice's worktree is clean and its branch is to be merged into another branch, with a merge commit made in a worktree of the mode's own; a conflict undoes the merge and names the paths.
+    input: schemas/merge-request.json
+    output: schemas/merge-response.json
+    effects: [read, write, network, spend, delete]
+    run:
+      - script: scripts/merge.ts
+  set-aside:
+    description: When a slice's worktree has changed or untracked files to keep but not on its branch; they are committed to a new branch forge/wip/<slice>/<n>, and the worktree goes back to its head with no changes.
+    input: schemas/set-aside-request.json
+    output: schemas/set-aside-response.json
+    effects: [read, write, network, spend, delete]
+    run:
+      - script: scripts/set-aside.ts
+  apply:
+    description: When a copy needs a patch applied to it, all of it or nothing; a path outside the copy is refused before git runs. It never changes a worktree.
+    input: schemas/apply-request.json
+    output: schemas/apply-response.json
+    effects: [read, write, network, spend, delete]
+    run:
+      - script: scripts/apply.ts

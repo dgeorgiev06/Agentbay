@@ -102,6 +102,7 @@ export type CommandAsked = {
   readonly command: Json;
   readonly folder?: Json;
   readonly timeLimitSeconds?: Json;
+  readonly input?: Json;
 };
 
 export type Ran = {

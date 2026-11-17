@@ -5,6 +5,9 @@ import { defineRequestScript } from "./lib/request.ts";
 
 export const run = defineRequestScript(async (request, context) => {
   const slice = request.text("slice");
+  if (slice === "wip") {
+    fail("The slice name wip is kept for the branches set-aside makes under forge/wip/, so no slice is cut with it.");
+  }
   const branch = sliceBranch(slice);
   const folder = worktreeFolder(slice);
   const commit = await safeCommitOf(context, ".", request.text("base"));

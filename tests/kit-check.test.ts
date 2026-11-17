@@ -31,12 +31,12 @@ test("the real bay check on the kit itself reports no errors, the two size warni
     ];
   const listed = listedBy("typescript");
   const listedGit = listedBy("git-worktrees");
-  const git =
-    "git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false " +
-    "--attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+  const unattributed = "git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false";
+  const git = `${unattributed} --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904`;
+  const committing = `${git} -c user.name=agentbay-git-worktrees -c user.email=git-worktrees@agentbay.invalid -c gc.auto=0`;
   assert.deepEqual(findings, [
     listedGit(12, `${git} rev-parse --verify --quiet --end-of-options`),
-    listedGit(13, `${git} config --show-scope --name-only --get-regexp ^filter\\.`),
+    listedGit(13, `${git} config --show-scope --name-only --get-regexp ^(filter\\.|merge\\..*\\.driver$)`),
     listedGit(14, `${git} worktree add --detach --end-of-options`),
     listedGit(15, `${git} branch --end-of-options`),
     listedGit(16, `${git} switch --end-of-options`),
@@ -48,10 +48,22 @@ test("the real bay check on the kit itself reports no errors, the two size warni
     ),
     listedGit(20, `${git} check-ignore --quiet --end-of-options`),
     listedGit(21, `${git} ls-tree -z --name-only --end-of-options`),
-    listedGit(22, `${git} --work-tree=. restore --worktree --source`),
-    listedGit(23, `${git} merge-base --is-ancestor --end-of-options`),
-    listedGit(24, `${git} worktree remove --end-of-options`),
-    listedGit(25, `${git} branch -d --end-of-options`),
+    listedGit(22, `${git} ls-files -z --others --directory --end-of-options`),
+    listedGit(23, `${git} --work-tree=. restore --worktree --source`),
+    listedGit(24, `${git} merge-base --is-ancestor --end-of-options`),
+    listedGit(25, `${git} worktree remove --end-of-options`),
+    listedGit(26, `${git} branch -d --end-of-options`),
+    listedGit(27, `${git} worktree add --end-of-options`),
+    listedGit(
+      28,
+      `${committing} merge --no-ff --no-edit --no-stat --no-verify --no-gpg-sign --no-verify-signatures ` +
+        "--no-autostash --no-rerere-autoupdate --end-of-options",
+    ),
+    listedGit(29, `${committing} merge --abort`),
+    listedGit(30, `${git} add --all --`),
+    listedGit(31, `${committing} commit --quiet --no-verify --no-gpg-sign --file=- --end-of-options`),
+    listedGit(32, `${unattributed} --work-tree=. check-attr -z filter --`),
+    listedGit(33, `${unattributed} --work-tree=. apply --end-of-options`),
     listed(9, "npm run generate:check --"),
     listed(10, "npm run typecheck --"),
     listed(11, "npm run lint --"),

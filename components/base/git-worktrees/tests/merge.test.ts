@@ -139,6 +139,23 @@ test("a target branch that does not exist is refused", async () => {
   }
 });
 
+test("a folder left from an earlier merge into the target is said plainly, and nothing is merged", async () => {
+  const project = await openRepositoryProject();
+  try {
+    await sliceWithCommit(project, { "feature.txt": "feature\n" });
+    const targetHead = await integrationWith(project, { "other.txt": "other\n" });
+    await writeFiles(project, ".forge/targets/integration", { "left.txt": "left\n" });
+    assert.equal(
+      await project.failure("git-worktrees.merge", { folder, into: "integration" }),
+      "The folder .forge/targets/integration is left from an earlier merge into integration, " +
+        "so the mode does not merge until it is removed.",
+    );
+    assert.equal(git(project, ".", ["rev-parse", "integration"]).trim(), targetHead);
+  } finally {
+    await project.close();
+  }
+});
+
 test("merging a slice already merged says so and makes no commit", async () => {
   const project = await openRepositoryProject();
   try {

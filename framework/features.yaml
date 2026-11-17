@@ -162,6 +162,7 @@ features:
       - bay/check-layout.ts
       - bay/check-limits.ts
       - bay/check-skills.ts
+      - bay/check-trust.ts
       - bay/import-scanner.ts
     may_import:
       - vocabulary

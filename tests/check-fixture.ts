@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import type { FileListing, Finding } from "../bay/check-context.ts";
 import { checkSystem, type CheckReport } from "../bay/check.ts";
-import type { Layout } from "../bay/layout.ts";
+import { layoutOf, type Layout } from "../bay/layout.ts";
 import { fakeFileSystem, type FakeFileSystem } from "./fakes.ts";
-import { layout, rooted, validFiles } from "./system-fixture.ts";
+import { layout, paths, rooted, validFiles } from "./system-fixture.ts";
 
 export const notesSkillFile = "components/modes/notes/skills/write-note/SKILL.md";
 
@@ -54,6 +54,18 @@ export function cleanFiles(): Record<string, string> {
     "components/modes/briefing/tests/digest.example.json": example,
     "framework/limits.yaml": limitsText,
   };
+}
+
+export const separate = layoutOf({ kit: "/kit", project: "/project" });
+
+export function separateFiles(project: Readonly<Record<string, string>>): FakeFileSystem {
+  const kit = Object.entries(cleanFiles()).filter(
+    ([path]) => path !== paths.config && path !== "framework/limits.yaml",
+  );
+  return fakeFileSystem({
+    ...Object.fromEntries(kit.map(([path, text]) => [`/kit/${path}`, text])),
+    ...Object.fromEntries(Object.entries(project).map(([path, text]) => [`/project/${path}`, text])),
+  });
 }
 
 export function listingOf(files: FakeFileSystem): FileListing {

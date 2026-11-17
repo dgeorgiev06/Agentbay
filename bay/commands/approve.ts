@@ -9,7 +9,7 @@ import {
   type Terminal,
 } from "../command-context.ts";
 import type { Command } from "../command-line.ts";
-import type { ListTrust, ModeList, TrustGiven } from "../contracts.ts";
+import type { ListTrust, ModeList, ScriptFiles, TrustGiven } from "../contracts.ts";
 import type { Kernel } from "../kernel.ts";
 import type { ActiveMode } from "../manifests/manifests.ts";
 import type { Problem } from "../outcome.ts";
@@ -17,15 +17,18 @@ import { listOf } from "../policy.ts";
 import { runResult } from "../run-report.ts";
 import { shownPath } from "../layout.ts";
 import {
-  changedScriptFiles,
   listHashOf,
   readTrustRecord,
   recordWithTrust,
   recordWithoutTrust,
+  scriptFileChanges,
   scriptFilesOf,
+  shown,
   writeTrustRecord,
+  type ScriptFileChange,
 } from "../trust.ts";
-import { differenceCard, listSize, shown, trustCard, trustedWhen, withdrawCard } from "../trust-card.ts";
+import { hashOf } from "../json.ts";
+import { differenceCard, listSize, scriptsCard, trustCard, trustedWhen, withdrawCard } from "../trust-card.ts";
 
 type Channel = { readonly via: "terminal" } | { readonly via: "chat"; readonly quote: string };
 
@@ -68,7 +71,13 @@ type Answerable = Exclude<ListTrust, { readonly state: "not needed" | "unreadabl
 
 type TrustSubject =
   | { readonly verdict: "give"; readonly list: ModeList; readonly modeFolder: string; readonly card: Card }
-  | { readonly verdict: "withdraw"; readonly given: TrustGiven; readonly card: Card };
+  | { readonly verdict: "withdraw"; readonly given: TrustGiven; readonly card: Card }
+  | {
+      readonly verdict: "record scripts";
+      readonly given: TrustGiven;
+      readonly scripts: ScriptFiles;
+      readonly card: Card;
+    };
 
 type ModeRefusal =
   | { readonly reason: "no such mode"; readonly mode: string }
@@ -108,6 +117,7 @@ const prompts = {
   first: "Type yes to trust it: ",
   changed: "Type yes to trust the new list: ",
   withdraw: "Type yes to withdraw: ",
+  scripts: "Type yes to record that you read them: ",
 };
 
 function channelOf(invocation: Invocation): Channel | string {
@@ -312,14 +322,29 @@ function answerRefusalResult(refusal: AnswerRefusal): CommandResult {
   }
 }
 
-async function changedScripts(kernel: Kernel, folder: string, given: TrustGiven): Promise<number> {
-  const now = await scriptFilesNow(kernel, folder);
-  return changedScriptFiles(given.scripts, now).length;
-}
+type ScriptsNow = {
+  readonly scripts: ScriptFiles;
+  readonly changes: readonly ScriptFileChange[];
+};
 
-async function scriptFilesNow(kernel: Kernel, folder: string): Promise<TrustGiven["scripts"]> {
+async function scriptFilesNow(kernel: Kernel, folder: string): Promise<ScriptFiles> {
   const paths = await kernel.ports.listing.projectFiles(folder);
   return scriptFilesOf(kernel.ports.files, folder, paths);
+}
+
+async function scriptsSince(kernel: Kernel, folder: string, given: TrustGiven): Promise<ScriptsNow> {
+  const scripts = await scriptFilesNow(kernel, folder);
+  return { scripts, changes: scriptFileChanges(given.scripts, scripts) };
+}
+
+async function trustedSubject(kernel: Kernel, folder: string, given: TrustGiven): Promise<TrustSubject | TrustRefusal> {
+  const { scripts, changes } = await scriptsSince(kernel, folder, given);
+  if (changes.length === 0) {
+    return { reason: "already trusted", given };
+  }
+  const hash = hashOf({ list: given.hash, scripts });
+  const lines = scriptsCard({ given, changes, hash });
+  return { verdict: "record scripts", given, scripts, card: { lines, hash, prompt: prompts.scripts } };
 }
 
 function notNeeded(found: ActiveMode): TrustRefusal {
@@ -335,7 +360,7 @@ async function givingSubject(
   const { modeFolder } = found.grants;
   switch (listTrust.state) {
     case "trusted":
-      return { reason: "already trusted", given: listTrust.given };
+      return trustedSubject(kernel, modeFolder, listTrust.given);
     case "never trusted": {
       const folder = shownPath(kernel.layout, modeFolder);
       const lines = trustCard({ list: listTrust.list, folder });
@@ -343,7 +368,8 @@ async function givingSubject(
     }
     case "changed": {
       const { list, given } = listTrust;
-      const lines = differenceCard({ list, given, changedScripts: await changedScripts(kernel, modeFolder, given) });
+      const { changes } = await scriptsSince(kernel, modeFolder, given);
+      const lines = differenceCard({ list, given, changedScripts: changes.length });
       return giving(list, modeFolder, { lines, prompt: prompts.changed });
     }
   }
@@ -422,21 +448,32 @@ async function written(request: TrustRequest, subject: TrustSubject): Promise<Co
     return refusalResult({ reason: "unreadable record", problems: record.problems });
   }
   const ports = { files: kernel.ports.files, folders: kernel.ports.folders };
-  if (subject.verdict === "withdraw") {
-    await writeTrustRecord(ports, kernel.layout, recordWithoutTrust(record.value, ask.mode));
-    return succeeded(
-      { withdrawn: ask.mode },
-      `Trust withdrawn from ${ask.mode}. From the next step, its scripts may not run its commands.`,
-    );
-  }
-  const scripts = await scriptFilesNow(kernel, subject.modeFolder);
   const by = byOf(ask.channel);
-  const giving = { scripts, at: kernel.ports.clock.now().toISOString(), by };
-  await writeTrustRecord(ports, kernel.layout, recordWithTrust(record.value, subject.list, giving));
-  return succeeded(
-    { trusted: ask.mode, hash: subject.card.hash, by },
-    `${ask.mode} is trusted: ${listSize(subject.list)}. Its scripts may run its commands from the next step.`,
-  );
+  const at = kernel.ports.clock.now().toISOString();
+  switch (subject.verdict) {
+    case "withdraw":
+      await writeTrustRecord(ports, kernel.layout, recordWithoutTrust(record.value, ask.mode));
+      return succeeded(
+        { withdrawn: ask.mode },
+        `Trust withdrawn from ${ask.mode}. From the next step, its scripts may not run its commands.`,
+      );
+    case "give": {
+      const scripts = await scriptFilesNow(kernel, subject.modeFolder);
+      await writeTrustRecord(ports, kernel.layout, recordWithTrust(record.value, subject.list, { scripts, at, by }));
+      return succeeded(
+        { trusted: ask.mode, hash: subject.card.hash, by },
+        `${ask.mode} is trusted: ${listSize(subject.list)}. Its scripts may run its commands from the next step.`,
+      );
+    }
+    case "record scripts": {
+      const giving = { scripts: subject.scripts, at, by };
+      await writeTrustRecord(ports, kernel.layout, recordWithTrust(record.value, subject.given.list, giving));
+      return succeeded(
+        { recorded: ask.mode, hash: subject.given.hash, by },
+        `The script files of ${ask.mode} are recorded as you read them. Its list is trusted as before.`,
+      );
+    }
+  }
 }
 
 async function decideTrust(request: TrustRequest): Promise<CommandResult> {

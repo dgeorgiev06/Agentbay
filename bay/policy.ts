@@ -20,6 +20,8 @@ export type GrantRequest = {
   readonly record: Outcome<TrustRecord>;
 };
 
+export type ListTrustRequest = Pick<GrantRequest, "manifest" | "home" | "folder" | "layout" | "record">;
+
 export type GrantProblem = {
   readonly at: readonly (string | number)[];
   readonly message: string;
@@ -271,7 +273,7 @@ function hostProblems(manifest: Mode): readonly GrantProblem[] {
   );
 }
 
-function isBaseMode(request: GrantRequest): boolean {
+function isBaseMode(request: ListTrustRequest): boolean {
   return request.home === "kit" && isInsideOrEqual(request.folder, pathIn(request.layout, "kit", baseTier));
 }
 
@@ -356,7 +358,7 @@ function projectPaths(layout: Layout, paths: readonly string[]): readonly string
   return paths.map((path) => pathIn(layout, "project", normalized(path)));
 }
 
-function listTrustOf(request: GrantRequest): ListTrust {
+export function listTrustOf(request: ListTrustRequest): ListTrust {
   const list = listOf(request.manifest);
   const listsNothing = list.commands.length === 0 && list.throwaway.length === 0;
   if (isBaseMode(request) || listsNothing) {

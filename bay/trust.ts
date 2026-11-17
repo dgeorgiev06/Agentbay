@@ -16,6 +16,31 @@ export type TrustGiving = {
   readonly by: string;
 };
 
+export type CommandChange =
+  | { readonly change: "added" | "removed" | "kept"; readonly command: GrantedCommand }
+  | {
+      readonly change: "changed";
+      readonly command: GrantedCommand;
+      readonly wordsWere?: readonly string[];
+      readonly effectsWere?: readonly Effect[];
+    };
+
+export type FolderChanges = {
+  readonly added: readonly string[];
+  readonly removed: readonly string[];
+  readonly kept: readonly string[];
+};
+
+export type ListChanges = {
+  readonly commands: readonly CommandChange[];
+  readonly folders: FolderChanges;
+};
+
+export type ScriptFileChange = {
+  readonly path: string;
+  readonly change: "added" | "removed" | "changed";
+};
+
 export type RecordPorts = {
   readonly files: FileSystem;
   readonly folders: Folders;
@@ -132,9 +157,86 @@ function hashIn(scripts: ScriptFiles, path: string): string | undefined {
   return Object.hasOwn(scripts, path) ? scripts[path] : undefined;
 }
 
-export function changedScriptFiles(before: ScriptFiles, now: ScriptFiles): readonly string[] {
+function scriptFileChange(
+  path: string,
+  before: string | undefined,
+  now: string | undefined,
+): readonly ScriptFileChange[] {
+  if (before === now) {
+    return [];
+  }
+  if (before === undefined) {
+    return [{ path, change: "added" }];
+  }
+  return [{ path, change: now === undefined ? "removed" : "changed" }];
+}
+
+export function scriptFileChanges(before: ScriptFiles, now: ScriptFiles): readonly ScriptFileChange[] {
   const paths = [...new Set([...Object.keys(before), ...Object.keys(now)])].sort();
-  return paths.filter((path) => hashIn(before, path) !== hashIn(now, path));
+  return paths.flatMap((path) => scriptFileChange(path, hashIn(before, path), hashIn(now, path)));
+}
+
+function sameWords(first: readonly string[], second: readonly string[]): boolean {
+  return first.length === second.length && first.every((word, index) => word === second[index]);
+}
+
+function sameEffects(first: readonly Effect[], second: readonly Effect[]): boolean {
+  return sameWords([...first].sort(), [...second].sort());
+}
+
+function commandChange(before: GrantedCommand | undefined, now: GrantedCommand | undefined): CommandChange | undefined {
+  if (before === undefined) {
+    return now === undefined ? undefined : { change: "added", command: now };
+  }
+  if (now === undefined) {
+    return { change: "removed", command: before };
+  }
+  const wordsSame = sameWords(before.words, now.words);
+  const effectsSame = sameEffects(before.effects, now.effects);
+  if (wordsSame && effectsSame) {
+    return { change: "kept", command: now };
+  }
+  return {
+    change: "changed",
+    command: now,
+    ...(wordsSame ? {} : { wordsWere: before.words }),
+    ...(effectsSame ? {} : { effectsWere: before.effects }),
+  };
+}
+
+function commandNamed(commands: readonly GrantedCommand[], name: string): GrantedCommand | undefined {
+  return commands.find((command) => command.name === name);
+}
+
+export function listChanges(before: ModeList, now: ModeList): ListChanges {
+  const names = [...new Set([...before.commands, ...now.commands].map((command) => command.name))].sort();
+  const commands = names.flatMap(
+    (name) => commandChange(commandNamed(before.commands, name), commandNamed(now.commands, name)) ?? [],
+  );
+  const folders = {
+    added: now.throwaway.filter((folder) => !before.throwaway.includes(folder)),
+    removed: before.throwaway.filter((folder) => !now.throwaway.includes(folder)),
+    kept: now.throwaway.filter((folder) => before.throwaway.includes(folder)),
+  };
+  return { commands, folders };
+}
+
+function isRedrawing(code: number): boolean {
+  return (
+    code < 0x20 ||
+    (code >= 0x7f && code <= 0x9f) ||
+    (code >= 0x202a && code <= 0x202e) ||
+    (code >= 0x2066 && code <= 0x2069)
+  );
+}
+
+export function shown(text: string): string {
+  return Array.from(text)
+    .map((character) => {
+      const code = character.charCodeAt(0);
+      return isRedrawing(code) ? `\\u${code.toString(16).padStart(4, "0")}` : character;
+    })
+    .join("");
 }
 
 function problemAt(place: Place, message: string): Problem {

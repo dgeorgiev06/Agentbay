@@ -9,6 +9,8 @@ import {
   cleanFiles,
   findFinding,
   notesSkillFile,
+  separate,
+  separateFiles,
   skillSections,
   skillText,
   withoutFinding,
@@ -66,11 +68,20 @@ test("a listed command with no effects in a base mode is an error with a fix", a
   assert.match(finding.fix ?? "", /^List under resources\.commands\.tests\.effects in /);
 });
 
-test("a listed command in a mode outside components/base is not an error, and has no finding of its own yet", async () => {
+function waiting(size: string): readonly unknown[] {
+  return [
+    "warning",
+    "/resources",
+    `Mode notes lists ${size}, and the owner does not trust the list of mode notes, so none of it is granted.`,
+    "The owner reads the list and decides: bay approve --trust notes",
+  ];
+}
+
+test("a listed command in a mode outside components/base is not an error; it waits for the owner's trust", async () => {
   const commands = { changes: { run: "git status", effects: ["read"] } };
   const manifest = yamlText({ ...notesMode, resources: { commands } });
   const report = await check({ ...cleanFiles(), [paths.notes]: manifest });
-  assert.deepEqual(findingsIn(report, paths.notes), []);
+  assert.deepEqual(findingsIn(report, paths.notes), [waiting("1 command")]);
   assert.equal(report.errors, 0);
 });
 
@@ -142,14 +153,14 @@ test("words for a mode's commands to start with, in a mode outside components/ba
     commands: { changes: { run: "status", effects: ["read"] } },
   };
   const report = await check({ ...cleanFiles(), [paths.notes]: yamlText({ ...notesMode, resources }) });
-  assert.deepEqual(findingsIn(report, paths.notes), []);
+  assert.deepEqual(findingsIn(report, paths.notes), [waiting("1 command")]);
   assert.equal(report.errors, 0);
 });
 
 test("a throwaway folder in a mode outside components/base is not an error", async () => {
   const manifest = yamlText({ ...notesMode, resources: { files: { throwaway: ["scratch/"] } } });
   const report = await check({ ...cleanFiles(), [paths.notes]: manifest });
-  assert.deepEqual(findingsIn(report, paths.notes), []);
+  assert.deepEqual(findingsIn(report, paths.notes), [waiting("1 throwaway folder")]);
   assert.equal(report.errors, 0);
 });
 
@@ -188,18 +199,6 @@ test("the summary of a clean report is only the counts", () => {
   };
   assert.match(summarizeCheck(one), /bay check: 1 error, 0 warnings\.$/);
 });
-
-const separate = layoutOf({ kit: "/kit", project: "/project" });
-
-function separateFiles(project: Readonly<Record<string, string>>): FakeFileSystem {
-  const kit = Object.entries(cleanFiles()).filter(
-    ([path]) => path !== paths.config && path !== "framework/limits.yaml",
-  );
-  return fakeFileSystem({
-    ...Object.fromEntries(kit.map(([path, text]) => [`/kit/${path}`, text])),
-    ...Object.fromEntries(Object.entries(project).map(([path, text]) => [`/project/${path}`, text])),
-  });
-}
 
 const journalFolder = "components/modes/journal";
 

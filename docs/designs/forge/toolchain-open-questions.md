@@ -1,9 +1,9 @@
 # `toolchain@1`: what the interface leaves undefined
 
-Found while writing its shared test (slice S1). A second language would trip on each. None is decided; the interface is unchanged. The first two shape forge and are for the owner before G4.
+Found while writing its shared test (slice S1). A second language would trip on each. Question 2 is decided; the others are not. The first two shape forge and are for the owner before G4.
 
 1. **A project's own toolchain cannot exist today.** `practices` is "relative to the kit", and only base modes may list commands. A toolchain for a second language can therefore live only in the kit, never in a project. `docs/adr/0018` aims at any project.
-2. **Writing into the checkout.** `check` and `test` declare the write effect and nothing in the interface forbids writing there. A Go or Rust build writes a build folder or a cache. Is writing allowed, and where? The shared test currently holds that nothing is written, which only the brief asked for.
+2. **Writing into the checkout.** Decided in `docs/adr/0020`, item 2. The folder given to `check` and `test` is a throwaway copy the caller made and will remove. The toolchain's tools may write inside it and nowhere else, and the shared test holds that. What callers must do is in `calling-a-toolchain.md`.
 3. **Order of running.** `describe` says "in the order check runs them" and the response says "in the order describe lists". May a toolchain run its checks at the same time, as long as the verdicts come back in order?
 4. **The end of the output.** How much is promised? Does a check stopped at its limit keep what it wrote before it was stopped?
 5. **The refusal of an unknown check name.** Must its reason name the unknown check?

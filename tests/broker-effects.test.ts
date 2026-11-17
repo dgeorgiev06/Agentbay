@@ -128,46 +128,61 @@ function assertNotRefusedForEffects<T>(answer: Answer<T>): void {
 
 test("files: a write needs write", async () => {
   await withBroker(["read"], async (broker, root) => {
-    assertRefusedFor(await broker.writeFile("notes-out/a.txt", "x"), "write");
+    assertRefusedFor(await broker.entries["files.write"]({ path: "notes-out/a.txt", text: "x" }), "write");
     assert.equal(existsSync(join(root, "notes-out", "a.txt")), false);
   });
   await withBroker(["read", "write"], async (broker, root) => {
-    assert.deepEqual(await broker.writeFile("notes-out/a.txt", "x"), { ok: true, value: null });
+    assert.deepEqual(await broker.entries["files.write"]({ path: "notes-out/a.txt", text: "x" }), {
+      ok: true,
+      value: null,
+    });
     assert.equal(existsSync(join(root, "notes-out", "a.txt")), true);
   });
 });
 
 test("files: reading and listing need no effect", async () => {
   await withBroker([], async (broker) => {
-    assert.deepEqual(await broker.readFile("notes-in/today.md"), { ok: true, value: "today" });
-    assert.deepEqual(await broker.listFiles("notes-in"), { ok: true, value: ["today.md"] });
+    assert.deepEqual(await broker.entries["files.read"]({ path: "notes-in/today.md" }), { ok: true, value: "today" });
+    assert.deepEqual(await broker.entries["files.list"]({ path: "notes-in" }), { ok: true, value: ["today.md"] });
   });
 });
 
 test("db: a statement that changes data needs write", async () => {
   await withBroker(["read"], async (broker) => {
-    assertRefusedFor(await broker.execute("insert into notes values ('a')"), "write");
-    assertRefusedFor(await broker.execute("create table more (y)"), "write");
+    assertRefusedFor(
+      await broker.entries["db.execute"]({ sql: "insert into notes values ('a')", parameters: [] }),
+      "write",
+    );
+    assertRefusedFor(await broker.entries["db.execute"]({ sql: "create table more (y)", parameters: [] }), "write");
   });
   await withBroker(["read", "write"], async (broker) => {
-    assert.ok((await broker.execute("insert into notes values ('a')")).ok);
+    assert.ok((await broker.entries["db.execute"]({ sql: "insert into notes values ('a')", parameters: [] })).ok);
   });
 });
 
 test("db: a statement that deletes needs delete as well as write", async () => {
   await withBroker(["read", "write"], async (broker) => {
-    assertRefusedFor(await broker.execute("delete from notes"), "delete");
-    assertRefusedFor(await broker.execute("drop table notes"), "delete");
-    assertRefusedFor(await broker.execute("alter table notes drop column x"), "delete");
-    assertRefusedFor(await broker.execute("with gone as (select 1) delete from notes"), "delete");
-    assert.ok((await broker.execute("insert into notes values ('delete me; drop it')")).ok);
+    assertRefusedFor(await broker.entries["db.execute"]({ sql: "delete from notes", parameters: [] }), "delete");
+    assertRefusedFor(await broker.entries["db.execute"]({ sql: "drop table notes", parameters: [] }), "delete");
+    assertRefusedFor(
+      await broker.entries["db.execute"]({ sql: "alter table notes drop column x", parameters: [] }),
+      "delete",
+    );
+    assertRefusedFor(
+      await broker.entries["db.execute"]({ sql: "with gone as (select 1) delete from notes", parameters: [] }),
+      "delete",
+    );
+    assert.ok(
+      (await broker.entries["db.execute"]({ sql: "insert into notes values ('delete me; drop it')", parameters: [] }))
+        .ok,
+    );
   });
   await withBroker(["read", "delete"], async (broker) => {
-    assertRefusedFor(await broker.execute("delete from notes"), "write");
+    assertRefusedFor(await broker.entries["db.execute"]({ sql: "delete from notes", parameters: [] }), "write");
   });
   await withBroker(["read", "write", "delete"], async (broker) => {
-    assert.ok((await broker.execute("insert into notes values ('a')")).ok);
-    assert.deepEqual(await broker.execute("delete from notes"), {
+    assert.ok((await broker.entries["db.execute"]({ sql: "insert into notes values ('a')", parameters: [] })).ok);
+    assert.deepEqual(await broker.entries["db.execute"]({ sql: "delete from notes", parameters: [] }), {
       ok: true,
       value: { changes: 1, lastInsertRowid: 1 },
     });
@@ -177,20 +192,26 @@ test("db: a statement that deletes needs delete as well as write", async () => {
 test("db: a write the leading word does not show is still refused without write, by the read-only connection", async () => {
   const hidden = "with source as (select 'a' as x) insert into notes select x from source";
   await withBroker(["read"], async (broker) => {
-    const answer = await broker.execute(hidden);
+    const answer = await broker.entries["db.execute"]({ sql: hidden, parameters: [] });
     assert.ok(!answer.ok && answer.kind === "refused", JSON.stringify(answer));
     assert.match(answer.message, /to run a write statement/);
   });
   await withBroker(["read", "write"], async (broker) => {
-    assert.ok((await broker.execute(hidden)).ok);
+    assert.ok((await broker.entries["db.execute"]({ sql: hidden, parameters: [] })).ok);
   });
 });
 
 test("db: queries, agent queries and migrations need no effect", async () => {
   await withBroker([], async (broker) => {
-    assert.deepEqual(await broker.query("select count(*) as n from notes"), { ok: true, value: [{ n: 0 }] });
-    assert.ok((await broker.agentQuery("select count(*) from notes")).ok);
-    assert.deepEqual(await broker.migrate("other"), { ok: true, value: ["0001-notes.sql"] });
+    assert.deepEqual(await broker.entries["db.query"]({ sql: "select count(*) as n from notes", parameters: [] }), {
+      ok: true,
+      value: [{ n: 0 }],
+    });
+    assert.ok((await broker.entries["db.agentQuery"]({ sql: "select count(*) from notes" })).ok);
+    assert.deepEqual(await broker.entries["db.migrate"]({ partition: "other" }), {
+      ok: true,
+      value: ["0001-notes.sql"],
+    });
   });
 });
 
@@ -225,7 +246,7 @@ test("secrets and events need no effect of their own", async () => {
 
 test("a refusal by the effect rule is logged as a refused event, once", async () => {
   await withBroker(["read"], async (broker, _root, events) => {
-    await broker.writeFile("notes-out/a.txt", "x");
+    await broker.entries["files.write"]({ path: "notes-out/a.txt", text: "x" });
     const refusals = events.events.filter((event) => event.kind === "refused");
     assert.equal(refusals.length, 1);
     assert.match(JSON.stringify(refusals[0]?.detail), /needs the write effect/);
@@ -241,16 +262,48 @@ type MethodRow = {
 const everyEffect: readonly Effect[] = ["read", "write", "network", "spend", "delete"];
 
 const brokerMethods: Readonly<Record<string, MethodRow>> = {
-  migrate: { call: (broker) => broker.migrate(), needs: [], usesPorts: true },
-  execute: { call: (broker) => broker.execute("insert into notes values (1)"), needs: ["write"], usesPorts: true },
-  query: { call: (broker) => broker.query("select 1"), needs: [], usesPorts: true },
-  agentQuery: { call: (broker) => broker.agentQuery("select 1"), needs: [], usesPorts: true },
-  readFile: { call: (broker) => broker.readFile("notes-in/today.md"), needs: [], usesPorts: true },
-  writeFile: { call: (broker) => broker.writeFile("notes-out/a.txt", "x"), needs: ["write"], usesPorts: true },
-  listFiles: { call: (broker) => broker.listFiles("notes-in"), needs: [], usesPorts: true },
-  makeFolder: { call: (broker) => broker.makeFolder("scratch/one"), needs: ["write"], usesPorts: true },
-  link: { call: (broker) => broker.link("scratch/notes", "notes-in"), needs: ["write"], usesPorts: true },
-  remove: { call: (broker) => broker.remove("scratch/one"), needs: ["write", "delete"], usesPorts: true },
+  "db.migrate": { call: (broker) => broker.entries["db.migrate"]({}), needs: [], usesPorts: true },
+  "db.execute": {
+    call: (broker) => broker.entries["db.execute"]({ sql: "insert into notes values (1)", parameters: [] }),
+    needs: ["write"],
+    usesPorts: true,
+  },
+  "db.query": {
+    call: (broker) => broker.entries["db.query"]({ sql: "select 1", parameters: [] }),
+    needs: [],
+    usesPorts: true,
+  },
+  "db.agentQuery": {
+    call: (broker) => broker.entries["db.agentQuery"]({ sql: "select 1" }),
+    needs: [],
+    usesPorts: true,
+  },
+  "files.read": {
+    call: (broker) => broker.entries["files.read"]({ path: "notes-in/today.md" }),
+    needs: [],
+    usesPorts: true,
+  },
+  "files.write": {
+    call: (broker) => broker.entries["files.write"]({ path: "notes-out/a.txt", text: "x" }),
+    needs: ["write"],
+    usesPorts: true,
+  },
+  "files.list": { call: (broker) => broker.entries["files.list"]({ path: "notes-in" }), needs: [], usesPorts: true },
+  "files.makeFolder": {
+    call: (broker) => broker.entries["files.makeFolder"]({ path: "scratch/one" }),
+    needs: ["write"],
+    usesPorts: true,
+  },
+  "files.link": {
+    call: (broker) => broker.entries["files.link"]({ path: "scratch/notes", target: "notes-in" }),
+    needs: ["write"],
+    usesPorts: true,
+  },
+  "files.remove": {
+    call: (broker) => broker.entries["files.remove"]({ path: "scratch/one" }),
+    needs: ["write", "delete"],
+    usesPorts: true,
+  },
   secret: { call: (broker) => broker.secret("API_TOKEN"), needs: [], usesPorts: true },
   request: {
     call: (broker) => broker.request({ method: "GET", url: "https://api.example.com/x", headers: {} }),
@@ -270,7 +323,10 @@ const notResourceMethods: readonly string[] = ["constructor", "close", "report"]
 
 test("every broker method that serves a resource is in the table of the one rule", () => {
   const methods = Object.getOwnPropertyNames(Broker.prototype).filter((name) => !notResourceMethods.includes(name));
-  assert.deepEqual(methods.sort(), Object.keys(brokerMethods).sort());
+  const broker = brokerWith("/project", [], brokenPorts());
+  const served = [...methods, ...Object.keys(broker.entries)];
+  broker.close();
+  assert.deepEqual(served.sort(), Object.keys(brokerMethods).sort());
 });
 
 test("every broker method passes through the one rule: refused without its effect, allowed with it", async () => {
@@ -308,16 +364,32 @@ test("every broker method answers when every port throws, and never rejects", as
   });
 });
 
+type Asked = (broker: Broker) => Promise<Answer<unknown>>;
+
+const operationsOfEntries: readonly (readonly [string, Asked, Effect | undefined])[] = [
+  ["db.migrate", (broker) => broker.entries["db.migrate"]({}), undefined],
+  ["db.execute", (broker) => broker.entries["db.execute"]({ sql: "update notes set x = 1", parameters: [] }), "write"],
+  ["db.execute", (broker) => broker.entries["db.execute"]({ sql: "select 1", parameters: [] }), undefined],
+  ["db.query", (broker) => broker.entries["db.query"]({ sql: "select 'drop' as word", parameters: [] }), undefined],
+  [
+    "db.query",
+    (broker) => broker.entries["db.query"]({ sql: "with a as (select 1) delete from notes", parameters: [] }),
+    "write",
+  ],
+  ["db.agentQuery", (broker) => broker.entries["db.agentQuery"]({ sql: "select 1" }), undefined],
+  ["files.read", (broker) => broker.entries["files.read"]({ path: "a" }), undefined],
+  ["files.list", (broker) => broker.entries["files.list"]({ path: "a" }), undefined],
+  ["files.write", (broker) => broker.entries["files.write"]({ path: "a", text: "" }), "write"],
+];
+
+function effectNamedBy<T>(answer: Answer<T>): string | undefined {
+  if (answer.ok || answer.kind !== "refused") {
+    return undefined;
+  }
+  return /effect; to allow it, add (\w+) to/.exec(answer.change)?.[1];
+}
+
 const operations: readonly (readonly [BrokerOperation, Effect | undefined])[] = [
-  [{ kind: "db.migrate" }, undefined],
-  [{ kind: "db.execute", sql: "update notes set x = 1" }, "write"],
-  [{ kind: "db.execute", sql: "select 1" }, undefined],
-  [{ kind: "db.query", sql: "select 'drop' as word" }, undefined],
-  [{ kind: "db.query", sql: "with a as (select 1) delete from notes" }, "write"],
-  [{ kind: "db.agentQuery" }, undefined],
-  [{ kind: "files.read", path: "a" }, undefined],
-  [{ kind: "files.list", path: "a" }, undefined],
-  [{ kind: "files.write", path: "a" }, "write"],
   [{ kind: "secrets.get", name: "A" }, undefined],
   [{ kind: "http.request", method: "GET", url: "https://a.example" }, "network"],
   [{ kind: "events.emit", eventKind: "noted" }, undefined],
@@ -326,17 +398,24 @@ const operations: readonly (readonly [BrokerOperation, Effect | undefined])[] = 
   [{ kind: "commands.run", command: ["git", "status"], folder: "." }, "read"],
 ];
 
-test("the rule names the first missing effect for each kind of operation", () => {
+test("the rule names the first missing effect for each kind of operation", async () => {
   const at = { stepKey: "0", action: "look", manifest: "/m/mode.yaml" };
   for (const [operation, needed] of operations) {
     const refusal = effectRefusal(operation, [], at);
     assert.equal(refusal === undefined ? undefined : /add (\w+) to/.exec(refusal.change)?.[1], needed, operation.kind);
     assert.equal(effectRefusal(operation, ["read", "write", "delete", "network", "spend"], at), undefined);
   }
+  for (const [name, asked, needed] of operationsOfEntries) {
+    await withBroker([], async (broker) => {
+      assert.equal(effectNamedBy(await asked(broker)), needed, name);
+    });
+    await withBroker(["read", "write", "delete", "network", "spend"], async (broker) => {
+      assert.equal(effectNamedBy(await asked(broker)), undefined, name);
+    });
+  }
 });
 
-test("a statement deletes when a word outside quotes and comments is delete, drop or truncate", () => {
-  const at = { stepKey: "0", action: "tidy", manifest: "/m/mode.yaml" };
+test("a statement deletes when a word outside quotes and comments is delete, drop or truncate", async () => {
   const cases: readonly (readonly [string, boolean])[] = [
     ["delete from items where id = 1", true],
     ["DROP TABLE items", true],
@@ -354,10 +433,12 @@ test("a statement deletes when a word outside quotes and comments is delete, dro
     ["update items set deleted = 1", false],
     ["insert or replace into items values (1)", false],
   ];
-  for (const [sql, expected] of cases) {
-    const refusal = effectRefusal({ kind: "db.execute", sql }, ["read", "write"], at);
-    assert.equal(refusal !== undefined, expected, sql);
-  }
+  await withBroker(["read", "write"], async (broker) => {
+    for (const [sql, expected] of cases) {
+      const answer = await broker.entries["db.execute"]({ sql, parameters: [] });
+      assert.equal(effectNamedBy(answer) !== undefined, expected, sql);
+    }
+  });
 });
 
 test("a script is granted direct file writes only when its action declares write", () => {

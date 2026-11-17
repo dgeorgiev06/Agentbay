@@ -10,16 +10,6 @@ export type SpendAmounts = {
 };
 
 export type BrokerOperation =
-  | { readonly kind: "db.migrate" }
-  | { readonly kind: "db.execute"; readonly sql: string }
-  | { readonly kind: "db.query"; readonly sql: string }
-  | { readonly kind: "db.agentQuery" }
-  | { readonly kind: "files.read"; readonly path: string }
-  | { readonly kind: "files.list"; readonly path: string }
-  | { readonly kind: "files.write"; readonly path: string }
-  | { readonly kind: "files.makeFolder"; readonly path: string }
-  | { readonly kind: "files.link"; readonly path: string; readonly target: string }
-  | { readonly kind: "files.remove"; readonly path: string }
   | { readonly kind: "secrets.get"; readonly name: string }
   | { readonly kind: "http.request"; readonly method: HttpRequest["method"]; readonly url: string }
   | { readonly kind: "events.emit"; readonly eventKind: string }
@@ -90,16 +80,6 @@ type OperationRule = {
 };
 
 const operationRules: { readonly [Kind in BrokerOperation["kind"]]: OperationRule } = {
-  "db.migrate": { resource: "db", needs: [] },
-  "db.execute": { resource: "db", needs: [] },
-  "db.query": { resource: "db", needs: [] },
-  "db.agentQuery": { resource: "db", needs: [] },
-  "files.read": { resource: "files", needs: [] },
-  "files.list": { resource: "files", needs: [] },
-  "files.write": { resource: "files", needs: [writesFiles] },
-  "files.makeFolder": { resource: "files", needs: [writesFiles] },
-  "files.link": { resource: "files", needs: [writesFiles] },
-  "files.remove": { resource: "files", needs: [writesFiles, removesFiles] },
   "secrets.get": { resource: "secrets", needs: [] },
   "http.request": { resource: "http", needs: [usesNetwork] },
   "events.emit": { resource: "events", needs: [] },
@@ -109,9 +89,6 @@ const operationRules: { readonly [Kind in BrokerOperation["kind"]]: OperationRul
 };
 
 function contentNeeds(operation: BrokerOperation): readonly Need[] {
-  if (operation.kind === "db.execute" || operation.kind === "db.query") {
-    return statementNeeds(operation.sql);
-  }
   if (operation.kind === "spend") {
     return isSpending(operation.amounts) ? [spends] : [];
   }
@@ -123,24 +100,6 @@ function contentNeeds(operation: BrokerOperation): readonly Need[] {
 
 function needsOf(operation: BrokerOperation): readonly Need[] {
   return [...operationRules[operation.kind].needs, ...contentNeeds(operation)];
-}
-
-type DatabaseOperation = Extract<BrokerOperation, { readonly kind: `db.${string}` }>;
-
-function isDatabaseOperation(operation: BrokerOperation): operation is DatabaseOperation {
-  return operationRules[operation.kind].resource === "db";
-}
-
-function describedDatabaseOperation(operation: DatabaseOperation): string {
-  switch (operation.kind) {
-    case "db.migrate":
-      return "run the migrations";
-    case "db.execute":
-    case "db.query":
-      return `run a statement that starts with "${leadingKeyword(operation.sql)}"`;
-    case "db.agentQuery":
-      return "run an agent's query";
-  }
 }
 
 type SpendingOperation = Extract<BrokerOperation, { readonly kind: "spend" | "skill.submit" }>;
@@ -155,36 +114,9 @@ function describedSpending(operation: SpendingOperation): string {
     : `report spending ${String(operation.usd)} US dollars`;
 }
 
-type FileOperation = Extract<BrokerOperation, { readonly kind: `files.${string}` }>;
-
-function isFileOperation(operation: BrokerOperation): operation is FileOperation {
-  return operationRules[operation.kind].resource === "files";
-}
-
-function describedFileOperation(operation: FileOperation): string {
-  switch (operation.kind) {
-    case "files.read":
-    case "files.list":
-    case "files.write":
-      return `${operation.kind.slice("files.".length)} ${operation.path}`;
-    case "files.makeFolder":
-      return `make the folder ${operation.path}`;
-    case "files.link":
-      return `link ${operation.path} to ${operation.target}`;
-    case "files.remove":
-      return `remove ${operation.path}`;
-  }
-}
-
 export function describedOperation(operation: BrokerOperation): string {
-  if (isDatabaseOperation(operation)) {
-    return describedDatabaseOperation(operation);
-  }
   if (isSpendingOperation(operation)) {
     return describedSpending(operation);
-  }
-  if (isFileOperation(operation)) {
-    return describedFileOperation(operation);
   }
   switch (operation.kind) {
     case "secrets.get":

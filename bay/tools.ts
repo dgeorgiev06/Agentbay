@@ -48,7 +48,7 @@ async function databaseQuery(call: ToolCall): Promise<Outcome<Json>> {
     return sql;
   }
   return withBroker(call, async (broker) => {
-    const answer = await broker.agentQuery(sql);
+    const answer = await broker.entries["db.agentQuery"]({ sql });
     return answer.ok
       ? { ok: true, value: { columns: answer.value.columns, rows: answer.value.rows } }
       : refused(answer.message);
@@ -60,7 +60,9 @@ async function filesRead(call: ToolCall): Promise<Outcome<Json>> {
   if (typeof path !== "string") {
     return path;
   }
-  return withBroker(call, async (broker) => answered(await broker.readFile(path), (text) => ({ path, text })));
+  return withBroker(call, async (broker) =>
+    answered(await broker.entries["files.read"]({ path }), (text) => ({ path, text })),
+  );
 }
 
 async function filesList(call: ToolCall): Promise<Outcome<Json>> {
@@ -69,7 +71,7 @@ async function filesList(call: ToolCall): Promise<Outcome<Json>> {
     return path;
   }
   return withBroker(call, async (broker) =>
-    answered(await broker.listFiles(path), (names) => ({ path, names: [...names] })),
+    answered(await broker.entries["files.list"]({ path }), (names) => ({ path, names: [...names] })),
   );
 }
 
@@ -82,7 +84,9 @@ async function filesWrite(call: ToolCall): Promise<Outcome<Json>> {
   if (typeof text !== "string") {
     return text;
   }
-  return withBroker(call, async (broker) => answered(await broker.writeFile(path, text), () => ({ written: path })));
+  return withBroker(call, async (broker) =>
+    answered(await broker.entries["files.write"]({ path, text }), () => ({ written: path })),
+  );
 }
 
 function unlisted(call: ToolCall, action: string): Outcome<Json> | undefined {

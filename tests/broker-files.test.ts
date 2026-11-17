@@ -63,24 +63,30 @@ function refusalOf<T>(answer: Answer<T>): string {
 
 test("files inside the read paths can be read, by project path or absolute path", async () => {
   await withFilesBroker(async ({ root, broker }) => {
-    assert.deepEqual(await broker.readFile("notes-in/today.md"), { ok: true, value: "today" });
-    assert.deepEqual(await broker.readFile(join(root, "components/modes/notes/templates/day.md")), {
+    assert.deepEqual(await broker.entries["files.read"]({ path: "notes-in/today.md" }), { ok: true, value: "today" });
+    assert.deepEqual(
+      await broker.entries["files.read"]({ path: join(root, "components/modes/notes/templates/day.md") }),
+      {
+        ok: true,
+        value: "template",
+      },
+    );
+    assert.deepEqual(await broker.entries["files.list"]({ path: "components/modes/notes" }), {
       ok: true,
-      value: "template",
+      value: ["templates"],
     });
-    assert.deepEqual(await broker.listFiles("components/modes/notes"), { ok: true, value: ["templates"] });
   });
 });
 
 test("a read outside the read paths is refused, naming resources.files.read", async () => {
   await withFilesBroker(async ({ broker, events }) => {
-    const message = refusalOf(await broker.readFile("outside/secret.txt"));
+    const message = refusalOf(await broker.entries["files.read"]({ path: "outside/secret.txt" }));
     assert.match(message, /asked to read .*outside\/secret\.txt/);
     assert.match(message, /resources\.files\.read in .*components\/modes\/notes\/mode\.yaml/);
-    refusalOf(await broker.readFile("notes-in/../outside/secret.txt"));
-    refusalOf(await broker.readFile("/etc/passwd"));
-    refusalOf(await broker.listFiles("outside"));
-    refusalOf(await broker.listFiles("."));
+    refusalOf(await broker.entries["files.read"]({ path: "notes-in/../outside/secret.txt" }));
+    refusalOf(await broker.entries["files.read"]({ path: "/etc/passwd" }));
+    refusalOf(await broker.entries["files.list"]({ path: "outside" }));
+    refusalOf(await broker.entries["files.list"]({ path: "." }));
     assert.equal(events.events.filter((event) => event.kind === "refused").length, 5);
   });
 });
@@ -89,30 +95,39 @@ test("a read through a link inside a read path that points outside is refused", 
   await withFilesBroker(async ({ root, broker }) => {
     await symlink(join(root, "outside/secret.txt"), join(root, "notes-in/link.md"));
     await symlink(join(root, "outside"), join(root, "notes-in/folder-link"));
-    const message = refusalOf(await broker.readFile("notes-in/link.md"));
+    const message = refusalOf(await broker.entries["files.read"]({ path: "notes-in/link.md" }));
     assert.match(message, /link/);
-    refusalOf(await broker.readFile("notes-in/folder-link/secret.txt"));
-    refusalOf(await broker.listFiles("notes-in/folder-link"));
+    refusalOf(await broker.entries["files.read"]({ path: "notes-in/folder-link/secret.txt" }));
+    refusalOf(await broker.entries["files.list"]({ path: "notes-in/folder-link" }));
   });
 });
 
 test("a write inside the write paths is atomic, and makes missing folders", async () => {
   await withFilesBroker(async ({ root, broker }) => {
-    assert.deepEqual(await broker.writeFile("notes-out/day/one.md", "first"), { ok: true, value: null });
-    assert.deepEqual(await broker.writeFile("notes-out/day/one.md", "second"), { ok: true, value: null });
+    assert.deepEqual(await broker.entries["files.write"]({ path: "notes-out/day/one.md", text: "first" }), {
+      ok: true,
+      value: null,
+    });
+    assert.deepEqual(await broker.entries["files.write"]({ path: "notes-out/day/one.md", text: "second" }), {
+      ok: true,
+      value: null,
+    });
     assert.equal(await readFile(join(root, "notes-out/day/one.md"), "utf8"), "second");
     assert.deepEqual(await readdir(join(root, "notes-out/day")), ["one.md"]);
-    assert.deepEqual(await broker.readFile("notes-out/day/one.md"), { ok: true, value: "second" });
+    assert.deepEqual(await broker.entries["files.read"]({ path: "notes-out/day/one.md" }), {
+      ok: true,
+      value: "second",
+    });
   });
 });
 
 test("a write outside the write paths is refused, even inside a read path", async () => {
   await withFilesBroker(async ({ broker }) => {
-    const message = refusalOf(await broker.writeFile("notes-in/today.md", "changed"));
+    const message = refusalOf(await broker.entries["files.write"]({ path: "notes-in/today.md", text: "changed" }));
     assert.match(message, /resources\.files\.write/);
-    refusalOf(await broker.writeFile("outside/new.txt", "x"));
-    refusalOf(await broker.writeFile("notes-out/../outside/new.txt", "x"));
-    refusalOf(await broker.writeFile(".agentbay/data/notes.db", "x"));
+    refusalOf(await broker.entries["files.write"]({ path: "outside/new.txt", text: "x" }));
+    refusalOf(await broker.entries["files.write"]({ path: "notes-out/../outside/new.txt", text: "x" }));
+    refusalOf(await broker.entries["files.write"]({ path: ".agentbay/data/notes.db", text: "x" }));
   });
 });
 
@@ -121,18 +136,21 @@ test("a write path with a linked component is refused, even when the link stays 
     await symlink(join(root, "outside"), join(root, "notes-out/away"));
     await mkdir(join(root, "notes-out/real"));
     await symlink(join(root, "notes-out/real"), join(root, "notes-out/inside-link"));
-    refusalOf(await broker.writeFile("notes-out/away/new.txt", "x"));
-    refusalOf(await broker.writeFile("notes-out/inside-link/new.txt", "x"));
+    refusalOf(await broker.entries["files.write"]({ path: "notes-out/away/new.txt", text: "x" }));
+    refusalOf(await broker.entries["files.write"]({ path: "notes-out/inside-link/new.txt", text: "x" }));
     await writeProjectFile(root, "outside/target.txt", "kept");
     await symlink(join(root, "outside/target.txt"), join(root, "notes-out/file-link.txt"));
-    refusalOf(await broker.writeFile("notes-out/file-link.txt", "x"));
+    refusalOf(await broker.entries["files.write"]({ path: "notes-out/file-link.txt", text: "x" }));
     assert.equal(await readFile(join(root, "outside/target.txt"), "utf8"), "kept");
   });
 });
 
 test("reading a missing file fails plainly", async () => {
   await withFilesBroker(async ({ broker }) => {
-    assert.match(failureOf(await broker.readFile("notes-in/missing.md")).message, /does not exist/);
+    assert.match(
+      failureOf(await broker.entries["files.read"]({ path: "notes-in/missing.md" })).message,
+      /does not exist/,
+    );
   });
 });
 
@@ -156,8 +174,8 @@ test("a granted path that is itself a link to another folder of the project is r
       commandSearchPath: "/usr/bin:/bin",
     });
     try {
-      assert.match(refusalOf(await broker.readFile("notes-in/store.db")), /link/);
-      refusalOf(await broker.listFiles("notes-in"));
+      assert.match(refusalOf(await broker.entries["files.read"]({ path: "notes-in/store.db" })), /link/);
+      refusalOf(await broker.entries["files.list"]({ path: "notes-in" }));
     } finally {
       broker.close();
     }

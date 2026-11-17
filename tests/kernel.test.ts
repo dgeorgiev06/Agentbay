@@ -69,8 +69,11 @@ test("a mode's database is made when first used, with its migrations applied bef
   const place = { runId: "none", mode: "writer", action: "compose", stepKey: "0" };
   const broker = kernel.brokerFor(place, permissions);
   try {
-    assert.deepEqual(await broker.query("select text from notes"), { ok: true, value: [{ text: "The first note." }] });
-    assert.deepEqual(await broker.migrate(), { ok: true, value: [] });
+    assert.deepEqual(await broker.entries["db.query"]({ sql: "select text from notes", parameters: [] }), {
+      ok: true,
+      value: [{ text: "The first note." }],
+    });
+    assert.deepEqual(await broker.entries["db.migrate"]({}), { ok: true, value: [] });
   } finally {
     broker.close();
   }

@@ -63,33 +63,65 @@ async function withMigrations(run: (setup: Setup) => Promise<void>): Promise<voi
 
 test("a partition is its own file, named <mode>--<name>.db, beside the unnamed database", async () => {
   await withMigrations(async ({ root, broker }) => {
-    assert.deepEqual(valueOf(await broker.migrate("alpha")), ["0001-notes.sql"]);
+    assert.deepEqual(valueOf(await broker.entries["db.migrate"]({ partition: "alpha" })), ["0001-notes.sql"]);
     assert.ok(existsSync(join(root, ".agentbay", "data", "notes--alpha.db")));
     assert.equal(existsSync(join(root, ".agentbay", "data", "notes.db")), false);
-    valueOf(await broker.execute("insert into notes (text) values (?)", ["kept in alpha"], "alpha"));
-    assert.deepEqual(valueOf(await broker.query("select text from notes", [], "alpha")), [{ text: "kept in alpha" }]);
+    valueOf(
+      await broker.entries["db.execute"]({
+        sql: "insert into notes (text) values (?)",
+        parameters: ["kept in alpha"],
+        partition: "alpha",
+      }),
+    );
+    assert.deepEqual(
+      valueOf(await broker.entries["db.query"]({ sql: "select text from notes", parameters: [], partition: "alpha" })),
+      [{ text: "kept in alpha" }],
+    );
   });
 });
 
 test("migrations are tracked per partition file, and the unnamed database is migrated on its own", async () => {
   await withMigrations(async ({ root, broker }) => {
-    assert.deepEqual(valueOf(await broker.migrate("alpha")), ["0001-notes.sql"]);
-    assert.deepEqual(valueOf(await broker.migrate("alpha")), []);
-    assert.deepEqual(valueOf(await broker.migrate("beta")), ["0001-notes.sql"]);
-    assert.deepEqual(valueOf(await broker.migrate()), ["0001-notes.sql"]);
+    assert.deepEqual(valueOf(await broker.entries["db.migrate"]({ partition: "alpha" })), ["0001-notes.sql"]);
+    assert.deepEqual(valueOf(await broker.entries["db.migrate"]({ partition: "alpha" })), []);
+    assert.deepEqual(valueOf(await broker.entries["db.migrate"]({ partition: "beta" })), ["0001-notes.sql"]);
+    assert.deepEqual(valueOf(await broker.entries["db.migrate"]({})), ["0001-notes.sql"]);
     assert.ok(existsSync(join(root, ".agentbay", "data", "notes.db")));
   });
 });
 
 test("two partitions do not see each other's tables or rows", async () => {
   await withMigrations(async ({ broker }) => {
-    valueOf(await broker.migrate("alpha"));
-    valueOf(await broker.migrate("beta"));
-    valueOf(await broker.execute("create table only_alpha (x text)", [], "alpha"));
-    valueOf(await broker.execute("insert into notes (text) values ('alpha note')", [], "alpha"));
-    assert.deepEqual(valueOf(await broker.query("select text from notes", [], "beta")), []);
-    assert.match(failureOf(await broker.query("select x from only_alpha", [], "beta")).message, /no such table/);
-    assert.match(failureOf(await broker.query("select x from only_alpha")).message, /no database|no such table/);
+    valueOf(await broker.entries["db.migrate"]({ partition: "alpha" }));
+    valueOf(await broker.entries["db.migrate"]({ partition: "beta" }));
+    valueOf(
+      await broker.entries["db.execute"]({
+        sql: "create table only_alpha (x text)",
+        parameters: [],
+        partition: "alpha",
+      }),
+    );
+    valueOf(
+      await broker.entries["db.execute"]({
+        sql: "insert into notes (text) values ('alpha note')",
+        parameters: [],
+        partition: "alpha",
+      }),
+    );
+    assert.deepEqual(
+      valueOf(await broker.entries["db.query"]({ sql: "select text from notes", parameters: [], partition: "beta" })),
+      [],
+    );
+    assert.match(
+      failureOf(
+        await broker.entries["db.query"]({ sql: "select x from only_alpha", parameters: [], partition: "beta" }),
+      ).message,
+      /no such table/,
+    );
+    assert.match(
+      failureOf(await broker.entries["db.query"]({ sql: "select x from only_alpha", parameters: [] })).message,
+      /no database|no such table/,
+    );
   });
 });
 
@@ -97,11 +129,13 @@ test("a partition name that is not kebab-case is refused before any file is touc
   await withMigrations(async ({ root, broker, events }) => {
     const names = ["../escape", "a.b", "a/b", "Alpha", "", "a--b", "-a", "a-", "x".repeat(65), "with space"];
     for (const name of names) {
-      const refusal = refusalOf(await broker.execute("create table t (x text)", [], name));
+      const refusal = refusalOf(
+        await broker.entries["db.execute"]({ sql: "create table t (x text)", parameters: [], partition: name }),
+      );
       assert.match(refusal.declared, /kebab-case/, name);
-      refusalOf(await broker.migrate(name));
-      refusalOf(await broker.query("select 1", [], name));
-      refusalOf(await broker.agentQuery("select 1", name));
+      refusalOf(await broker.entries["db.migrate"]({ partition: name }));
+      refusalOf(await broker.entries["db.query"]({ sql: "select 1", parameters: [], partition: name }));
+      refusalOf(await broker.entries["db.agentQuery"]({ sql: "select 1", partition: name }));
     }
     const dataFolder = join(root, ".agentbay", "data");
     assert.equal(existsSync(dataFolder), false);
@@ -111,34 +145,66 @@ test("a partition name that is not kebab-case is refused before any file is touc
 
 test("an agent query on one partition cannot attach another partition or read its rows", async () => {
   await withMigrations(async ({ root, broker }) => {
-    valueOf(await broker.migrate("alpha"));
-    valueOf(await broker.migrate("beta"));
-    valueOf(await broker.execute("insert into notes (text) values ('secret plans of beta')", [], "beta"));
+    valueOf(await broker.entries["db.migrate"]({ partition: "alpha" }));
+    valueOf(await broker.entries["db.migrate"]({ partition: "beta" }));
+    valueOf(
+      await broker.entries["db.execute"]({
+        sql: "insert into notes (text) values ('secret plans of beta')",
+        parameters: [],
+        partition: "beta",
+      }),
+    );
     const betaFile = join(root, ".agentbay", "data", "notes--beta.db");
-    const attach = await broker.agentQuery(`attach database '${betaFile}' as other`, "alpha");
+    const attach = await broker.entries["db.agentQuery"]({
+      sql: `attach database '${betaFile}' as other`,
+      partition: "alpha",
+    });
     assert.equal(attach.ok, false);
-    const joined = await broker.agentQuery(`select * from other.notes`, "alpha");
+    const joined = await broker.entries["db.agentQuery"]({ sql: `select * from other.notes`, partition: "alpha" });
     assert.equal(joined.ok, false);
-    const own = valueOf(await broker.agentQuery("select count(*) as n from notes", "alpha"));
+    const own = valueOf(
+      await broker.entries["db.agentQuery"]({ sql: "select count(*) as n from notes", partition: "alpha" }),
+    );
     assert.deepEqual(own.rows, [[0]]);
-    const theirs = valueOf(await broker.agentQuery("select text from notes", "beta"));
+    const theirs = valueOf(await broker.entries["db.agentQuery"]({ sql: "select text from notes", partition: "beta" }));
     assert.deepEqual(theirs.rows, [["secret plans of beta"]]);
   });
 });
 
 test("an agent query on a partition that was never migrated fails plainly", async () => {
   await withMigrations(async ({ broker }) => {
-    assert.match(failureOf(await broker.agentQuery("select 1", "gamma")).message, /no database yet/);
+    assert.match(
+      failureOf(await broker.entries["db.agentQuery"]({ sql: "select 1", partition: "gamma" })).message,
+      /no database yet/,
+    );
   });
 });
 
 test("text that looks like a secret is redacted from statement values before it is stored", async () => {
   await withMigrations(async ({ broker, events }) => {
-    valueOf(await broker.migrate("alpha"));
+    valueOf(await broker.entries["db.migrate"]({ partition: "alpha" }));
     const leaked = "deploy with api_key=Zx9-made-up-key-0042 tonight";
-    valueOf(await broker.execute("insert into notes (text) values (?)", [leaked], "alpha"));
-    valueOf(await broker.execute("insert into notes (text) values (:text)", { text: "no secret here" }, "alpha"));
-    const rows = valueOf(await broker.query("select text from notes order by rowid", [], "alpha"));
+    valueOf(
+      await broker.entries["db.execute"]({
+        sql: "insert into notes (text) values (?)",
+        parameters: [leaked],
+        partition: "alpha",
+      }),
+    );
+    valueOf(
+      await broker.entries["db.execute"]({
+        sql: "insert into notes (text) values (:text)",
+        parameters: { text: "no secret here" },
+        partition: "alpha",
+      }),
+    );
+    const rows = valueOf(
+      await broker.entries["db.query"]({
+        sql: "select text from notes order by rowid",
+        parameters: [],
+        partition: "alpha",
+      }),
+    );
     assert.deepEqual(rows, [{ text: "deploy with [redacted:secret-assignment] tonight" }, { text: "no secret here" }]);
     const redacted = events.events.filter((event) => event.kind === "redacted");
     assert.equal(redacted.length, 1);

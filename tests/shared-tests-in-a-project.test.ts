@@ -1,0 +1,204 @@
+import assert from "node:assert/strict";
+import { execFileSync, spawn } from "node:child_process";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, relative } from "node:path";
+import { after, before, test } from "node:test";
+import { stringify } from "yaml";
+import { failedTests, type ModeFiles } from "./kit-copy.ts";
+import { memoryStore, memoryStoreFiles } from "./made-up-modes.ts";
+import { almanac, almanacFiles, wrongAlmanac } from "./made-up-sources.ts";
+import { kit } from "./project-fixture.ts";
+
+type Ran = {
+  readonly status: number | null;
+  readonly stdout: string;
+  readonly output: string;
+};
+
+type Replacement = readonly [string | RegExp, string];
+
+const modesFolder = "components/modes";
+
+const digest = "digest";
+
+const environment = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
+
+const interfacesInTheKit = join(kit, "components/base/interfaces");
+
+const projectConfig = {
+  adapter: "claude-code",
+  bindings: { "items-store": "store" },
+  settings: {
+    [digest]: { title: "What the project keeps" },
+    store: { monthlyUsd: { almanac: 1 } },
+  },
+};
+
+let project: string;
+
+let projectModesRan: Ran;
+
+let wrongModeRan: Ran;
+
+function ran(parameters: readonly string[]): Promise<Ran> {
+  const child = spawn(process.execPath, parameters, { cwd: project, env: environment });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
+    stdout += chunk;
+  });
+  child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
+    stderr += chunk;
+  });
+  return new Promise((resolve) => {
+    child.on("close", (status) => {
+      resolve({ status, stdout, output: `${stdout}${stderr}` });
+    });
+  });
+}
+
+function sharedTestFile(mode: string): string {
+  return join(modesFolder, mode, "tests", `${mode}.test.ts`);
+}
+
+function sharedTestsRan(modes: readonly string[]): Promise<Ran> {
+  return ran(["--test", "--test-reporter=tap", ...modes.map(sharedTestFile)]);
+}
+
+function passedTests(output: string): readonly string[] {
+  return [...output.matchAll(/^\s*ok \d+ - (.+)$/gm)].map((match) => match[1] ?? "");
+}
+
+function passedPerMode(output: string): Readonly<Record<string, number>> {
+  const counts: Record<string, number> = {};
+  for (const name of passedTests(output)) {
+    const mode = /^[a-z-]+@\d+, ([a-z-]+): /.exec(name)?.[1] ?? "no mode";
+    counts[mode] = (counts[mode] ?? 0) + 1;
+  }
+  return counts;
+}
+
+function replaced(path: string, text: string, replacements: readonly Replacement[]): string {
+  return replacements.reduce((changed, [from, to]) => {
+    const next = changed.replace(from, to);
+    assert.notEqual(next, changed, `${path} no longer holds ${String(from)}`);
+    return next;
+  }, text);
+}
+
+function placedInProject(mode: string, files: ModeFiles): ModeFiles {
+  const tests = join(project, modesFolder, mode, "tests");
+  const sharedTestLines: readonly Replacement[] = [
+    ['"../../../base/interfaces/', `"${relative(tests, interfacesInTheKit)}/`],
+    [/\}\);\n$/, "}, { project: import.meta.dirname });\n"],
+  ];
+  return Object.fromEntries(
+    Object.entries(files).map(([path, text]) => {
+      const scriptLines: readonly Replacement[] = path.startsWith("scripts/")
+        ? [[/"(\.\.\/)+bay\/sdk\.ts"/, '"agentbay/sdk"']]
+        : [];
+      const testLines = path === `tests/${mode}.test.ts` ? sharedTestLines : [];
+      return [path, replaced(path, text, [...scriptLines, ...testLines])];
+    }),
+  );
+}
+
+function json(value: unknown): string {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+async function digestFiles(): Promise<ModeFiles> {
+  const statusSchema = async (name: string): Promise<string> =>
+    readFile(join(interfacesInTheKit, "items-store", `status-${name}.json`), "utf8");
+  return {
+    "mode.yaml": stringify({
+      name: digest,
+      version: "1.0.0",
+      description: "Shows the counts of the items the project keeps; a mode of the project that needs the kit's store.",
+      requires: { interfaces: ["items-store@1"] },
+      settings: "schemas/settings.json",
+      actions: {
+        status: {
+          description: "When the owner wants the counts of the items the project keeps.",
+          input: "schemas/status-request.json",
+          output: "schemas/status-response.json",
+          effects: ["read"],
+          run: [{ call: "items-store.status" }],
+        },
+      },
+    }),
+    "schemas/settings.json": json({
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      title: "DigestSettings",
+      description: "Settings of the digest, given under settings.digest in agentbay.config.yaml.",
+      type: "object",
+      additionalProperties: false,
+      required: ["title"],
+      properties: { title: { type: "string", description: "The name the owner gives the digest." } },
+    }),
+    "schemas/status-request.json": await statusSchema("request"),
+    "schemas/status-response.json": await statusSchema("response"),
+    "tests/status.example.json": json({ input: {}, output: { items: 0, deletions: 0, sources: [] } }),
+  };
+}
+
+async function writeMode(mode: string, files: ModeFiles): Promise<void> {
+  for (const [path, text] of Object.entries(files)) {
+    const file = join(project, modesFolder, mode, path);
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, text, "utf8");
+  }
+}
+
+before(async () => {
+  project = await realpath(await mkdtemp(join(tmpdir(), "agentbay-project-modes-")));
+  execFileSync("git", ["init", "-q"], { cwd: project });
+  await writeFile(join(project, "agentbay.config.yaml"), stringify(projectConfig), "utf8");
+  await writeMode(almanac, placedInProject(almanac, almanacFiles(almanac, "continues after the cursor")));
+  await writeMode(
+    wrongAlmanac,
+    placedInProject(wrongAlmanac, almanacFiles(wrongAlmanac, "repeats the item at the cursor")),
+  );
+  await writeMode(memoryStore, placedInProject(memoryStore, memoryStoreFiles(memoryStore, "keeps every item")));
+  await writeMode(digest, await digestFiles());
+  [projectModesRan, wrongModeRan] = await Promise.all([
+    sharedTestsRan([almanac, memoryStore]),
+    sharedTestsRan([wrongAlmanac]),
+  ]);
+});
+
+after(async () => {
+  await rm(project, { recursive: true, force: true });
+});
+
+test("bay check in a project beside the kit, with its own source, its own store and a mode that needs the kit's store, finds no errors", async () => {
+  const checked = await ran([join(kit, "bay", "cli.ts"), "check", "--json"]);
+  assert.equal(checked.status, 0, checked.output);
+  const report: unknown = JSON.parse(checked.stdout);
+  assert.equal(typeof report === "object" && report !== null ? Reflect.get(report, "errors") : undefined, 0);
+});
+
+test("the project's source and store each pass every case of their interface's shared test, run from the project with node --test", () => {
+  const tested = projectModesRan;
+  assert.deepEqual(failedTests(tested.output), []);
+  assert.equal(tested.status, 0, tested.output);
+  assert.deepEqual(passedPerMode(tested.output), { [almanac]: 13, [memoryStore]: 23 });
+  assert.match(tested.output, /^# pass 36$/m);
+});
+
+test("a project's source that repeats the item at the cursor fails the shared test's cases on the cursor, run from the project", () => {
+  const tested = wrongModeRan;
+  assert.equal(tested.status, 1, tested.output);
+  assert.deepEqual(
+    failedTests(tested.output),
+    [
+      "fetching every page with the cursor gives every item once, oldest first, in the pages given, " +
+        "and more is false only on the last",
+      "the cursor of the last page gives no items and more false",
+      "after the project is opened again, a page's cursor continues with the next page, and the last one with nothing",
+      "no page costs less than nothing or more than describe's pageCostUsd, and the walk costs what the mode's test says",
+    ].map((name) => `items-source@1, ${wrongAlmanac}: ${name}`),
+  );
+  assert.deepEqual(passedPerMode(tested.output), { [wrongAlmanac]: 9 });
+});

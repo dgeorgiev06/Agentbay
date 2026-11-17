@@ -11,8 +11,6 @@ import {
   shapes,
 } from "./operations.ts";
 
-export const sdkSpecifier = "agentbay/sdk";
-
 export const removalAllowedArgument = "--agentbay-may-remove-files";
 
 export type AskedFor<Name extends OperationName> = { readonly operation: Name; readonly request: Requests[Name] };

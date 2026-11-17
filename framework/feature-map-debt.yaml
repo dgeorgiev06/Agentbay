@@ -11,9 +11,6 @@ breaks:
   - from: bay/build.ts
     to: bay/skill-tools.ts
     rule: may-not-import
-  - from: bay/check-imports.ts
-    to: bay/broker/script-protocol.ts
-    rule: may-not-import
   - from: bay/kernel.ts
     to: bay/check-context.ts
     rule: may-not-import
@@ -23,9 +20,6 @@ breaks:
   - from: bay/mcp.ts
     to: bay/tool-definitions.ts
     rule: private-file
-  - from: bay/new.ts
-    to: bay/broker/script-protocol.ts
-    rule: may-not-import
   - from: bay/node-ports.ts
     to: bay/check-context.ts
     rule: may-not-import

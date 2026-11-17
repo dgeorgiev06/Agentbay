@@ -94,11 +94,14 @@ test("a step is given the commands whose effects its action declares: read alone
   const readOnly = withListedCommands(["read"]);
   assert.ok(toolsFor(readOnly).includes("Bash"));
   assert.ok(
-    agentFileText(readOnly, project).includes("\n- Run only commands that start with `git status`, with plain"),
+    agentFileText(readOnly, project).includes(
+      "\n- Run only the commands your mode lists, each as its listed words alone or followed by plain arguments: " +
+        "`git status`.\n",
+    ),
   );
   assert.deepEqual(stepCommands(readOnly), ["git status"]);
   const everything = withListedCommands(everyEffect);
-  assert.ok(agentFileText(everything, project).includes("start with `git status`, `git commit`, with plain"));
+  assert.ok(agentFileText(everything, project).includes("plain arguments: `git status`, `git commit`.\n"));
   assert.deepEqual(stepCommands(everything), ["git status", "git commit"]);
   const nothing = withListedCommands(["write"]);
   assert.ok(!toolsFor(nothing).includes("Bash"));
@@ -165,9 +168,7 @@ test("the agent file's body states the protocol in under 40 lines", () => {
     assert.ok(body.includes(phrase), phrase);
   }
   assert.ok(agentFileText(scanAgent, project).includes("this step writes no files"));
-  assert.ok(
-    agentFileText(buildAgent, project).includes("Run only commands that start with `node --test`, `git status`"),
-  );
+  assert.ok(agentFileText(buildAgent, project).includes("plain arguments: `node --test`, `git status`"));
 });
 
 test("a write folder outside the project is shown whole in the agent file", () => {

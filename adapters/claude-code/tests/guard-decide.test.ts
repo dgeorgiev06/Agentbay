@@ -367,7 +367,7 @@ test("a search pattern may not climb, start at home, name a closed location or r
   assertDenied(ask(digest, "Grep", { pattern: "x", path: "/p/clean", glob: ".*" }), "hidden");
 });
 
-test("a command must be a listed prefix, alone or followed by a space and plain arguments", () => {
+test("a command must be the words of a listed command, alone or followed by a space and plain arguments", () => {
   for (const command of ["node --test", "node --test tests/a.test.ts", "git status", "git status --short -b"]) {
     assertAllowed(ask(builder, "Bash", { command }), command);
   }
@@ -375,11 +375,11 @@ test("a command must be a listed prefix, alone or followed by a space and plain 
     assertAllowed(ask(builder, "Bash", { command }), JSON.stringify(command));
   }
   for (const command of ["node --testx", "node --test2 x", "node", "git", "git statusx", "npm test", "nodex --test"]) {
-    assertDenied(ask(builder, "Bash", { command }), "listed command prefix", command);
+    assertDenied(ask(builder, "Bash", { command }), "not the words of a command the step may run", command);
   }
 });
 
-test("every character outside the plain set after a prefix is denied", () => {
+test("every character outside the plain set after the command's words is denied", () => {
   const forbidden = ["'", '"', ";", "&", "|", "$", "`", ">", "<", "\n", "\r", "\t", "(", ")", "{", "}"];
   for (const character of [...forbidden, "*", "?", "~", "!", "#", "\\", "[", "]", "^", "\u0000"]) {
     const command = `node --test a${character}b`;
@@ -390,15 +390,18 @@ test("every character outside the plain set after a prefix is denied", () => {
 test("empty, multi-line and look-alike commands are denied", () => {
   assertDenied(ask(builder, "Bash", { command: "" }), "empty");
   assertDenied(ask(builder, "Bash", { command: " \t " }), "empty");
-  assertDenied(ask(builder, "Bash", { command: "\nnode --test" }), "listed command prefix");
-  assertDenied(ask(builder, "Bash", { command: "node --test\n" }), "listed command prefix");
-  assertDenied(ask(builder, "Bash", { command: "node --test\nrm -rf x" }), "listed command prefix");
+  assertDenied(ask(builder, "Bash", { command: "\nnode --test" }), "not the words of a command the step may run");
+  assertDenied(ask(builder, "Bash", { command: "node --test\n" }), "not the words of a command the step may run");
+  assertDenied(
+    ask(builder, "Bash", { command: "node --test\nrm -rf x" }),
+    "not the words of a command the step may run",
+  );
   assertDenied(ask(builder, "Bash", { command: "node --test x\nrm -rf x" }), "holds a character");
-  assertDenied(ask(builder, "Bash", { command: "nоde --test" }), "listed command prefix");
-  assertDenied(ask(builder, "Bash", { command: "node —test" }), "listed command prefix");
+  assertDenied(ask(builder, "Bash", { command: "nоde --test" }), "not the words of a command the step may run");
+  assertDenied(ask(builder, "Bash", { command: "node —test" }), "not the words of a command the step may run");
   assertDenied(ask(builder, "Bash", { command: "node --test a；b" }), "holds a character");
-  assertDenied(ask(builder, "Bash", { command: "node --test x" }), "listed command prefix");
-  assertDenied(ask(builder, "Bash", { command: "node\t--test" }), "listed command prefix");
+  assertDenied(ask(builder, "Bash", { command: "node --test x" }), "not the words of a command the step may run");
+  assertDenied(ask(builder, "Bash", { command: "node\t--test" }), "not the words of a command the step may run");
   assertDenied(ask(builder, "Bash", { command: 12 }), "no command text");
   assertDenied(ask(builder, "Bash", {}), "no command text");
 });
@@ -453,6 +456,25 @@ test("a relative path is resolved against the call's working folder", () => {
   assertAllowed(decide(setup, { ...payload, cwd: "/p/out" }, world));
   assertDenied(decide(setup, { ...payload, cwd: "/p/notes" }, world), "resources.files.write");
   assertDenied(decide(setup, { ...payload, cwd: "relative" }, world), "no absolute working folder");
+});
+
+test("a denied command names the step, the commands it may run and the manifest line", () => {
+  assert.deepEqual(ask(builder, "Bash", { command: "npm test" }), {
+    verdict: "deny",
+    reason:
+      'agentbay denied Bash "npm test" for step agentbay-forge-build: it is not the words of a command the step may ' +
+      "run, alone or followed by a space and arguments, and the step may run only node --test, git status; a " +
+      "command listed by name under resources.commands in the mode.yaml of mode forge, with effects that the " +
+      "step's actions declare, would allow it.",
+  });
+  assert.deepEqual(ask(builder, "Bash", { command: "node --test a;b" }), {
+    verdict: "deny",
+    reason:
+      'agentbay denied Bash "node --test a;b" for step agentbay-forge-build: the text after the command\'s words ' +
+      "holds a character other than letters, digits, spaces and _ . / = : , @ % + -, and the step may run only " +
+      "node --test, git status; a command listed by name under resources.commands in the mode.yaml of mode " +
+      "forge, with effects that the step's actions declare, would allow it.",
+  });
 });
 
 test("a deny reason names the step, what it may do and the manifest line", () => {

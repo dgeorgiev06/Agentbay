@@ -165,7 +165,7 @@ test("without a policy file the hook process denies subagents and still guards t
   }
 });
 
-test("the hook process follows a real link into the kit's components/base/ and denies the session agent's write", () => {
+test("the hook process follows a real link into the kit's components/base/ and denies the session agent", () => {
   const written = join(project, "kit-base", "store", "mode.yaml");
   const run = runGuard(payload("Edit", { file_path: written, old_string: "a", new_string: "b" }, false));
   assertDeniedRun(

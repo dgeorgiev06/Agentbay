@@ -143,7 +143,10 @@ function howToAllow(tool: string, rules: StepRules): string {
     case "write":
       return `a folder under resources.files.write in the mode.yaml of mode ${rules.mode} would allow writing it`;
     case "command":
-      return `a prefix under resources.commands in the mode.yaml of mode ${rules.mode} would allow a command`;
+      return (
+        `a command listed by name under resources.commands in the mode.yaml of mode ${rules.mode}, ` +
+        "with effects that the step's actions declare, would allow it"
+      );
     case "kernel":
       return `naming ${tool.slice("mcp__agentbay__".length)} in the Tools section of skill ${rules.skill} would allow it`;
     case "other":

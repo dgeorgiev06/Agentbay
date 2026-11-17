@@ -1,7 +1,7 @@
 import { type Answer, errorLine, failed, type RefusalWording, refused } from "../answers.ts";
 import type { ActionCaller, Effect, Json, ModeGrants } from "../contracts.ts";
 import type { Layout } from "../layout.ts";
-import type { ChildProcesses, Clock, FileInspector, FileSystem, ThrowawayFolders } from "../ports.ts";
+import type { ChildProcesses, Clock, FileInspector, FileSystem, Http, ThrowawayFolders } from "../ports.ts";
 import type { SecretStore } from "../secrets.ts";
 import type { DatabaseProcess } from "./database-process.ts";
 import { type ActionAt, missingEffectRefusal, type Need, type SpendAmounts } from "./effect-rule.ts";
@@ -23,12 +23,21 @@ export type AgentQueryLimits = {
   readonly agentQueryMilliseconds: number;
 };
 
+export type StepLimits = AgentQueryLimits & {
+  readonly httpRequestBytes: number;
+  readonly httpResponseBytes: number;
+  readonly httpRedirects: number;
+  readonly commandMilliseconds: number;
+  readonly commandOutputCharacters: number;
+};
+
 export type Asking = {
   readonly grants: ModeGrants;
   readonly effects: readonly Effect[];
   readonly at: ActionAt;
   readonly layout: Layout;
   readonly inspector: FileInspector;
+  readonly limits: StepLimits;
 };
 
 export type Doing = {
@@ -40,7 +49,8 @@ export type Doing = {
   readonly secrets: Pick<SecretStore, "lookUp">;
   readonly clock: Clock;
   readonly childProcesses: ChildProcesses;
-  readonly limits: AgentQueryLimits;
+  readonly http: Http;
+  readonly limits: StepLimits;
   readonly record: (kind: string, detail: Json) => Promise<void>;
   readonly addSpending: (amounts: SpendAmounts) => void;
   readonly call: ActionCaller;

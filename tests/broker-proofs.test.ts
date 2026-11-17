@@ -22,7 +22,7 @@ import {
   writeProjectFile,
 } from "./broker-fixture.ts";
 
-type Moved = keyof Broker["entries"] | "http.request" | "commands.run";
+type Moved = keyof Broker["entries"] | "commands.run";
 
 type Asking = {
   readonly ask: (broker: Broker) => Promise<Answer<Json>>;
@@ -542,29 +542,38 @@ const proofs: Proofs = {
   },
   "http.request": {
     withoutEffect: [
-      { ask: (broker) => broker.request(get("https://api.example.com/x")), effects: [], change: networkNeeded },
+      {
+        ask: (broker) => broker.entries["http.request"](get("https://api.example.com/x")),
+        effects: [],
+        change: networkNeeded,
+      },
       {
         ask: (broker) =>
-          broker.request({ method: "POST", url: "https://api.example.com/x", headers: {}, body: "payload" }),
+          broker.entries["http.request"]({
+            method: "POST",
+            url: "https://api.example.com/x",
+            headers: {},
+            body: "payload",
+          }),
         effects: writing,
         change: networkNeeded,
       },
     ],
     outsideGrant: [
       {
-        ask: (broker) => broker.request(get("https://evil.example/collect")),
+        ask: (broker) => broker.entries["http.request"](get("https://evil.example/collect")),
         effects: allFive,
         change: `To allow it, add evil.example under resources.network in ${manifest}.`,
       },
       {
-        ask: (broker) => broker.request(get("http://api.example.com/x")),
+        ask: (broker) => broker.entries["http.request"](get("http://api.example.com/x")),
         effects: allFive,
         change: "Use an https:// URL; no manifest line allows another scheme.",
       },
     ],
     allowed: [
       {
-        ask: (broker) => broker.request(get("https://api.example.com/x")),
+        ask: (broker) => broker.entries["http.request"](get("https://api.example.com/x")),
         effects: ["network"],
         value: fine,
         recorded: [
@@ -576,7 +585,9 @@ const proofs: Proofs = {
       },
       {
         ask: (broker) =>
-          broker.request(get("https://api.example.com/start", { authorization: `Bearer ${secretValue}` })),
+          broker.entries["http.request"](
+            get("https://api.example.com/start", { authorization: `Bearer ${secretValue}` }),
+          ),
         effects: ["network"],
         value: fine,
         recorded: [

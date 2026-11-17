@@ -102,6 +102,7 @@ features:
       - bay/broker/file-operations.ts
       - bay/broker/database-operations.ts
       - bay/broker/other-operations.ts
+      - bay/broker/http-operations.ts
     may_import:
       - vocabulary
       - safety

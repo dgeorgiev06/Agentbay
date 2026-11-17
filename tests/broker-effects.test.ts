@@ -222,10 +222,17 @@ test("db: queries, agent queries and migrations need no effect", async () => {
 
 test("http: a request needs network", async () => {
   await withBroker(["read"], async (broker) => {
-    assertRefusedFor(await broker.request({ method: "GET", url: "https://api.example.com/x", headers: {} }), "network");
+    assertRefusedFor(
+      await broker.entries["http.request"]({ method: "GET", url: "https://api.example.com/x", headers: {} }),
+      "network",
+    );
   });
   await withBroker(["read", "network"], async (broker) => {
-    const answer = await broker.request({ method: "GET", url: "https://api.example.com/x", headers: {} });
+    const answer = await broker.entries["http.request"]({
+      method: "GET",
+      url: "https://api.example.com/x",
+      headers: {},
+    });
     assert.deepEqual(answer, { ok: true, value: { status: 200, headers: {}, body: "fine" } });
   });
 });
@@ -319,8 +326,8 @@ const brokerMethods: Readonly<Record<string, MethodRow>> = {
     usesPorts: true,
   },
   "secrets.get": { call: (broker) => broker.entries["secrets.get"]({ name: "API_TOKEN" }), needs: [], usesPorts: true },
-  request: {
-    call: (broker) => broker.request({ method: "GET", url: "https://api.example.com/x", headers: {} }),
+  "http.request": {
+    call: (broker) => broker.entries["http.request"]({ method: "GET", url: "https://api.example.com/x", headers: {} }),
     needs: ["network"],
     usesPorts: true,
   },

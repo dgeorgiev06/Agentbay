@@ -1,13 +1,11 @@
 import { createHash } from "node:crypto";
-import { type Answer, errorLine, failed, granted, listed, manifestOf, refused } from "../answers.ts";
+import { type Answer, errorLine, failed, granted, manifestOf, refused } from "../answers.ts";
 import type {
   ChildProcesses,
   Clock,
   FileInspector,
   FileSystem,
   Http,
-  HttpRequest,
-  HttpResponse,
   ProcessOutput,
   Processes,
   ThrowawayFolders,
@@ -27,20 +25,15 @@ import {
 import { checkPath } from "./file-access.ts";
 import { databaseEntries, type DatabaseOperationName } from "./database-operations.ts";
 import { dataFolder, fileEntries, type FileOperationName } from "./file-operations.ts";
+import { httpEntries, type HttpOperationName } from "./http-operations.ts";
 import { otherEntries, type OtherOperationName } from "./other-operations.ts";
-import { checkUrl, type Hop, loggedHeaders, nextRequest, redirectTarget, type UrlCheck } from "./http-access.ts";
 import { isInsideOrEqual, pathIn, shownPath, type Layout } from "../layout.ts";
 import type { SecretStore } from "../secrets.ts";
-import type { AgentQueryLimits, Entries, Step } from "./rule.ts";
+import type { Entries, Step, StepLimits } from "./rule.ts";
 import type { CommandOutput, CommandRan, CommandRequest } from "../sdk.ts";
 
-export type BrokerLimits = AgentQueryLimits & {
-  readonly httpRequestBytes: number;
-  readonly httpResponseBytes: number;
-  readonly httpRedirects: number;
+export type BrokerLimits = StepLimits & {
   readonly databaseMilliseconds: number;
-  readonly commandMilliseconds: number;
-  readonly commandOutputCharacters: number;
 };
 
 export type BrokerOptions = {
@@ -83,7 +76,7 @@ function noCaller(stepKey: string): ActionCaller {
     });
 }
 
-type EntryName = FileOperationName | DatabaseOperationName | OtherOperationName;
+type EntryName = FileOperationName | DatabaseOperationName | OtherOperationName | HttpOperationName;
 
 export class Broker {
   readonly #options: BrokerOptions;
@@ -101,14 +94,14 @@ export class Broker {
     this.#effects = options.permissions.actionEffects;
     this.#limits = { ...defaultBrokerLimits, ...options.limits };
     const step = this.#step();
-    this.entries = { ...fileEntries(step), ...databaseEntries(step), ...otherEntries(step) };
+    this.entries = { ...fileEntries(step), ...databaseEntries(step), ...otherEntries(step), ...httpEntries(step) };
   }
 
   #step(): Step {
     const options = this.#options;
     const { layout, inspector } = options;
     return {
-      asking: { grants: this.#grants, effects: this.#effects, at: this.#at, layout, inspector },
+      asking: { grants: this.#grants, effects: this.#effects, at: this.#at, layout, inspector, limits: this.#limits },
       doing: {
         stepKey: options.place.stepKey,
         files: options.files,
@@ -117,6 +110,7 @@ export class Broker {
         scrubber: options.secrets,
         secrets: options.secrets,
         clock: options.clock,
+        http: options.http,
         childProcesses: options.childProcesses,
         limits: this.#limits,
         record: (kind, detail) => this.#append(kind, detail),
@@ -134,11 +128,6 @@ export class Broker {
       },
       settled: (answer, detail) => this.#settle(answer, detail),
     };
-  }
-
-  request(request: HttpRequest): Promise<Answer<HttpResponse>> {
-    const operation = { kind: "http.request" as const, method: request.method, url: request.url };
-    return this.#guarded(operation, () => this.#sendFollowingRedirects(request));
   }
 
   runCommand(request: CommandRequest): Promise<Answer<CommandRan>> {
@@ -273,36 +262,6 @@ export class Broker {
     return { text: scrubbed.slice(-limit), cut };
   }
 
-  async #sendFollowingRedirects(request: HttpRequest): Promise<Answer<HttpResponse>> {
-    const size = Buffer.byteLength(request.body ?? "");
-    if (size > this.#limits.httpRequestBytes) {
-      return refused({
-        resource: "http",
-        asked: `${this.#asking} to send a request body of ${String(size)} bytes`,
-        declared: `the broker sends at most ${String(this.#limits.httpRequestBytes)} bytes`,
-        change: "Send a smaller body; no manifest line raises this cap.",
-      });
-    }
-    let current = request;
-    for (let hops = 0; hops <= this.#limits.httpRedirects; hops += 1) {
-      const check = checkUrl(current.url, this.#grants.hosts);
-      if (check.status !== "allowed") {
-        return this.#urlRefusal(check, hops > 0);
-      }
-      const response = await this.#sendOnce(current);
-      if (!response.ok) {
-        return response;
-      }
-      const hop: Hop = { request: current, response: response.value };
-      const target = redirectTarget(hop);
-      if (target === undefined) {
-        return this.#cappedResponse(response.value);
-      }
-      current = nextRequest(hop, target);
-    }
-    return failed(`The request was redirected more than ${String(this.#limits.httpRedirects)} times.`);
-  }
-
   close(): void {
     for (const database of this.#databases.values()) {
       database.close();
@@ -356,67 +315,5 @@ export class Broker {
       change: secrets.redact(answer.change),
       message,
     };
-  }
-
-  #urlRefusal(check: Exclude<UrlCheck, { readonly status: "allowed" }>, redirected: boolean): Answer<never> {
-    const hosts = this.#grants.hosts;
-    const target = check.status === "not-a-url" ? "something that is not a URL" : check.url.href;
-    const asked = redirected ? `A request was redirected to ${target}` : `${this.#asking} for ${target}`;
-    const declaredHosts = `the mode ${this.#grants.mode} declares the hosts: ${listed(hosts, "none")}`;
-    return refused({ resource: "http", asked, ...this.#urlRule(check, declaredHosts) });
-  }
-
-  #urlRule(
-    check: Exclude<UrlCheck, { readonly status: "allowed" }>,
-    declaredHosts: string,
-  ): { readonly declared: string; readonly change: string } {
-    switch (check.status) {
-      case "not-a-url":
-        return { declared: "the broker sends requests to https URLs only", change: "Send a full https:// URL." };
-      case "not-https":
-        return {
-          declared: "the broker sends requests over https only",
-          change: "Use an https:// URL; no manifest line allows another scheme.",
-        };
-      case "credentials-in-url":
-        return { declared: "the broker sends no credentials in a URL", change: "Send credentials in a header." };
-      case "other-port":
-        return {
-          declared: "the broker reaches declared hosts on the default https port only",
-          change: "Use the host without a port.",
-        };
-      case "undeclared-host":
-        return {
-          declared: declaredHosts,
-          change: `To allow it, add ${check.url.hostname} under resources.network in ${manifestOf(this.#grants)}.`,
-        };
-    }
-  }
-
-  async #sendOnce(request: HttpRequest): Promise<Answer<HttpResponse>> {
-    let response: HttpResponse;
-    try {
-      response = await this.#options.http.request(request);
-    } catch (error) {
-      return failed(`The request to ${request.url} failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-    await this.#append("http", {
-      step: this.#options.place.stepKey,
-      method: request.method,
-      url: request.url,
-      headers: loggedHeaders(request.headers),
-      status: response.status,
-    });
-    return granted(response);
-  }
-
-  #cappedResponse(response: HttpResponse): Answer<HttpResponse> {
-    const size = Buffer.byteLength(response.body);
-    if (size > this.#limits.httpResponseBytes) {
-      return failed(
-        `The response is ${String(size)} bytes, more than ${String(this.#limits.httpResponseBytes)} bytes.`,
-      );
-    }
-    return granted(response);
   }
 }

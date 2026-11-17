@@ -171,3 +171,25 @@ test("a granted path that is itself a link to another folder of the project is r
     }
   });
 });
+
+test("the broker gives the kernel a script runner and a broker for a step, which only asks and closes", async () => {
+  await withFilesBroker(({ broker }) => {
+    assert.deepEqual(Object.keys(broker).sort(), ["ask", "close"]);
+    return Promise.resolve();
+  });
+  const broker = createBroker({
+    layout: projectLayout("/project"),
+    files: nodeFileSystem,
+    throwawayFolders: nodeThrowawayFolders,
+    inspector: nodeFileInspector,
+    http: scriptedHttp(() => ({ status: 500, headers: {}, body: "" })),
+    secrets: new SecretStore({ environment: {}, processes: noProcesses, platform: "linux" }),
+    events: recordingSink(),
+    clock: systemClock,
+    childProcesses: nodeChildProcesses,
+    processes: noProcesses,
+    commandSearchPath: "/usr/bin:/bin",
+  });
+  assert.deepEqual(Object.keys(broker).sort(), ["forStep", "scripts"]);
+  assert.deepEqual(Object.keys(broker.scripts), ["run"]);
+});

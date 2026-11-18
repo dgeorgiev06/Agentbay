@@ -30,13 +30,38 @@ const tr2: Slice = {
   ],
   after: [{ slice: "TR1", because: "ModeGrants.listTrust and readTrustRecord, which the broker reads" }],
   done: [
-    { id: "DOD-TR2-1", says: "Each state refuses with its sentence", level: "must", proof: { kind: "fails-first" } },
+    {
+      id: "DOD-TR2-1",
+      says: "Each state refuses with its sentence",
+      level: "must",
+      proof: { kind: "fails-first", tests: ["tests/broker-list-trust.test.ts"] },
+    },
     { id: "DOD-TR2-1b", says: "the sentences say what the owner does", level: "must" },
-    { id: "DOD-TR2-2", says: "One function decides", level: "must", proof: { kind: "count" } },
-    { id: "DOD-TR2-3", says: "A run is refused", level: "must", proof: { kind: "fails-first" } },
-    { id: "DOD-TR2-4", says: "bay call runs it", level: "must", proof: { kind: "fails-first" } },
-    { id: "DOD-TR2-5", says: "Nothing changes", level: "must", proof: { kind: "same-output" } },
-    { id: "DOD-TR2-6a", says: "Neither debt list grows", level: "must", proof: { kind: "count" } },
+    {
+      id: "DOD-TR2-2",
+      says: "One function decides",
+      level: "must",
+      proof: { kind: "count", pattern: "listTrust.state", paths: ["bay/broker"], most: 2 },
+    },
+    {
+      id: "DOD-TR2-3",
+      says: "A run is refused",
+      level: "must",
+      proof: { kind: "fails-first", tests: ["tests/broker-list-trust.test.ts"] },
+    },
+    {
+      id: "DOD-TR2-4",
+      says: "bay call runs it",
+      level: "must",
+      proof: { kind: "fails-first", tests: ["tests/cli-trust-at-use.test.ts"] },
+    },
+    {
+      id: "DOD-TR2-5",
+      says: "Nothing changes",
+      level: "must",
+      proof: { kind: "same-output", differ: ["grants-check"] },
+    },
+    { id: "DOD-TR2-6a", says: "Neither debt list grows", level: "must", proof: { kind: "count", use: "debt" } },
     { id: "DOD-TR2-6b", says: "the copy-paste count does not rise", level: "must" },
     { id: "DOD-TR2-7", says: "Every injected bug is caught", level: "must", proof: { kind: "bugs-caught" } },
     { id: "DOD-TR2-8", says: "The checks and the tests pass", level: "must", proof: { kind: "checks" } },
@@ -102,38 +127,163 @@ function computed(step: "slice" | "prove" | "draw", words: string): Drawn["card"
   return { mark: "computed", words, source: { step } };
 }
 
-test("card 1 for TR2 is section 5's card, every line computed from the step slice", () => {
-  assert.deepEqual(startCard({ slice: tr2, title: tr2Title, base: "c7f0d13" }), {
+function fromSlice(words: readonly string[]): readonly Drawn["card"]["lines"][number][] {
+  return words.map((said) => computed("slice", said));
+}
+
+const tr2Bugs = ["the record is not read again"];
+
+test("card 1 for TR2 shows every item, each line computed from the step slice", () => {
+  assert.deepEqual(startCard({ slice: tr2, title: tr2Title, base: "c7f0d13", bugs: tr2Bugs }), {
     title: "Build slice TR2?",
-    lines: [
-      computed("slice", tr2Title),
-      computed("slice", "kind capability; base c7f0d13"),
-      computed("slice", "scope: bay/broker/** and 6 more paths"),
-      computed("slice", "after TR1: ModeGrants.listTrust and readTrustRecord, which the broker reads"),
-      computed("slice", "10 items: 8 name a kind of proof, 2 are judgement"),
-      computed("slice", "judgement, by you: 1b, 6b"),
-    ],
+    lines: fromSlice([
+      "The broker says why a list is not",
+      "in force, and reads the record",
+      "again before each command",
+      "kind capability; base c7f0d13",
+      "scope: bay/broker/** and 6 more",
+      "paths",
+      "after TR1: ModeGrants.listTrust and",
+      "readTrustRecord, which the broker",
+      "reads",
+      "DOD-TR2-1, must: Each state refuses",
+      "with its sentence",
+      "held by: a test fails first",
+      "tests:",
+      "tests/broker-list-trust.test.ts",
+      "DOD-TR2-1b, must: the sentences say",
+      "what the owner does",
+      "held by: your judgement",
+      "DOD-TR2-2, must: One function",
+      "decides",
+      "held by: a count",
+      'lines with "listTrust.state" in',
+      "bay/broker: at most 2",
+      "DOD-TR2-3, must: A run is refused",
+      "held by: a test fails first",
+      "tests:",
+      "tests/broker-list-trust.test.ts",
+      "DOD-TR2-4, must: bay call runs it",
+      "held by: a test fails first",
+      "tests:",
+      "tests/cli-trust-at-use.test.ts",
+      "DOD-TR2-5, must: Nothing changes",
+      "held by: same output",
+      "compares the settings' commands;",
+      "grants-check must differ",
+      "DOD-TR2-6a, must: Neither debt list",
+      "grows",
+      "held by: a count",
+      "the settings' count debt: no rise",
+      "DOD-TR2-6b, must: the copy-paste",
+      "count does not rise",
+      "held by: your judgement",
+      "DOD-TR2-7, must: Every injected bug",
+      "is caught",
+      "held by: bugs caught",
+      "injects the bugs named at the end",
+      "DOD-TR2-8, must: The checks and the",
+      "tests pass",
+      "held by: checks",
+      "1 bug to inject: the record is not",
+      "read again",
+    ]),
   });
 });
 
-test("card 1 for a slice of one path, after nothing, with no judgement item", () => {
-  const slice: Slice = {
-    name: "A1",
-    kind: "mode",
-    scope: ["components/base/forge/**"],
-    after: [],
-    done: [{ id: "DOD-A1-1", says: "It works", level: "must", proof: { kind: "checks" } }],
-  };
-  assert.deepEqual(startCard({ slice, title: "One file", base: "main" }).lines, [
-    computed("slice", "One file"),
-    computed("slice", "kind mode; base main"),
-    computed("slice", "scope: components/base/forge/**"),
-    computed("slice", "after no other slice"),
-    computed("slice", "1 item: 1 names a kind of proof, 0 are judgement"),
-  ]);
+const everyKind: Slice = {
+  name: "K1",
+  kind: "mode",
+  scope: ["components/base/forge/**"],
+  after: [],
+  done: [
+    { id: "K1-1", says: "The checks pass.", level: "must", proof: { kind: "checks" } },
+    {
+      id: "K1-2",
+      says: "The card test fails first.",
+      level: "must",
+      proof: { kind: "fails-first", tests: ["components/base/forge/tests/cards.test.ts", "tests/a.test.ts"] },
+    },
+    { id: "K1-3", says: "Each bug is caught.", level: "should", proof: { kind: "bugs-caught" } },
+    { id: "K1-4", says: "Nothing else changes.", level: "should", proof: { kind: "same-output", differ: [] } },
+    {
+      id: "K1-5",
+      says: "No new TODO.",
+      level: "must",
+      proof: { kind: "count", pattern: "TODO", paths: ["bay", "tests"], most: 0 },
+    },
+    {
+      id: "K1-6",
+      says: "No more casts.",
+      level: "must",
+      proof: { kind: "count", pattern: "any", paths: ["bay"], noRise: true },
+    },
+    { id: "K1-7", says: "The debt does not grow.", level: "must", proof: { kind: "count", use: "debt" } },
+    {
+      id: "K1-8",
+      says: "The kit checks itself.",
+      level: "should",
+      proof: { kind: "real-thing", runs: [{ bay: ["check"] }, { bay: ["actions", "--json"] }] },
+    },
+    { id: "K1-9", says: "It reads well.", level: "should" },
+  ],
+};
+
+const everyKindBugs = ["the card drops an item", "a should reads must"];
+
+test("card 1 for a slice with one item of every kind says how each is held and what is run or counted", () => {
+  assert.deepEqual(
+    startCard({ slice: everyKind, title: "Every kind", base: "main", bugs: everyKindBugs }).lines,
+    fromSlice([
+      "Every kind",
+      "kind mode; base main",
+      "scope: components/base/forge/**",
+      "after no other slice",
+      "K1-1, must: The checks pass.",
+      "held by: checks",
+      "K1-2, must: The card test fails",
+      "first.",
+      "held by: a test fails first",
+      "tests:",
+      "components/base/forge/tests/cards.t",
+      "est.ts, tests/a.test.ts",
+      "K1-3, should: Each bug is caught.",
+      "held by: bugs caught",
+      "injects the bugs named at the end",
+      "K1-4, should: Nothing else changes.",
+      "held by: same output",
+      "compares the settings' commands",
+      "K1-5, must: No new TODO.",
+      "held by: a count",
+      'lines with "TODO" in bay, tests: at',
+      "most 0",
+      "K1-6, must: No more casts.",
+      "held by: a count",
+      'lines with "any" in bay: no rise',
+      "K1-7, must: The debt does not grow.",
+      "held by: a count",
+      "the settings' count debt: no rise",
+      "K1-8, should: The kit checks",
+      "itself.",
+      "held by: the real thing",
+      "2 runs: bay check, bay actions",
+      "K1-9, should: It reads well.",
+      "held by: your judgement",
+      "2 bugs to inject: the card drops an",
+      "item; a should reads must",
+    ]),
+  );
 });
 
-test("card 1 counts a second path and a lone judgement item in the singular", () => {
+test("card 1 with no bugs given says so for a bugs-caught item and has no line of bugs", () => {
+  const slice: Slice = { ...everyKind, done: everyKind.done.filter((item) => item.id === "K1-3") };
+  assert.deepEqual(
+    startCard({ slice, title: "No bugs", base: "main", bugs: [] }).lines.slice(4),
+    fromSlice(["K1-3, should: Each bug is caught.", "held by: bugs caught", "no bugs given to inject"]),
+  );
+});
+
+test("card 1 for a slice of two paths after two slices", () => {
   const slice: Slice = {
     name: "A2",
     kind: "interface",
@@ -144,13 +294,144 @@ test("card 1 counts a second path and a lone judgement item in the singular", ()
     ],
     done: [{ id: "A2-judged", says: "It reads well", level: "should" }],
   };
-  assert.deepEqual(startCard({ slice, title: "Two", base: "abc" }).lines.slice(2), [
-    computed("slice", "scope: a/** and 1 more path"),
-    computed("slice", "after A1: It reads A1's file"),
-    computed("slice", "after A0: It reads A0's table"),
-    computed("slice", "1 item: 0 name a kind of proof, 1 is judgement"),
-    computed("slice", "judgement, by you: A2-judged"),
-  ]);
+  assert.deepEqual(
+    startCard({ slice, title: "Two", base: "abc", bugs: [] }).lines.slice(2),
+    fromSlice([
+      "scope: a/** and 1 more path",
+      "after A1: It reads A1's file",
+      "after A0: It reads A0's table",
+      "A2-judged, should: It reads well",
+      "held by: your judgement",
+    ]),
+  );
+});
+
+function printedWidth(line: Drawn["card"]["lines"][number]): number {
+  return Array.from(`${line.mark} ${line.words}`).length;
+}
+
+function joinedWords(lines: readonly Drawn["card"]["lines"][number][]): string {
+  return lines.map((line) => line.words).join(" ");
+}
+
+test("every line of card 1 is at most 44 columns as printed, and every item's sentence is whole", () => {
+  const cards = [
+    { slice: tr2, card: startCard({ slice: tr2, title: tr2Title, base: "c7f0d13", bugs: tr2Bugs }) },
+    { slice: everyKind, card: startCard({ slice: everyKind, title: "Every kind", base: "main", bugs: [] }) },
+  ];
+  for (const { slice, card } of cards) {
+    assert.deepEqual(
+      card.lines.filter((line) => printedWidth(line) > 44),
+      [],
+    );
+    for (const item of slice.done) {
+      assert.ok(joinedWords(card.lines).includes(`${item.id}, ${item.level}: ${item.says}`), item.id);
+    }
+  }
+});
+
+test("a word longer than a line is broken into lines, never dropped", () => {
+  const long = `${"a".repeat(35)}${"b".repeat(35)}c`;
+  const slice: Slice = { ...everyKind, done: [{ id: "L1", says: long, level: "must" }] };
+  assert.deepEqual(
+    startCard({ slice, title: "Long", base: "main", bugs: [] }).lines.slice(4),
+    fromSlice(["L1, must:", "a".repeat(35), "b".repeat(35), "c", "held by: your judgement"]),
+  );
+});
+
+test("a newline, a tab or a control character in a sentence is shown as a space", () => {
+  const says = "First line.\nSecond\tpart\u0007 ends\r\n\u202ehere.";
+  const slice: Slice = { ...everyKind, done: [{ id: "C1", says, level: "must" }] };
+  assert.deepEqual(
+    startCard({ slice, title: "Line\none", base: "main", bugs: ["a\tbug"] }).lines,
+    fromSlice([
+      "Line one",
+      "kind mode; base main",
+      "scope: components/base/forge/**",
+      "after no other slice",
+      "C1, must: First line. Second part",
+      "ends here.",
+      "held by: your judgement",
+      "1 bug to inject: a bug",
+    ]),
+  );
+});
+
+const startWords = [
+  "kind",
+  ";",
+  "base",
+  "scope:",
+  "and",
+  "6",
+  "more",
+  "paths",
+  "after",
+  ":",
+  ",",
+  "must:",
+  "held",
+  "by:",
+  "a",
+  "test",
+  "fails",
+  "first",
+  "tests:",
+  "your",
+  "judgement",
+  "count",
+  "lines",
+  "with",
+  '"',
+  "in",
+  "at",
+  "most",
+  "2",
+  "same",
+  "output",
+  "compares",
+  "the",
+  "settings'",
+  "commands;",
+  "must",
+  "differ",
+  "no",
+  "rise",
+  "bugs",
+  "caught",
+  "injects",
+  "named",
+  "end",
+  "checks",
+  "1",
+  "bug",
+  "to",
+  "inject:",
+];
+
+test("nothing but the plan's and the request's words reach card 1, and never a patch", () => {
+  const card = startCard({ slice: tr2, title: tr2Title, base: "c7f0d13", bugs: tr2Bugs });
+  const planned = [
+    tr2Title,
+    "c7f0d13",
+    tr2.kind,
+    ...tr2.scope.slice(0, 1),
+    ...tr2.after.flatMap((after) => [after.slice, after.because]),
+    ...tr2.done.flatMap((item) => [item.id, item.says]),
+    "tests/broker-list-trust.test.ts",
+    "tests/cli-trust-at-use.test.ts",
+    "listTrust.state",
+    "bay/broker",
+    "grants-check",
+    "debt",
+    ...tr2Bugs,
+  ].sort((one, other) => other.length - one.length);
+  const left = planned.reduce((text, said) => text.split(said).join(" "), joinedWords(card.lines));
+  const words = left.split(" ").filter((word) => word !== "");
+  assert.deepEqual(
+    words.filter((word) => !startWords.includes(word)),
+    [],
+  );
 });
 
 test("card 2 for TR2 is section 5's card, with a line of its own for each changed kernel file", () => {

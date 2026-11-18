@@ -6,11 +6,22 @@ import { verdictOf, type Verdict } from "../scripts/lib/verdicts.ts";
 
 const printed: BayRun = { ran: "ended", exitCode: 0, stdout: "sound checks\n" };
 
-const printedLouder: BayRun = { ran: "ended", exitCode: 0, stdout: "sound checks, louder\n" };
+const printedLouder: BayRun = {
+  ran: "ended",
+  exitCode: 0,
+  stdout: "sound checks, louder\n",
+};
 
-const endedOtherwise: BayRun = { ran: "ended", exitCode: 1, stdout: "sound checks\n" };
+const endedOtherwise: BayRun = {
+  ran: "ended",
+  exitCode: 1,
+  stdout: "sound checks\n",
+};
 
-const stopped: BayRun = { ran: "not known", reason: "./bay.sh print fixtures/sound.txt was stopped by the signal SIGKILL." };
+const stopped: BayRun = {
+  ran: "not known",
+  reason: "It was stopped by the signal SIGKILL.",
+};
 
 function same(name: string): CommandRuns {
   return { name, base: printed, head: printed };
@@ -46,7 +57,9 @@ test("same-output: failed when a command not named prints otherwise or ends othe
     item: "output",
     kind: "same-output",
     verdict: "failed",
-    detail: "sound-check printed otherwise at the head than at the base. grants-check printed otherwise at the head than at the base.",
+    detail:
+      "sound-check printed or ended otherwise at the head than at the base. " +
+      "grants-check printed or ended otherwise at the head than at the base.",
   });
 });
 
@@ -70,18 +83,21 @@ test("same-output: inconclusive when a run is not known on either side, even bes
     kind: "same-output",
     verdict: "inconclusive",
     reason:
-      "The output of sound-check at the head is not known: ./bay.sh print fixtures/sound.txt was stopped by the signal SIGKILL. " +
-      "The output of grants-check at the base is not known: ./bay.sh print fixtures/sound.txt was stopped by the signal SIGKILL.",
+      "The output of sound-check at the head is not known. It was stopped by the signal SIGKILL. " +
+      "The output of grants-check at the base is not known. It was stopped by the signal SIGKILL.",
   });
 });
 
 test("same-output: inconclusive with the interface's sentence when the project declares no commands", () => {
-  assert.deepEqual(verdictOf("output", "same-output", sameOutputParts(["sound-check"], { found: "no commands" })), {
-    item: "output",
-    kind: "same-output",
-    verdict: "inconclusive",
-    reason: "This project declares no commands whose output must not change, so nothing is known.",
-  });
+  assert.deepEqual(
+    verdictOf("output", "same-output", sameOutputParts(["sound-check"], { found: "ran", commands: [] })),
+    {
+      item: "output",
+      kind: "same-output",
+      verdict: "inconclusive",
+      reason: "This project declares no commands whose output must not change, so nothing is known.",
+    },
+  );
 });
 
 test("same-output: inconclusive when the item names commands the project does not declare, counted and not named", () => {
@@ -94,7 +110,10 @@ test("same-output: inconclusive when the item names commands the project does no
 });
 
 test("same-output: inconclusive with the worktrees interface's reason when a copy was not made", () => {
-  const evidence = { found: "not copied", reason: "No copy of base could be made: no such commit." } as const;
+  const evidence = {
+    found: "not copied",
+    reason: "No copy of base could be made: no such commit.",
+  } as const;
   assert.deepEqual(verdictOf("output", "same-output", sameOutputParts([], evidence)), {
     item: "output",
     kind: "same-output",

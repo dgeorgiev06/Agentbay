@@ -17,6 +17,9 @@ resources:
     read-file:
       run: cat --
       effects: [read]
+    bay:
+      run: ./bay.sh
+      effects: [read, write]
 
 actions:
   prove:

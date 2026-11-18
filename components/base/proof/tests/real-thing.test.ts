@@ -56,18 +56,21 @@ test("real-thing: a run that printed other text and ended otherwise is named for
 test("real-thing: inconclusive when a run is not known, even beside a run that failed", () => {
   const runs: readonly BayRun[] = [
     { ran: "ended", exitCode: 0, stdout: "6\n" },
-    { ran: "not known", reason: "./bay.sh check did not finish within 30 seconds." },
+    { ran: "not known", reason: "It did not finish within 30 seconds." },
   ];
   assert.deepEqual(judged(runs), {
     item: "real",
     kind: "real-thing",
     verdict: "inconclusive",
-    reason: "Run 2 of 2 is not known: ./bay.sh check did not finish within 30 seconds.",
+    reason: "Run 2 of 2 is not known. It did not finish within 30 seconds.",
   });
 });
 
 test("real-thing: inconclusive with the worktrees interface's reason when the copy was not made", () => {
-  const evidence = { found: "not copied", reason: "No copy of head could be made: no such commit." } as const;
+  const evidence = {
+    found: "not copied",
+    reason: "No copy of head could be made: no such commit.",
+  } as const;
   assert.deepEqual(verdictOf("real", "real-thing", realThingParts(expected, evidence)), {
     item: "real",
     kind: "real-thing",

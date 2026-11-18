@@ -90,6 +90,15 @@ test("a slice is moved to a later wave only past the slices it shares a path wit
   ]);
 });
 
+test("a slice goes after the slice it comes after, even when that one was moved to a later wave", () => {
+  const slices = [slice("Y", ["x/**"]), slice("Z", ["x/y.ts"]), slice("D", ["d/**"], ["Z"])];
+  assert.deepEqual(workOut(plan(slices), noFeatures).waves, [
+    { wave: 1, slices: ["Y"], builders: 1 },
+    { wave: 2, slices: ["Z"], builders: 1 },
+    { wave: 3, slices: ["D"], builders: 1 },
+  ]);
+});
+
 test("two slices whose scopes may share a path are never in one wave, and the problem names both patterns", () => {
   const slices = [slice("A", ["bay//x.ts"]), slice("B", ["bay/x.ts"])];
   assert.deepEqual(workOut(plan(slices), noFeatures), {

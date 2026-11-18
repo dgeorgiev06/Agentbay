@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  bugsCaughtParts,
-  type BugEvidence,
-} from "../scripts/kinds/bugs-caught.ts";
+import { bugsCaughtParts, type BugEvidence } from "../scripts/kinds/bugs-caught.ts";
 import { verdictOf, type Verdict } from "../scripts/lib/verdicts.ts";
 
 function judged(bugs: readonly BugEvidence[]): Verdict {
@@ -28,15 +25,12 @@ test("bugs-caught: passed when the run of the one bug failed", () => {
 });
 
 test("bugs-caught: passed when the run of every bug failed, and the detail counts them", () => {
-  assert.deepEqual(
-    judged([caught("the value is not raised"), caught("the name is lost")]),
-    {
-      item: "bugs",
-      kind: "bugs-caught",
-      verdict: "passed",
-      detail: "Every injected bug was caught: 2 of 2.",
-    },
-  );
+  assert.deepEqual(judged([caught("the value is not raised"), caught("the name is lost")]), {
+    item: "bugs",
+    kind: "bugs-caught",
+    verdict: "passed",
+    detail: "Every injected bug was caught: 2 of 2.",
+  });
 });
 
 test("bugs-caught: failed when the run of the one bug passed, and the bug is named", () => {
@@ -64,16 +58,12 @@ test("bugs-caught: of two bugs, only the one whose run passed is named, wherever
 });
 
 test("bugs-caught: every bug that survived is named", () => {
-  assert.deepEqual(
-    judged([survived("the name is lost"), survived("the value is not raised")]),
-    {
-      item: "bugs",
-      kind: "bugs-caught",
-      verdict: "failed",
-      detail:
-        "A bug survived: the name is lost. A bug survived: the value is not raised.",
-    },
-  );
+  assert.deepEqual(judged([survived("the name is lost"), survived("the value is not raised")]), {
+    item: "bugs",
+    kind: "bugs-caught",
+    verdict: "failed",
+    detail: "A bug survived: the name is lost. A bug survived: the value is not raised.",
+  });
 });
 
 test("bugs-caught: inconclusive with no bugs at all", () => {
@@ -90,12 +80,8 @@ test("bugs-caught: a bug whose patch does not apply is never caught, alone or be
     name: "the patch is stale",
     run: { how: "not applied", reason: "patch failed" },
   };
-  const reason =
-    "The bug the patch is stale could not be applied to the head, so it touched nothing: patch failed";
-  for (const bugs of [
-    [stale],
-    [caught("the value is not raised"), stale, survived("the name is lost")],
-  ]) {
+  const reason = "The bug the patch is stale could not be applied to the head, so it touched nothing: patch failed";
+  for (const bugs of [[stale], [caught("the value is not raised"), stale, survived("the name is lost")]]) {
     assert.deepEqual(judged(bugs), {
       item: "bugs",
       kind: "bugs-caught",
@@ -136,10 +122,7 @@ test("bugs-caught: a run stopped at its limit, a run that could not start, and a
     ],
   ];
   for (const [unknownBug, reason] of cases) {
-    for (const bugs of [
-      [unknownBug],
-      [caught("the value is not raised"), unknownBug],
-    ]) {
+    for (const bugs of [[unknownBug], [caught("the value is not raised"), unknownBug]]) {
       assert.deepEqual(judged(bugs), {
         item: "bugs",
         kind: "bugs-caught",

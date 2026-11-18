@@ -92,7 +92,7 @@
     },
     "inconclusive": {
       "type": "object",
-      "description": "The run could not be started, did not finish in time, ran no tests, or ended in a way the toolchain does not recognise, so nothing is known.",
+      "description": "The checkout is not set up for the test run, or the run could not be started, did not finish in time, ran no tests, or ended in a way the toolchain does not recognise, so nothing is known.",
       "additionalProperties": false,
       "required": ["verdict", "reason", "seconds", "stdout", "stderr"],
       "properties": {

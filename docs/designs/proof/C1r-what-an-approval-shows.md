@@ -11,12 +11,15 @@ Words are used as `CONTEXT.md` defines them. The tests that hold each sentence a
   approval: Merge this slice?
   show: $steps.draw.output.card
   choices:
-    merge: { when: $steps.offer.output.merge }
-    send-back: { when: $steps.offer.output.sendBack }
-    keep: {}
-    discard: {}
+    merge: { does: Merge into the integration branch, when: $steps.offer.output.merge }
+    send-back: { does: "Round 2, a fresh builder", when: $steps.offer.output.sendBack }
+    keep: { does: Stop; the branches stay }
+    discard: { does: Stop; the worktree goes }
   quotes: [review]
 ```
+
+- Every choice has `does`: one sentence of what taking it does, which the owner reads beside its name on the card.
+  A choice without it, or with a blank one, is refused when the workflow loads.
 
 - A rule (`when`) is `$steps.<id>.output` with an optional path, naming an earlier step. Anything else is refused
   when the workflow loads. At run time a rule that is not `true` or `false`, or resolves to nothing, fails the step.
@@ -66,10 +69,15 @@ While the run waits, `runs.show(id).state.waiting` is:
   "hash": "<hashOf(content)>",
   "content": "<the scrubbed content, as handed over>",
   "choices": [
-    { "name": "merge", "status": "withheld", "reason": "1 must item is inconclusive." },
-    { "name": "send-back", "status": "offered" },
-    { "name": "keep", "status": "offered" },
-    { "name": "discard", "status": "offered" }
+    {
+      "name": "merge",
+      "status": "withheld",
+      "does": "Merge into the integration branch",
+      "reason": "1 must item is inconclusive."
+    },
+    { "name": "send-back", "status": "offered", "does": "Round 2, a fresh builder" },
+    { "name": "keep", "status": "offered", "does": "Stop; the branches stay" },
+    { "name": "discard", "status": "offered", "does": "Stop; the worktree goes" }
   ],
   "card": {
     "title": "Merge TR2?",
@@ -89,6 +97,8 @@ While the run waits, `runs.show(id).state.waiting` is:
 
 - `choices` is there only when the step names choices, and `card` only when the content is a card. Without
   either, the waiting approval is exactly as before.
+- Each choice carries its `does` from the workflow, as the run first reached the approval. Like the rules, it is
+  stored with the approval and not read again from a changed workflow file. It is not part of the hash.
 - The hash is `hashOf` the scrubbed content: title, lines with marks and sources, and the reasons. `skills` and
   `counted` are the kernel's and are not hashed.
 - `skills` is what the kernel recorded for the skill steps inside the cited step: mode, skill and tier. The kernel

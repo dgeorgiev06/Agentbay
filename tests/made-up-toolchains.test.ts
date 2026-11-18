@@ -7,6 +7,7 @@ import { addMode, copyOfTheKit, failedTests } from "./kit-copy.ts";
 import {
   besideTally,
   kernelStateTally,
+  notSetUpTally,
   onceTally,
   rootTally,
   tally,
@@ -31,6 +32,7 @@ const modes: Readonly<Record<string, TallyVariant>> = {
   [rootTally]: "writes its build output in the project's root",
   [kernelStateTally]: "writes its build output in the kernel's state folder",
   [onceTally]: "builds only into a folder with no build output",
+  [notSetUpTally]: "passes a check the checkout is not set up for",
 };
 
 const writesOutsideTheFolder =
@@ -86,7 +88,7 @@ test("a made-up toolchain for another language, whose checks are listed commands
   const tested = ranFor(tally);
   assert.deepEqual(failedTests(tested.output), []);
   assert.equal(tested.status, 0, tested.output);
-  assert.match(tested.output, /^# pass 16$/m);
+  assert.match(tested.output, /^# pass 19$/m);
 });
 
 test("a made-up toolchain that reports passed for a check stopped at its limit fails the shared test's case on it", () => {
@@ -127,5 +129,13 @@ test("a made-up toolchain whose build fails where it has built before fails the 
       onceTally,
       "a second check and test on the same folder, after the first wrote there, give the same verdicts",
     ),
+  ]);
+});
+
+test("a made-up toolchain that reports passed for a check the checkout is not set up for fails the shared test's case on it", () => {
+  const tested = ranFor(notSetUpTally);
+  assert.equal(tested.status, 1, tested.output);
+  assert.deepEqual(failedTests(tested.output), [
+    caseOf(notSetUpTally, "a check the checkout is not set up for is inconclusive, and the checks after it still run"),
   ]);
 });

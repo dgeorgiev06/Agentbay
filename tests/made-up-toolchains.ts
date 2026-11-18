@@ -8,7 +8,8 @@ export type TallyVariant =
   | "writes its build output beside the folder"
   | "writes its build output in the project's root"
   | "writes its build output in the kernel's state folder"
-  | "builds only into a folder with no build output";
+  | "builds only into a folder with no build output"
+  | "passes a check the checkout is not set up for";
 
 export const tally = "tally";
 
@@ -21,6 +22,8 @@ export const rootTally = "tally-root";
 export const kernelStateTally = "tally-kernel-state";
 
 export const onceTally = "tally-once";
+
+export const notSetUpTally = "tally-not-set-up";
 
 const sdkFromScripts = "../../../../bay/sdk.ts";
 
@@ -35,6 +38,7 @@ const buildCommands: Readonly<Record<TallyVariant, string>> = {
   "writes its build output in the project's root": "sh build.sh ../../build -p",
   "writes its build output in the kernel's state folder": "sh build.sh ../../.agentbay/build -p",
   "builds only into a folder with no build output": "sh build.sh build",
+  "passes a check the checkout is not set up for": "sh build.sh build -p",
 };
 
 const effectsOfARun = ["read", "write", "network", "spend", "delete"];
@@ -63,7 +67,9 @@ function manifestOf(name: string, variant: TallyVariant): string {
     description: "Checks and tests Tally, a made-up language; a toolchain@1 that a test adds to a copy of the kit.",
     implements: ["toolchain@1"],
     resources: {
+      files: { read: ["checks/", "run-tests.sh"] },
       commands: {
+        "has-file": { run: "test -f", effects: ["read"] },
         "check-spelling": everyEffectOf("sh checks/spelling.sh"),
         "check-line-length": everyEffectOf("sh checks/line-length.sh"),
         "check-build": everyEffectOf(buildCommands[variant]),
@@ -72,7 +78,7 @@ function manifestOf(name: string, variant: TallyVariant): string {
     },
     extraFiles: ["practices.md"],
     actions: {
-      describe: action("When a test needs Tally's files, practices and checks.", "scripts/describe.ts", []),
+      describe: action("When a test needs Tally's files, practices and checks.", "scripts/describe.ts", ["read"]),
       check: action("When a test needs Tally's checks run in a checkout.", "scripts/check.ts", effectsOfARun),
       test: action("When a test needs Tally's tests run in a checkout.", "scripts/run-tests.ts", effectsOfARun),
     },
@@ -82,6 +88,10 @@ function manifestOf(name: string, variant: TallyVariant): string {
 const stoppedLine = '      return { ...shown, ending: { kind: "unknown", reason: stoppedReason(limit) } };';
 
 const passedWhenStoppedLine = '      return { ...shown, ending: { kind: "exited", exitCode: 0 } };';
+
+const notSetUpLine = '  return { ...notRun, verdict: "inconclusive", reason };';
+
+const passedWhenNotSetUpLine = '  return { ...notRun, verdict: "passed" };';
 
 const library = String.raw`import { fieldsOf, type Json, type ScriptContext } from "${sdkFromLibrary}";
 
@@ -105,16 +115,33 @@ type Verdict =
   | (Shown & { readonly verdict: "passed" | "failed" })
   | (Shown & { readonly verdict: "inconclusive"; readonly reason: string });
 
-export function requestOf(input: Json, namesField: string): Request {
+export type Asked = { readonly namesField: string; readonly defaultSeconds: number };
+
+export function requestOf(input: Json, asked: Asked): Request {
   const fields = fieldsOf(input);
-  const names = fields[namesField];
+  const names = fields[asked.namesField];
   const seconds = fields.timeLimitSeconds;
   return {
     folder: typeof fields.folder === "string" ? fields.folder : "",
     names: Array.isArray(names) ? names.filter((name) => typeof name === "string") : undefined,
-    timeLimitSeconds: typeof seconds === "number" ? seconds : 60,
+    timeLimitSeconds: typeof seconds === "number" ? seconds : asked.defaultSeconds,
   };
 }
+
+export function fileOfCheck(name: string): string {
+  return "checks/" + name + ".sh";
+}
+
+export const testRunFile = "run-tests.sh";
+
+export function lacking(place: string, file: string): string {
+  return place + " has no " + file + ": add it, so that Tally can run it.";
+}
+
+export type SetUp =
+  | { readonly kind: "set up" }
+  | { readonly kind: "not set up"; readonly reason: string }
+  | { readonly kind: "unknown"; readonly reason: string };
 
 function stoppedReason(limit: number): string {
   return "It did not finish within " + String(limit) + " seconds and was stopped.";
@@ -139,6 +166,23 @@ ${stoppedLine}
     case "signalled":
       return { ...shown, ending: { kind: "unknown", reason: "It was stopped by the signal " + end.signal + "." } };
   }
+}
+
+export async function setUpFor(context: ScriptContext, file: string, request: Request): Promise<SetUp> {
+  const found = await ran(context, { name: "has-file", arguments: [file] }, request);
+  if (found.ending.kind === "unknown") {
+    return found.ending;
+  }
+  return found.ending.exitCode === 0 ? { kind: "set up" } : { kind: "not set up", reason: lacking("The checkout", file) };
+}
+
+export function notSetUpVerdict(name: string, reason: string): Json {
+  const notRun = { name, seconds: 0, stdout: "", stderr: "" };
+${notSetUpLine}
+}
+
+export function unknownVerdict(name: string, reason: string): Json {
+  return { name, seconds: 0, stdout: "", stderr: "", verdict: "inconclusive", reason };
 }
 
 export function checkVerdict(name: string, result: Ran): Json {
@@ -180,29 +224,50 @@ export function testResult(result: Ran): Json {
 }
 `;
 
-function describeScript(name: string): string {
-  return lines(
-    `import { defineScript } from "${sdkFromScripts}";`,
-    'import { checks } from "./lib/tally.ts";',
-    "",
-    "export const run = defineScript(() =>",
-    "  Promise.resolve({",
-    '    language: "Tally",',
-    '    sourceFiles: ["**/*.tally"],',
-    '    testFiles: ["tests/**/*.test.tally"],',
-    `    practices: "components/base/${name}/practices.md",`,
-    "    checks: [...checks],",
-    "  }),",
-    ");",
-  );
-}
+const describeScript = lines(
+  `import { defineScript } from "${sdkFromScripts}";`,
+  'import { checks, fileOfCheck, lacking, testRunFile } from "./lib/tally.ts";',
+  "",
+  'const files = [...checks.map((name) => ({ name, file: fileOfCheck(name) })), { name: "test", file: testRunFile }];',
+  "",
+  "export const run = defineScript(async (_input, context) => {",
+  "  const present = [];",
+  "  const missing = [];",
+  "  for (const { name, file } of files) {",
+  "    const read = await context.files.read(file);",
+  "    if (read.ok) {",
+  "      present.push(name);",
+  "    } else {",
+  '      missing.push({ name, reason: lacking("The project", file) });',
+  "    }",
+  "  }",
+  "  return {",
+  '    language: "Tally",',
+  '    sourceFiles: ["**/*.tally"],',
+  '    testFiles: ["tests/**/*.test.tally"],',
+  '    practices: "practices.md",',
+  "    checks: [...checks],",
+  "    present,",
+  "    missing,",
+  "  };",
+  "});",
+);
 
 const checkScript = lines(
   `import { defineScript, fail } from "${sdkFromScripts}";`,
-  'import { checks, checkVerdict, ran, requestOf } from "./lib/tally.ts";',
+  "import {",
+  "  checks,",
+  "  checkVerdict,",
+  "  fileOfCheck,",
+  "  notSetUpVerdict,",
+  "  ran,",
+  "  requestOf,",
+  "  setUpFor,",
+  "  unknownVerdict,",
+  '} from "./lib/tally.ts";',
   "",
   "export const run = defineScript(async (input, context) => {",
-  '  const request = requestOf(input, "checks");',
+  '  const request = requestOf(input, { namesField: "checks", defaultSeconds: 90 });',
   "  const asked = request.names ?? checks;",
   "  const unknown = asked.filter((name) => !checks.includes(name));",
   "  if (unknown.length > 0) {",
@@ -210,7 +275,14 @@ const checkScript = lines(
   "  }",
   "  const verdicts = [];",
   "  for (const name of checks.filter((check) => asked.includes(check))) {",
-  '    verdicts.push(checkVerdict(name, await ran(context, { name: "check-" + name, arguments: [] }, request)));',
+  "    const setUp = await setUpFor(context, fileOfCheck(name), request);",
+  '    if (setUp.kind === "set up") {',
+  '      verdicts.push(checkVerdict(name, await ran(context, { name: "check-" + name, arguments: [] }, request)));',
+  '    } else if (setUp.kind === "not set up") {',
+  "      verdicts.push(notSetUpVerdict(name, setUp.reason));",
+  "    } else {",
+  "      verdicts.push(unknownVerdict(name, setUp.reason));",
+  "    }",
   "  }",
   "  return { verdicts };",
   "});",
@@ -218,10 +290,14 @@ const checkScript = lines(
 
 const testScript = lines(
   `import { defineScript } from "${sdkFromScripts}";`,
-  'import { ran, requestOf, testResult } from "./lib/tally.ts";',
+  'import { ran, requestOf, setUpFor, testResult, testRunFile } from "./lib/tally.ts";',
   "",
   "export const run = defineScript(async (input, context) => {",
-  '  const request = requestOf(input, "files");',
+  '  const request = requestOf(input, { namesField: "files", defaultSeconds: 420 });',
+  "  const setUp = await setUpFor(context, testRunFile, request);",
+  '  if (setUp.kind !== "set up") {',
+  '    return { seconds: 0, stdout: "", stderr: "", verdict: "inconclusive", reason: setUp.reason };',
+  "  }",
   '  return testResult(await ran(context, { name: "run-tests", arguments: request.names ?? [] }, request));',
   "});",
 );
@@ -266,8 +342,8 @@ const runner = [
   "",
 ].join("\n");
 
-function checkScriptOf(check: WantedCheck): string {
-  return ["echo " + JSON.stringify(check.line), checkBodies[check.outcome], ""].join("\n");
+function checkScriptOf(check: WantedCheck, outcome: Outcome): string {
+  return ["echo " + JSON.stringify(check.line), checkBodies[outcome], ""].join("\n");
 }
 
 function testLineOf(test: WantedTest): string {
@@ -275,14 +351,18 @@ function testLineOf(test: WantedTest): string {
 }
 
 export function tallyCheckout(wanted: Wanted): Files {
-  const checks = wanted.checks.map((check) => ["checks/" + check.name + ".sh", checkScriptOf(check)]);
+  const checks = wanted.checks.flatMap((check) => {
+    const outcome = check.outcome;
+    return outcome === "not set up" ? [] : [["checks/" + check.name + ".sh", checkScriptOf(check, outcome)]];
+  });
+  const runners = wanted.testRun === "set up" ? { "run-tests.sh": runner } : {};
   const tests = wanted.testFiles.map((file, index) => [
     "tests/file-" + String(index + 1) + ".test.tally",
     [...file.map(testLineOf), ""].join("\n"),
   ]);
   return {
     "build.sh": builder,
-    "run-tests.sh": runner,
+    ...runners,
     "src/main.tally": "pass the source\n",
     ...Object.fromEntries(checks),
     ...Object.fromEntries(tests),
@@ -306,8 +386,10 @@ const examples = {
       language: "Tally",
       sourceFiles: ["**/*.tally"],
       testFiles: ["tests/**/*.test.tally"],
-      practices: "components/base/tally/practices.md",
+      practices: "practices.md",
       checks: checkNames,
+      present: ["spelling", "line-length", "build"],
+      missing: [{ name: "test", reason: "The project has no run-tests.sh: add it, so that Tally can run it." }],
     },
   },
   check: {
@@ -329,8 +411,12 @@ const examples = {
 };
 
 export function tallyFiles(name: string, variant: TallyVariant): ModeFiles {
-  const chosen =
-    variant === "passes a check stopped at its limit" ? library.replace(stoppedLine, passedWhenStoppedLine) : library;
+  const replacements: Partial<Record<TallyVariant, readonly [string, string]>> = {
+    "passes a check stopped at its limit": [stoppedLine, passedWhenStoppedLine],
+    "passes a check the checkout is not set up for": [notSetUpLine, passedWhenNotSetUpLine],
+  };
+  const replacement = replacements[variant];
+  const chosen = replacement === undefined ? library : library.replace(...replacement);
   return {
     "mode.yaml": manifestOf(name, variant),
     "README.md": lines(
@@ -340,7 +426,7 @@ export function tallyFiles(name: string, variant: TallyVariant): ModeFiles {
     ),
     "practices.md": lines("# Tally practices", "", "A made-up language has no practices yet."),
     "scripts/lib/tally.ts": chosen,
-    "scripts/describe.ts": describeScript(name),
+    "scripts/describe.ts": describeScript,
     "scripts/check.ts": checkScript,
     "scripts/run-tests.ts": testScript,
     "tests/describe.example.json": json(examples.describe),

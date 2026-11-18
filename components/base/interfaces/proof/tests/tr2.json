@@ -1,0 +1,92 @@
+{
+  "slice": {
+    "name": "TR2",
+    "kind": "capability",
+    "scope": ["bay/broker/*.ts", "bay/trust.ts", "tests/**", "framework/features.yaml"],
+    "after": [
+      {
+        "slice": "TR1",
+        "because": "The broker reads ModeGrants.listTrust and readTrustRecord, which TR1 adds."
+      }
+    ],
+    "done": [
+      {
+        "id": "DOD-TR2-1",
+        "says": "A command and each throwaway operation, in each of three states, is refused with its literal sentence.",
+        "level": "must",
+        "proof": { "kind": "fails-first", "tests": ["tests/broker-list-trust.test.ts"] }
+      },
+      {
+        "id": "DOD-TR2-1b",
+        "says": "The sentences say what the owner does, beside the design's, with a reason for each difference.",
+        "level": "must"
+      },
+      {
+        "id": "DOD-TR2-2",
+        "says": "One function decides whether a list is in force, and reachOf is the only other reader of its state.",
+        "level": "must",
+        "proof": { "kind": "count", "pattern": "listTrust.state", "paths": ["bay/broker"], "most": 2 }
+      },
+      {
+        "id": "DOD-TR2-3",
+        "says": "A run loaded with trust is refused once the record changes, and the command never starts.",
+        "level": "must",
+        "proof": { "kind": "fails-first", "tests": ["tests/broker-list-trust.test.ts"] }
+      },
+      {
+        "id": "DOD-TR2-4",
+        "says": "bay call runs a trusted project mode's command, and is refused once the trust is withdrawn.",
+        "level": "must",
+        "proof": { "kind": "fails-first", "tests": ["tests/cli-trust-at-use.test.ts"] }
+      },
+      {
+        "id": "DOD-TR2-5",
+        "says": "Nothing changes for the kit but where a fixture's project mode lists a command.",
+        "level": "must",
+        "proof": { "kind": "same-output", "differ": ["grants-check", "grants-check-json"] }
+      },
+      {
+        "id": "DOD-TR2-6a",
+        "says": "Neither list of known breaks grows.",
+        "level": "must",
+        "proof": { "kind": "count", "use": "debt" }
+      },
+      {
+        "id": "DOD-TR2-6b",
+        "says": "The copy-paste detector's count does not rise.",
+        "level": "must"
+      },
+      {
+        "id": "DOD-TR2-7",
+        "says": "Every injected bug is caught.",
+        "level": "must",
+        "proof": { "kind": "bugs-caught" }
+      },
+      {
+        "id": "DOD-TR2-8",
+        "says": "The checks and the tests pass.",
+        "level": "must",
+        "proof": { "kind": "checks" }
+      }
+    ]
+  },
+  "base": "33cd559",
+  "head": "c9bb216",
+  "declared": {
+    "files": [
+      "bay/broker/command-operations.ts",
+      "bay/broker/file-operations.ts",
+      "bay/broker/list-in-force.ts",
+      "bay/broker/rule.ts",
+      "bay/broker/step-broker.ts",
+      "framework/features.yaml",
+      "tests/broker-list-trust.test.ts",
+      "tests/cli-trust-at-use.test.ts",
+      "tests/script-commands.test.ts",
+      "tests/shared-tests-in-a-project.test.ts",
+      "tests/system-fixture.ts"
+    ],
+    "names": { "gained": [], "lost": [], "changed": [] }
+  },
+  "bugs": []
+}

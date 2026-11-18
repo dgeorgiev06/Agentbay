@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { addMode, copyOfTheKit, failedTests } from "./kit-copy.ts";
+import { addMode, baseModeTestRan, copyOfTheKit, failedTests, type ModeTestRun } from "./kit-copy.ts";
 import {
   besideTally,
   kernelStateTally,
@@ -15,14 +14,7 @@ import {
   type TallyVariant,
 } from "./made-up-toolchains.ts";
 
-type Ran = {
-  readonly status: number | null;
-  readonly output: string;
-};
-
 const baseFolder = "components/base";
-
-const environment = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
 
 const modes: Readonly<Record<string, TallyVariant>> = {
   [tally]: "stops a check at its limit",
@@ -38,26 +30,9 @@ const writesOutsideTheFolder =
 
 let copy: string;
 
-let ranByMode: Readonly<Record<string, Ran>>;
+let ranByMode: Readonly<Record<string, ModeTestRun>>;
 
-function modeTestRan(name: string): Promise<Ran> {
-  const file = join(baseFolder, name, "tests", `${name}.test.ts`);
-  const child = spawn(process.execPath, ["--test", file], { cwd: copy, env: environment });
-  let output = "";
-  child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
-    output += chunk;
-  });
-  child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
-    output += chunk;
-  });
-  return new Promise((resolve) => {
-    child.on("close", (status) => {
-      resolve({ status, output });
-    });
-  });
-}
-
-function ranFor(name: string): Ran {
+function ranFor(name: string): ModeTestRun {
   const ran = ranByMode[name];
   assert.ok(ran !== undefined, name);
   return ran;
@@ -73,7 +48,10 @@ before(async () => {
     await addMode(copy, join(baseFolder, name), tallyFiles(name, variant));
   }
   const ran = await Promise.all(
-    Object.keys(modes).map(async (name): Promise<readonly [string, Ran]> => [name, await modeTestRan(name)]),
+    Object.keys(modes).map(async (name): Promise<readonly [string, ModeTestRun]> => [
+      name,
+      await baseModeTestRan(copy, name),
+    ]),
   );
   ranByMode = Object.fromEntries(ran);
 });

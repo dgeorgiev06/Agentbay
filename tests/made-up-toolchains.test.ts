@@ -2,7 +2,16 @@ import assert from "node:assert/strict";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { addMode, baseModeTestRan, copyOfTheKit, failedTests, type ModeTestRun } from "./kit-copy.ts";
+import {
+  addMode,
+  assertFailsOnlyTheChosenCases,
+  copyOfTheKit,
+  failedTests,
+  modeTestFile,
+  modeTestRan,
+  type Cases,
+  type ModeTestRun,
+} from "./kit-copy.ts";
 import {
   besideTally,
   kernelStateTally,
@@ -32,6 +41,19 @@ const modes: Readonly<Record<string, TallyVariant>> = {
 const writesOutsideTheFolder =
   "check and test write nothing outside the folder they are given, anywhere in the project";
 
+const caseThatCatches: Readonly<Record<string, string>> = {
+  [wrongTally]:
+    "a check that does not end within its time limit is stopped and inconclusive, " +
+    "its time is reported, and the checks after it still run",
+  [besideTally]: writesOutsideTheFolder,
+  [rootTally]: writesOutsideTheFolder,
+  [kernelStateTally]: writesOutsideTheFolder,
+  [onceTally]: "a second check and test on the same folder, after the first wrote there, give the same verdicts",
+  [notSetUpTally]: "a check the checkout is not set up for is inconclusive, and the checks after it still run",
+  [lacksNothingTally]:
+    "describe says which checks and whether the test run the project is set up for, and what to add for the rest",
+};
+
 let copy: string;
 
 let ranByMode: Readonly<Record<string, ModeTestRun>>;
@@ -42,11 +64,27 @@ function ranFor(name: string): ModeTestRun {
   return ran;
 }
 
-function caseOf(name: string, statement: string): string {
+function catchingCaseOf(name: string): string {
+  const statement = caseThatCatches[name];
+  assert.ok(statement !== undefined, `no case is named to catch ${name}`);
   return `toolchain@1, ${name}: ${statement}`;
 }
 
+function casesFor(name: string): Cases {
+  return name === tally ? "every case" : { only: [catchingCaseOf(name)] };
+}
+
+function assertCaught(name: string): void {
+  assertFailsOnlyTheChosenCases(ranFor(name), [catchingCaseOf(name)]);
+}
+
 before(async () => {
+  assert.deepEqual(
+    Object.keys(caseThatCatches).sort(),
+    Object.keys(modes)
+      .filter((name) => name !== tally)
+      .sort(),
+  );
   copy = await copyOfTheKit("toolchains");
   for (const [name, variant] of Object.entries(modes)) {
     await addMode(copy, join(baseFolder, name), tallyFiles(name, variant));
@@ -54,7 +92,7 @@ before(async () => {
   const ran = await Promise.all(
     Object.keys(modes).map(async (name): Promise<readonly [string, ModeTestRun]> => [
       name,
-      await baseModeTestRan(copy, name),
+      await modeTestRan(copy, modeTestFile(baseFolder, name), casesFor(name)),
     ]),
   );
   ranByMode = Object.fromEntries(ran);
@@ -72,61 +110,29 @@ test("a made-up toolchain for another language, whose checks are listed commands
 });
 
 test("a made-up toolchain that reports passed for a check stopped at its limit fails the shared test's case on it", () => {
-  const tested = ranFor(wrongTally);
-  assert.equal(tested.status, 1, tested.output);
-  assert.deepEqual(failedTests(tested.output), [
-    caseOf(
-      wrongTally,
-      "a check that does not end within its time limit is stopped and inconclusive, " +
-        "its time is reported, and the checks after it still run",
-    ),
-  ]);
+  assertCaught(wrongTally);
 });
 
 test("a made-up toolchain whose build writes beside the folder it is given fails the shared test's case on writing outside the folder", () => {
-  const tested = ranFor(besideTally);
-  assert.equal(tested.status, 1, tested.output);
-  assert.deepEqual(failedTests(tested.output), [caseOf(besideTally, writesOutsideTheFolder)]);
+  assertCaught(besideTally);
 });
 
 test("a made-up toolchain whose build writes in the project's root fails the shared test's case on writing outside the folder", () => {
-  const tested = ranFor(rootTally);
-  assert.equal(tested.status, 1, tested.output);
-  assert.deepEqual(failedTests(tested.output), [caseOf(rootTally, writesOutsideTheFolder)]);
+  assertCaught(rootTally);
 });
 
 test("a made-up toolchain whose build writes in the kernel's state folder fails the shared test's case on writing outside the folder", () => {
-  const tested = ranFor(kernelStateTally);
-  assert.equal(tested.status, 1, tested.output);
-  assert.deepEqual(failedTests(tested.output), [caseOf(kernelStateTally, writesOutsideTheFolder)]);
+  assertCaught(kernelStateTally);
 });
 
 test("a made-up toolchain whose build fails where it has built before fails the shared test's case on a second call", () => {
-  const tested = ranFor(onceTally);
-  assert.equal(tested.status, 1, tested.output);
-  assert.deepEqual(failedTests(tested.output), [
-    caseOf(
-      onceTally,
-      "a second check and test on the same folder, after the first wrote there, give the same verdicts",
-    ),
-  ]);
+  assertCaught(onceTally);
 });
 
 test("a made-up toolchain that reports passed for a check the checkout is not set up for fails the shared test's case on it", () => {
-  const tested = ranFor(notSetUpTally);
-  assert.equal(tested.status, 1, tested.output);
-  assert.deepEqual(failedTests(tested.output), [
-    caseOf(notSetUpTally, "a check the checkout is not set up for is inconclusive, and the checks after it still run"),
-  ]);
+  assertCaught(notSetUpTally);
 });
 
 test("a made-up toolchain whose describe says the project lacks nothing fails the shared test's case on what the project is set up for", () => {
-  const tested = ranFor(lacksNothingTally);
-  assert.equal(tested.status, 1, tested.output);
-  assert.deepEqual(failedTests(tested.output), [
-    caseOf(
-      lacksNothingTally,
-      "describe says which checks and whether the test run the project is set up for, and what to add for the rest",
-    ),
-  ]);
+  assertCaught(lacksNothingTally);
 });

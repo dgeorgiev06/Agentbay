@@ -13,13 +13,6 @@ const caseOfThisMode = "proof@1, proof: ";
 const sharedTestMilliseconds = 15 * 60_000;
 
 const notBuilt: readonly string[] = [
-  "in-scope: the item scope is passed when every changed path, and the old path of every move, matches the write scope",
-  "in-scope: a path outside the scope fails the item scope and is named, also one that only starts like a folder of the scope and the old path of a move (K3)",
-  "as-declared: the item declared is passed when the changed files and the changed action names are those declared (TR2)",
-  "as-declared: a file declared and not changed and one changed and not declared fail the item declared with counts, never the builder's text (V2)",
-  "as-declared: an action name declared as changed that did not change, and one that did, fail the item declared with counts (V2)",
-  "as-declared: a move declared by its new path alone fails the item declared, since a move changes its old path too",
-
   "bugs-caught: passed when the covering tests fail with each bug applied (TR2, K1)",
   "bugs-caught: a bug that survives fails the item and is named (K2)",
   "bugs-caught: a bug whose patch does not apply makes the item inconclusive, with a reason that names the bug and says it could not be applied, never passed or failed",

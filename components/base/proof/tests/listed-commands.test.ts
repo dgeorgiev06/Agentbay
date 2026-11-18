@@ -26,7 +26,7 @@ function warningsOf(file: string): readonly (readonly unknown[])[] {
     .map((finding) => [fieldOf(finding, "severity"), fieldOf(finding, "line"), fieldOf(finding, "message")]);
 }
 
-test("bay check on the kit warns once for the command the proof mode lists and once for its long step, and for nothing else", () => {
+test("bay check on the kit warns once for each command the proof mode lists and once for its long step, and for nothing else", () => {
   assert.deepEqual(warningsOf(manifest), [
     [
       "warning",
@@ -36,7 +36,13 @@ test("bay check on the kit warns once for the command the proof mode lists and o
     ],
     [
       "warning",
-      22,
+      18,
+      "Mode proof lists the command read-file, which runs cat -- and which the mode says has the effects: read; " +
+        "a listed command can run code the agent wrote.",
+    ],
+    [
+      "warning",
+      25,
       "Action prove of mode proof declares scriptTimeLimitSeconds: 1800, so each of its script steps may run " +
         "unattended for 1800 seconds, longer than the kernel's 480.",
     ],

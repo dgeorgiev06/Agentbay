@@ -192,8 +192,6 @@ test("every copy is removed when the toolchain stops a run at its limit, when a 
     { path: "src/value.txt", base: 1, head: 1 },
     { path: hiddenTest, head: 1 },
   ]);
-  const notBuilt = (kind: string): string =>
-    `The kind ${kind} is not built in this version of the proof mode, so nothing is known.`;
   assert.deepEqual(fieldOf(output, "verdicts"), [
     {
       item: "checked",
@@ -213,8 +211,13 @@ test("every copy is removed when the toolchain stops a run at its limit, when a 
       verdict: "failed",
       detail: "These test files do not exist at the head, so they cannot show the change: tests/gone.test.ts.",
     },
-    { item: "scope", kind: "in-scope", verdict: "inconclusive", reason: notBuilt("in-scope") },
-    { item: "declared", kind: "as-declared", verdict: "inconclusive", reason: notBuilt("as-declared") },
+    { item: "scope", kind: "in-scope", verdict: "passed", detail: "Every changed path is in the scope: 2 of 2." },
+    {
+      item: "declared",
+      kind: "as-declared",
+      verdict: "passed",
+      detail: "What changed is as declared: 2 files and 0 action names.",
+    },
   ]);
   assert.deepEqual(await readdir(join(project.root, ".forge", "copies")), []);
   const given = async (action: string): Promise<readonly unknown[]> =>

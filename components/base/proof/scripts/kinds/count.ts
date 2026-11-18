@@ -65,11 +65,12 @@ type InCopy = { readonly folder: string; readonly on: string };
 
 const countMatches = "count-matches";
 
-function linesIn(stdout: string): number {
-  return stdout
-    .split("\n")
-    .filter((line) => line !== "")
-    .reduce((total, line) => total + Number.parseInt(line, 10), 0);
+function linesIn(stdout: string): number | undefined {
+  const counts = stdout.split("\n").filter((line) => line !== "");
+  if (!counts.every((line) => /^\d+$/.test(line))) {
+    return undefined;
+  }
+  return counts.reduce((total, line) => total + Number.parseInt(line, 10), 0);
 }
 
 function linesOf(ran: CommandRan, on: string, seconds: number): Lines {
@@ -84,9 +85,13 @@ function linesOf(ran: CommandRan, on: string, seconds: number): Lines {
         const said = `Counting at the ${on} ended with the exit code ${String(code)}`;
         return { known: false, reason: `${said}: a path to count in does not exist or could not be read.` };
       }
-      return ran.stdout.cut
-        ? { known: false, reason: `Counting at the ${on} printed more than proof reads.` }
-        : { known: true, lines: linesIn(ran.stdout.text) };
+      if (ran.stdout.cut) {
+        return { known: false, reason: `Counting at the ${on} printed more than proof reads.` };
+      }
+      const lines = linesIn(ran.stdout.text);
+      return lines === undefined
+        ? { known: false, reason: `Counting at the ${on} printed something other than counts.` }
+        : { known: true, lines };
     }
   }
 }

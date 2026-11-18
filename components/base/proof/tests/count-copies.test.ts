@@ -98,12 +98,18 @@ function contextOf(asked: Asked, answers: readonly Answer[], copying: Copying): 
 
 async function gathered(
   count: Count,
-  given: { readonly spent: number; readonly answers: readonly Answer[]; readonly copying?: Copying },
+  given: {
+    readonly spent: number;
+    readonly answers: readonly Answer[];
+    readonly copying?: Copying;
+    readonly noRise?: Request["noRise"];
+  },
 ): Promise<{ readonly asked: Asked; readonly found: unknown }> {
   const asked: Asked = { calls: [], runs: [] };
   const step = new ProofStep(contextOf(asked, given.answers, given.copying ?? "made"));
   step.spend(given.spent);
-  return { asked, found: await countEvidence(step, request, count) };
+  const noRise = given.noRise ?? request.noRise;
+  return { asked, found: await countEvidence(step, { ...request, noRise }, count) };
 }
 
 function runsOf(asked: Asked): readonly Json[] {
@@ -217,6 +223,41 @@ test("count: an exit code of 1, which grep gives when no line holds the text, co
   };
   const { found } = await gathered(most, { spent: 0, answers: [none] });
   assert.deepEqual(found, { found: "most", most: 2, head: { known: true, lines: 0 } });
+});
+
+test("count: a declared count is found by its whole name, whatever order the settings declare it in", async () => {
+  const debt = { name: "debt", pattern: "rule:", paths: ["debt.yaml"] };
+  const entries = { name: "debt-entries", pattern: "- from:", paths: ["entries.yaml"] };
+  const only = await gathered({ of: "declared", name: "debt" }, { spent: 0, answers: [], noRise: [entries] });
+  assert.deepEqual(only.found, { found: "not declared", name: "debt" });
+  for (const noRise of [
+    [debt, entries],
+    [entries, debt],
+  ]) {
+    for (const each of [debt, entries]) {
+      const answers = [printed("1\n", 0), printed("1\n", 0)];
+      const { asked } = await gathered({ of: "declared", name: each.name }, { spent: 0, answers, noRise });
+      assert.deepEqual(
+        asked.runs.map((run) => run.arguments),
+        [
+          [each.pattern, "--", ...each.paths],
+          [each.pattern, "--", ...each.paths],
+        ],
+      );
+    }
+  }
+});
+
+test("count: output with a line that is not a whole number in digits is not known, and no total is made of it", async () => {
+  for (const text of ["12abc\n", "1\n-1\n", "1\nx\n", "1.5\n", " 2\n"]) {
+    const { asked, found } = await gathered(most, { spent: 0, answers: [printed(text, 0)] });
+    assert.deepEqual(found, {
+      found: "most",
+      most: 2,
+      head: { known: false, reason: "Counting at the head printed something other than counts." },
+    });
+    assert.deepEqual(asked.calls, copiedOnce);
+  }
 });
 
 let project: ModeProject;

@@ -73,7 +73,9 @@ async function copyOfFiles(project: ModeProject): Promise<string> {
   return commit;
 }
 
-async function withCopy(work: (project: ModeProject, commit: string) => Promise<void>): Promise<void> {
+async function withCopy(
+  work: (project: ModeProject & { readonly base: string }, commit: string) => Promise<void>,
+): Promise<void> {
   const project = await openRepositoryProject();
   try {
     await work(project, await copyOfFiles(project));

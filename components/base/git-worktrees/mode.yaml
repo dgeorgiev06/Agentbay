@@ -106,12 +106,12 @@ actions:
     run:
       - script: scripts/changed.ts
   copy:
-    description: When a mode needs a throwaway copy of a commit's files under .forge/copies/, with links to ignored folders of the project such as installed packages.
+    description: When a mode needs a throwaway copy of a commit's files under .forge/copies/, a repository of its own holding them as one commit, with links to ignored folders of the project such as installed packages, ignored in the copy too.
     effects: [read, write, network, spend, delete]
     run:
       - script: scripts/copy.ts
   overlay:
-    description: When a copy needs some of its paths as they are at another commit; a path absent there is removed. It never changes a worktree.
+    description: When a copy needs some of its paths as they are at another commit; a path absent there is removed, and the change is committed in the copy. It never changes a worktree.
     effects: [read, write, network, spend, delete]
     run:
       - script: scripts/overlay.ts
@@ -131,7 +131,7 @@ actions:
     run:
       - script: scripts/set-aside.ts
   apply:
-    description: When a copy needs a patch applied to it, all of it or nothing; a path outside the copy is refused before git runs. It never changes a worktree.
+    description: When a copy needs a patch applied to it, all of it or nothing, committed in the copy; a path outside the copy is refused before git runs. It never changes a worktree.
     effects: [read, write, delete]
     run:
       - script: scripts/apply.ts

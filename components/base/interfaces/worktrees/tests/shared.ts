@@ -30,6 +30,7 @@ export type Repository = {
   readonly parentsOf: (commit: string) => Promise<readonly string[]>;
   readonly filesOf: (commit: string) => Promise<Files>;
   readonly checkedOut: () => Promise<string>;
+  readonly listed: (folder: string) => Promise<readonly string[]>;
 };
 
 export type WorktreesUnderTest = {
@@ -448,6 +449,48 @@ const cases: readonly Case[] = [
       assert.deepEqual(await forgeTree(world), before);
       const later = await copied(world, { commit: ownersBranch, name: "refused" });
       assert.deepEqual(await treeIn(world, later), { files: await world.filesOf(world.base), links: {} });
+    },
+  },
+  {
+    name: "a copy is a repository of its own: the mode's tool for listing files lists exactly the commit's files and not the links, and after an overlay exactly the files the copy then holds",
+    restsOn:
+      "copy-response (a repository of its own holding the commit's files; links present and ignored), overlay-response (the copy's files are listed as they now are)",
+    run: async (world) => {
+      const { earlier, later } = await twoCommits(world);
+      await written(world, ".", { "deps/package.txt": "installed\n" });
+      const folder = await copied(world, { commit: later, name: "listed", links: ["deps"] });
+      const atLater = Object.keys(await world.filesOf(later)).sort();
+      assert.deepEqual(await world.listed(folder), atLater);
+      assert.deepEqual(
+        ["deps", "new.txt", "dir/only-later.txt"].map((path) => atLater.includes(path)),
+        [false, true, true],
+      );
+      await world.output("overlay", { folder, commit: earlier, paths: ["dir", "new.txt"] });
+      const overlaid = Object.keys({
+        ...without(under(await world.filesOf(later), "dir"), ["new.txt"]),
+        "dir/a.txt": "",
+      });
+      assert.deepEqual(await world.listed(folder), overlaid.sort());
+      assert.deepEqual(
+        ["new.txt", "dir/only-later.txt", "dir/a.txt"].map((path) => overlaid.includes(path)),
+        [false, false, true],
+      );
+    },
+  },
+  {
+    name: "a commit made inside a copy stays in the copy: the project has no such commit, and its branches and files are as they were",
+    restsOn: "copy-response (nothing done inside the copy changes the project's repository)",
+    run: async (world) => {
+      const folder = await copied(world, { commit: ownersBranch, name: "inside" });
+      const owner = await ownersCheckout(world);
+      const made = await world.commit(
+        changeOn({ folder }, { "inside.txt": "made inside\n" }, "Commit inside the copy"),
+      );
+      assert.equal(sentenceOf(await world.failure("changed", { from: ownersBranch, to: made })), givenReason);
+      assert.equal(sentenceOf(await world.failure("copy", { commit: made, name: "again" })), givenReason);
+      assert.equal(await world.headOf(ownersBranch), world.base);
+      assert.deepEqual(await ownersCheckout(world), owner);
+      assert.equal((await world.listed(folder)).includes("inside.txt"), true);
     },
   },
   {

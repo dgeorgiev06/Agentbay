@@ -58,6 +58,13 @@ async function committedOnBranch(project: ModeProject, branch: string, change: C
   }
 }
 
+function listedIn(project: ModeProject, folder: string): readonly string[] {
+  return git(project, folder, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"])
+    .split("\0")
+    .filter((path) => path !== "")
+    .sort();
+}
+
 function filesOf(project: ModeProject, commit: string): Files {
   const paths = git(project, ".", ["ls-tree", "-r", "-z", "--name-only", commit])
     .split("\0")
@@ -88,6 +95,7 @@ async function startGitRepository(start: Start): Promise<Repository> {
       Promise.resolve(git(project, ".", ["rev-list", "--parents", "-n", "1", commit]).trim().split(" ").slice(1)),
     filesOf: (commit) => Promise.resolve(filesOf(project, commit)),
     checkedOut: () => Promise.resolve(checkedOut(project)),
+    listed: (folder) => Promise.resolve(listedIn(project, folder)),
   };
 }
 

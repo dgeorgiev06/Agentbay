@@ -134,6 +134,7 @@ test("a script whose call to another action throws gets a failed answer and the 
       settings: {},
       remaining: {},
       timeLimitMilliseconds: 30_000,
+      timeLimitSetBy: "kernel",
       call: () => Promise.reject(new Error("the run store went away")),
     });
     assert.ok(outcome.status === "failed", JSON.stringify(outcome));

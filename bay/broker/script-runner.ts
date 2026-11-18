@@ -101,10 +101,33 @@ function answerFor<Name extends OperationName>(
   return running.answering[asked.operation](asked.request);
 }
 
-function endReason(end: ChildEnd, limits: { readonly milliseconds: number; readonly outputBytes: number }): string {
+type EndLimits = {
+  readonly request: ScriptRequest;
+  readonly outputBytes: number;
+};
+
+function whereTheLimitWasSet(request: ScriptRequest): string {
+  const field = `actions.${request.place.action}.scriptTimeLimitSeconds`;
+  const manifest = manifestOf(request.permissions.grants);
+  switch (request.timeLimitSetBy) {
+    case "action":
+      return `set by ${field} in ${manifest}.`;
+    case "kernel":
+      return `the kernel's limit for a script step. Its action may declare a longer one in ${field} in ${manifest}.`;
+    case "budget":
+      return "the minutes left of the run's budget.";
+  }
+}
+
+function stoppedReason(request: ScriptRequest): string {
+  const shown = seconds(request.timeLimitMilliseconds);
+  return `The script was stopped at its time limit of ${shown} seconds, ${whereTheLimitWasSet(request)}`;
+}
+
+function endReason(end: ChildEnd, limits: EndLimits): string {
   switch (end.how) {
     case "timed-out":
-      return `The script was stopped at its time limit of ${seconds(limits.milliseconds)} seconds.`;
+      return stoppedReason(limits.request);
     case "output-exceeded":
       return `The script printed more than ${String(limits.outputBytes)} bytes and was stopped.`;
     case "not-started":
@@ -116,11 +139,7 @@ function endReason(end: ChildEnd, limits: { readonly milliseconds: number; reado
   }
 }
 
-function outcomeOf(
-  state: RunState,
-  end: ChildEnd,
-  limits: { readonly milliseconds: number; readonly outputBytes: number },
-) {
+function outcomeOf(state: RunState, end: ChildEnd, limits: EndLimits) {
   if (state.stopped !== undefined) {
     return { status: "failed" as const, reason: state.stopped };
   }
@@ -243,7 +262,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
     broker.close();
     await Promise.all(state.inFlight);
     const minutes = (options.clock.now().getTime() - startedAt) / 60_000;
-    const outcome = outcomeOf(state, end, { milliseconds, outputBytes: limits.outputBytes });
+    const outcome = outcomeOf(state, end, { request, outputBytes: limits.outputBytes });
     const spent: Spend = { ...broker.spent(), minutes };
     if (outcome.status === "done") {
       return { status: "done", output: options.secrets.redactJson(outcome.output), spent };

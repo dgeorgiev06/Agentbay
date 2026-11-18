@@ -76,14 +76,20 @@ export type StepPlace = {
 
 export type ActionCaller = (reference: string, input: Json) => Promise<StepOutcome>;
 
-export type ScriptRequest = {
+export const defaultScriptTimeLimitSeconds = 480;
+
+export type StepTimeLimit = {
+  readonly timeLimitMilliseconds: number;
+  readonly timeLimitSetBy: "kernel" | "action" | "budget";
+};
+
+export type ScriptRequest = StepTimeLimit & {
   readonly place: StepPlace;
   readonly script: string;
   readonly input: Json;
   readonly permissions: Permissions;
   readonly settings: Readonly<Record<string, unknown>>;
   readonly remaining: Budget;
-  readonly timeLimitMilliseconds: number;
   readonly call: ActionCaller;
   readonly caller?: string;
   readonly skillInput?: Json;

@@ -67,6 +67,7 @@ async function run(layout: Layout, modeFolder: string): Promise<StepOutcome> {
     settings: {},
     remaining: {},
     timeLimitMilliseconds: 30_000,
+    timeLimitSetBy: "kernel",
     call: () =>
       Promise.resolve({ status: "failed", reason: "no calls", spent: { items: 0, usd: 0, tokens: 0, minutes: 0 } }),
   });

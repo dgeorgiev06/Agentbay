@@ -105,6 +105,12 @@ export function frameRemaining(frame: BudgetFrame): Budget {
   return smallestBudget(chainOf(frame).map((member) => remainingBudget(member.limit, member.spent)));
 }
 
+export function frameAfterMinutes(parent: BudgetFrame, minutes: number): BudgetFrame {
+  const left = frameRemaining(parent).minutes;
+  const limit = left === undefined ? {} : { minutes: Math.max(0, left - minutes) };
+  return { limit, spent: noSpend, parent };
+}
+
 export function frameOverrun(frame: BudgetFrame): Overrun | undefined {
   for (const member of chainOf(frame)) {
     const overrun = overrunOf(member.limit, member.spent);

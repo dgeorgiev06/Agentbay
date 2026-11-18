@@ -170,6 +170,8 @@ const cardWidth = 44;
 
 const lineRoom = cardWidth - "computed ".length;
 
+const unsafe = /[\p{Cc}\p{Cf}]/gu;
+
 const sliceKinds: readonly Slice["kind"][] = ["interface", "capability", "mode"];
 
 const lacking: readonly Missing["lacks"][] = ["kernel", "toolbox", "test-toolbox", "interface"];
@@ -322,32 +324,25 @@ function scopeWords(scope: readonly string[]): string {
   return rest.length === 0 ? `scope: ${first}` : `scope: ${first} and ${counted(rest.length, "more path")}`;
 }
 
-function isUnsafe(character: string): boolean {
-  const code = character.codePointAt(0) ?? 0;
-  return (
-    code < 0x20 ||
-    (code >= 0x7f && code <= 0x9f) ||
-    (code >= 0x202a && code <= 0x202e) ||
-    (code >= 0x2066 && code <= 0x2069)
-  );
-}
-
-function piecesOf(word: readonly string[]): readonly string[] {
+function piecesOf(word: string): readonly string[] {
   const pieces: string[] = [];
-  for (let at = 0; at < word.length; at += lineRoom) {
-    pieces.push(word.slice(at, at + lineRoom).join(""));
+  let left = Array.from(word);
+  while (left.length > lineRoom) {
+    const slash = left.lastIndexOf("/", lineRoom - 1);
+    const cut = slash > 0 ? slash + 1 : lineRoom;
+    pieces.push(left.slice(0, cut).join(""));
+    left = left.slice(cut);
   }
-  return pieces;
+  return [...pieces, left.join("")];
 }
 
 function wrapped(text: string): readonly string[] {
-  const characters = Array.from(text).map((character) => (isUnsafe(character) ? " " : character));
-  const words = characters
-    .join("")
+  const words = text
+    .replace(unsafe, " ")
     .split(" ")
     .filter((word) => word !== "");
   const lines: string[] = [];
-  for (const piece of words.flatMap((word) => piecesOf(Array.from(word)))) {
+  for (const piece of words.flatMap(piecesOf)) {
     const last = lines.at(-1);
     const longer = `${last ?? ""} ${piece}`;
     if (last !== undefined && Array.from(longer).length <= lineRoom) {

@@ -99,5 +99,5 @@ test("a direct call with no caller uses the owner's own partition", async () => 
 
 test("the store writes only database files: one partition per caller, and no unnamed database it never uses", () => {
   const files = readdirSync(join(project.root, ".agentbay", "data")).filter((name) => !/-(wal|shm)$/.test(name));
-  assert.deepEqual(files.sort(), ["store--mail-briefing.db", "store--owner.db", "store--errands.db"]);
+  assert.deepEqual(files.sort(), ["store--errands.db", "store--mail-briefing.db", "store--owner.db"]);
 });

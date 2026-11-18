@@ -4,8 +4,6 @@ import { notStartedReason, runTimed } from "./lib/commands.ts";
 import { checkoutScripts, hasScript, readinessOf, type CheckoutScripts } from "./lib/package-scripts.ts";
 import { checkoutRequestOf, type CheckoutRequest } from "./lib/request.ts";
 
-const defaultSeconds = 90;
-
 function chosenChecks(names: readonly string[] | undefined, found: CheckoutScripts): readonly Check[] {
   if (names === undefined) {
     return checks.filter((check) => check.need.kind === "required" || hasScript(found, check));
@@ -37,7 +35,7 @@ async function verdictOf(
 }
 
 export const run = defineScript(async (input, context) => {
-  const request = checkoutRequestOf(input, { namesField: "checks", defaultSeconds });
+  const request = checkoutRequestOf(input, "check");
   const found = await checkoutScripts(context, request);
   const verdicts: CheckVerdict[] = [];
   for (const check of chosenChecks(request.names, found)) {

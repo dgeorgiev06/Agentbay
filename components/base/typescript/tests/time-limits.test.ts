@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import type { ModeProject } from "../../../../tests/test-toolbox.ts";
+import { checkoutRequestOf } from "../scripts/lib/request.ts";
 import {
-  hanging,
   listed,
   npmHeader,
   openToolchainProject,
@@ -16,17 +16,10 @@ let project: ModeProject;
 
 let folder: string;
 
-const hangingTest = [
-  'import { test } from "node:test";',
-  'test("waits for ever", () => new Promise((done) => setTimeout(done, 600000)));',
-  "",
-].join("\n");
-
 before(async () => {
   project = await openToolchainProject();
   folder = await writeCheckout(project, "limits", {
-    "package.json": packageWith({ typecheck: hanging, lint: printing("lint found nothing"), test: "node --test" }),
-    "tests/waits.test.ts": hangingTest,
+    "package.json": packageWith({ lint: printing("lint found nothing") }),
   });
 });
 
@@ -53,17 +46,19 @@ test("check and test accept a time limit of 420 seconds and refuse 421 with the 
   assert.equal(await project.refusal("typescript.test", { folder, timeLimitSeconds: 421 }), refused);
 });
 
-test("left out, a check may take 90 seconds and a test run 420", async () => {
-  const [check, run] = await Promise.all([
-    project.output("typescript.check", { folder, checks: ["typecheck"] }),
-    project.output("typescript.test", { folder }),
-  ]);
-  const [typecheck] = listed(check, "verdicts").map((verdict) => withoutSeconds(verdict));
+test("a request with no time limit gives 90 seconds for a check and 420 for the test run, and a given limit is passed through", () => {
   assert.deepEqual(
-    { check: typecheck?.reason ?? null, test: withoutSeconds(run).reason ?? null },
-    {
-      check: "typecheck did not finish within 90 seconds and was stopped.",
-      test: "The test run did not finish within 420 seconds and was stopped.",
-    },
+    [
+      checkoutRequestOf({ folder: "checkouts/a" }, "check"),
+      checkoutRequestOf({ folder: "checkouts/a" }, "test"),
+      checkoutRequestOf({ folder: "checkouts/a", checks: ["lint"], timeLimitSeconds: 7 }, "check"),
+      checkoutRequestOf({ folder: "checkouts/a", files: ["tests/a.test.ts"], timeLimitSeconds: 7 }, "test"),
+    ],
+    [
+      { folder: "checkouts/a", names: undefined, timeLimitSeconds: 90 },
+      { folder: "checkouts/a", names: undefined, timeLimitSeconds: 420 },
+      { folder: "checkouts/a", names: ["lint"], timeLimitSeconds: 7 },
+      { folder: "checkouts/a", names: ["tests/a.test.ts"], timeLimitSeconds: 7 },
+    ],
   );
 });

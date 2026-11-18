@@ -117,9 +117,9 @@ fails the run (`workflow-steps.ts:173-182`). A card without choices is printed w
 <run> <step> --hash <hash> [--reject]" (`bay/run-report.ts:93-98`, `bay/approval-card.ts:73-81`). Tests:
 `tests/runs-cards.test.ts:124` (a sound card shown with the kernel's counts), `tests/run-report.test.ts:164`.
 
-**3, `cut`. Carried by existing code**, with one line in forge's `mode.yaml`: forge must require `worktrees@1`
-(and `toolchain@1`, below), since a workflow may name only its mode's actions or those of an interface it
-requires (`schemas/workflow.schema.json:101`). W1's forge requires only `proof@1`. `worktrees.cut` makes
+**3, `cut`. Carried by existing code**, with one line in forge's `mode.yaml`: forge must require `worktrees@1`,
+since a workflow may name only its mode's actions or those of an interface it requires
+(`schemas/workflow.schema.json:101`). W1's forge requires only `proof@1`. `worktrees.cut` makes
 `.forge/worktrees/<slice>` on branch `forge/<slice>` (`components/base/git-worktrees/scripts/cut.ts:6-29`,
 `scripts/lib/folders.ts:6-19`). Tests: `components/base/git-worktrees/tests/cut.test.ts:7`; a second cut of the same
 slice is refused, "The branch forge/again already exists, so the slice again is not cut again."
@@ -174,7 +174,7 @@ merge in the kit (WM1) and for discard (WD1).** A script reads the choice and ca
 through `context.call` (`sdk.ts:107`; `action-steps.ts:184-197`). A call is refused when the called action has an
 effect the calling action does not declare (`action-steps.ts:479-485`), so `carry-out` declares
 `[read, write, delete]`, the effects of `worktrees.merge`, `remove` and `cut`
-(`components/base/interfaces/worktrees.yaml`). What blocks:
+(`components/base/interfaces/worktrees.yaml:7`, `:27-31`). What blocks:
 
 - merge into the branch the project has checked out is refused: "The branch main is checked out in the project
   or in another worktree, and the mode merges only into a branch it can check out in a worktree of its own, so
@@ -182,8 +182,8 @@ effect the calling action does not declare (`action-steps.ts:479-485`), so `carr
   In the kit the project is the kit's checkout, and it has `feat/0022-agentbay5` checked out
   (`git worktree list` from this worktree: `/home/claude/agentbay d17fbb1 [feat/0022-agentbay5]`).
 - remove after such a merge is refused unless the branch is also merged into the project's checked-out branch
-  (`scripts/remove.ts:119-133`; test `tests/remove.test.ts:32`).
-- nothing removes a worktree whose branch is not merged: `remove` keeps both and says so (`remove.ts:105-117`).
+  (`scripts/remove.ts:28-42`; test `tests/remove.test.ts:32`).
+- nothing removes a worktree whose branch is not merged: `remove` keeps both and says so (`remove.ts:14-26`).
 
 ### The questions of the brief
 
@@ -207,6 +207,15 @@ a time (F1 to F3) is confined to `.forge/worktrees/`; two at once (F4) could wri
 slice WR1. Found on the way: a search (`Glob`, `Grep`) over a worktree's top folder is refused, because the walk
 meets the `.git` entry there (`guard-paths.ts:168-176`; test `guard-decide.test.ts:306`); the build skill must
 search below it (`bay/`, `tests/`). Not a capability; a sentence in the skill.
+
+What the write path does to the two frames. S3 holds: the path is declared in forge's manifest, and the hook
+allows nothing else. T3 holds: the trust record, `.agentbay/` and the config stay closed inside every root, so a
+builder cannot give trust. What is new is that a builder may write, in its worktree, a `mode.yaml` under
+`components/base/`. In the kit's own `components/base/` the hook refuses it, since no root lies there
+(`guard-decide.ts:190-192`). Once merged, such a mode is trusted by place (T5) and its list is granted. That happens only through the owner's merge choice, never through a step, so T3 is not
+weakened; but the owner must see it. F1's `draw` therefore adds a computed line for each changed path under
+`components/base/*/mode.yaml`, `bay/`, `adapters/` or `schemas/`, from proof's `size` list; forge's test 6 holds
+it (section 4). Code a builder wrote runs unconfined when proof runs the tests, as ADR 22 already says.
 
 **Who commits the builder's work to the slice's branch? Nobody can today. May the agent's shell run git there?
 No.** The build agent gets `Bash` only when its mode lists a command its action's effects cover
@@ -237,12 +246,22 @@ not count against it. No test calls `proof.prove` from a workflow; F1's test doe
 same run (`action-steps.ts:184-197`, `:441-462`), and each command a nested script runs is recorded in this run's
 events with that script's step key (`command-operations.ts:175-177`). Keys of nested steps start with the
 caller's key and `/` (`bay/runs/step-key.ts:49-68`), and a `ran` line is accepted when an event `command` of the
-cited name has a step key under the cited step (`card.ts:171-173`, `:222-234`). So a line cites
-`{ step: prove, command: run-tests }` for the test run and `check-types`, `lint`, `check-format`,
-`find-dead-code` for the checks: the typescript mode's names (`components/base/typescript/mode.yaml:11-30`).
-`tests/runs-cards.test.ts:124` holds a `ran` line for a command recorded directly in the cited step's script, not
-one recorded by a nested call; F1's test must hold that case. The `run` field of a source is not needed: it is for
-runs a skill called (`card.ts:236-245`).
+cited name has a step key under the cited step (`card.ts:171-173`, `:222-234`). So a line would cite
+`{ step: prove, command: run-tests }`. `tests/runs-cards.test.ts:124` holds a `ran` line for a command recorded
+directly in the cited step's script, not one recorded by a nested call; a test must hold that case before forge
+relies on it. The `run` field of a source is not needed: it is for runs a skill called (`card.ts:236-245`).
+
+**But forge cannot write such a line today, so F1's card has no `ran` line.** A source names the command by the
+name its mode lists, such as `run-tests` or `check-types` (`components/base/typescript/mode.yaml:11-30`). Forge
+does not know those names: proof's answer has no command names
+(`components/base/interfaces/proof/prove-response.json:89-160`), a toolchain's answer names the check (`typecheck`)
+and not the command (`toolchain/check-response.json:33-41`), and a script cannot read the run's events
+(`sdk.ts:101-103` only emits). Forge naming `run-tests` would name a language (ADR 15). And a `ran` line is worth
+showing only when its words are what the command printed, such as `# pass 1374`, as C1p's literal card shows
+(`tests/run-report.test.ts:130-131`); proof does not return what a command printed. So F1 marks every verdict
+`computed`, citing `prove`: proof's step runs no skill, which is all the kernel asks of a computed line
+(`card.ts:200-206`), and that is how C1p's card marks verdicts too (`tests/run-report.test.ts:132-140`). Slice RN1
+(section 3) gives forge the names and the printed lines.
 
 **Which skill judges the judgement items, and is it in F1 or later? None, in F1 or in any slice of the plan.** A
 `judged` line needs an action step listed under `quotes` that ran a skill (`card.ts:208-220`). The build step must
@@ -308,3 +327,380 @@ at a time (`suite-time.md:12-15`). The 945 seconds of `prove` on TR2 is the brie
 records it is not in this branch, and was not found. The builder's time is outside the budget and outside this
 count: 50 to 80 minutes a slice (`docs/plans/0022-forge-in-waves.md`, Time). After P2 to P5 the count rises: each
 bug a copy and a test run, `same-output` two copies and every declared command twice.
+
+## 3. The capabilities missing, as slices
+
+In the plan's form (`docs/plans/0022-forge-in-waves.md`), fewest and smallest first. Kinds: **C** a capability in
+one kernel feature, **M** a mode with its interface. None changes a file F1 changes, so each can run beside F1.
+
+| # | Slice | Kind | Write scope | After | Because | Who waits |
+|---|---|---|---|---|---|---|
+| TT1 | The test toolbox takes a choice, shows a waiting approval's choices and card, and can stop and resume a run | C, test toolbox | `tests/test-toolbox.ts`, `tests/test-toolbox*.test.ts` | - | - | F1 |
+| WC1 | `worktrees.commit`: every changed and untracked file of a slice's worktree committed to its own branch, the mode as author, with a message given | M | `components/base/interfaces/worktrees.yaml`, `components/base/interfaces/worktrees/**`, `components/base/git-worktrees/**`, `tests/made-up-worktrees*` | - | - | F2, by choice |
+| WD1 | `worktrees.discard`: the work set aside, the branch renamed to `forge/discarded/<slice>/<n>`, the worktree removed; no commit is deleted | M | as WC1 | WC1 | the same files | F2 |
+| WM1 | `worktrees.merge` into the branch the project has checked out: the merge commit made in a worktree of the mode's own, then the project fast-forwarded to it, only when the project has no changed or untracked file | M | as WC1 | WD1 | the same files | F1 as planned; the cut does it by hand |
+| RN1a | A toolchain's check and test verdicts name the listed command that ran and the last lines it printed | M | `components/base/interfaces/toolchain.yaml`, `components/base/interfaces/toolchain/**`, `components/base/typescript/**`, `tests/made-up-toolchains*` | - | - | none of F1 to F4; X1, by choice |
+| RN1b | Proof's verdicts carry those names and lines on, so a forge card can mark them `ran` | M | `components/base/interfaces/proof.yaml`, `components/base/interfaces/proof/**`, `components/base/proof/**`, `tests/made-up-proofs*` | RN1a, P2 to P5 | the toolchain's fields; the same folder | as RN1a |
+| TP1 | `toolchain.describe` gives the practices file relative to the project, so forge can hand it to a builder | M | as RN1a | RN1a | the same files | none; the cut takes it from forge's settings |
+| WR1 | A skill step's write roots are the one worktree of its run, not every worktree | C, adapter and runs | `adapters/claude-code/`, one field of a task in `bay/runs/` | a design first (P-35) | the hook knows a step only by its agent's name | F4 |
+
+What each must be able to do alone, and how each keeps the frames:
+
+- **TT1.** Today a test's decision is `{ stepKey, hash, verdict, by }` only, a waiting approval shows no choices or
+  card, and a test cannot stop or resume a run (`tests/test-toolbox.ts:44-56`, `:76-81`, `:83-100`); runs already
+  take a choice (`bay/runs/runs.ts:368-377`). Seen alone: a made-up mode's workflow stopped at an approval with a
+  withheld choice, taken through the test toolbox, refused with its reason. It cannot be avoided: a mode's tests may
+  import only the test toolbox and the toolbox (`framework/features.yaml:252-260`). No frame is touched.
+- **WC1.** Built from two commands git-worktrees already lists, `stage-everything` and `commit-staged`
+  (`git-worktrees/mode.yaml:67-72`), so the mode's list does not change. Seen alone: a worktree with a changed and
+  an untracked file is clean afterwards and its branch is one commit ahead. Frames: the builder still runs no
+  command; the action is a script of a base mode, effects `[read, write, delete]` declared (S3). What the builder
+  wrote could run if git ran hooks or filters on commit; every listed command already starts with
+  `core.hooksPath=/dev/null` and an empty attribute source (`mode.yaml:11`, `:71`), and a test like
+  `git-worktrees/tests/hooks.test.ts` with a hook and a filter in the worktree holds it for commit too.
+  **Avoidable** by the cut of section 4: `set-aside` is the commit, and a second `cut` at that commit is the
+  branch that is merged. Cost: two worktrees and three branches per slice, the work's commit is set-aside's (its
+  message says whose work it holds, `tests/set-aside.test.ts:7`), and in round 2 a fresh builder starts from the
+  base, not from round 1's work, unless forge cuts round 2 at the set-aside commit.
+- **WD1.** One new listed command, `branch -m`, for git-worktrees, a base mode, trusted by place (T5), so no trust
+  card; `bay check` shows the changed list (T4). Seen alone: a dirty, unmerged worktree is gone, its work and its
+  commits are on two named branches, and `cut` of the same slice works again. **Avoidable** in F2 by cutting each
+  round under a new name (`TR2-r2`). Cost: names and branches pile up, and the reviewer removes them by hand,
+  with `git branch -D`, which forge never runs.
+- **WM1.** One new listed command, `merge --ff-only`. Seen alone: with the project clean, its checked-out branch
+  ends at the merge commit and `remove` of the slice succeeds; with one changed file in the project, nothing moves
+  and the sentence says which file. Frames: no S or T property names the owner's checkout. What changes is that an
+  approval, not a person's git command, moves the files the kernel itself runs from, when the kit is the project.
+  The approval is the owner's (T3 holds: no step chooses), and the card must say it: `draw` adds a computed line
+  for every changed path under `bay/`, `adapters/`, `schemas/` or `components/base/*/mode.yaml`, from proof's
+  `size` list, because a new base mode is trusted by place once merged (T5). A forge test holds that line.
+  **Avoidable** by the owner's question 1 below, at the cost of a person's hands on every merge.
+- **RN1a, RN1b.** Seen alone: `bay call proof.prove` on a hand-built slice answers, for `checks`, the commands
+  `check-types`, `lint`, `check-format`, `find-dead-code`, `run-tests` and the last lines of each. Frames: the
+  lines pass the scrubber when the card is shown (`workflow-steps.ts:228`), S6 holds; the kernel still does not
+  compare a line with output (ADR 22). Two slices, not one, because each is one interface with its modes.
+  **Avoidable**, as F1 does: verdicts marked `computed`. Cost: the owner never reads a command's own words.
+- **TP1.** Seen alone: describe in the kit and in a project gives a path a builder can open. **Avoidable** by
+  forge's settings, at the cost of the owner writing the path once per project.
+- **WR1.** Its smallest form is **not known**. The hook identifies a step by `agent_type`, the agent's name
+  (`guard-decide.ts:77-90`), which is one per mode and skill (`bay/adapter.ts:42-44`), and reads only
+  `.agentbay/steps.json`, written by `bay build` (`step-guard.ts:87-89`). Per-run roots need either an agent per
+  run or a file the kernel writes when it issues a task. It narrows what a step may write, so it weakens nothing;
+  it does touch the file the hook trusts, which is closed to every step (`guard-input.ts:1-2`). **Avoidable** by
+  one builder at a time, which costs F4 its point.
+
+Not slices, but found, and each should be in a brief before its slice starts:
+
+- **RV1, a review skill.** Nothing in the plan judges judgement items after the build (section 2). A forge slice
+  (M, `components/base/forge/skills/review/**`, the step in the workflow and `quotes: [review]`), after F1. Until
+  then the owner judges them from "not judged" lines.
+- **C3 has nothing to count yet.** C3 "counts the times a step asks for tests", but no skill step can ask:
+  `call_action` takes only read-only actions (`engine.ts:302-311`) and `toolchain.test` has every effect
+  (`components/base/interfaces/toolchain.yaml:12-15`); forge's agents have no shell (`agent-file.ts:24`).
+  C3's brief must say how a builder asks, and that reaches the kernel's rule on what a skill may call.
+- **The kit's own tools may read `.forge/`.** `.forge/` is ignored by git (`.gitignore:8`), but the kit's `lint` is
+  `eslint … .` with no ignore for it (`package.json:13`, `components/base/typescript/eslint.config.js`), and
+  `node --test` with no file names searches the folder (`package.json:10`). **Not known** whether either reads a
+  worktree under `.forge/worktrees/`. Experiment: with one worktree there, run `npm run lint` and
+  `node --test --test-name-pattern=none` in the kit and look for `.forge/` in what they name. If they do, a
+  one-line ignore in the typescript mode's config, before the owner's first live session. Proof is not touched:
+  its copies hold a commit, which has no `.forge/`.
+
+### What the owner decides
+
+1. **Where a merge lands while the kit is the project.** (a) WM1: git-worktrees fast-forwards the checked-out
+   branch, only when the checkout is clean. (b) The kit's checkout is left detached during a forge run, and the
+   reviewer switches it back after the merge, by hand, for every slice. (c) Forge merges into a branch nobody has
+   checked out, and the reviewer merges that into the integration branch by hand. **Recommended: (a)**, built
+   after F1; it is what the reviewer does by hand today, and F1's cut uses (b) until then.
+2. **How the builder's work becomes a commit.** (a) WC1, a commit action. (b) Keep `set-aside` and a second cut.
+   **Recommended: (a)**, before F2, so that a round keeps its work on the slice's branch.
+3. **Who judges a slice's judgement items.** (a) The owner, from "not judged" lines, until X1. (b) RV1, a review
+   skill at tier deep, quoted on the merge card, before X1. **Recommended: (b)**; X1 is the first job whose
+   judgement items nobody has seen before.
+
+## 4. F1 cut to what can be built now
+
+The smallest flow that works end to end with what exists and the forge mode's own files. It needs W1 merged
+(forge's folder, `proof: proof` in the config) and TT1 for its tests. Merge is withheld on every real slice until
+P2 merges, since `scope` and `declared` are inconclusive until then; the tests reach merge with a stand-in proof.
+
+### Its files
+
+Write scope, named by file, all in `components/base/forge/`:
+
+- `mode.yaml`: W1's, plus `requires.interfaces: [proof@1, worktrees@1]`, `resources.files.write:
+  [.forge/worktrees/]`, and the actions `slice`, `declare`, `build`, `draw`, `carry-out`.
+- `schemas/settings.json`: W1's, plus `into` (the branch a merge goes into) and `practices` (paths a builder reads).
+- `schemas/slice-request.json` (a planned slice by reference to `plan.json`, `base`, `bugs` by reference to
+  proof@1), `slice-response.json`, `declare-request.json`, `declaration.json` (proof@1's `declaration` by
+  reference), `build-request.json`, `built.json` (`{ outcome: built }` or `{ outcome: stopped, missing }`, no
+  free text the card could show), `draw-request.json`, `draw-response.json`, `carry-out-request.json`,
+  `carry-out-response.json`.
+- `workflows/one-slice.yaml`, below.
+- `scripts/slice.ts`, `scripts/draw.ts`, `scripts/carry-out.ts`, `scripts/declared-in-scope.ts` (the declare
+  skill's check), `scripts/lib/cards.ts` (pure: the lines of both cards, the three rules, the reasons).
+- `skills/declare/SKILL.md`, `skills/build/SKILL.md`. The build skill says: work only in the folder given; search
+  below its top folder, not at it; run nothing; if the slice needs what the toolbox or the kernel lacks, stop and
+  answer `stopped` with what is missing (ADR 17 item 2); never write outside the declared files without saying so
+  in a second declaration, which F1 does not have.
+- `tests/cards.test.ts`, `tests/one-slice.test.ts`; `README.md` gains a paragraph.
+
+### Its workflow, in the schema's real form
+
+```yaml
+name: one-slice
+trigger: { manual: true }
+budget: { minutes: 45 }
+steps:
+  - id: slice
+    action: slice
+  - id: start
+    approval: Build this slice?
+    show: $steps.slice.output.card
+  - id: cut
+    action: worktrees.cut
+    input:
+      slice: $steps.slice.output.slice.name
+      base: $steps.slice.output.base
+  - id: declare
+    action: declare
+    input:
+      slice: $steps.slice.output.slice
+      folder: $steps.cut.output.folder
+      practices: $settings.practices
+  - id: build
+    action: build
+    input:
+      slice: $steps.slice.output.slice
+      folder: $steps.cut.output.folder
+      practices: $settings.practices
+      declared: $steps.declare.output
+  - id: keep-work
+    action: worktrees.set-aside
+    input:
+      folder: $steps.cut.output.folder
+  - id: prove
+    action: proof.prove
+    input:
+      slice: $steps.slice.output.slice
+      base: $steps.cut.output.commit
+      head: $steps.keep-work.output.commit
+      declared: $steps.declare.output
+      bugs: $steps.slice.output.bugs
+  - id: draw
+    action: draw
+    input:
+      slice: $steps.slice.output.slice
+      title: $steps.slice.output.title
+      proof: $steps.prove.output
+      built: $steps.build.output
+      into: $settings.into
+  - id: card
+    approval: Merge this slice?
+    show: $steps.draw.output.card
+    choices:
+      merge: { does: Merge into the integration branch, when: $steps.draw.output.merge }
+      send-back: { does: "Round 2, a fresh builder", when: $steps.draw.output.sendBack }
+      keep: { does: Stop; the branches stay }
+      discard: { does: Stop; the worktree goes, when: $steps.draw.output.discard }
+  - id: carry-out
+    action: carry-out
+    input:
+      choice: $steps.card.output.choice
+      name: $steps.slice.output.slice.name
+      head: $steps.keep-work.output.commit
+      into: $settings.into
+```
+
+Every reference is `$steps.<id>.output` with a path, or `$settings.<key>`, as the grammar allows
+(`references.ts:33-38`). `sendBack` and `discard` are always `false` in F1, with their reasons. If the builder
+changed nothing, `set-aside` answers `{ how: nothing }` with no commit, `$steps.keep-work.output.commit` resolves
+to nothing, and step `prove` fails with that sentence (`references.ts:89-103`): the run ends, and the owner reads
+why. `carry-out` on merge calls `worktrees.cut` with `<name>-merge` at the head, then `worktrees.merge` into
+`into`; on keep it calls nothing. A rejected card 1 fails the run before anything is cut.
+
+### Done by hand for now
+
+| What | Who | Until |
+|---|---|---|
+| `settings.forge.into` and `settings.forge.practices` in `agentbay.config.yaml` (closed to every agent, `guard-input.ts:7`) | the owner, through the coordinator | TP1 for practices; `into` stays a setting |
+| `bay build` after F1 merges, so the build agent's roots are written | the reviewer | each change of forge's manifest |
+| The kit's checkout detached before a run whose merge may be taken, and switched back to the integration branch after | the reviewer | WM1 |
+| `worktrees.remove` of `.forge/worktrees/<slice>` and `<slice>-merge` after the switch back; `git branch -D forge/wip/<slice>/1` | the reviewer | WC1 and WM1 |
+| Discard: `git worktree remove --force`, `git branch -D`, then `worktrees.remove` so the mode forgets the folder (`remove.ts:62-65`) | the reviewer | WD1 |
+| Send back: a new run with a new slice name, the findings in the slice's items | the reviewer | F2 |
+| Judging the judgement items | the owner | RV1 |
+| Writing the bugs to inject | the reviewer | P3 makes them count |
+
+### Its tests, with no model
+
+As the runs tests do, the test answers each skill step itself (`tests/test-toolbox.ts:91`, `answer(token,
+output)`), plays the builder by writing files into the worktree before it answers `build`, and decides each
+approval as the owner would (after TT1, with a choice). The project is a temporary git repository holding the kit's
+base modes, and a stand-in proof mode that the test writes into the project, as proof's own test writes a stand-in
+toolchain (`components/base/proof/tests/copies.test.ts:20-40`); it implements `proof@1` and answers the verdicts
+the test put in a file. Cases in `tests/one-slice.test.ts`:
+
+1. Every verdict passed: merge is offered; taking it merges `forge/<slice>-merge` into a branch `integration`
+   that nobody has checked out, and `integration`'s tree holds the files the test wrote as the builder.
+2. One `must` item inconclusive: merge is withheld with draw's reason; asking for merge is refused with that
+   reason; keep leaves `forge/<slice>` and `forge/wip/<slice>/1`.
+3. Card 1 rejected: the run fails and no branch `forge/<slice>` exists.
+4. The builder answers `stopped`: the card says so in a computed line and withholds merge.
+5. A declaration naming a file outside the scope is sent back by its check, round 2 has the feedback.
+6. The cards: no line cites `build`; every verdict line is `computed` and cites `prove`; each judgement item is a
+   "not judged" line; a changed `components/base/<mode>/mode.yaml` or a path under `bay/`, `adapters/` or
+   `schemas/` gets a line of its own; the card is at most 44 columns as printed.
+7. The build agent's root: forge's manifest names exactly `.forge/worktrees/` to write, and nothing else.
+
+`tests/cards.test.ts` holds the pure part: for each combination of verdicts, the three rules and the reasons,
+and the lines of both cards for TR2's verdicts, literally.
+
+## 5. Both cards for TR2, as F1's cut would show them
+
+Drawn with the kernel's own wrapping (`bay/trust-card.ts:48`, `:63-94`; `approval-card.ts:17-81`): a mark padded to
+nine columns, continued lines indented two more, 44 columns. The hashes are examples; `1,374` is an example of
+the test count. Above each card `bay runs` prints the run's line and below it the command to decide
+(`run-report.ts:93-98`), which may be wider than 44.
+
+Card 1, at step `start`. No choices: approve or reject.
+
+```
+Build slice TR2?
+computed The broker says why a list is not
+computed   in force, and reads the record
+computed   again before each command
+computed kind capability; base c7f0d13
+computed scope: bay/broker/** and 6 more
+computed   paths
+computed after TR1: ModeGrants.listTrust and
+computed   readTrustRecord, which the broker
+computed   reads
+computed 10 items: 8 name a kind of proof, 2
+computed   are judgement
+computed judgement, by you: 1b, 6b
+checked: 0 ran, 6 computed, 0 judged
+hash 9c41e07b52aa
+```
+
+Every line cites `{ step: slice }`, a script step that ran no skill. The words of the first line are the planned
+slice's title, written by whoever wrote the plan, not by a builder. Card 1 does not say which kinds proof can
+judge today: forge cannot read proof's table (`proof/scripts/kinds.ts:15-28`), and a copy of it in forge would go
+stale with each P slice. The owner learns it from card 2.
+
+Card 2, at step `card`.
+
+```
+Merge TR2 into feat/0022-agentbay5?
+computed 11 files changed; the work is set
+computed   aside on forge/wip/TR2/1
+computed checks passed: typecheck, lint,
+computed   format:check, deadcode
+computed tests passed: 1,374
+computed DOD-TR2-1, 3, 4: the named tests
+computed   failed on the base and pass on
+computed   the head
+computed not known, kind not built:
+computed   DOD-TR2-2, 5, 6a, 7, scope,
+computed   declared
+computed not judged, for you: DOD-TR2-1b the
+computed   sentences say what the owner does
+computed not judged, for you: DOD-TR2-6b the
+computed   copy-paste count does not rise
+computed size in lines: bay/ +107, tests/
+computed   +393, framework/ +1
+Choose one:
+  merge      Merge into feat/0022-agentbay5
+             not offered: 4 must items,
+             scope and declared are not
+             known.
+  send-back  Round 2, a fresh builder
+             not offered: rounds come with
+             slice F2.
+  keep       Stop; the branches stay
+  discard    Stop; the worktree goes
+             not offered: discarding comes
+             with slice WD1.
+checked: 0 ran, 8 computed, 0 judged
+hash 51d0aa3e9c7f
+```
+
+| Line | Cites | Comes from |
+|---|---|---|
+| 11 files changed | `draw` | proof's `size` list and set-aside's branch |
+| checks passed | `prove` | DOD-TR2-8's detail (`kinds/checks.ts:42-48`) |
+| tests passed | `prove` | the same detail |
+| DOD-TR2-1, 3, 4 | `prove` | the three `fails-first` verdicts |
+| not known | `prove` | the six inconclusive verdicts, by item |
+| not judged (two lines) | `draw` | proof's `judgement` list and the items' own words in the slice |
+| size in lines | `draw` | proof's `size`, summed by top folder |
+
+A line that restates a verdict cites `prove`; a line forge computes from several outputs cites `draw`. Both ran no
+skill, so both are `computed`. The choice sentences are the workflow's `does`, beside each name
+(`workflow.schema.json:81-85`). The reasons are `draw`'s, one for each choice whose rule is false and no other
+(`choices.ts:112`). The kernel's tier line ("judged by forge skills/review, tier deep",
+`approval-card.ts:30-39`) appears only on a card with a judged line, so on neither of these. Merge's sentence names
+the branch because `draw` writes the title and reasons from `into`; the choice's `does` is fixed in the workflow, so
+it says "the integration branch" there. If the suite ran out of time, the second and third lines become one
+"not known" line for DOD-TR2-8 and merge's reason counts 5 must items.
+
+With RN1 and P2 to P5 merged, the same card would read like C1p's literal (`tests/run-report.test.ts:126-162`):
+`ran` lines with what `run-tests` printed, and merge offered when every verdict passed.
+
+## 6. What the owner should try in his first live session, once F1 is built
+
+The owner has no terminal; the coordinator runs each command and shows him what it prints (adapter `README.md:36`).
+
+1. Ask the coordinator to run `./bay.sh check` in the kit. Look for: forge and proof active, `proof` bound, no
+   mode waiting for trust. Then `./bay.sh build`, and ask to see the build agent's write paths in
+   `.agentbay/steps.json`: only `.forge/worktrees`.
+2. Through the coordinator, set `settings.forge.into: feat/0022-agentbay5` and
+   `settings.forge.practices: [components/base/typescript/practices.md, framework/practices.md]`.
+3. Ask the reviewer to detach the kit's checkout (`git switch --detach`) for the session, and to confirm
+   `.forge/` is not read by `npm run lint` (section 3).
+4. Start a replay of TR2, a slice whose result is known: `./bay.sh call --workflow
+   forge:workflows/one-slice.yaml "$(cat tr2-replay.json)"`, with the trigger of section 1.
+5. Read card 1 against section 5. Every line should say `computed`, and nothing should come from a builder.
+   Approve with the hash it shows.
+6. When the run waits at `declare`, let the coordinator hand the task to `agentbay-forge-declare`. Then at
+   `build`, to `agentbay-forge-build`. While it works, ask it to write one file outside its worktree, such as
+   `bay/x.ts`: the hook should refuse with a sentence naming `.forge/worktrees`. Ask it to run `npm test`: it has
+   no shell to run it with.
+7. Wait for `prove`: about 16 minutes on this machine, longer beside a builder's suite. `./bay.sh runs <id>`
+   meanwhile shows the step it is on.
+8. Read card 2 against section 5. Try `--choice merge`: it should be refused with the reason the card shows.
+   Choose `keep`.
+9. Ask the reviewer to check what is left: `git branch --list 'forge/*'` shows `forge/TR2` and
+   `forge/wip/TR2/1`; `git diff c9bb216 forge/wip/TR2/1 --stat` shows how far the replayed build is from the
+   real TR2. Then clean up by hand (section 4) and switch the checkout back.
+10. Once P2 has merged, repeat with a small new slice whose items are all `checks` and `fails-first`, and choose
+    merge when it is offered. That is the first slice forge carries with the reviewer only watching.
+
+## 7. Report
+
+**The missing capabilities, most blocking first.**
+
+1. TT1: the test toolbox cannot take a choice or show a card, so F1 cannot be tested. Small; F1 waits.
+2. P2 (planned): until it merges, `scope` and `declared` are inconclusive and merge is withheld on every slice.
+3. WM1: `worktrees.merge` refuses the integration branch, which the kit's checkout has checked out; F1 as planned.
+4. WC1: no action commits a worktree to its own branch, and the builder has no shell; the cut uses `set-aside`.
+5. WD1: nothing discards an unmerged worktree, and a slice cannot be cut again by name; F2 waits.
+6. RV1: no skill in the plan judges judgement items; the owner does, from "not judged" lines.
+7. RN1a, RN1b: forge cannot name a toolchain's commands, so no `ran` line; verdicts are marked `computed`.
+8. WR1: write roots are per mode and skill, not per run; F4's two builders could write each other's worktree.
+9. C3's premise: no skill step can ask for tests; C3's brief must say how one would.
+10. TP1: describe's practices path is relative to a folder forge cannot learn; forge's settings carry it.
+
+**What I could not find evidence for.** The 945 seconds of `prove` on TR2: no report note in this branch records
+it; the figure is the brief's. Whether a `ran` line citing a command recorded by a nested call passes the card
+check: by reading yes, held by no test. Whether the kit's `eslint` and `node --test` read `.forge/worktrees/`.
+What `worktrees.copy` does with a copy left by a killed proof script. How long `fails-first` takes on TR2's named
+test files. Whether TR2's head has `generate:check` (the checks line lists four checks; describe decides).
+
+**What I did not read.** The three forge designs beyond the lines cited (`B-owner.md`, most of `A-smallest.md`
+and `C-seams.md`), `calling-a-toolchain.md`, `modes-beside-the-kit.md`, ADRs 16, 18, 19, 21 and 23 beyond one
+line, the proof designs B and C beyond section 3 of C, `interface-open-questions.md`, `toolbox-for-plans.md`,
+the briefs other than TR2's and FD1, the broker's operation table beyond the command record, the sqlite run store,
+`bay/mcp.ts`, the adapter's `build.ts` and `settings.ts`, the git-worktrees scripts other than cut, merge and
+remove, and proof's `checks.ts` and `fails-first.ts` beyond the calls they make.

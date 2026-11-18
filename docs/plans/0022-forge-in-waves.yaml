@@ -1,0 +1,489 @@
+title: Forge, from here to the todo mode
+slices:
+  - title: The kit's typescript and git-worktrees modes pass their shared tests from a project that is not the kit; the practices path is true in both places; the test time ceiling fits the measured suite; the capture's fixtures move into the repository
+    slice:
+      name: T1
+      kind: mode
+      scope:
+        - components/base/typescript/**
+        - components/base/interfaces/toolchain/**
+        - components/base/git-worktrees/tests/**
+        - tests/made-up-toolchains*.ts
+        - tests/shared-tests-in-a-project.test.ts
+        - tests/capture-fixtures.test.ts
+        - tests/fixtures/**
+        - docs/designs/forge/modes-beside-the-kit.md
+        - docs/designs/forge/toolchain-open-questions.md
+        - CONTEXT.md
+        - knip.json
+        - tsconfig.json
+      after: []
+      done:
+        - id: DOD-T1
+          says: Every item of the definition of done in docs/briefs/T1-a-toolchain-in-any-project.md holds.
+          level: must
+
+  - title: "proof@1: one action, the kinds as data, the form of a slice in its request, a shared test, a made-up proof that passes it and wrong proofs that each fail one case"
+    slice:
+      name: I1
+      kind: interface
+      scope:
+        - components/base/interfaces/proof.yaml
+        - components/base/interfaces/proof/**
+        - tests/made-up-proofs*.ts
+        - tests/made-up-toolchains.test.ts
+        - tests/kit-copy.ts
+        - docs/designs/proof/interface-open-questions.md
+        - CONTEXT.md
+        - framework/features.yaml
+        - knip.json
+      after: []
+      done:
+        - id: DOD-I1
+          says: Every item of the definition of done in docs/briefs/I1-the-proof-interface.md holds.
+          level: must
+
+  - title: A workflow's approval names choices, each with a rule; the kernel withholds a choice whose rule is false and refuses it; the kernel checks where each line of a card came from by the kind of step
+    slice:
+      name: C1r
+      kind: capability
+      scope:
+        - bay/runs/**
+        - bay/contracts.ts
+        - bay/generated/workflow.ts
+        - bay/manifests/references.ts
+        - schemas/workflow.schema.json
+        - tests/approval-card-kit.test.ts
+        - tests/runs-cards.test.ts
+        - tests/runs-choices.test.ts
+        - tests/runs-fixture.ts
+        - docs/designs/proof/C1r-what-an-approval-shows.md
+        - framework/features.yaml
+        - CONTEXT.md
+      after: []
+      done:
+        - id: DOD-C1r
+          says: Every item of the definition of done in docs/briefs/C1r-an-approval-with-named-choices-and-a-checked-card.md holds.
+          level: must
+
+  - title: A card is printed as lines, not JSON; bay approve takes the choice
+    slice:
+      name: C1p
+      kind: capability
+      scope:
+        - bay/run-report.ts
+        - bay/approval-card.ts
+        - bay/trust-card.ts
+        - bay/commands/*.ts
+        - bay/generated/workflow.ts
+        - bay/runs/choices.ts
+        - bay/runs/step-detail.ts
+        - schemas/workflow.schema.json
+        - adapters/claude-code/coordinator.ts
+        - tests/approval-card-kit.test.ts
+        - tests/approve-choices.test.ts
+        - tests/coordinator-commands.test.ts
+        - tests/run-report.test.ts
+        - tests/runs-choices.test.ts
+        - framework/features.yaml
+      after:
+        - slice: C1r
+          because: It prints the choices and the card that C1r adds to an approval.
+      done:
+        - id: DOD-C1p
+          says: Every item of the definition of done in docs/briefs/C1p-a-card-printed-and-a-choice-taken.md holds.
+          level: must
+
+  - title: The kernel counts the times a step asks for tests and refuses past the limit
+    slice:
+      name: C3
+      kind: capability
+      scope:
+        - bay/runs/**
+        - bay/broker/command-operations.ts
+        - tests/runs-rounds*.ts
+      after:
+        - slice: C1r
+          because: Both change runs, so one after the other.
+      done:
+        - id: DOD-C3
+          says: A step that asks for tests more often than its limit allows is refused by the kernel, and a test shows it.
+          level: must
+
+  - title: "Proof: its folder, manifest and table of kinds; the checks pass; a test fails on the base and passes on the slice. Copy, call, remove"
+    slice:
+      name: P1
+      kind: mode
+      scope:
+        - components/base/proof/**
+        - agentbay.config.yaml
+        - framework/features.yaml
+        - CONTEXT.md
+      after:
+        - slice: I1
+          because: It implements proof@1, which I1 adds.
+        - slice: T1
+          because: It runs the kit's suite through the typescript mode, whose ceiling T1 fits to the suite.
+        - slice: KL1
+          because: Its step runs longer than eight minutes, which KL1 allows.
+      done:
+        - id: DOD-P1
+          says: Every item of the definition of done in docs/briefs/P1-the-proof-mode-and-its-first-two-kinds.md holds.
+          level: must
+
+  - title: "Waves from a plan file: order, disjoint scopes, longest chain, builders per wave, the table drawn; a plan where every slice waits is sent back"
+    slice:
+      name: W1
+      kind: mode
+      scope:
+        - components/base/forge/**
+        - docs/plans/0022-forge-in-waves.yaml
+        - docs/plans/0022-forge-in-waves.md
+        - agentbay.config.yaml
+        - framework/features.yaml
+        - CONTEXT.md
+      after:
+        - slice: I1
+          because: A plan's slice is the slice of proof@1's request, which I1 adds.
+        - slice: TB1
+          because: It reads a YAML file, checks it against a schema and matches paths against patterns with the toolbox, which TB1 gives.
+      done:
+        - id: DOD-W1
+          says: Every item of the definition of done in docs/briefs/W1-waves-from-a-plan-file.md holds.
+          level: must
+
+  - title: "Proof: changes are in scope; files outside are untouched; what changed matches the declaration; size"
+    slice:
+      name: P2
+      kind: mode
+      scope:
+        - components/base/proof/scripts/kinds/in-scope.ts
+        - components/base/proof/scripts/kinds/as-declared.ts
+        - components/base/proof/tests/in-scope.test.ts
+        - components/base/proof/tests/as-declared.test.ts
+        - components/base/proof/tests/prove.example.json
+        - components/base/proof/scripts/kinds.ts
+        - components/base/proof/tests/proof.test.ts
+        - components/base/proof/README.md
+      after:
+        - slice: P1
+          because: It adds its kinds to the folder and the table of kinds that P1 lays out.
+      done:
+        - id: DOD-P2
+          says: Every item of the definition of done in docs/briefs/P2-P5-the-other-kinds-of-proof.md holds for the kinds in-scope and as-declared.
+          level: must
+
+  - title: "Proof: injected bugs are caught, in a throwaway copy, each run naming the test files that cover it, with a time limit"
+    slice:
+      name: P3
+      kind: mode
+      scope:
+        - components/base/proof/scripts/kinds/bugs-caught.ts
+        - components/base/proof/tests/bugs-caught.test.ts
+        - components/base/proof/scripts/kinds.ts
+        - components/base/proof/tests/proof.test.ts
+        - components/base/proof/README.md
+      after:
+        - slice: P1
+          because: It calls tests as P1 does, from the folder and the table of kinds that P1 lays out.
+      done:
+        - id: DOD-P3
+          says: Every item of the definition of done in docs/briefs/P2-P5-the-other-kinds-of-proof.md holds for the kind bugs-caught.
+          level: must
+
+  - title: "Proof: output is unchanged, or changed only as the plan says; the real thing runs in a fresh project with literal expected output"
+    slice:
+      name: P4
+      kind: mode
+      scope:
+        - components/base/proof/scripts/kinds/same-output.ts
+        - components/base/proof/scripts/kinds/real-thing.ts
+        - components/base/proof/tests/same-output.test.ts
+        - components/base/proof/tests/real-thing.test.ts
+        - components/base/proof/scripts/kinds.ts
+        - components/base/proof/tests/proof.test.ts
+        - components/base/proof/README.md
+      after:
+        - slice: P1
+          because: It adds its kinds to the folder and the table of kinds that P1 lays out.
+      done:
+        - id: DOD-P4
+          says: Every item of the definition of done in docs/briefs/P2-P5-the-other-kinds-of-proof.md holds for the kinds same-output and real-thing.
+          level: must
+
+  - title: "Proof: no new boundary break, duplicate or dead code; the counts that may not rise"
+    slice:
+      name: P5
+      kind: mode
+      scope:
+        - components/base/proof/scripts/kinds/count.ts
+        - components/base/proof/tests/count.test.ts
+        - components/base/proof/scripts/kinds.ts
+        - components/base/proof/tests/proof.test.ts
+        - components/base/proof/README.md
+      after:
+        - slice: P1
+          because: It adds its kind to the folder and the table of kinds that P1 lays out.
+      done:
+        - id: DOD-P5
+          says: Every item of the definition of done in docs/briefs/P2-P5-the-other-kinds-of-proof.md holds for the kind count.
+          level: must
+
+  - title: "Forge: one workflow from an approved slice through a builder in a worktree, proof, the merge card with its choices, and the merge"
+    slice:
+      name: F1
+      kind: mode
+      scope:
+        - components/base/forge/mode.yaml
+        - components/base/forge/README.md
+        - components/base/forge/workflows/slice.yaml
+        - components/base/forge/skills/build/**
+        - components/base/forge/scripts/card.ts
+        - components/base/forge/schemas/card*.json
+        - components/base/forge/tests/slice.test.ts
+      after:
+        - slice: P1
+          because: The merge card shows proof's verdicts.
+        - slice: P2
+          because: The merge card shows the verdicts on scope and on the declaration.
+        - slice: C1p
+          because: The workflow stops on a card the owner reads and answers with a choice.
+        - slice: W1
+          because: It reads a slice from a plan file in the forge mode that W1 starts.
+        - slice: MN1
+          because: A judged line on the merge card names the model, which MN1 gives the kernel.
+      done:
+        - id: DOD-F1
+          says: An approved slice goes through a builder, proof, the merge card and the merge, and a test shows each stop.
+          level: must
+
+  - title: "Forge: send back to a fresh builder with the findings; two rounds, then the owner; the card shows spill and cost"
+    slice:
+      name: F2
+      kind: mode
+      scope:
+        - components/base/forge/workflows/build.yaml
+        - components/base/forge/scripts/rounds.ts
+        - components/base/forge/scripts/merge-card.ts
+        - components/base/forge/tests/rounds.test.ts
+      after:
+        - slice: F1
+          because: It extends the workflow F1 adds.
+        - slice: C3
+          because: The kernel counts the times a step asks for tests.
+        - slice: P3
+          because: The merge card shows whether injected bugs were caught.
+        - slice: P4
+          because: The merge card shows whether output is unchanged.
+        - slice: P5
+          because: The merge card shows the counts that may not rise.
+      done:
+        - id: DOD-F2
+          says: A slice sent back twice goes to the owner, and the card shows spill and cost, each shown by a test.
+          level: must
+
+  - title: "Forge: restate, propose interfaces, plan in waves, challenge by another model, the first card"
+    slice:
+      name: F3
+      kind: mode
+      scope:
+        - components/base/forge/workflows/before.yaml
+        - components/base/forge/skills/restate/**
+        - components/base/forge/skills/propose/**
+        - components/base/forge/skills/plan/**
+        - components/base/forge/skills/challenge/**
+        - components/base/forge/scripts/plan-card.ts
+        - components/base/forge/tests/before.test.ts
+      after:
+        - slice: F1
+          because: It hands an approved slice to the workflow F1 adds.
+      done:
+        - id: DOD-F3
+          says: A request in prose becomes a card that shows interfaces, then a plan that forge.waves accepts.
+          level: must
+
+  - title: "Forge runs a wave: two builders in two worktrees on disjoint scopes, merged in order"
+    slice:
+      name: F4
+      kind: mode
+      scope:
+        - components/base/forge/workflows/wave.yaml
+        - components/base/forge/tests/wave.test.ts
+      after:
+        - slice: F2
+          because: One slice goes end to end first.
+        - slice: F3
+          because: It takes its waves from a plan that F3 writes.
+      done:
+        - id: DOD-F4
+          says: Two builders work one wave in two worktrees on disjoint scopes, and their slices are merged in order.
+          level: must
+
+  - title: The todo mode, asked for in prose, built by forge
+    slice:
+      name: X1
+      kind: mode
+      scope:
+        - components/modes/todo/**
+        - components/base/interfaces/todo.yaml
+        - components/base/interfaces/todo/**
+      after:
+        - slice: F4
+          because: Forge is whole.
+      done:
+        - id: DOD-X1
+          says: The todo mode works in a fresh project, and the owner was stopped twice.
+          level: must
+
+  - title: An action may let its script steps run longer than eight minutes, up to 1,800 seconds; commands get what is left; toolchain@1's ceiling rises to 1,000 seconds
+    slice:
+      name: KL1
+      kind: capability
+      scope:
+        - bay/runs/**
+        - bay/broker/command-operations.ts
+        - bay/broker/rule.ts
+        - bay/broker/script-runner.ts
+        - bay/broker/step-broker.ts
+        - bay/check.ts
+        - bay/contracts.ts
+        - bay/generated/mode.ts
+        - bay/manifests/spec.ts
+        - schemas/mode.schema.json
+        - components/base/interfaces/toolchain/check-request.json
+        - components/base/interfaces/toolchain/test-request.json
+        - components/base/interfaces/toolchain/tests/shared.ts
+        - components/base/typescript/README.md
+        - components/base/typescript/mode.yaml
+        - components/base/typescript/tests/**
+        - docs/designs/forge/toolchain-open-questions.md
+        - tests/check.test.ts
+        - tests/inside/broker/script-command.test.ts
+        - tests/kit-check.test.ts
+        - tests/made-up-toolchains.test.ts
+        - tests/manifests-schemas.test.ts
+        - tests/runs-actions.test.ts
+        - tests/script-runner*.ts
+        - tests/shared-tests-in-a-project.test.ts
+        - tests/step-time-limits.test.ts
+        - tests/unexpected-errors.test.ts
+        - framework/features.yaml
+      after:
+        - slice: T1
+          because: T1 found that a script step is stopped at eight minutes, so the kit's own suite could not be judged through its toolchain.
+      done:
+        - id: DOD-KL1
+          says: Every item of the definition of done in docs/briefs/KL1-a-script-step-may-run-longer.md holds.
+          level: must
+
+  - title: The broker reserves the event kinds the kernel itself reads (run.asked-by, tool.called, budget.exceeded)
+    slice:
+      name: EK1
+      kind: capability
+      scope:
+        - bay/broker/other-operations.ts
+        - tests/broker-event-kinds.test.ts
+      after:
+        - slice: C1r
+          because: C1r found that a script can write them; one changes what the owner reads while a run waits for budget.
+      done:
+        - id: DOD-EK1
+          says: A script that emits an event kind the kernel reads is refused, and a test shows it for each of the three.
+          level: must
+
+  - title: The adapter tells the kernel which model each tier is, so a judged line on a card names the model
+    slice:
+      name: MN1
+      kind: capability
+      scope:
+        - adapters/claude-code/**
+        - schemas/config.schema.json
+        - bay/generated/config.ts
+        - bay/runs/card.ts
+        - tests/model-names*.test.ts
+      after:
+        - slice: C1p
+          because: The owner chose that the kernel adds the model's name to the card C1p prints.
+      done:
+        - id: DOD-MN1
+          says: A judged line on a card names the model of its skill's tier, and a test shows it.
+          level: must
+
+  - title: The kernel compiles each schema once; the cost of starting a script host is measured and cut where it is safe
+    slice:
+      name: KS1
+      kind: capability
+      scope:
+        - bay/manifests/spec.ts
+        - bay/broker/script-runner.ts
+        - bay/broker/script-host.ts
+        - bay/broker/step-broker.ts
+        - tests/script-runner.test.ts
+        - tests/manifests-schemas.test.ts
+        - docs/research/2026-11-17-suite-time.md
+      after: []
+      done:
+        - id: DOD-KS1
+          says: Every item of the definition of done in docs/briefs/KS1-the-kernel-compiles-a-schema-once.md holds.
+          level: must
+
+  - title: A throwaway copy is a repository of its own, so tools and the kit's own tests see its files
+    slice:
+      name: WT1
+      kind: mode
+      scope:
+        - components/base/git-worktrees/**
+        - components/base/interfaces/worktrees/**
+        - tests/made-up-worktrees*.ts
+        - docs/designs/forge/worktrees-open-questions.md
+        - docs/designs/forge/toolchain-open-questions.md
+        - CONTEXT.md
+      after:
+        - slice: KL1
+          because: "KL1's real run showed that in a copy git lists no files, bay sees an empty project and 34 of the kit's tests fail."
+      done:
+        - id: DOD-WT1
+          says: Every item of the definition of done in docs/briefs/WT1-a-copy-is-a-repository-of-its-own.md holds.
+          level: must
+
+  - title: The toolbox reads YAML to a value, checks a value against a schema, and matches a path against a pattern
+    slice:
+      name: TB1
+      kind: capability
+      scope:
+        - bay/sdk.ts
+        - bay/answers.ts
+        - bay/kernel.ts
+        - bay/schema-files.ts
+        - bay/value-check.ts
+        - bay/yaml-text.ts
+        - bay/broker/operations.ts
+        - bay/broker/rule.ts
+        - bay/broker/schema-operations.ts
+        - bay/broker/script-preload.ts
+        - bay/broker/script-protocol.ts
+        - bay/broker/script-runner.ts
+        - bay/broker/step-broker.ts
+        - bay/manifests/*.ts
+        - components/base/git-worktrees/tests/root-guard.test.ts
+        - components/base/interfaces/proof/prove-request.json
+        - docs/designs/proof/toolbox-for-plans.md
+        - tests/broker-*.ts
+        - tests/inside/broker/*.ts
+        - tests/made-up-proofs.ts
+        - tests/manifests-yaml-limits.test.ts
+        - tests/path-match.test.ts
+        - tests/schema-check.test.ts
+        - tests/schema-references.test.ts
+        - tests/script-runner*.ts
+        - tests/secrets.test.ts
+        - tests/toolbox-surface.test.ts
+        - tests/unexpected-errors.test.ts
+        - tests/yaml-text.test.ts
+        - framework/features.yaml
+        - CONTEXT.md
+      after: []
+      done:
+        - id: DOD-TB1
+          says: Every item of the definition of done in docs/briefs/TB1-the-toolbox-reads-yaml-checks-a-value-and-matches-a-path.md holds.
+          level: must

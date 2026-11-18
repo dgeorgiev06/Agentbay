@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WavesResponse",
+  "description": "What forge.waves worked out from a plan file, as data and as lines the owner reads; or why it could not read the plan.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["answer", "title", "slices", "waves", "notPlaced", "longestChain", "problems", "lines"],
+      "description": "The plan was read: its table, its waves, its longest chain and every problem found.",
+      "properties": {
+        "answer": { "const": "worked out" },
+        "title": { "type": "string", "description": "The plan's title." },
+        "slices": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/row" },
+          "description": "The table of slices, in the plan's order."
+        },
+        "waves": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/wave" },
+          "description": "The waves, first to last. Slices in one wave have no order between them and scopes that share no path."
+        },
+        "notPlaced": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "The slices in a cycle, or after one, which no wave can hold."
+        },
+        "longestChain": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "The names of the longest run of slices each of which comes after the one before."
+        },
+        "problems": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/problem" },
+          "description": "Every problem found, each with its sentence. A plan with an error is sent back."
+        },
+        "lines": { "$ref": "#/$defs/lines" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["answer", "problems", "lines"],
+      "description": "The plan could not be read, or is not in the form of a plan.",
+      "properties": {
+        "answer": { "const": "refused" },
+        "problems": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["at", "sentence"],
+            "properties": {
+              "at": { "type": "string", "description": "Where in the plan, as a JSON pointer; empty for the whole file." },
+              "sentence": { "type": "string", "description": "What is wrong and what to do." }
+            }
+          },
+          "description": "Every reason the plan was refused."
+        },
+        "lines": { "$ref": "#/$defs/lines" }
+      }
+    }
+  ],
+  "$defs": {
+    "lines": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "What the owner reads, one line each."
+    },
+    "names": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "title", "kind", "scope", "after"],
+      "properties": {
+        "name": { "type": "string" },
+        "title": { "type": "string" },
+        "kind": { "enum": ["interface", "capability", "mode"] },
+        "scope": { "$ref": "#/$defs/names" },
+        "after": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["slice", "because"],
+            "properties": {
+              "slice": { "type": "string" },
+              "because": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "wave": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wave", "slices", "builders"],
+      "properties": {
+        "wave": { "type": "integer", "minimum": 1 },
+        "slices": { "$ref": "#/$defs/names" },
+        "builders": { "type": "integer", "minimum": 1, "description": "How many builders the wave can use: one per slice." }
+      }
+    },
+    "pair": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "type": "string" }
+    },
+    "problem": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "level", "slice", "after", "sentence"],
+          "properties": {
+            "kind": { "const": "after names no slice" },
+            "level": { "const": "error" },
+            "slice": { "type": "string" },
+            "after": { "type": "string" },
+            "sentence": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "level", "slices", "sentence"],
+          "properties": {
+            "kind": { "const": "cycle" },
+            "level": { "const": "error" },
+            "slices": { "$ref": "#/$defs/names" },
+            "sentence": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "level", "slices", "patterns", "example", "sentence"],
+          "properties": {
+            "kind": { "const": "scopes share a path" },
+            "level": { "const": "error" },
+            "slices": { "$ref": "#/$defs/pair" },
+            "patterns": { "$ref": "#/$defs/pair" },
+            "example": { "type": "string" },
+            "sentence": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "level", "slices", "patterns", "sentence"],
+          "properties": {
+            "kind": { "const": "scopes may share a path" },
+            "level": { "const": "error" },
+            "slices": { "$ref": "#/$defs/pair" },
+            "patterns": { "$ref": "#/$defs/pair" },
+            "sentence": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "level", "slice", "feature", "sentence"],
+          "properties": {
+            "kind": { "const": "whole feature" },
+            "level": { "const": "warning" },
+            "slice": { "type": "string" },
+            "feature": { "type": "string" },
+            "sentence": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "level", "sentence"],
+          "properties": {
+            "kind": { "const": "one after another" },
+            "level": { "const": "error" },
+            "sentence": { "type": "string" }
+          }
+        }
+      ]
+    }
+  }
+}

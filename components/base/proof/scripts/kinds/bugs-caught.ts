@@ -1,7 +1,7 @@
-import type { Bug, Request } from "../lib/request.ts";
-import { inCopy, type ProofStep } from "../lib/step.ts";
-import { testRun, type TestRun } from "../lib/toolchain.ts";
 import { broken, held, unknown, type Part, type Parts } from "../lib/verdicts.ts";
+import { testRun, type TestRun } from "../lib/toolchain.ts";
+import { inCopy, type ProofStep } from "../lib/step.ts";
+import type { Bug, Request } from "../lib/request.ts";
 
 export type BugRun =
   | { readonly how: "no copy"; readonly reason: string }

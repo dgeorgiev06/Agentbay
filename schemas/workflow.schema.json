@@ -72,6 +72,17 @@
         "minutes": { "description": "The most minutes the run may take.", "type": "number", "minimum": 0 }
       }
     },
+    "choice": {
+      "description": "One named answer of an approval. Without a rule it is always offered.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "when": {
+          "description": "The rule: an earlier step's output, $steps.<id>.output with an optional path, that is true or false. When it is false the choice is withheld, and what the step shows gives the reason under withheld.<choice>. A rule that is neither fails the step.",
+          "$ref": "#/$defs/reference"
+        }
+      }
+    },
     "step": {
       "description": "One step: an action, an approval, a wait or a foreach.",
       "oneOf": [
@@ -108,6 +119,19 @@
             "show": {
               "description": "What the owner approves; without it, the output of the step before.",
               "$ref": "#/$defs/reference"
+            },
+            "choices": {
+              "description": "The named answers the owner may give, in order; without it, the owner approves or rejects. The choice taken is the step's output as choice, beside what it showed as content.",
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": { "$ref": "#/$defs/name" },
+              "additionalProperties": { "$ref": "#/$defs/choice" }
+            },
+            "quotes": {
+              "description": "The ids of earlier action steps whose skills a card's judged lines may cite.",
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/name" }
             },
             "id": {
               "description": "The step's id, unique in the whole file; its output is saved under it.",

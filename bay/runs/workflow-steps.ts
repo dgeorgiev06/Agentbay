@@ -1,13 +1,15 @@
 import { nestedTarget, runNestedAction } from "./action-steps.ts";
 import { noSpend, subtractSpend, type BudgetFrame } from "./budget.ts";
-import type { Json } from "../contracts.ts";
+import type { Json, Settled } from "../contracts.ts";
 import type { Step as WorkflowStep } from "../generated/workflow.ts";
 import { toJson } from "../json.ts";
-import { problemText, succeededWith } from "../outcome.ts";
+import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
 import type { ReferenceScope, WorkflowTarget } from "../manifests/manifests.ts";
 import type { StepRecord } from "./run-store.ts";
+import { checkedCard, type StepSeen } from "./card.ts";
+import { evaluatedChoices, reasonProblems, shownChoices, type ChoiceStatus } from "./choices.ts";
 import { approvalContentOf, type ApprovalContent } from "./scrubbed-store.ts";
-import type { ApprovalDetail } from "./step-detail.ts";
+import type { ApprovalDetail, ApprovalVerdict } from "./step-detail.ts";
 import { foreachItemKey, workflowStepKey } from "./step-key.ts";
 import {
   changeDetail,
@@ -31,6 +33,7 @@ type WorkflowScope = {
   readonly within: string;
   readonly trigger: Json;
   readonly outputs: Map<string, Json>;
+  readonly keys: Map<string, string>;
   readonly item: Json | undefined;
 };
 
@@ -61,6 +64,19 @@ type UnsettledStep<T> = StepAt<T> & {
 type Shown = ApprovalContent & {
   readonly detail: ApprovalDetail;
 };
+
+type ShownAt = {
+  readonly step: ApprovalStep;
+  readonly content: Json;
+  readonly choices: readonly ChoiceStatus[] | undefined;
+};
+
+type Settling = {
+  readonly at: StepAt<ApprovalStep>;
+  readonly shown: Shown;
+};
+
+type ShownParts = Pick<ApprovalDetail, "choices" | "card">;
 
 const unitMilliseconds: ReadonlyMap<string, number> = new Map([
   ["m", 60_000],
@@ -97,7 +113,7 @@ async function runWorkflowAction(walk: Walk, scope: WorkflowScope, at: Unsettled
 }
 
 function approvalWaiting(at: StepAt<ApprovalStep>, detail: ApprovalDetail, content: Json): Progress {
-  const previousHash = detail.previousHash;
+  const { previousHash, choices, card } = detail;
   return waiting({
     reason: "approval",
     stepKey: at.key,
@@ -105,6 +121,48 @@ function approvalWaiting(at: StepAt<ApprovalStep>, detail: ApprovalDetail, conte
     hash: detail.hash,
     content,
     ...(previousHash === undefined ? {} : { previousHash }),
+    ...(choices === undefined ? {} : { choices: shownChoices(choices, content) }),
+    ...(card === undefined ? {} : { card }),
+  });
+}
+
+function evaluatedRules(scope: WorkflowScope, step: ApprovalStep): Outcome<readonly ChoiceStatus[] | undefined> {
+  if (step.choices === undefined) {
+    return succeededWith(undefined);
+  }
+  const resolve = (rule: string): Outcome<Json> => scope.workflow.resolve(rule, referenceScope(scope));
+  return evaluatedChoices({ stepId: step.id, choices: step.choices, resolve });
+}
+
+function stepsSeen(records: ReadonlyMap<string, StepRecord>): ReadonlyMap<string, StepSeen> {
+  return new Map(
+    [...records].map(([key, record]) => {
+      const skill = record.kind === "skill" && record.detail !== null ? record.detail : undefined;
+      return [key, { kind: record.kind, status: record.status, skill }];
+    }),
+  );
+}
+
+async function checkedShown(walk: Walk, scope: WorkflowScope, at: ShownAt): Promise<Outcome<ShownParts>> {
+  const { step, content, choices } = at;
+  const store = walk.services.store;
+  const context = {
+    stepId: step.id,
+    quotes: step.quotes ?? [],
+    keys: scope.keys,
+    steps: stepsSeen(walk.records),
+    events: await store.readEvents(walk.writer.runId),
+    eventsOf: (runId: string) => store.readEvents(runId),
+  };
+  const card = await checkedCard(content, context);
+  const reasons = choices === undefined ? [] : reasonProblems(step.id, choices, content);
+  const problems = [...reasons.map((message) => unplacedProblem(message)), ...(card.ok ? [] : card.problems)];
+  if (problems.length > 0 || !card.ok) {
+    return failedWith(problems);
+  }
+  return succeededWith({
+    ...(choices === undefined ? {} : { choices }),
+    ...(card.value === undefined ? {} : { card: card.value }),
   });
 }
 
@@ -112,11 +170,38 @@ function approvalDetailOf(record: StepRecord): ApprovalDetail | undefined {
   return record.kind === "approval" ? (record.detail ?? undefined) : undefined;
 }
 
-async function settleApproval(walk: Walk, at: StepAt<ApprovalStep>, shown: Shown): Promise<Progress> {
+function decided(at: StepAt<ApprovalStep>, verdict: ApprovalVerdict, content: Json): Settled {
+  switch (verdict.decision) {
+    case "approve":
+      return done(content);
+    case "reject":
+      return failed(`${verdict.by} rejected step ${at.step.id}: ${at.step.approval}`);
+    case "choice":
+      return done({ choice: verdict.choice, content });
+  }
+}
+
+function recordedDetail(at: StepAt<ApprovalStep>, verdict: ApprovalVerdict, hash: string): Json {
+  const { by } = verdict;
+  switch (verdict.decision) {
+    case "approve":
+    case "reject":
+      return { stepKey: at.key, hash, decision: verdict.decision, by };
+    case "choice":
+      return { stepKey: at.key, hash, decision: verdict.decision, choice: verdict.choice, by };
+  }
+}
+
+async function settleApproval(walk: Walk, scope: WorkflowScope, settling: Settling): Promise<Progress> {
+  const { at, shown } = settling;
   const recordedHash = shown.detail.hash;
   if (recordedHash !== shown.hash) {
-    const question = shown.detail.question;
-    const detail = { question, hash: shown.hash, previousHash: recordedHash, shown: shown.content };
+    const { question, choices } = shown.detail;
+    const parts = await checkedShown(walk, scope, { step: at.step, content: shown.content, choices });
+    if (!parts.ok) {
+      return refuse(walk, { key: at.key, kind: "approval", input: shown.content }, problemText(parts.problems));
+    }
+    const detail = { question, hash: shown.hash, previousHash: recordedHash, shown: shown.content, ...parts.value };
     await changeDetail(walk, { key: at.key, kind: "approval", detail });
     return approvalWaiting(at, detail, shown.content);
   }
@@ -124,10 +209,8 @@ async function settleApproval(walk: Walk, at: StepAt<ApprovalStep>, shown: Shown
   if (verdict === undefined) {
     return approvalWaiting(at, shown.detail, shown.content);
   }
-  const { decision, by } = verdict;
-  const recorded = eventOf(walk, "approval.recorded", { stepKey: at.key, hash: shown.hash, decision, by });
-  const settled =
-    decision === "approve" ? done(shown.content) : failed(`${by} rejected step ${at.step.id}: ${at.step.approval}`);
+  const recorded = eventOf(walk, "approval.recorded", recordedDetail(at, verdict, shown.hash));
+  const settled = decided(at, verdict, shown.content);
   return endRecord(walk, { ...settled, key: at.key, spent: noSpend }, [recorded]);
 }
 
@@ -145,11 +228,20 @@ async function runApproval(walk: Walk, scope: WorkflowScope, at: UnsettledStep<A
   const shown = approvalContentOf(content.value, walk.services.scrubber);
   const detail = at.record === undefined ? undefined : approvalDetailOf(at.record);
   if (detail === undefined) {
-    const started = { question: at.step.approval, hash: shown.hash };
-    await startRecord(walk, { key: at.key, kind: "approval", input: shown.content, detail: started });
+    const start = { key: at.key, kind: "approval" as const, input: shown.content };
+    const choices = evaluatedRules(scope, at.step);
+    if (!choices.ok) {
+      return refuse(walk, start, problemText(choices.problems));
+    }
+    const parts = await checkedShown(walk, scope, { step: at.step, content: shown.content, choices: choices.value });
+    if (!parts.ok) {
+      return refuse(walk, start, problemText(parts.problems));
+    }
+    const started = { question: at.step.approval, hash: shown.hash, ...parts.value };
+    await startRecord(walk, { ...start, detail: started });
     return approvalWaiting(at, started, shown.content);
   }
-  return settleApproval(walk, at, { ...shown, detail });
+  return settleApproval(walk, scope, { at, shown: { ...shown, detail } });
 }
 
 async function runWait(walk: Walk, at: UnsettledStep<WaitStep>): Promise<Progress> {
@@ -203,7 +295,7 @@ async function runItems(
   const outputs: Json[] = [];
   for (const [index, item] of loop.items.entries()) {
     const within = foreachItemKey(loop.at.key, index);
-    const inner = { ...scope, within, outputs: new Map(scope.outputs), item };
+    const inner = { ...scope, within, outputs: new Map(scope.outputs), keys: new Map(scope.keys), item };
     const progress = await runWorkflowSteps(walk, inner, { steps: loop.at.step.steps, start: item });
     if (progress.status !== "done") {
       return concludeComposite(walk, {
@@ -260,15 +352,13 @@ export async function runWorkflowSteps(
 ): Promise<Progress> {
   let previous = list.start;
   for (const step of list.steps) {
-    const progress = await runWorkflowStep(walk, scope, {
-      step,
-      key: workflowStepKey(scope.within, step.id),
-      previous,
-    });
+    const key = workflowStepKey(scope.within, step.id);
+    const progress = await runWorkflowStep(walk, scope, { step, key, previous });
     if (progress.status !== "done") {
       return progress;
     }
     scope.outputs.set(step.id, progress.output);
+    scope.keys.set(step.id, key);
     previous = progress.output;
   }
   return done(previous);

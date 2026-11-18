@@ -25,6 +25,8 @@ import {
 } from "./run-store.ts";
 import type { ApprovalDecision, RunStatus } from "./run-state.ts";
 import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
+import { decisionRefusal } from "./choices.ts";
+import type { ApprovalVerdict } from "./step-detail.ts";
 import { scrubbedStore } from "./scrubbed-store.ts";
 import { startedSkillOf, submissionProblems, type StartedSkill } from "./skill-steps.ts";
 import { skillRoundOf } from "./step-key.ts";
@@ -169,6 +171,27 @@ function startedApprovalOf(record: StepRecord | undefined): StartedApproval | un
   return record?.kind === "approval" && record.status === "started" ? record : undefined;
 }
 
+function verdictOf(decision: ApprovalDecision): ApprovalVerdict {
+  const { by } = decision;
+  switch (decision.decision) {
+    case "approve":
+    case "reject":
+      return { decision: decision.decision, by };
+    case "choice":
+      return { decision: decision.decision, choice: decision.choice, by };
+  }
+}
+
+function answeredApproval(run: RunWithSteps, stepKey: string, decision: ApprovalDecision): Outcome<StartedApproval> {
+  const found = waitingApproval(run, stepKey, decision.hash);
+  if (!found.ok) {
+    return found;
+  }
+  const { detail, input } = found.value;
+  const refused = decisionRefusal(stepKey, detail.choices, { answer: decision, shown: detail.shown ?? input });
+  return refused === undefined ? found : refusal(run.id, { message: refused });
+}
+
 function waitingApproval(run: RunWithSteps, stepKey: string, hash: string): Outcome<StartedApproval> {
   const refused = endedRefusal(run) ?? waitingRefusal(run, { reason: "approval", stepKey });
   const record = startedApprovalOf(recordAt(run, stepKey));
@@ -258,6 +281,7 @@ function mainProgress(walk: Walk, run: RunWithSteps, budget: BudgetFrame): Promi
         within: "",
         trigger: run.input,
         outputs: new Map<string, Json>(),
+        keys: new Map<string, string>(),
         item: undefined,
       };
       return runWorkflowSteps(walk, scope, { steps: workflow.workflow.steps, start: run.input });
@@ -334,7 +358,7 @@ export class Engine {
     if (!called.ok) {
       return called;
     }
-    const charged = await this.#chargeSkill(call, called.value.spent);
+    const charged = await this.#chargeSkill(call, called.value);
     return charged.ok ? called : charged;
   }
 
@@ -372,11 +396,11 @@ export class Engine {
 
   approve(runId: string, stepKey: string, decision: ApprovalDecision): Promise<Outcome<AdvancedRun>> {
     return this.#withRun(runId, this.#services.clock.now(), async (run, writer, now) => {
-      const found = waitingApproval(run, stepKey, decision.hash);
+      const found = answeredApproval(run, stepKey, decision);
       if (!found.ok) {
         return found;
       }
-      const detail = { ...found.value.detail, verdict: { decision: decision.decision, by: decision.by } };
+      const detail = { ...found.value.detail, verdict: verdictOf(decision) };
       const change = { key: stepKey, kind: "approval" as const, detail, at: now.toISOString() };
       await this.#services.store.saveStepDetail(writer, change, []);
       return this.#continue(writer, { now, cause: "approve", rerunUnfinished: false }, {});
@@ -436,13 +460,15 @@ export class Engine {
     return this.#start({ target: runTarget, input, limit });
   }
 
-  #chargeSkill(call: SkillCall, spent: Spend): Promise<Outcome<AdvancedRun>> {
+  #chargeSkill(call: SkillCall, called: AdvancedRun): Promise<Outcome<AdvancedRun>> {
     return this.#withRun(call.runId, this.#services.clock.now(), async (run, writer, now) => {
       const found = waitingSkill(run, call.stepKey);
       if (!found.ok) {
         return found;
       }
-      const detail = { ...found.value.detail, calledSpent: addSpend(found.value.detail.calledSpent, spent) };
+      const before = found.value.detail;
+      const calledRuns = [...(before.calledRuns ?? []), called.id];
+      const detail = { ...before, calledSpent: addSpend(before.calledSpent, called.spent), calledRuns };
       const change = { key: found.value.key, kind: "skill" as const, detail, at: now.toISOString() };
       await this.#services.store.saveStepDetail(writer, change, []);
       return this.#advance(writer, { now, cause: "charge", rerunUnfinished: false });

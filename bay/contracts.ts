@@ -5,7 +5,9 @@ export type Json = null | boolean | number | string | readonly Json[] | { readon
 
 export type Effect = "read" | "write" | "network" | "spend" | "delete";
 
-export type Tier = "fast" | "balanced" | "deep";
+export const tiers = ["fast", "balanced", "deep"] as const;
+
+export type Tier = (typeof tiers)[number];
 
 export const measures = ["items", "usd", "tokens", "minutes"] as const;
 

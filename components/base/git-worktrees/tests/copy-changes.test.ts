@@ -7,40 +7,40 @@ import { commitFiles, git, openRepositoryProject, refsAndWorktrees } from "./rep
 
 const folder = ".forge/copies/changed";
 
-const keptAddedGone = [
-  "diff --git a/kept.txt b/kept.txt",
-  "--- a/kept.txt",
-  "+++ b/kept.txt",
+const notesAddedOld = [
+  "diff --git a/notes.txt b/notes.txt",
+  "--- a/notes.txt",
+  "+++ b/notes.txt",
   "@@ -1,2 +1,2 @@",
   " one",
   "-two",
   "+three",
-  "diff --git a/dir/new.txt b/dir/new.txt",
+  "diff --git a/docs/added.txt b/docs/added.txt",
   "new file mode 100644",
   "--- /dev/null",
-  "+++ b/dir/new.txt",
+  "+++ b/docs/added.txt",
   "@@ -0,0 +1 @@",
-  "+new",
-  "diff --git a/gone.txt b/gone.txt",
+  "+added",
+  "diff --git a/old.txt b/old.txt",
   "deleted file mode 100644",
-  "--- a/gone.txt",
+  "--- a/old.txt",
   "+++ /dev/null",
   "@@ -1 +0,0 @@",
   "-gone",
   "",
 ].join("\n");
 
-const keptThenWrong = [
-  "diff --git a/kept.txt b/kept.txt",
-  "--- a/kept.txt",
-  "+++ b/kept.txt",
+const notesThenWrong = [
+  "diff --git a/notes.txt b/notes.txt",
+  "--- a/notes.txt",
+  "+++ b/notes.txt",
   "@@ -1,2 +1,2 @@",
   " one",
   "-two",
   "+three",
-  "diff --git a/gone.txt b/gone.txt",
-  "--- a/gone.txt",
-  "+++ b/gone.txt",
+  "diff --git a/old.txt b/old.txt",
+  "--- a/old.txt",
+  "+++ b/old.txt",
   "@@ -1 +1 @@",
   "-not what the file holds",
   "+changed",
@@ -66,7 +66,7 @@ function copyState(project: ModeProject): readonly string[] {
 
 async function copyOfFiles(project: ModeProject): Promise<string> {
   const commit = await commitFiles(project, {
-    files: { "kept.txt": "one\ntwo\n", "gone.txt": "gone\n", "dir/a.txt": "a\n" },
+    files: { "notes.txt": "one\ntwo\n", "old.txt": "gone\n", "docs/first.txt": "a\n" },
     message: "Files to change",
   });
   await project.output("git-worktrees.copy", { commit: "main", name: "changed" });
@@ -86,47 +86,47 @@ async function withCopy(
 
 test("overlay leaves the copy clean, with one commit more and exactly its files listed", async () => {
   await withCopy(async (project, commit) => {
-    const paths = ["kept.txt", "dir", "missing.txt"];
+    const paths = ["notes.txt", "docs", "missing.txt"];
     assert.deepEqual(await project.output("git-worktrees.overlay", { folder, commit: project.base, paths }), {
       folder,
       placed: [],
-      removed: ["kept.txt", "dir", "missing.txt"],
+      removed: ["notes.txt", "docs", "missing.txt"],
     });
     assert.deepEqual(copyState(project), [
       "",
-      `The paths kept.txt, dir, missing.txt as they are at ${project.base}.\nA throwaway copy of ${commit}.`,
+      `The paths notes.txt, docs, missing.txt as they are at ${project.base}.\nA throwaway copy of ${commit}.`,
     ]);
-    assert.deepEqual(listed(project), [".gitignore", "README.md", "agentbay.config.yaml", "gone.txt"]);
+    assert.deepEqual(listed(project), [".gitignore", "README.md", "agentbay.config.yaml", "old.txt"]);
   });
 });
 
 test("apply leaves the copy clean, with one commit more listing a new file and not a deleted one", async () => {
   await withCopy(async (project, commit) => {
-    await project.output("git-worktrees.apply", { folder, patch: keptAddedGone });
+    await project.output("git-worktrees.apply", { folder, patch: notesAddedOld });
     assert.deepEqual(copyState(project), [
       "",
-      `A patch to kept.txt, dir/new.txt, gone.txt.\nA throwaway copy of ${commit}.`,
+      `A patch to notes.txt, docs/added.txt, old.txt.\nA throwaway copy of ${commit}.`,
     ]);
     assert.deepEqual(listed(project), [
       ".gitignore",
       "README.md",
       "agentbay.config.yaml",
-      "dir/a.txt",
-      "dir/new.txt",
-      "kept.txt",
+      "docs/added.txt",
+      "docs/first.txt",
+      "notes.txt",
     ]);
-    assert.equal(inCopy(project, ["show", "HEAD:kept.txt"]), "one\nthree");
+    assert.equal(inCopy(project, ["show", "HEAD:notes.txt"]), "one\nthree");
   });
 });
 
 test("half a patch is not kept: the copy's files, commits and status are as they were", async () => {
   await withCopy(async (project, commit) => {
     assert.match(
-      await project.failure("git-worktrees.apply", { folder, patch: keptThenWrong }),
+      await project.failure("git-worktrees.apply", { folder, patch: notesThenWrong }),
       /^The patch does not apply to the copy, so nothing was changed: /,
     );
     assert.deepEqual(copyState(project), ["", `A throwaway copy of ${commit}.`]);
-    assert.equal(inCopy(project, ["show", "HEAD:kept.txt"]), "one\ntwo");
+    assert.equal(inCopy(project, ["show", "HEAD:notes.txt"]), "one\ntwo");
     assert.equal(git(project, folder, ["diff", "--stat"]), "");
   });
 });
@@ -142,8 +142,8 @@ test("a copy whose .git now points at the project's repository, or is gone, is r
       if (tampering === "points at the project") {
         await writeFile(gitFolder, `gitdir: ${join(project.root, ".git")}\n`, "utf8");
       }
-      assert.equal(await project.failure("git-worktrees.apply", { folder, patch: keptAddedGone }), refused, tampering);
-      const overlay = { folder, commit: project.base, paths: ["kept.txt"] };
+      assert.equal(await project.failure("git-worktrees.apply", { folder, patch: notesAddedOld }), refused, tampering);
+      const overlay = { folder, commit: project.base, paths: ["notes.txt"] };
       assert.equal(await project.failure("git-worktrees.overlay", overlay), refused, tampering);
     }
     assert.deepEqual([git(project, ".", ["status", "--porcelain=v1"]), refsAndWorktrees(project)], before);
@@ -155,7 +155,7 @@ test("a copy whose own configuration names a filter is refused by apply, and the
     const ran = join(project.root, "filter-ran");
     git(project, folder, ["config", "filter.evil.clean", `sh -c 'touch "${ran}"; cat'`]);
     assert.equal(
-      await project.failure("git-worktrees.apply", { folder, patch: keptAddedGone }),
+      await project.failure("git-worktrees.apply", { folder, patch: notesAddedOld }),
       "The repository's own configuration names filter.evil.clean. git could run the command of such a filter " +
         "or merge driver, so the mode does nothing in this repository until it is removed.",
     );
@@ -178,7 +178,7 @@ test("a copy whose own configuration demands signing gets apply's commit unsigne
     for (const [key, value] of settings) {
       git(project, folder, ["config", key, value]);
     }
-    await project.output("git-worktrees.apply", { folder, patch: keptAddedGone });
+    await project.output("git-worktrees.apply", { folder, patch: notesAddedOld });
     assert.doesNotMatch(inCopy(project, ["cat-file", "commit", "HEAD"]), /^gpgsig/m);
     await assert.rejects(access(ran));
   });

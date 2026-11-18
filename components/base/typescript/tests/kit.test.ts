@@ -13,6 +13,8 @@ const kit = fileURLToPath(new URL("../../../..", import.meta.url));
 
 const copy = "kit-copy";
 
+const secondsForEachCheckWhenThreeSuitesShareTwoCores = 200;
+
 function kitFiles(): readonly string[] {
   const listing = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: kit });
   return listing
@@ -39,7 +41,10 @@ after(async () => {
 });
 
 test("check on a copy of the kit itself finds every check passed", async () => {
-  const output = await project.output("typescript.check", { folder: copy });
+  const output = await project.output("typescript.check", {
+    folder: copy,
+    timeLimitSeconds: secondsForEachCheckWhenThreeSuitesShareTwoCores,
+  });
   const verdicts = listed(output, "verdicts").map((verdict) => withoutSeconds(verdict));
   assert.deepEqual(
     verdicts.map(({ name, verdict }) => ({ name, verdict })),

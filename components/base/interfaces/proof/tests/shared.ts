@@ -210,6 +210,7 @@ const failedHead: Files = {
   "src/main/old.txt": "an old note\n",
   "tests/sum.test.ts": "src/main/sum.txt 5\n",
   "tests/name.test.ts": "src/main/name.txt Ada\n",
+  "tests/total.test.ts": "src/main/sum.txt 6\n",
 };
 
 const notesBefore = [
@@ -380,6 +381,7 @@ const failedRequest: Fields = {
       "src/main/old.txt",
       "docs/old.txt",
       "tests/sum.test.ts",
+      "tests/total.test.ts",
       builderWords,
     ],
     names: nothingNamed(),
@@ -544,9 +546,11 @@ const cases: readonly Case[] = [
     },
   },
   {
-    name: "checks: failed when a check found a fault",
+    name: "checks: failed when a check found a fault and a test failed, and the detail names the check and counts the test",
     run: async (proof) => {
-      assertVerdict(await proof.proven("failed"), "checks-fail", { kind: "checks", verdict: "failed" });
+      const verdict = assertVerdict(await proof.proven("failed"), "checks-fail", { kind: "checks", verdict: "failed" });
+      assert.match(verdict.said, /\blint\b/);
+      assert.match(verdict.said, /\b1\b/);
     },
   },
   {

@@ -25,7 +25,7 @@ function assertFailsOnly(name: string, statement: string): void {
   const tested = ranFor(name);
   assert.equal(tested.status, 1, tested.output);
   assert.deepEqual(failedTests(tested.output), [caseOf(name, statement)]);
-  assert.match(tested.output, /^# pass 34$/m);
+  assert.match(tested.output, /^# pass 35$/m);
 }
 
 before(async () => {
@@ -49,7 +49,7 @@ test("a made-up proof that reaches code only through the toolchain and worktrees
   const tested = ranFor(assay);
   assert.deepEqual(failedTests(tested.output), []);
   assert.equal(tested.status, 0, tested.output);
-  assert.match(tested.output, /^# pass 35$/m);
+  assert.match(tested.output, /^# pass 36$/m);
 });
 
 test("a made-up proof that reads an inconclusive check as passed fails the shared test's case on it", () => {

@@ -47,6 +47,7 @@ type Proof = {
   readonly asked: () => Promise<readonly Asked[]>;
   readonly provenEverywhere: () => Promise<void>;
   readonly outsideTheCopies: () => Promise<Files>;
+  readonly describedByTheMadeUpToolchain: () => Promise<Value>;
   readonly asOpened: Files;
 };
 
@@ -559,6 +560,20 @@ function folderOf(asked: Asked): string {
 }
 
 const cases: readonly Case[] = [
+  {
+    name: "the made-up toolchain answers describe as toolchain@1 requires, so a proof may call describe",
+    run: async (proof) => {
+      assert.deepEqual(await proof.describedByTheMadeUpToolchain(), {
+        language: "Recorded",
+        sourceFiles: ["**"],
+        testFiles: ["tests/**/*.test.ts"],
+        practices: "framework/practices.md",
+        checks: ["format", "lint", "types"],
+        present: ["format", "lint", "types", "test"],
+        missing: [],
+      });
+    },
+  },
   {
     name: "checks: passed when every check and then the test run passed on a copy of the head (TR2, K1)",
     run: async (proof) => {
@@ -1124,6 +1139,8 @@ export const run = defineScript(() =>
     testFiles: ["tests/**/*.test.ts"],
     practices: "framework/practices.md",
     checks: ["format", "lint", "types"],
+    present: ["format", "lint", "types", "test"],
+    missing: [],
   }),
 );
 `,
@@ -1429,6 +1446,7 @@ function proofFor(state: State, mode: string, requests: Readonly<Record<Scenario
       }
     },
     outsideTheCopies: () => entriesOutside(state.project.root, state.project.root),
+    describedByTheMadeUpToolchain: () => state.project.output(`${recorder}.describe`, {}),
     asOpened: state.asOpened,
   };
 }

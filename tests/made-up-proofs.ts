@@ -240,7 +240,7 @@ export function textOf(value: Json, name: string): string {
   return typeof field === "string" ? field : "";
 }
 
-function linksOf(context: ScriptContext): readonly string[] {
+export function linksOf(context: ScriptContext): readonly string[] {
   const links = context.settings.links;
   return Array.isArray(links) ? links.filter((link) => typeof link === "string") : [];
 }
@@ -774,7 +774,8 @@ function modeTest(name: string): string {
 }
 
 const leavesACopyBaseRun = String.raw`async function baseRun(context: ScriptContext, request: Request, tests: readonly string[]): Promise<Part> {
-  const copy = await called(context, "worktrees.copy", { commit: request.base, name: "proof-base-" + String(context.now().getTime()) });
+  const name = "proof-base-" + String(context.now().getTime());
+  const copy = await called(context, "worktrees.copy", { commit: request.base, name, links: linksOf(context) });
   if (!copy.ok) {
     return unknown(copy.reason);
   }
@@ -802,7 +803,8 @@ const worktreeChecks = String.raw`  const cut = await called(context, "worktrees
 
 const codeKindsImport = 'import { called, inCopy, ranIn, testRun, type Copy } from "./calls.ts";';
 
-const codeKindsImportWithText = 'import { called, inCopy, ranIn, testRun, textOf, type Copy } from "./calls.ts";';
+const codeKindsImportWithText =
+  'import { called, inCopy, linksOf, ranIn, testRun, textOf, type Copy } from "./calls.ts";';
 
 const replacements: Readonly<Record<ProofVariant, readonly Replacement[]>> = {
   "proves by the interface": [],

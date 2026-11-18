@@ -533,7 +533,7 @@ function linksOfCopies(asked: readonly Asked[]): readonly (readonly string[])[] 
     .filter((entry) => entry.action === "copy")
     .map((entry) => {
       const links = entry.request.links ?? [];
-      return Array.isArray(links) ? links.map((link) => textOf(link)).sort() : [];
+      return Array.isArray(links) ? links.filter((link): link is string => typeof link === "string").sort() : [];
     });
   const distinct = new Map(linked.map((links) => [JSON.stringify(links), links]));
   return [...distinct.values()];
@@ -1471,14 +1471,16 @@ function proofFor(state: State, mode: string, requests: Readonly<Record<Scenario
     outsideTheCopies: () => entriesOutside(state.project.root, state.project.root),
     describedByTheMadeUpToolchain: () => state.project.output(`${recorder}.describe`, {}),
     linksOfCopiesWhenSettingsName: async (links) => {
+      const askedFileText = await readFile(join(state.project.root, askedFile), "utf8");
       const askedBefore = await asked();
       state.project = await state.project.reopen(configWith(mode, { ...declaredCommands, links }));
       try {
         await state.project.output(`${mode}.prove`, requests.failed);
+        return linksOfCopies((await asked()).slice(askedBefore.length));
       } finally {
         state.project = await state.project.reopen(configWith(mode, declaredCommands));
+        await writeFile(join(state.project.root, askedFile), askedFileText, "utf8");
       }
-      return linksOfCopies((await asked()).slice(askedBefore.length));
     },
     asOpened: state.asOpened,
   };

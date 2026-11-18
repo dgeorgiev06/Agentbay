@@ -61,13 +61,25 @@ function recordingScript(action: string, answer: string): string {
 const standInFiles: Files = {
   "mode.yaml": standInManifest(),
   "README.md": "# stand-in\n\nA made-up toolchain for proof's own test.\n",
-  "scripts/describe.ts": recordingScript(
-    "describe",
-    '{ language: "Made-up", sourceFiles: ["**"], testFiles: ["tests/**"], practices: "practices.md", checks: ["lint"], present: ["lint", "test"], missing: [] }',
-  ),
+  "scripts/describe.ts": [
+    `import { defineScript } from "${sdk}";`,
+    "",
+    "export const run = defineScript(() =>",
+    "  Promise.resolve({",
+    '    language: "Made-up",',
+    '    sourceFiles: ["**"],',
+    '    testFiles: ["tests/**"],',
+    '    practices: "practices.md",',
+    '    checks: ["lint", "types"],',
+    '    present: ["lint", "types", "test"],',
+    "    missing: [],",
+    "  }),",
+    ");",
+    "",
+  ].join("\n"),
   "scripts/check.ts": recordingScript(
     "check",
-    '{ verdicts: [{ name: "lint", verdict: "passed", seconds: 0, stdout: "", stderr: "" }] }',
+    '{ verdicts: ["lint", "types"].map((name) => ({ name, verdict: "passed", seconds: 0, stdout: "", stderr: "" })) }',
   ),
   "scripts/test.ts": recordingScript(
     "test",
@@ -145,7 +157,7 @@ after(async () => {
   await project.close();
 });
 
-test("every copy is removed when the toolchain stops a run at its limit and when a called action refuses what proof hands it midway", async () => {
+test("every copy is removed when the toolchain stops a run at its limit, when a called action refuses what proof hands it midway and when a named test is not at the head; a check call shares the time among the checks", async () => {
   const ignored = [".agentbay/", ".forge/", `${askedFolder}/`, "node_modules", "components/", "agentbay.config.yaml"];
   const base = await committed({ ".gitignore": `${ignored.join("\n")}\n`, "src/value.txt": "1\n" });
   const head = await committed({ "src/value.txt": "2\n", [hiddenTest]: "a test only a dot hides\n" });
@@ -162,6 +174,12 @@ test("every copy is removed when the toolchain stops a run at its limit and when
           says: "A test fails first.",
           level: "must",
           proof: { kind: "fails-first", tests: [hiddenTest] },
+        },
+        {
+          id: "gone",
+          says: "A test that was never written fails first.",
+          level: "must",
+          proof: { kind: "fails-first", tests: ["tests/gone.test.ts"] },
         },
       ],
     },
@@ -189,6 +207,12 @@ test("every copy is removed when the toolchain stops a run at its limit and when
       verdict: "inconclusive",
       reason: `The run on the base could not start: ${refused} The run on the head could not start: ${refused}`,
     },
+    {
+      item: "gone",
+      kind: "fails-first",
+      verdict: "failed",
+      detail: "These test files do not exist at the head, so they cannot show the change: tests/gone.test.ts.",
+    },
     { item: "scope", kind: "in-scope", verdict: "inconclusive", reason: notBuilt("in-scope") },
     { item: "declared", kind: "as-declared", verdict: "inconclusive", reason: notBuilt("as-declared") },
   ]);
@@ -198,6 +222,6 @@ test("every copy is removed when the toolchain stops a run at its limit and when
       fieldOf(request, "timeLimitSeconds"),
       String(fieldOf(request, "folder")).startsWith(".forge/copies/proof-"),
     ]);
-  assert.deepEqual(await given("check"), [[1000, true]]);
+  assert.deepEqual(await given("check"), [[865, true]]);
   assert.deepEqual(await given("test"), [[1000, true]]);
 });

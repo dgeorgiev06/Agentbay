@@ -103,12 +103,12 @@ function folderOf(number: number): string {
   return `.forge/copies/proof-1794996000000-${String(number)}`;
 }
 
-function bugRunAsked(number: number, patch: string, files: readonly string[], seconds: number): Asked {
+function bugRunAsked(number: number, bug: Bug, seconds: number): Asked {
   const folder = folderOf(number);
   return [
     ["worktrees.copy", copyOf(number)],
-    ["worktrees.apply", { folder, patch }],
-    ["toolchain.test", { folder, files, timeLimitSeconds: seconds }],
+    ["worktrees.apply", { folder, patch: bug.patch }],
+    ["toolchain.test", { folder, files: bug.tests, timeLimitSeconds: seconds }],
     ["worktrees.remove", { folder }],
   ];
 }
@@ -122,7 +122,7 @@ test("bugs-caught: one bug gets a copy of the head, its patch and its own test f
   assert.deepEqual(await bugsCaughtEvidence(step, { ...request, bugs: [caughtBug] }), [
     { name: "the value is not raised", run: { how: "ran", run: { ran: "failed", failed: 2 } } },
   ]);
-  assert.deepEqual(asked, bugRunAsked(1, "caught", ["tests/value.test.ts"], 730));
+  assert.deepEqual(asked, bugRunAsked(1, caughtBug, 730));
 });
 
 test("bugs-caught: each of two bugs gets its own copy, only its own patch and its own test files, and each copy is removed, also after a survivor", async () => {
@@ -133,19 +133,13 @@ test("bugs-caught: each of two bugs gets its own copy, only its own patch and it
     caught,
     survived,
   ]);
-  assert.deepEqual(first.asked, [
-    ...bugRunAsked(1, "caught", ["tests/value.test.ts"], 730),
-    ...bugRunAsked(2, "survives", ["tests/name.test.ts"], 610),
-  ]);
+  assert.deepEqual(first.asked, [...bugRunAsked(1, caughtBug, 730), ...bugRunAsked(2, survivingBug, 610)]);
   const second = stepWith(1000);
   assert.deepEqual(await bugsCaughtEvidence(second.step, { ...request, bugs: [survivingBug, caughtBug] }), [
     survived,
     caught,
   ]);
-  assert.deepEqual(second.asked, [
-    ...bugRunAsked(1, "survives", ["tests/name.test.ts"], 730),
-    ...bugRunAsked(2, "caught", ["tests/value.test.ts"], 690),
-  ]);
+  assert.deepEqual(second.asked, [...bugRunAsked(1, survivingBug, 730), ...bugRunAsked(2, caughtBug, 690)]);
 });
 
 test("bugs-caught: a patch that does not apply runs no test and its copy is removed; the next bug still runs", async () => {
@@ -159,7 +153,7 @@ test("bugs-caught: a patch that does not apply runs no test and its copy is remo
     ["worktrees.copy", copyOf(1)],
     ["worktrees.apply", { folder: folderOf(1), patch: "stale" }],
     ["worktrees.remove", { folder: folderOf(1) }],
-    ...bugRunAsked(2, "caught", ["tests/value.test.ts"], 1000),
+    ...bugRunAsked(2, caughtBug, 1000),
   ]);
 });
 
@@ -170,10 +164,7 @@ test("bugs-caught: a test call the toolchain refuses could not start, its asked 
     { name: "the value waits", run: { how: "ran", run: { ran: "not started", reason: notHere.message } } },
     { name: "the value is not raised", run: { how: "ran", run: { ran: "failed", failed: 2 } } },
   ]);
-  assert.deepEqual(asked, [
-    ...bugRunAsked(1, "refused", ["tests/value.test.ts"], 1000),
-    ...bugRunAsked(2, "caught", ["tests/value.test.ts"], 710),
-  ]);
+  assert.deepEqual(asked, [...bugRunAsked(1, refusedRun, 1000), ...bugRunAsked(2, caughtBug, 710)]);
 });
 
 test("bugs-caught: with no time left the test is not asked, the run could not start, and the copy is removed", async () => {
@@ -287,7 +278,7 @@ function sliceWith(base: string, head: string, bugs: readonly Json[]): Json {
 
 function ownVerdict(output: Json): Json {
   const verdicts = fieldsOf(output).verdicts;
-  return Array.isArray(verdicts) ? (verdicts[0] ?? null) : null;
+  return Array.isArray(verdicts) ? verdicts.slice(0, 1) : null;
 }
 
 before(async () => {
@@ -324,19 +315,20 @@ test("bugs-caught with the real git-worktrees mode and toolchain: each bug runs 
   });
   const head = await committed({ "src/value.txt": "2\n" });
   const surviving = await project.output("proof.prove", sliceWith(base, head, [realBugs.caught, realBugs.survives]));
-  assert.deepEqual(ownVerdict(surviving), {
-    item: "bugs",
-    kind: "bugs-caught",
-    verdict: "failed",
-    detail: "A bug survived: the name is changed.",
-  });
+  assert.deepEqual(ownVerdict(surviving), [
+    { item: "bugs", kind: "bugs-caught", verdict: "failed", detail: "A bug survived: the name is changed." },
+  ]);
   assert.deepEqual(await readdir(join(project.root, ".forge", "copies")), []);
   const stale = await project.output("proof.prove", sliceWith(base, head, [realBugs.stale, realBugs.caught]));
-  const said = fieldsOf(ownVerdict(stale));
-  assert.deepEqual(
-    [said.verdict, String(said.reason).startsWith("The bug the patch is stale could not be applied")],
-    ["inconclusive", true],
-  );
+  assert.deepEqual(ownVerdict(stale), [
+    {
+      item: "bugs",
+      kind: "bugs-caught",
+      verdict: "inconclusive",
+      reason:
+        "The bug the patch is stale could not be applied to the head: The patch does not apply to the copy, so nothing was changed: error: patch failed: src/name.txt:1",
+    },
+  ]);
   assert.deepEqual(await readdir(join(project.root, ".forge", "copies")), []);
   assert.equal(await readFile(join(project.root, "src", "value.txt"), "utf8"), "2\n");
 });

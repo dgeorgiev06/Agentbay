@@ -77,7 +77,7 @@ test("bugs-caught: inconclusive with no bugs at all", () => {
 
 test("bugs-caught: a bug whose patch does not apply is never caught, alone or beside a caught bug and a survivor", () => {
   const stale: BugEvidence = { name: "the patch is stale", run: { how: "not applied", reason: "patch failed" } };
-  const reason = "The bug the patch is stale could not be applied to the head, so it touched nothing: patch failed";
+  const reason = "The bug the patch is stale could not be applied to the head: patch failed";
   for (const bugs of [[stale], [caught("the value is not raised"), stale, survived("the name is lost")]]) {
     assert.deepEqual(judged(bugs), {
       item: "bugs",

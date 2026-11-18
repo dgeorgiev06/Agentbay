@@ -28,7 +28,7 @@ function bugPart(bug: BugEvidence): Part {
     case "no copy":
       return unknown(bug.run.reason);
     case "not applied":
-      return unknown(`The bug ${bug.name} could not be applied to the head, so it touched nothing: ${bug.run.reason}`);
+      return unknown(`The bug ${bug.name} could not be applied to the head: ${bug.run.reason}`);
     case "ran":
       return runPart(bug.name, bug.run.run);
   }

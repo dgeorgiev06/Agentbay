@@ -1,4 +1,5 @@
 import { proveChecks } from "./kinds/checks.ts";
+import { proveBugsCaught } from "./kinds/bugs-caught.ts";
 import { proveFailsFirst } from "./kinds/fails-first.ts";
 import { proveAsDeclared } from "./kinds/as-declared.ts";
 import { proveRealThing } from "./kinds/real-thing.ts";
@@ -23,7 +24,7 @@ export const kinds: Table = {
   "in-scope": proveInScope,
   "as-declared": proveAsDeclared,
 
-  "bugs-caught": notBuilt,
+  "bugs-caught": proveBugsCaught,
 
   "same-output": proveSameOutput,
   "real-thing": proveRealThing,

@@ -60,6 +60,22 @@ Each was found by a builder or in review, and none was in the designs.
 | WT1 | A throwaway copy is a repository of its own, so tools and the kit's own tests see its files | M | `components/base/git-worktrees/`, `components/base/interfaces/worktrees/` | KL1 | KL1's real run: in a copy, git lists no files, `bay` sees an empty project and 34 of the kit's tests fail. Proof's kinds run in copies |
 | TB1 | The toolbox reads YAML to a value, checks a value against a schema, and matches a path against a pattern | C, toolbox | `bay/sdk.ts` and the kernel files behind three functions | - | W1 stopped: a mode's script could do none of these, and a plan is a YAML file a script checks. P2 and W1 need the matching |
 
+
+Found by the design note `docs/designs/forge/one-slice.md`, which walked forge's first slice against the code before a builder started:
+
+| # | Slice | Kind | Write scope | After | Because |
+|---|---|---|---|---|---|
+| TT1 | The test toolbox takes a choice, shows an approval's choices and card, and can stop and resume a run | C, test toolbox | `tests/test-toolbox.ts` and its test | C1p | no mode can test a workflow with choices; F1 waits |
+| WC1 | `worktrees.commit`: a slice's worktree committed to its own branch, the mode as author | M | the worktrees interface and the git-worktrees mode | - | nothing commits a builder's work; F2 waits (F1's cut uses `set-aside`) |
+| WD1 | `worktrees.discard`: the work set aside, the branch renamed, the worktree removed; no commit deleted | M | as WC1 | WC1 | nothing discards an unmerged worktree; F2 waits |
+| WM1 | `worktrees.merge` into the branch the project has checked out, fast-forwarded only when the checkout is clean | M | as WC1 | WD1 | merge refuses a checked-out branch; F1 as planned waits (the cut does it by hand) |
+| RV1 | A review skill judges a slice's judgement items and is quoted on the merge card | M, forge | forge's review skill and its step | F1 | nothing judges them after the build; before X1 |
+| RN1a, RN1b | A toolchain's verdicts name the command and its last lines; proof carries them on, so a card can mark them ran | M | the toolchain and proof interfaces with their modes | P2 to P5 | forge cannot name a toolchain's commands; until then verdicts are marked computed |
+| TP1 | `toolchain.describe` gives the practices file where a builder can open it | M | as RN1a | RN1a | forge's settings carry the path until then |
+| WR1 | A skill step's write roots are the one worktree of its run | C, adapter and runs, after a design | `adapters/claude-code/`, one field in runs | F3 | write limits are per mode and skill, not per run; F4 waits |
+
+Three of these are the owner's to choose (WM1, WC1, RV1); the note recommends all three. C3 has nothing to count until a skill step can ask for tests; its brief must say how.
+
 KL1 runs in wave 1 beside T1. EK1 and MN1 run in wave 2 or 3 where a seat is free; F1 needs MN1. KS1 runs when the machine is quiet, since it times the suite.
 
 ## Waves

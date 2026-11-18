@@ -2,6 +2,8 @@ modes: [feed-briefing, typescript, git-worktrees]
 bindings:
   items-source: fake-source
   items-store: store
+  toolchain: typescript
+  worktrees: git-worktrees
 adapter: claude-code
 settings:
   feed-briefing:

@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProofSettings",
+  "description": "What a project declares for proof, under settings in agentbay.config.yaml, by the name of the mode that implements proof@1. Every such mode reads these settings in this shape; its own settings schema is a copy of this file.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "sameOutput": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "bay"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+            "maxLength": 64,
+            "description": "The command's name, which an item of the kind same-output names in differ."
+          },
+          "bay": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "description": "One word given to the command."
+            },
+            "description": "The words given to the copy's own ./bay.sh, run at the copy's root, such as check --project tests/fixtures/sound."
+          }
+        },
+        "description": "One command whose output and exit code must not change unless a slice says so."
+      },
+      "description": "The commands whose output must not change; left out, the project declares none and an item of the kind same-output is inconclusive."
+    },
+    "noRise": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "pattern", "paths"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+            "maxLength": 64,
+            "description": "The count's name, which an item of the kind count names in use."
+          },
+          "pattern": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "The text a counted line holds, matched as it is written: a dot is a dot, not a pattern."
+          },
+          "paths": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^(?!.*\\.\\.)\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*(/\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+              "maxLength": 1000,
+              "description": "A file or folder relative to the repository's root; a folder counts every file under it."
+            },
+            "description": "Where the lines are counted."
+          }
+        },
+        "description": "One count that no slice may raise, such as the entries of a list of known breaks."
+      },
+      "description": "The counts that may not rise; left out, the project declares none."
+    }
+  }
+}

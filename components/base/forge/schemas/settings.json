@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ForgeSettings",
-  "description": "What a project declares for forge, under settings.forge in agentbay.config.yaml.",
+  "description": "What a project declares for forge, under settings.forge in agentbay.config.yaml. Only the owner writes it.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -10,6 +10,23 @@
       "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*\\.yaml$",
       "maxLength": 1000,
       "description": "The project's map of features, a YAML file whose features each list entry and private files, such as framework/features.yaml. forge.waves warns of a scope that holds every private file of one feature. Left out, no scope is compared with a feature."
+    },
+    "into": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The branch a slice is merged into when the owner chooses merge, such as integration. It must not be checked out anywhere, since the worktrees mode merges only in a worktree of its own."
+    },
+    "practices": {
+      "type": "array",
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+        "maxLength": 1000
+      },
+      "description": "The practices files a builder reads before it writes, relative to the project, such as framework/practices.md and components/base/typescript/practices.md."
     }
   }
 }

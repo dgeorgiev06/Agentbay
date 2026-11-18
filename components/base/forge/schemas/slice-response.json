@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SliceResponse",
+  "description": "The slice, base and bugs handed on to the later steps, and the start card the owner reads before anything is cut.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["slice", "base", "bugs", "card"],
+  "properties": {
+    "slice": {
+      "$ref": "proof@1/prove-request.json#/$defs/slice"
+    },
+    "base": {
+      "$ref": "proof@1/prove-request.json#/$defs/commit"
+    },
+    "bugs": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/bug"
+      }
+    },
+    "card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "lines"],
+      "description": "The start card: the slice's title, kind, base, scope, afters and items.",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "lines": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["mark", "words", "source"],
+            "properties": {
+              "mark": {
+                "const": "computed",
+                "description": "Every line of forge's cards comes from a step that ran no skill."
+              },
+              "words": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000,
+                "description": "What the owner reads, worked out by script from the slice and proof's answer, never a builder's words."
+              },
+              "source": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["step"],
+                "properties": {
+                  "step": {
+                    "enum": ["slice"],
+                    "description": "The step the line cites."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

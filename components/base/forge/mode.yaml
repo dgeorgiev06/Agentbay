@@ -1,15 +1,16 @@
 name: forge
 version: 1.0.0
-description: Builds a piece of work in slices that run side by side. Today it reads a plan file and works out its waves; later it carries each slice through a builder, proof and the merge.
+description: Builds a piece of work in slices that run side by side. It reads a plan file and works out its waves, and it carries one slice through a builder in a worktree, proof and the merge card.
 
 requires:
-  interfaces: [proof@1]
+  interfaces: [proof@1, worktrees@1]
 
 settings: schemas/settings.json
 
 resources:
   files:
     read: [docs/plans/, framework/features.yaml]
+    write: [.forge/worktrees/]
 
 actions:
   waves:
@@ -19,3 +20,44 @@ actions:
     effects: [read]
     run:
       - script: scripts/waves.ts
+  slice:
+    description: When the owner names a planned slice to build, it is handed on to the later steps and the start card is drawn from it.
+    input: schemas/slice-request.json
+    output: schemas/slice-response.json
+    effects: [read]
+    run:
+      - script: scripts/slice.ts
+  declare:
+    description: When a builder must state which files and action names it will change, before its first edit.
+    input: schemas/declare-request.json
+    output: schemas/declaration.json
+    effects: [read]
+    run:
+      - skill: skills/declare
+        tier: balanced
+        checks: [scripts/declared-in-scope.ts]
+  build:
+    description: When a declared slice is to be written in its worktree by a builder.
+    input: schemas/build-request.json
+    output: schemas/built.json
+    effects: [read, write]
+    run:
+      - skill: skills/build
+        tier: deep
+  draw:
+    description: When proof has judged a slice and the owner needs the merge card, with the rule and reason for each choice.
+    input: schemas/draw-request.json
+    output: schemas/draw-response.json
+    effects: [read]
+    run:
+      - script: scripts/draw.ts
+  carry-out:
+    description: When the owner has chosen on the merge card and the choice is to be done.
+    input: schemas/carry-out-request.json
+    output: schemas/carry-out-response.json
+    effects: [read, write, delete]
+    run:
+      - script: scripts/carry-out.ts
+
+workflows:
+  - workflows/one-slice.yaml

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CarryOutRequest",
+  "description": "The owner's choice on the merge card, and what it acts on.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["choice", "name", "branch", "work", "head", "into"],
+  "properties": {
+    "choice": {
+      "enum": ["merge", "send-back", "keep", "discard"],
+      "description": "The choice the owner took."
+    },
+    "name": {
+      "$ref": "proof@1/prove-request.json#/$defs/sliceName"
+    },
+    "branch": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The slice's branch, as worktrees.cut made it."
+    },
+    "work": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The branch set-aside committed the work to."
+    },
+    "head": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+      "description": "The commit proof judged: the one a merge merges."
+    },
+    "into": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The branch a merge goes into."
+    }
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DrawResponse",
+  "description": "The merge card and the three rules: merge, send back and discard, each true or false, with a reason on the card for each that is false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["card", "merge", "sendBack", "discard"],
+  "properties": {
+    "card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "lines", "withheld"],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400
+        },
+        "lines": {
+          "type": "array",
+          "maxItems": 2000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["mark", "words", "source"],
+            "properties": {
+              "mark": {
+                "const": "computed",
+                "description": "Every line of forge's cards comes from a step that ran no skill."
+              },
+              "words": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000,
+                "description": "What the owner reads, worked out by script from the slice and proof's answer, never a builder's words."
+              },
+              "source": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["step"],
+                "properties": {
+                  "step": {
+                    "enum": ["prove", "draw"],
+                    "description": "The step the line cites."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "withheld": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "merge": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Why merge is not offered."
+            },
+            "send-back": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Why send-back is not offered."
+            },
+            "discard": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Why discard is not offered."
+            }
+          },
+          "description": "The reason for each choice whose rule is false, and for no other."
+        }
+      }
+    },
+    "merge": {
+      "type": "boolean",
+      "description": "True only when the builder built the slice and every must item, scope and declared passed."
+    },
+    "sendBack": {
+      "const": false,
+      "description": "Rounds come with slice F2."
+    },
+    "discard": {
+      "const": false,
+      "description": "Discarding comes with slice WD1."
+    }
+  }
+}

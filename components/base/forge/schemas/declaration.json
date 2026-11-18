@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Declaration",
+  "description": "What the builder states it will change, before its first edit, in proof@1's form.",
+  "$ref": "proof@1/prove-request.json#/$defs/declaration"
+}

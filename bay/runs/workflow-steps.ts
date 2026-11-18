@@ -6,7 +6,7 @@ import { toJson } from "../json.ts";
 import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
 import type { ReferenceScope, WorkflowTarget } from "../manifests/manifests.ts";
 import type { StepRecord } from "./run-store.ts";
-import { checkedCard } from "./card.ts";
+import { checkedCard, type StepSeen } from "./card.ts";
 import { evaluatedChoices, reasonProblems, shownChoices, type ChoiceStatus } from "./choices.ts";
 import { approvalContentOf, type ApprovalContent } from "./scrubbed-store.ts";
 import type { ApprovalDetail, ApprovalVerdict } from "./step-detail.ts";
@@ -134,6 +134,15 @@ function evaluatedRules(scope: WorkflowScope, step: ApprovalStep): Outcome<reado
   return evaluatedChoices({ stepId: step.id, choices: step.choices, resolve });
 }
 
+function stepsSeen(records: ReadonlyMap<string, StepRecord>): ReadonlyMap<string, StepSeen> {
+  return new Map(
+    [...records].map(([key, record]) => {
+      const skill = record.kind === "skill" && record.detail !== null ? record.detail : undefined;
+      return [key, { kind: record.kind, status: record.status, skill }];
+    }),
+  );
+}
+
 async function checkedShown(walk: Walk, scope: WorkflowScope, at: ShownAt): Promise<Outcome<ShownParts>> {
   const { step, content, choices } = at;
   const store = walk.services.store;
@@ -141,7 +150,7 @@ async function checkedShown(walk: Walk, scope: WorkflowScope, at: ShownAt): Prom
     stepId: step.id,
     quotes: step.quotes ?? [],
     keys: scope.keys,
-    records: walk.records,
+    steps: stepsSeen(walk.records),
     events: await store.readEvents(walk.writer.runId),
     eventsOf: (runId: string) => store.readEvents(runId),
   };

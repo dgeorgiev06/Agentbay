@@ -1,7 +1,6 @@
 import { tiers, type Json, type RunEvent, type Tier } from "../contracts.ts";
 import { fieldOf, isRecord, textField, toJson } from "../json.ts";
 import { failedWith, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
-import type { StepRecord } from "./run-store.ts";
 
 const marks = ["ran", "computed", "judged"] as const;
 
@@ -40,11 +39,21 @@ export type Card = {
   readonly counted: Readonly<Record<Mark, number>>;
 };
 
+type SkillSeen = SkillUsed & {
+  readonly calledRuns?: readonly string[];
+};
+
+export type StepSeen = {
+  readonly kind: string;
+  readonly status: string;
+  readonly skill: SkillSeen | undefined;
+};
+
 type CardContext = {
   readonly stepId: string;
   readonly quotes: readonly string[];
   readonly keys: ReadonlyMap<string, string>;
-  readonly records: ReadonlyMap<string, StepRecord>;
+  readonly steps: ReadonlyMap<string, StepSeen>;
   readonly events: readonly RunEvent[];
   readonly eventsOf: (runId: string) => Promise<readonly RunEvent[]>;
 };
@@ -165,24 +174,24 @@ function isUnder(key: string, other: string): boolean {
 
 function citedStep(context: CardContext, id: string): Cited | string {
   const key = context.keys.get(id);
-  const record = key === undefined ? undefined : context.records.get(key);
+  const record = key === undefined ? undefined : context.steps.get(key);
   if (key === undefined || record === undefined || record.status !== "done") {
     return `cites step ${id}, which has not finished in this run before the approval.`;
   }
   if (record.kind !== "action") {
     return `cites step ${id}, which is a ${record.kind} step; a line cites an action step.`;
   }
-  return { id, key, ...skillsUnder(context.records, key) };
+  return { id, key, ...skillsUnder(context.steps, key) };
 }
 
-function skillsUnder(records: CardContext["records"], key: string): Pick<Cited, "skills" | "calledRuns"> {
+function skillsUnder(steps: CardContext["steps"], key: string): Pick<Cited, "skills" | "calledRuns"> {
   const skills: SkillUsed[] = [];
   const calledRuns: string[] = [];
-  for (const record of records.values()) {
-    if (record.kind === "skill" && record.detail !== null && isUnder(key, record.key)) {
-      const { mode, skill, tier } = record.detail;
+  for (const [under, step] of steps) {
+    if (step.skill !== undefined && isUnder(key, under)) {
+      const { mode, skill, tier } = step.skill;
       skills.push({ mode, skill, tier });
-      calledRuns.push(...(record.detail.calledRuns ?? []));
+      calledRuns.push(...(step.skill.calledRuns ?? []));
     }
   }
   return { skills, calledRuns };

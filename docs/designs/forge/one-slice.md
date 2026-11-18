@@ -208,14 +208,15 @@ slice WR1. Found on the way: a search (`Glob`, `Grep`) over a worktree's top fol
 meets the `.git` entry there (`guard-paths.ts:168-176`; test `guard-decide.test.ts:306`); the build skill must
 search below it (`bay/`, `tests/`). Not a capability; a sentence in the skill.
 
-What the write path does to the two frames. S3 holds: the path is declared in forge's manifest, and the hook
-allows nothing else. T3 holds: the trust record, `.agentbay/` and the config stay closed inside every root, so a
-builder cannot give trust. What is new is that a builder may write, in its worktree, a `mode.yaml` under
+What the write path does to the two frames. S3 holds: the path is declared in forge's manifest, and the hook allows
+nothing else. T3 holds: the trust record, `.agentbay/` and the config stay closed inside every root, so a builder
+cannot give trust. What is new is that a builder may write, in its worktree, a `mode.yaml` under
 `components/base/`. In the kit's own `components/base/` the hook refuses it, since no root lies there
-(`guard-decide.ts:190-192`). Once merged, such a mode is trusted by place (T5) and its list is granted. That happens only through the owner's merge choice, never through a step, so T3 is not
-weakened; but the owner must see it. F1's `draw` therefore adds a computed line for each changed path under
-`components/base/*/mode.yaml`, `bay/`, `adapters/` or `schemas/`, from proof's `size` list; forge's test 6 holds
-it (section 4). Code a builder wrote runs unconfined when proof runs the tests, as ADR 22 already says.
+(`guard-decide.ts:190-192`). Once merged, such a mode is trusted by place (T5) and its list is granted. That
+happens only through the owner's merge choice, never through a step, so T3 is not weakened; but the owner must see
+it. F1's `draw` therefore adds a computed line for each changed path under `components/base/*/mode.yaml`, `bay/`,
+`adapters/` or `schemas/`, from proof's `size` list; forge's test 6 holds it (section 4). Code a builder wrote runs
+unconfined when proof runs the tests, as ADR 22 already says.
 
 **Who commits the builder's work to the slice's branch? Nobody can today. May the agent's shell run git there?
 No.** The build agent gets `Bash` only when its mode lists a command its action's effects cover
@@ -704,3 +705,4 @@ line, the proof designs B and C beyond section 3 of C, `interface-open-questions
 the briefs other than TR2's and FD1, the broker's operation table beyond the command record, the sqlite run store,
 `bay/mcp.ts`, the adapter's `build.ts` and `settings.ts`, the git-worktrees scripts other than cut, merge and
 remove, and proof's `checks.ts` and `fails-first.ts` beyond the calls they make.
+

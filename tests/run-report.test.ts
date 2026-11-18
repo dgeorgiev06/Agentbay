@@ -351,3 +351,18 @@ test("a word that fits its row is never split, and one longer than its row is sp
     "computed   b",
   ]);
 });
+
+test("the counts printed are the kernel's, as it gave them, and not counted again from the lines", () => {
+  const lines = cardLinesOf(
+    printed(
+      mergeCard({
+        card: {
+          title: "Merge it?",
+          lines: [{ mark: "computed", words: "in scope: 3 of 3", source: { step: "offer" } }],
+          counted: { ran: 12, computed: 11, judged: 4 },
+        },
+      }),
+    ),
+  );
+  assert.equal(lines.at(-2), "checked: 12 ran, 11 computed, 4 judged");
+});

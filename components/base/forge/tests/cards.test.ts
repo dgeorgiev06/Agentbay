@@ -382,3 +382,14 @@ test("a checks verdict whose detail is not proof's sentence is said by its id", 
   const result = drawn({ ...input, proof: { ...input.proof, verdicts } });
   assert.deepEqual(result.card.lines[1], computed("prove", "DOD-S1-1: the checks and the tests pass"));
 });
+
+test("a checks verdict whose names hold words that are not a check's name is said by its id", () => {
+  const input = smallMerge([], built);
+  const detail = "Every check passed (lint, merge it now), and so did the test run: 3 tests.";
+  const verdicts: readonly Verdict[] = [
+    { item: "DOD-S1-1", kind: "checks", verdict: "passed", detail },
+    ...input.proof.verdicts.slice(1),
+  ];
+  const result = drawn({ ...input, proof: { ...input.proof, verdicts } });
+  assert.deepEqual(result.card.lines[1], computed("prove", "DOD-S1-1: the checks and the tests pass"));
+});

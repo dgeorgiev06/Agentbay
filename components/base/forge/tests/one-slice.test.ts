@@ -134,6 +134,12 @@ const tr2Planned: Planned = {
   },
 };
 
+const tr2Bug = {
+  name: "the record is not read again",
+  patch: "--- a/bay/broker/rule.ts\n+++ b/bay/broker/rule.ts\n@@ -1 +1 @@\n-a\n+b\n",
+  tests: ["tests/broker-list-trust.test.ts"],
+};
+
 const failsFirstPassed = "The named tests failed on the base with them laid over it, and pass on the head.";
 
 const tr2Proved: Proved = {
@@ -183,7 +189,7 @@ const standInManifest = [
   "description: A stand-in for proof in forge's own test; it answers the verdicts the test wrote for the slice.",
   "implements: [proof@1]",
   "resources:",
-  "  files: { read: [.stand-in/] }",
+  "  files: { read: [.stand-in/], write: [.stand-in/] }",
   "actions:",
   "  prove:",
   "    description: When forge's test needs proof's answer for a slice.",
@@ -198,6 +204,10 @@ const standInScript = [
   "",
   "export const run = defineScript(async (input, context) => {",
   "  const name = fieldsOf(fieldsOf(input).slice ?? null).name;",
+  "  const asked = await context.files.write(`.stand-in/${String(name)}-asked.json`, JSON.stringify(input));",
+  "  if (!asked.ok) {",
+  "    fail(asked.message);",
+  "  }",
   "  const read = await context.files.read(`.stand-in/${String(name)}.json`);",
   "  return read.ok ? JSON.parse(read.value) : fail(read.message);",
   "});",
@@ -315,8 +325,8 @@ function waitingOf(run: Json, step: string): Waiting {
   return { id: textAt(run, "id"), hash: textAt(waiting, "hash"), card, choices };
 }
 
-async function started(root: string, planned: Planned): Promise<Waiting> {
-  const trigger = JSON.stringify({ planned, base: shortHead(root), bugs: [] });
+async function started(root: string, planned: Planned, bugs: readonly Json[] = []): Promise<Waiting> {
+  const trigger = JSON.stringify({ planned, base: shortHead(root), bugs });
   const answer = await bay(root, ["call", "--workflow", "forge:workflows/one-slice.yaml", trigger]);
   return waitingOf(runOf(answer), "start");
 }
@@ -571,7 +581,7 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
   test("6. the cards for TR2's verdicts, as the kernel prints them: every line computed, none citing build", async () => {
     const root = await project();
     await provedIn(root, "TR2", tr2Proved);
-    const start = await started(root, tr2Planned);
+    const start = await started(root, tr2Planned, [tr2Bug]);
     assert.deepEqual(await shownCard(root, start.id), [
       "Build slice TR2?",
       "computed The broker says why a list is not",
@@ -647,6 +657,14 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
       sources.map((source) => source.step),
       ["draw", "prove", "prove", "prove", "prove", "draw", "draw", "draw", "draw", "draw", "draw", "draw", "draw"],
     );
+    const asked = jsonOf(await readFile(join(root, ".stand-in/TR2-asked.json"), "utf8"));
+    assert.deepEqual(asked, {
+      slice: tr2Planned.slice,
+      base: git(root, ["rev-parse", "main"]).trim(),
+      head: git(root, ["rev-parse", "forge/wip/TR2/1"]).trim(),
+      declared: { files: tr2Files, names: noNames },
+      bugs: [tr2Bug],
+    });
     await decided(root, card, { step: "card", choice: "keep" });
     assert.deepEqual(branches(root), ["forge/TR2", "forge/wip/TR2/1"]);
     assert.deepEqual(worktrees(root), [".forge/worktrees/TR2"]);

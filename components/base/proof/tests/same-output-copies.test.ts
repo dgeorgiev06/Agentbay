@@ -95,8 +95,16 @@ function stepWith(
 
 const copiedTwice = ["worktrees.copy", "worktrees.remove", "worktrees.copy", "worktrees.remove"];
 
-test("same-output: the copy's bay.sh runs at the base and the head, each run asks for what is left of the step, and each copy is removed", async () => {
-  const { asked, step } = stepWith(1000, [ended(0, "sound\n", 30_000), ended(1, "sound\n", 1_000)]);
+test("same-output: the copy's bay.sh runs at the base and the head, each run asks for what is left of the step, each copy is removed, and standard error is not read", async () => {
+  const warned: Answer = {
+    ran: {
+      end: { how: "exited", exitCode: 1 },
+      milliseconds: 1_000,
+      stdout: { text: "sound\n", cut: false },
+      stderr: { text: "a warning\n", cut: false },
+    },
+  };
+  const { asked, step } = stepWith(1000, [ended(0, "sound\n", 30_000), warned]);
   assert.deepEqual(await sameOutputEvidence(step, request), {
     found: "ran",
     commands: [

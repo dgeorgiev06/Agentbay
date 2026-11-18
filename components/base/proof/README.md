@@ -30,11 +30,11 @@ Not built.
 
 ### same-output
 
-Not built.
+Built. Each command the project declares in proof's settings, under `sameOutput`, is run in a copy of the base and then in a copy of the head, by the listed command `bay` (`./bay.sh` at the copy's root, effects read and write; each run asked for what is left of the step, as a toolchain call is). What each printed to its standard output and its exit code are compared; its standard error is not. Passed when every command printed and ended the same at the base and the head, except those the item names in `differ`, which must not. A command that differs and is not named, or is named and does not differ, fails the item, and the detail names the command, never its output. A project that declares no commands, a name in `differ` the project does not declare, a run that was stopped, could not start or printed more than proof reads, and a copy that could not be made each make the item inconclusive.
 
 ### real-thing
 
-Not built.
+Built. The item's runs are made one after another in one fresh copy of the head, by the listed command `bay`, as `same-output` makes them. Passed when each run printed exactly the expected text to its standard output and ended with the expected exit code. A run that printed other text or ended with another code fails the item; the detail says which run, by its number, and never what it printed. A run that was stopped, could not start or printed more than proof reads, and a copy that could not be made, make the item inconclusive.
 
 ### count
 

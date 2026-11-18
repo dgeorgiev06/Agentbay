@@ -496,8 +496,18 @@ const small: Slice = {
   scope: ["components/base/forge/**"],
   after: [],
   done: [
-    { id: "DOD-S1-1", says: "The tests fail first", level: "must", proof: { kind: "fails-first" } },
-    { id: "DOD-S1-2", says: "The real thing runs", level: "should", proof: { kind: "real-thing" } },
+    {
+      id: "DOD-S1-1",
+      says: "The tests fail first",
+      level: "must",
+      proof: { kind: "fails-first", tests: ["components/base/forge/tests/cards.test.ts"] },
+    },
+    {
+      id: "DOD-S1-2",
+      says: "The real thing runs",
+      level: "should",
+      proof: { kind: "real-thing", runs: [{ bay: ["check"] }] },
+    },
   ],
 };
 

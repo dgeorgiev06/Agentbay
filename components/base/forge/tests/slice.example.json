@@ -84,14 +84,42 @@
         },
         {
           "mark": "computed",
-          "words": "2 items: 1 names a kind of proof, 1 is judgement",
+          "words": "DOD-A1-1, must: The draw script",
           "source": {
             "step": "slice"
           }
         },
         {
           "mark": "computed",
-          "words": "judgement, by you: 2",
+          "words": "says each verdict on the card.",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "held by: checks",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "DOD-A1-2, should: Each sentence on",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "the card reads well on a phone.",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "held by: your judgement",
           "source": {
             "step": "slice"
           }

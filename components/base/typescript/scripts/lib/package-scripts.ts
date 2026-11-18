@@ -20,10 +20,6 @@ const owners: Readonly<Record<Place, string>> = { project: "The project", checko
 
 const packageFile = "package.json";
 
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function parsed(text: string): { readonly ok: true; readonly value: unknown } | { readonly ok: false } {
   try {
     const value: unknown = JSON.parse(text);
@@ -33,17 +29,23 @@ function parsed(text: string): { readonly ok: true; readonly value: unknown } | 
   }
 }
 
+function scriptNames(manifest: unknown): readonly string[] {
+  const scripts: unknown =
+    typeof manifest === "object" && manifest !== null ? Reflect.get(manifest, "scripts") : undefined;
+  if (typeof scripts !== "object" || scripts === null || Array.isArray(scripts)) {
+    return [];
+  }
+  return Object.entries(scripts).flatMap(([name, command]: readonly [string, unknown]) =>
+    typeof command === "string" ? [name] : [],
+  );
+}
+
 export function scriptsOfText(text: string): PackageScripts {
   const read = parsed(text);
   if (!read.ok) {
     return { kind: "not json" };
   }
-  const scripts = isRecord(read.value) ? read.value.scripts : undefined;
-  if (!isRecord(scripts)) {
-    return { kind: "listed", names: new Set() };
-  }
-  const names = Object.entries(scripts).flatMap(([name, command]) => (typeof command === "string" ? [name] : []));
-  return { kind: "listed", names: new Set(names) };
+  return { kind: "listed", names: new Set(scriptNames(read.value)) };
 }
 
 export async function projectScripts(context: ScriptContext): Promise<PackageScripts> {

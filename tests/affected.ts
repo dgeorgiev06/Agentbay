@@ -34,6 +34,7 @@ export const testsThatOpenTheKit: readonly string[] = [
   "tests/check-imports.test.ts",
   "tests/feature-map.test.ts",
   "tests/kit-check.test.ts",
+  "tests/lint-ignores.test.ts",
   "tests/made-up-proofs.test.ts",
   "tests/made-up-sources.test.ts",
   "tests/made-up-toolchains.test.ts",

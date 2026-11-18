@@ -76,10 +76,7 @@ test("bugs-caught: inconclusive with no bugs at all", () => {
 });
 
 test("bugs-caught: a bug whose patch does not apply is never caught, alone or beside a caught bug and a survivor", () => {
-  const stale: BugEvidence = {
-    name: "the patch is stale",
-    run: { how: "not applied", reason: "patch failed" },
-  };
+  const stale: BugEvidence = { name: "the patch is stale", run: { how: "not applied", reason: "patch failed" } };
   const reason = "The bug the patch is stale could not be applied to the head, so it touched nothing: patch failed";
   for (const bugs of [[stale], [caught("the value is not raised"), stale, survived("the name is lost")]]) {
     assert.deepEqual(judged(bugs), {
@@ -96,28 +93,19 @@ test("bugs-caught: a run stopped at its limit, a run that could not start, and a
     [
       {
         name: "the value waits",
-        run: {
-          how: "ran",
-          run: { ran: "inconclusive", reason: "It was stopped." },
-        },
+        run: { how: "ran", run: { ran: "inconclusive", reason: "It was stopped." } },
       },
       "The run with the bug the value waits is not known: It was stopped.",
     ],
     [
       {
         name: "the value waits",
-        run: {
-          how: "ran",
-          run: { ran: "not started", reason: "No time left." },
-        },
+        run: { how: "ran", run: { ran: "not started", reason: "No time left." } },
       },
       "The run with the bug the value waits could not start: No time left.",
     ],
     [
-      {
-        name: "the value waits",
-        run: { how: "no copy", reason: "No copy of head could be made: gone." },
-      },
+      { name: "the value waits", run: { how: "no copy", reason: "No copy of head could be made: gone." } },
       "No copy of head could be made: gone.",
     ],
   ];

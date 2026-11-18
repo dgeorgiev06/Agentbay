@@ -37,16 +37,10 @@ function bugPart(bug: BugEvidence): Part {
 export function bugsCaughtParts(bugs: readonly BugEvidence[]): Parts {
   const [first, ...rest] = bugs.map(bugPart);
   if (first === undefined) {
-    return {
-      parts: [unknown("No bugs were given to inject, so nothing is known.")],
-      whenPassed: "",
-    };
+    return { parts: [unknown("No bugs were given to inject, so nothing is known.")], whenPassed: "" };
   }
   const all = String(bugs.length);
-  return {
-    parts: [first, ...rest],
-    whenPassed: `Every injected bug was caught: ${all} of ${all}.`,
-  };
+  return { parts: [first, ...rest], whenPassed: `Every injected bug was caught: ${all} of ${all}.` };
 }
 
 async function bugRun(step: ProofStep, head: string, bug: Bug): Promise<BugRun> {
@@ -54,10 +48,7 @@ async function bugRun(step: ProofStep, head: string, bug: Bug): Promise<BugRun> 
     if (!copy.made) {
       return { how: "no copy", reason: copy.reason };
     }
-    const applied = await step.called("worktrees.apply", {
-      folder: copy.folder,
-      patch: bug.patch,
-    });
+    const applied = await step.called("worktrees.apply", { folder: copy.folder, patch: bug.patch });
     if (!applied.ok) {
       return { how: "not applied", reason: applied.reason };
     }

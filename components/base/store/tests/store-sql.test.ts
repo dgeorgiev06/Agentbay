@@ -27,10 +27,10 @@ function postsOf(source: string, count: number): Json {
 before(async () => {
   project = await openModeProject(
     { bindings: { "items-store": "store" }, adapter: "claude-code", modes: ["store"] },
-    { callers: ["mail-briefing", "todo"] },
+    { callers: ["mail-briefing", "errands"] },
   );
   await project.output("items-store.put", postsOf("fake", 3), { caller: "mail-briefing" });
-  await project.output("items-store.put", postsOf("other", 250), { caller: "todo" });
+  await project.output("items-store.put", postsOf("other", 250), { caller: "errands" });
 });
 
 after(async () => {
@@ -65,26 +65,26 @@ test("an agent's query that is refused says so, for a write to the store's own t
 });
 
 test("sql refuses more rows than its limit and stops a runaway query", async () => {
-  const many = await project.failure("items-store.sql", { sql: "select id from items" }, { caller: "todo" });
+  const many = await project.failure("items-store.sql", { sql: "select id from items" }, { caller: "errands" });
   assert.match(many, /more than 200 rows/);
   const endless = "with recursive r(n) as (select 1 union all select n + 1 from r) select count(*) from r";
   const started = Date.now();
-  const stopped = await project.failure("items-store.sql", { sql: endless }, { caller: "todo" });
+  const stopped = await project.failure("items-store.sql", { sql: endless }, { caller: "errands" });
   assert.match(stopped, /still running and was killed/);
   assert.ok(Date.now() - started < 15_000);
-  assert.deepEqual(fieldsOf(await sql("select count(*) from items", "todo")).rows, [[250]]);
+  assert.deepEqual(fieldsOf(await sql("select count(*) from items", "errands")).rows, [[250]]);
 });
 
 test("one caller cannot attach another caller's database file, nor see it listed", async () => {
-  const otherFile = join(project.root, ".agentbay", "data", "store--todo.db");
+  const otherFile = join(project.root, ".agentbay", "data", "store--errands.db");
   const attach = await project.failure(
     "items-store.sql",
-    { sql: `attach '${otherFile}' as todo` },
+    { sql: `attach '${otherFile}' as errands` },
     { caller: "mail-briefing" },
   );
   assert.match(attach, /refused/);
   const listed = await sql("select file from pragma_database_list");
-  assert.equal(JSON.stringify(listed).includes("store--todo.db"), false);
+  assert.equal(JSON.stringify(listed).includes("store--errands.db"), false);
 });
 
 test("a direct call with no caller uses the owner's own partition", async () => {
@@ -99,5 +99,5 @@ test("a direct call with no caller uses the owner's own partition", async () => 
 
 test("the store writes only database files: one partition per caller, and no unnamed database it never uses", () => {
   const files = readdirSync(join(project.root, ".agentbay", "data")).filter((name) => !/-(wal|shm)$/.test(name));
-  assert.deepEqual(files.sort(), ["store--mail-briefing.db", "store--owner.db", "store--todo.db"]);
+  assert.deepEqual(files.sort(), ["store--mail-briefing.db", "store--owner.db", "store--errands.db"]);
 });

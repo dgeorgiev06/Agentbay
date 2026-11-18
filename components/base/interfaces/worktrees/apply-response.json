@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ApplyResponse",
-  "description": "The paths the patch changed in the copy.",
+  "description": "The paths the patch changed in the copy. The change is one more commit of the copy's own repository, so the copy is clean and its files are listed as they now are.",
   "type": "object",
   "additionalProperties": false,
   "required": ["folder", "paths"],

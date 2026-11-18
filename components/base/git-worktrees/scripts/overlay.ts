@@ -1,4 +1,4 @@
-import { restoreInto, throwawayChanged } from "./lib/copies.ts";
+import { recordInCopy, refuseUnlessOwnRepository, restoreInto, throwawayChanged } from "./lib/copies.ts";
 import { madeCopy } from "./lib/folders.ts";
 import { gitSucceeded, nulFields, safeCommitOf } from "./lib/git.ts";
 import { defineRequestScript } from "./lib/request.ts";
@@ -11,11 +11,14 @@ export const run = defineRequestScript(async (request, context) => {
   const listed = await gitSucceeded(context, ".", ["paths-at-commit", commit, "--", ...paths]);
   const atCommit = nulFields(listed);
   const placed = paths.filter((path) => atCommit.includes(path));
+  await refuseUnlessOwnRepository(context, folder);
   for (const path of paths) {
     await throwawayChanged(context.files.remove(`${folder}/${path}`));
   }
   if (placed.length > 0) {
     await restoreInto(context, { folder, commit, paths: placed });
   }
+  const message = `The paths ${paths.join(", ")} as they are at ${commit}.`;
+  await recordInCopy(context, { folder, paths, message });
   return { folder, placed, removed: paths.filter((path) => !placed.includes(path)) };
 });

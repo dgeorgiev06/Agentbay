@@ -60,7 +60,7 @@ test("a made-up worktrees mode passes every case of the shared test that its six
   const tested = modeTestRan(shelf);
   assert.equal(tested.status, 1, tested.output);
   assert.deepEqual(failedTests(tested.output), casesOf(shelf, casesThatNeedMergeSetAsideOrApply));
-  assert.match(tested.output, /^# pass 23$/m);
+  assert.match(tested.output, /^# pass 25$/m);
 });
 
 test("a made-up worktrees mode whose remove deletes a worktree with a changed file fails the shared test's case on it", () => {

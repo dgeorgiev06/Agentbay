@@ -1,5 +1,5 @@
 import { fail, type ScriptContext } from "../../../../bay/sdk.ts";
-import { restoreInto, throwawayChanged } from "./lib/copies.ts";
+import { makeRepository, throwawayChanged } from "./lib/copies.ts";
 import { copyFolder, madeFolder, recordFolder } from "./lib/folders.ts";
 import { git, safeCommitOf } from "./lib/git.ts";
 import { defineRequestScript } from "./lib/request.ts";
@@ -27,9 +27,6 @@ export const run = defineRequestScript(async (request, context) => {
   const commit = await safeCommitOf(context, ".", request.text("commit"));
   await throwawayChanged(context.files.makeFolder(folder));
   await recordFolder(context, folder, { kind: "copy" });
-  await restoreInto(context, { folder, commit, paths: ["."] });
-  for (const link of links) {
-    await throwawayChanged(context.files.link(`${folder}/${link}`, link));
-  }
+  await makeRepository(context, { folder, commit, links });
   return { folder };
 });

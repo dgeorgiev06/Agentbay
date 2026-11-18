@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "CopyResponse",
-  "description": "The copy that was made.",
+  "description": "The copy that was made. Its folder is the top of a repository of its own that holds the commit's files as one commit, and nothing else is tracked or untracked there. The links are present and ignored there, so a tool that lists the copy's files does not list them. Nothing done inside the copy changes the project's repository.",
   "type": "object",
   "additionalProperties": false,
   "required": ["folder"],

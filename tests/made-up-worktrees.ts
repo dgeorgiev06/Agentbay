@@ -427,6 +427,13 @@ export const run = defineScript(async (input, context) => {
   await answered(context.files.makeFolder(folder));
   await record(context, folder, "copy");
   await place(context, folder, (await readCommit(context, commit)).files);
+  const commitFile = ".shelf/commits/" + commit + ".json";
+  await place(context, folder, {
+    ".shelf/HEAD": "copy\n",
+    ".shelf/branches.json": JSON.stringify({ copy: commit }, null, 2) + "\n",
+    ".shelf/ignored": links.map((link) => link + "\n").join(""),
+    [commitFile]: await answered(context.files.read(commitFile)),
+  });
   for (const link of links) {
     await answered(context.files.link(folder + "/" + link, link));
   }
@@ -564,13 +571,13 @@ actions:
 function readmeOf(name: string): string {
   return String.raw`# ${name}
 
-A made-up worktrees@1 that a test adds to a copy of the kit. It keeps each commit as a file of its paths and texts under .shelf/commits/, and its branches as names in .shelf/branches.json. It builds cut, status, changed, copy, overlay and remove; merge, set-aside and apply refuse.
+A made-up worktrees@1 that a test adds to a copy of the kit. It keeps each commit as a file of its paths and texts under .shelf/commits/, and its branches as names in .shelf/branches.json. It builds cut, status, changed, copy, overlay and remove; merge, set-aside and apply refuse. A copy holds a shelf of its own in its .shelf folder, with the copied commit, its links listed as ignored, so a commit made inside the copy stays there.
 `;
 }
 
 function modeTestOf(name: string): string {
   return String.raw`import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { openModeProject, type ModeProject } from "../../../../tests/test-toolbox.ts";
 import { testWorktrees, type Change, type Files, type Repository, type Start } from "../../interfaces/worktrees/tests/shared.ts";
@@ -647,26 +654,65 @@ async function checkedOut(shelf: Shelf): Promise<string> {
   return (await readFile(join(shelf.folder, "HEAD"), "utf8")).trim();
 }
 
-async function branchOfChange(shelf: Shelf, change: Change): Promise<string> {
+type Target = {
+  readonly shelf: Shelf;
+  readonly branch: string;
+  readonly root: string | undefined;
+};
+
+async function targetOf(shelf: Shelf, change: Change): Promise<Target> {
   if ("branch" in change.on) {
-    return change.on.branch;
+    const { branch } = change.on;
+    return { shelf, branch, root: branch === (await checkedOut(shelf)) ? shelf.project.root : undefined };
   }
-  return (await readFile(join(shelf.project.root, change.on.folder, ".shelf"), "utf8")).trim();
+  const root = join(shelf.project.root, change.on.folder);
+  const marker = join(root, ".shelf");
+  if ((await stat(marker)).isDirectory()) {
+    const own = { project: shelf.project, folder: marker };
+    return { shelf: own, branch: await checkedOut(own), root };
+  }
+  return { shelf, branch: (await readFile(marker, "utf8")).trim(), root };
 }
 
 async function committed(shelf: Shelf, change: Change): Promise<string> {
-  const branch = await branchOfChange(shelf, change);
-  const head = (await branches(shelf))[branch] ?? "";
-  const before = (await readCommit(shelf, head)).files;
+  const target = await targetOf(shelf, change);
+  const head = (await branches(target.shelf))[target.branch] ?? "";
+  const before = (await readCommit(target.shelf, head)).files;
   const kept = Object.fromEntries(Object.entries(before).filter(([path]) => !change.deleted.includes(path)));
-  const commit = await writeCommit(shelf, { parents: [head], subject: change.message, files: { ...kept, ...change.files } });
-  if ("folder" in change.on) {
-    await writeFiles(join(shelf.project.root, change.on.folder), change.files, change.deleted);
-  } else if (branch === (await checkedOut(shelf))) {
-    await writeFiles(shelf.project.root, change.files, change.deleted);
+  const commit = await writeCommit(target.shelf, { parents: [head], subject: change.message, files: { ...kept, ...change.files } });
+  if (target.root !== undefined) {
+    await writeFiles(target.root, change.files, change.deleted);
   }
-  await setBranch(shelf, branch, commit);
+  await setBranch(target.shelf, target.branch, commit);
   return commit;
+}
+
+async function ignoredIn(top: string): Promise<readonly string[]> {
+  try {
+    return (await readFile(join(top, ".shelf", "ignored"), "utf8")).split("\n").filter((line) => line !== "");
+  } catch {
+    return [];
+  }
+}
+
+async function listedIn(top: string): Promise<readonly string[]> {
+  const ignored = await ignoredIn(top);
+  const found: string[] = [];
+  const visit = async (relative: string): Promise<void> => {
+    for (const entry of await readdir(join(top, relative), { withFileTypes: true })) {
+      const path = relative === "" ? entry.name : relative + "/" + entry.name;
+      if (path === ".shelf" || ignored.some((skipped) => path === skipped || path.startsWith(skipped + "/"))) {
+        continue;
+      }
+      if (entry.isDirectory()) {
+        await visit(path);
+      } else {
+        found.push(path);
+      }
+    }
+  };
+  await visit("");
+  return found.sort();
 }
 
 async function startShelf(start: Start): Promise<Repository> {
@@ -686,6 +732,7 @@ async function startShelf(start: Start): Promise<Repository> {
     parentsOf: async (commit) => (await readCommit(shelf, commit)).parents,
     filesOf: async (commit) => (await readCommit(shelf, commit)).files,
     checkedOut: () => checkedOut(shelf),
+    listed: (folder) => listedIn(join(project.root, folder)),
   };
 }
 

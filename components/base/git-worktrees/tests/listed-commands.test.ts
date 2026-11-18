@@ -110,7 +110,7 @@ test("bay check on the kit warns once for each command the git-worktrees mode li
       line: 47,
       name: "restore-paths",
       effects: "read, write, network, spend, delete",
-      run: `${git} --work-tree=. restore --worktree --source`,
+      run: `${git} -c core.autocrlf=false --git-dir=../../../.git --work-tree=. restore --worktree --source`,
     }),
     listedAt({
       line: 50,
@@ -145,7 +145,7 @@ test("bay check on the kit warns once for each command the git-worktrees mode li
       line: 71,
       name: "commit-staged",
       effects: "read, write, delete",
-      run: `${committing} commit --quiet --no-verify --no-gpg-sign --file=- --end-of-options`,
+      run: `${committing} commit --quiet --allow-empty --no-verify --no-gpg-sign --file=- --end-of-options`,
     }),
     listedAt({
       line: 74,
@@ -158,6 +158,30 @@ test("bay check on the kit warns once for each command the git-worktrees mode li
       name: "apply-patch",
       effects: "read, write, delete",
       run: `${unattributed} --work-tree=. apply --end-of-options`,
+    }),
+    listedAt({
+      line: 80,
+      name: "make-repository",
+      effects: "read, write",
+      run: `${git} init --quiet --template= --initial-branch=copy --end-of-options`,
+    }),
+    listedAt({
+      line: 83,
+      name: "repository-top",
+      effects: "read",
+      run: `${git} rev-parse --show-prefix --absolute-git-dir --show-toplevel`,
+    }),
+    listedAt({
+      line: 86,
+      name: "forget-paths",
+      effects: "read, write, delete",
+      run: `${git} --work-tree=. rm --cached -r --quiet --ignore-unmatch --`,
+    }),
+    listedAt({
+      line: 89,
+      name: "stage-paths",
+      effects: "read, write, delete",
+      run: `${git} --work-tree=. add --all --force --`,
     }),
   ]);
 });
@@ -237,6 +261,10 @@ const everyCommand = [
   "commit-staged",
   "filters-of-paths",
   "apply-patch",
+  "make-repository",
+  "repository-top",
+  "forget-paths",
+  "stage-paths",
 ];
 
 const ranWords =

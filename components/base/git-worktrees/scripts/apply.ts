@@ -1,6 +1,7 @@
 import { fail, type ScriptContext } from "../../../../bay/sdk.ts";
+import { recordInCopy, refuseUnlessOwnRepository } from "./lib/copies.ts";
 import { madeCopy } from "./lib/folders.ts";
-import { firstLine, gitFed, gitSucceeded, nulFields, refuseRepositoryFilters } from "./lib/git.ts";
+import { firstLine, gitFed, gitSucceeded, nulFields } from "./lib/git.ts";
 import { pathsOfPatch } from "./lib/patches.ts";
 import { defineRequestScript } from "./lib/request.ts";
 
@@ -26,11 +27,12 @@ export const run = defineRequestScript(async (request, context) => {
   const patch = request.text("patch");
   const paths = pathsOfPatch(patch);
   await madeCopy(context, folder, "apply a patch to");
-  await refuseRepositoryFilters(context, ".");
+  await refuseUnlessOwnRepository(context, folder);
   await refuseFiltered(context, folder, paths);
   const applied = await gitFed(context, folder, { call: ["apply-patch"], input: patch });
   if (applied.exitCode !== 0) {
     fail(`The patch does not apply to the copy, so nothing was changed: ${firstLine(applied.stderr)}`);
   }
+  await recordInCopy(context, { folder, paths, message: `A patch to ${paths.join(", ")}.` });
   return { folder, paths };
 });

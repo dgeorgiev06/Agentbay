@@ -9,8 +9,14 @@ adapter: claude-code
 settings:
   proof:
     links: [node_modules]
+    noRise:
+      - name: debt
+        pattern: "rule:"
+        paths: [framework/feature-map-debt.yaml]
   forge:
     featureMap: framework/features.yaml
+    into: feat/0022-agentbay5
+    practices: [framework/practices.md, components/base/typescript/practices.md]
   feed-briefing:
     selector:
       labels: [staking, custody]

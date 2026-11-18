@@ -51,6 +51,7 @@ type Toolchain = {
   readonly check: (input: Fields) => Promise<Value>;
   readonly test: (input: Fields) => Promise<Value>;
   readonly failure: (action: string, input: Fields) => Promise<string>;
+  readonly refusal: (action: string, input: Fields) => Promise<string>;
   readonly whyInconclusive: (outputs: readonly Value[]) => string;
   readonly write: (label: string, wanted: Wanted) => Promise<string>;
   readonly filesIn: (folder: string) => Promise<Files>;
@@ -74,6 +75,8 @@ const testSeconds = 120;
 const stopAfterSeconds = 2;
 
 const waitedSeconds = 30;
+
+const longestSeconds = 1000;
 
 const unknownCheck = "no-such-check";
 
@@ -435,6 +438,23 @@ const cases: readonly Case[] = [
     },
   },
   {
+    name: "check and test accept a time limit of up to 1000 seconds and refuse 1001 before anything runs",
+    run: async (toolchain) => {
+      const description = await toolchain.describe();
+      const longest = { folder: missingFolder, timeLimitSeconds: longestSeconds };
+      assertVerdicts(toolchain, await toolchain.check(longest), description.checks.map(inconclusive));
+      assertTestResult(toolchain, await toolchain.test(longest), { verdict: "inconclusive", reason: givenReason });
+      const tooLong = { folder: missingFolder, timeLimitSeconds: longestSeconds + 1 };
+      assert.deepEqual(
+        [await toolchain.refusal("check", tooLong), await toolchain.refusal("test", tooLong)],
+        [
+          "input.timeLimitSeconds must be at most 1000, but it is 1001.",
+          "input.timeLimitSeconds must be at most 1000, but it is 1001.",
+        ],
+      );
+    },
+  },
+  {
     name: "a test run with no tests is inconclusive, not passed",
     run: async (toolchain) => {
       const description = await toolchain.describe();
@@ -543,6 +563,7 @@ function toolchainFor(project: ModeProject, underTest: ToolchainUnderTest, setti
     check: (input) => project.output(reference("check"), { timeLimitSeconds: checkSeconds, ...given(input) }),
     test: (input) => project.output(reference("test"), { timeLimitSeconds: testSeconds, ...given(input) }),
     failure: (action, input) => project.failure(reference(action), given(input)),
+    refusal: (action, input) => project.refusal(reference(action), given(input)),
     whyInconclusive: (outputs) => {
       const reasons = reasonsGiven(outputs);
       if (reasons.length === 0) {

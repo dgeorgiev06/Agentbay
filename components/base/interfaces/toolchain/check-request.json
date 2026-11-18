@@ -28,8 +28,8 @@
     "timeLimitSeconds": {
       "type": "integer",
       "minimum": 1,
-      "maximum": 420,
-      "description": "How long one check may run before it is stopped and its verdict is inconclusive; left out, the toolchain's own limit applies."
+      "maximum": 1000,
+      "description": "How long one check may run before it is stopped and its verdict is inconclusive; left out, the toolchain's own limit applies. A whole suite may need up to 1000 seconds: the kit's own takes about 450 alone and longer beside another run."
     }
   }
 }

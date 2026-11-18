@@ -64,7 +64,7 @@ test("a made-up toolchain for another language, whose checks are listed commands
   const tested = ranFor(tally);
   assert.deepEqual(failedTests(tested.output), []);
   assert.equal(tested.status, 0, tested.output);
-  assert.match(tested.output, /^# pass 16$/m);
+  assert.match(tested.output, /^# pass 17$/m);
 });
 
 test("a made-up toolchain that reports passed for a check stopped at its limit fails the shared test's case on it", () => {

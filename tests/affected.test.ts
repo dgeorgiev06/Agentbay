@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
-import { affectedTests, repositoryTestFiles, testsThatOpenTheKit } from "./affected.ts";
+import { affectedTests, changedSince, repositoryTestFiles, testsThatOpenTheKit } from "./affected.ts";
 
 const modeFolders = ["components/base/store", "components/base/proof", "components/modes/feed-briefing"];
 
@@ -174,4 +177,35 @@ test("every test on the list of tests that open the kit is a test file of the ki
     testsThatOpenTheKit.filter((file) => !files.includes(file)),
     [],
   );
+});
+
+test("the changed paths are those since the base, both paths of a moved file, and uncommitted and untracked ones", () => {
+  const folder = mkdtempSync(join(tmpdir(), "agentbay-affected-"));
+  const git = (...parameters: readonly string[]): void => {
+    const identity = ["-c", "user.name=affected-test", "-c", "user.email=affected-test@agentbay.invalid"];
+    execFileSync("git", [...identity, "-c", "commit.gpgsign=false", ...parameters], { cwd: folder });
+  };
+  const lines = Array.from({ length: 20 }, (_, index) => `export const line${String(index)} = ${String(index)};`);
+  try {
+    git("init", "-q");
+    writeFileSync(join(folder, "kept.ts"), lines.join("\n"));
+    writeFileSync(join(folder, "edited.ts"), "export const edited = 1;\n");
+    git("add", ".");
+    git("commit", "-q", "-m", "base");
+    git("mv", "kept.ts", "moved.ts");
+    writeFileSync(join(folder, "added.ts"), "export const added = 1;\n");
+    git("add", ".");
+    git("commit", "-q", "-m", "change");
+    writeFileSync(join(folder, "edited.ts"), "export const edited = 2;\n");
+    writeFileSync(join(folder, "untracked.ts"), "export const untracked = 1;\n");
+    assert.deepEqual([...changedSince("HEAD~1", folder)].sort(), [
+      "added.ts",
+      "edited.ts",
+      "kept.ts",
+      "moved.ts",
+      "untracked.ts",
+    ]);
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
 });

@@ -103,8 +103,8 @@ export function affectedTests(change: Change): Affected {
   };
 }
 
-function gitLines(parameters: readonly string[]): readonly string[] {
-  return execFileSync("git", parameters, { encoding: "utf8" })
+function gitLines(parameters: readonly string[], folder = "."): readonly string[] {
+  return execFileSync("git", parameters, { cwd: folder, encoding: "utf8" })
     .split("\n")
     .filter((line) => line !== "");
 }
@@ -117,10 +117,10 @@ export function repositoryTestFiles(): readonly string[] {
   return repositoryFiles().filter((file) => testFile.test(file));
 }
 
-function changedSince(base: string): readonly string[] {
-  const committed = gitLines(["diff", "--name-only", "--no-renames", `${base}...HEAD`]);
-  const uncommitted = gitLines(["diff", "--name-only", "--no-renames", "HEAD"]);
-  const untracked = gitLines(["ls-files", "--others", "--exclude-standard"]);
+export function changedSince(base: string, folder: string): readonly string[] {
+  const committed = gitLines(["diff", "--name-only", "--no-renames", `${base}...HEAD`], folder);
+  const uncommitted = gitLines(["diff", "--name-only", "--no-renames", "HEAD"], folder);
+  const untracked = gitLines(["ls-files", "--others", "--exclude-standard"], folder);
   return [...new Set([...committed, ...uncommitted, ...untracked])];
 }
 
@@ -142,7 +142,7 @@ function testsRan(affected: Affected): boolean {
 
 function checked(base: string): boolean {
   const files = repositoryFiles();
-  const change = { changed: changedSince(base), testFiles: files.filter((file) => testFile.test(file)) };
+  const change = { changed: changedSince(base, "."), testFiles: files.filter((file) => testFile.test(file)) };
   const affected = affectedTests({ ...change, modeFolders: modeFoldersOf(files) });
   console.log(`Tier: ${affected.tier}`);
   console.log(`Why: ${affected.why}`);

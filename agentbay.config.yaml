@@ -6,6 +6,8 @@ bindings:
   worktrees: git-worktrees
   proof: proof
 adapter: claude-code
+approvals:
+  from: [terminal, chat]
 settings:
   proof:
     links: [node_modules]

@@ -211,3 +211,38 @@ Three runs of `npm run test:times` before the change, median per file. Wall time
 | 128 | 0.1 | 0.1 / 0.1 / 0.1 | 2 | components/base/store/tests/store-schemas.test.ts |
 | 129 | 0.1 | 0.1 / 0.1 / 0.1 | 8 | components/base/git-worktrees/tests/root-guard.test.ts |
 | 130 | 0.1 | 0.1 / 0.1 / 0.2 | 39 | adapters/claude-code/tests/guard-decide.test.ts |
+
+## KS1: where one start of a script host and of a database process goes
+
+Profiled on `ks1/kernel-speed` on 2026-11-18, before any change to the host or the database process. Other builders were running tests at the time (load average 8 to 30 on 2 cores), so the milliseconds are inflated; the shares are the finding. Each table is the mean of five starts profiled with `node --cpu-prof --cpu-prof-interval=100`, each sample put in the first category its stack matches. The host started the kernel's own command line (`scriptCommand`) without `--permission`, because node writes no profile under the permission model; twenty starts with and without `--permission` cost the same CPU (3.9 and 3.9 s).
+
+A script host, one start of a script that returns 1:
+
+| Where | ms |
+|---|---|
+| type stripping (amaro's WebAssembly set up, then each .ts file) | 111.1 |
+| the yaml package, loaded because `bay/sdk.ts` re-exports `readYaml` from `bay/yaml-text.ts` | 73.3 |
+| undici (node's fetch and WebSocket library), loaded by the preload | 51.0 |
+| module loading (resolve, read, compile) | 30.0 |
+| the sandbox's setup in the preload, beyond the above | 10.1 |
+| garbage collection | 9.6 |
+| node's bootstrap and the kernel's and script's own code | 3.4 |
+
+- Type stripping is mostly fixed cost: the first file stripped in a process takes about 30 ms (amaro compiles its WebAssembly); every later kernel file the host strips takes about 17 ms together. Node's compile cache (`NODE_COMPILE_CACHE`) does not keep stripped TypeScript in node 22.23, and under `--permission` it writes nothing.
+- undici is loaded by one line: the preload redefines `globalThis.WebSocket`, and node holds `WebSocket` as a lazy property that is built (undici compiled) the moment it is redefined or even described. `fetch` and `EventSource` load nothing.
+- The yaml package is about 40 CommonJS files. Every script loads it through the toolbox, whether it reads YAML or not. Two scripts in the kit read YAML (forge, proof).
+- Opening the database is not part of a host start.
+
+A database process, one start that answers one query on an existing database:
+
+| Where | ms |
+|---|---|
+| type stripping | 37.5 |
+| module loading | 13.4 |
+| the kernel's code, node's bootstrap, garbage collection | 5.0 |
+| opening the database (`node:sqlite`) | 0.1 |
+
+- A step broker starts a database process only on the step's first database request (`DatabaseProcess.request`); a step that asks nothing of the database starts none. That already holds, so it is not a saving here.
+- The database process runs only kernel code, and nearly all of its start is stripping that code's types. Nothing the frame allows cuts it: it would need the kernel's TypeScript stripped ahead of time (see below).
+
+Twenty starts each, without the profiler, under the same load: bare `node` 0.023 CPU s a start, the script host 0.195, the database process 0.081.

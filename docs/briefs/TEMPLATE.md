@@ -26,6 +26,8 @@ A numbered list of what exists when the slice is done. Then one paragraph on wha
 
 Ordered steps. The first is always: run `npm run check` before any edit and record the baseline.
 
+While building, `npm run test:affected -- <base>` runs the tests the change needs before a merge. It reads the paths changed since `<base>`, with uncommitted and untracked ones, and picks a tier. A change inside one or more mode folders runs those modes' tests. A change to a mode's `mode.yaml`, schema, workflow or skill also runs the tests that open the kit, listed in `tests/affected.ts`. A change under `docs/`, or to the root `README.md` or `CONTEXT.md`, needs no test. A Markdown file inside a mode folder counts as part of that mode. Any other change runs the whole suite, Markdown included. It runs the type check, lint and the format check on the whole kit first. It decides what to run, not whether a change is safe: the whole suite still runs on the merged branch, and the last step of a slice is still `npm run check`.
+
 ## Tools
 
 Every command in full. Never "as in another brief".

@@ -44,7 +44,7 @@ resources:
       run: --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 ls-files -z --others --directory --end-of-options
       effects: [read]
     restore-paths:
-      run: --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --git-dir=../../../.git --work-tree=. restore --worktree --source
+      run: --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 -c core.autocrlf=false --git-dir=../../../.git --work-tree=. restore --worktree --source
       effects: [read, write, network, spend, delete]
     is-ancestor:
       run: --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 merge-base --is-ancestor --end-of-options

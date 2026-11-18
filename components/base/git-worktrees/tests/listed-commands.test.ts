@@ -110,7 +110,7 @@ test("bay check on the kit warns once for each command the git-worktrees mode li
       line: 47,
       name: "restore-paths",
       effects: "read, write, network, spend, delete",
-      run: `${git} --git-dir=../../../.git --work-tree=. restore --worktree --source`,
+      run: `${git} -c core.autocrlf=false --git-dir=../../../.git --work-tree=. restore --worktree --source`,
     }),
     listedAt({
       line: 50,

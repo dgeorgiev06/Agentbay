@@ -1,4 +1,5 @@
 import { fail, type ScriptContext } from "../../../../../bay/sdk.ts";
+import { forgetFolder } from "./folders.ts";
 import { gitFed, gitSucceeded, nulFields, refuseRepositoryFilters, treeOf } from "./git.ts";
 
 type Changed = Awaited<ReturnType<ScriptContext["files"]["makeFolder"]>>;
@@ -80,7 +81,12 @@ export async function makeRepository(
   await recordInCopy(context, { folder, paths: ["."], message: `A throwaway copy of ${commit}.` });
   const held = await treeOf(context, folder, "HEAD");
   if (held !== (await treeOf(context, ".", commit))) {
-    fail(`The copy ${folder} does not hold exactly the files of ${commit}, so it is not to be used; remove it.`);
+    await throwawayChanged(context.files.remove(folder));
+    await forgetFolder(context, folder);
+    fail(
+      `git wrote files into the copy ${folder} that differ from the files of ${commit}, as the repository's own ` +
+        "attributes can make it, so the copy was removed.",
+    );
   }
   await linkIgnored(context, folder, links);
 }

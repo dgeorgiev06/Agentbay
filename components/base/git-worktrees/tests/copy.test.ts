@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { access, chmod, mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { access, chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 import type { ModeProject } from "../../../../tests/test-toolbox.ts";
 import { git, gitWith, openRepositoryProject, refsAndWorktrees, writeFiles } from "./repository.ts";
@@ -162,6 +162,37 @@ test("the project's status, refs, worktrees and objects are the same after a cop
     await project.output("git-worktrees.remove", { folder });
     assert.equal(await exists(join(project.root, folder)), false);
     assert.deepEqual(projectState(project), before);
+  } finally {
+    await project.close();
+  }
+});
+
+test("a project whose configuration sets core.autocrlf gets a copy holding the commit's bytes, with line ends unchanged", async () => {
+  const project = await openRepositoryProject();
+  try {
+    git(project, ".", ["config", "core.autocrlf", "true"]);
+    await project.output("git-worktrees.copy", { commit: "main", name: "checked" });
+    assert.equal(await readFile(join(project.root, folder, "README.md"), "utf8"), "A small repository.\n");
+    assert.equal(inCopy(project, ["rev-parse", "HEAD^{tree}"]), git(project, ".", ["rev-parse", "main^{tree}"]).trim());
+  } finally {
+    await project.close();
+  }
+});
+
+test("a copy whose files git writes differently from the commit's is refused and removed, and the name is free again", async () => {
+  const project = await openRepositoryProject();
+  try {
+    const attributes = join(project.root, git(project, ".", ["rev-parse", "--git-path", "info/attributes"]).trim());
+    await mkdir(dirname(attributes), { recursive: true });
+    await writeFile(attributes, "* text eol=crlf\n", "utf8");
+    assert.equal(
+      await project.failure("git-worktrees.copy", { commit: project.base, name: "checked" }),
+      `git wrote files into the copy ${folder} that differ from the files of ${project.base}, as the repository's ` +
+        "own attributes can make it, so the copy was removed.",
+    );
+    assert.equal(await exists(join(project.root, folder)), false);
+    await rm(attributes);
+    assert.deepEqual(await project.output("git-worktrees.copy", { commit: project.base, name: "checked" }), { folder });
   } finally {
     await project.close();
   }

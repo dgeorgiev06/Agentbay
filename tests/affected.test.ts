@@ -7,7 +7,10 @@ const modeFolders = ["components/base/store", "components/base/proof", "componen
 
 const storeTests = ["components/base/store/tests/store-items.test.ts", "components/base/store/tests/store-sql.test.ts"];
 
-const proofTests = ["components/base/proof/tests/checks.test.ts", "components/base/proof/tests/listed-commands.test.ts"];
+const proofTests = [
+  "components/base/proof/tests/checks.test.ts",
+  "components/base/proof/tests/listed-commands.test.ts",
+];
 
 const briefingTests = ["components/modes/feed-briefing/tests/citations.test.ts"];
 
@@ -36,7 +39,10 @@ test("a change to one mode's script needs that mode's own tests", () => {
 
 test("a change to two modes' tests needs both modes' own tests", () => {
   assert.deepEqual(
-    affected(["components/base/store/tests/store-sql.test.ts", "components/modes/feed-briefing/tests/citations.test.ts"]),
+    affected([
+      "components/base/store/tests/store-sql.test.ts",
+      "components/modes/feed-briefing/tests/citations.test.ts",
+    ]),
     {
       tier: "mode",
       files: [...storeTests, ...briefingTests],
@@ -100,11 +106,14 @@ test("a change to documents only needs no test", () => {
 });
 
 test("a document beside a mode's script does not raise the tier", () => {
-  assert.deepEqual(affected(["CONTEXT.md", "components/base/store/README.md", "components/base/store/scripts/put.ts"]), {
-    tier: "mode",
-    files: storeTests,
-    why: "Every changed path is inside components/base/store, and none is a manifest, schema, workflow or skill.",
-  });
+  assert.deepEqual(
+    affected(["CONTEXT.md", "components/base/store/README.md", "components/base/store/scripts/put.ts"]),
+    {
+      tier: "mode",
+      files: storeTests,
+      why: "Every changed path is inside components/base/store, and none is a manifest, schema, workflow or skill.",
+    },
+  );
 });
 
 test("an unknown top-level file needs the whole suite, and the reason names it", () => {
@@ -124,17 +133,23 @@ test("a deleted test file of a mode is not run, and the mode's other tests are",
 });
 
 test("a file moved from one mode to another needs both modes' tests", () => {
-  assert.deepEqual(affected(["components/base/store/scripts/lib/rows.ts", "components/base/proof/scripts/lib/rows.ts"]), {
-    tier: "mode",
-    files: [...storeTests, ...proofTests],
-    why:
-      "Every changed path is inside components/base/store or components/base/proof, " +
-      "and none is a manifest, schema, workflow or skill.",
-  });
+  assert.deepEqual(
+    affected(["components/base/store/scripts/lib/rows.ts", "components/base/proof/scripts/lib/rows.ts"]),
+    {
+      tier: "mode",
+      files: [...storeTests, ...proofTests],
+      why:
+        "Every changed path is inside components/base/store or components/base/proof, " +
+        "and none is a manifest, schema, workflow or skill.",
+    },
+  );
 });
 
 test("a file moved out of a mode into the kernel needs the whole suite", () => {
-  assert.equal(affected(["components/base/store/scripts/lib/rows.ts", "bay/rows.ts"]).why, `bay/rows.ts is outside every mode folder, so the whole suite runs.`);
+  assert.equal(
+    affected(["components/base/store/scripts/lib/rows.ts", "bay/rows.ts"]).why,
+    `bay/rows.ts is outside every mode folder, so the whole suite runs.`,
+  );
 });
 
 test("nothing changed needs no test", () => {

@@ -1,0 +1,10 @@
+name: schemabad
+version: 1.0.0
+description: Breaks a schema rule.
+actions:
+  go:
+    input: schemas/go.json
+    output: schemas/go.json
+    effects: [read]
+    run:
+      - script: scripts/go.ts

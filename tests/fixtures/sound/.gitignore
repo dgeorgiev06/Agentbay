@@ -1,0 +1,6 @@
+.agentbay/
+out/
+bay
+schemas
+node_modules
+package.json

@@ -17,7 +17,11 @@
     "adapters/claude-code/step-guard.ts!",
     "schemas/generate-types.ts!"
   ],
-  "project": ["{bay,adapters,components,tests,schemas}/**/*.ts!", "!{tests,components/**/tests,adapters/**/tests}/**!"],
+  "project": [
+    "{bay,adapters,components,tests,schemas}/**/*.ts!",
+    "!{tests,components/**/tests,adapters/**/tests}/**!",
+    "!tests/fixtures/**"
+  ],
   "ignoreExportsUsedInFile": {
     "function": true,
     "type": true

@@ -1,0 +1,17 @@
+name: grantbad
+version: 1.0.0
+description: Breaks grant rules.
+resources:
+  files:
+    write:
+      - .agentbay/data/
+  commands:
+    tests: { run: node --test, effects: [read] }
+actions:
+  go:
+    description: When a test goes.
+    input: schemas/go.json
+    output: schemas/missing.json
+    effects: [read]
+    run:
+      - script: scripts/go.ts

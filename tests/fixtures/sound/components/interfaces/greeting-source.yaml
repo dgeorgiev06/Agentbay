@@ -1,0 +1,8 @@
+name: greeting-source
+version: 1
+actions:
+  fetch:
+    input: greeting-source/fetch-input.json
+    output: greeting-source/fetch-output.json
+    effects:
+      - read

@@ -1,13 +1,14 @@
 import { nestedTarget, runNestedAction } from "./action-steps.ts";
 import { noSpend, subtractSpend, type BudgetFrame } from "./budget.ts";
-import type { Json } from "../contracts.ts";
+import type { Json, Settled } from "../contracts.ts";
 import type { Step as WorkflowStep } from "../generated/workflow.ts";
 import { toJson } from "../json.ts";
-import { problemText, succeededWith } from "../outcome.ts";
+import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
 import type { ReferenceScope, WorkflowTarget } from "../manifests/manifests.ts";
 import type { StepRecord } from "./run-store.ts";
+import { evaluatedChoices, reasonProblems, shownChoices, type ChoiceStatus } from "./choices.ts";
 import { approvalContentOf, type ApprovalContent } from "./scrubbed-store.ts";
-import type { ApprovalDetail } from "./step-detail.ts";
+import type { ApprovalDetail, ApprovalVerdict } from "./step-detail.ts";
 import { foreachItemKey, workflowStepKey } from "./step-key.ts";
 import {
   changeDetail,
@@ -97,7 +98,7 @@ async function runWorkflowAction(walk: Walk, scope: WorkflowScope, at: Unsettled
 }
 
 function approvalWaiting(at: StepAt<ApprovalStep>, detail: ApprovalDetail, content: Json): Progress {
-  const previousHash = detail.previousHash;
+  const { previousHash, choices } = detail;
   return waiting({
     reason: "approval",
     stepKey: at.key,
@@ -105,18 +106,65 @@ function approvalWaiting(at: StepAt<ApprovalStep>, detail: ApprovalDetail, conte
     hash: detail.hash,
     content,
     ...(previousHash === undefined ? {} : { previousHash }),
+    ...(choices === undefined ? {} : { choices: shownChoices(choices, content) }),
   });
+}
+
+function choicesOf(scope: WorkflowScope, step: ApprovalStep, content: Json): Outcome<ChoiceStatus[] | undefined> {
+  if (step.choices === undefined) {
+    return succeededWith(undefined);
+  }
+  const resolve = (rule: string): Outcome<Json> => scope.workflow.resolve(rule, referenceScope(scope));
+  const evaluated = evaluatedChoices({ stepId: step.id, choices: step.choices, resolve });
+  if (!evaluated.ok) {
+    return evaluated;
+  }
+  const problems = reasonProblems(step.id, evaluated.value, content);
+  return problems.length === 0
+    ? succeededWith([...evaluated.value])
+    : failedWith(problems.map((message) => unplacedProblem(message)));
+}
+
+function shownProblems(step: ApprovalStep, detail: ApprovalDetail, content: Json): readonly string[] {
+  return detail.choices === undefined ? [] : reasonProblems(step.id, detail.choices, content);
 }
 
 function approvalDetailOf(record: StepRecord): ApprovalDetail | undefined {
   return record.kind === "approval" ? (record.detail ?? undefined) : undefined;
 }
 
+function decided(at: StepAt<ApprovalStep>, verdict: ApprovalVerdict, content: Json): Settled {
+  switch (verdict.decision) {
+    case "approve":
+      return done(content);
+    case "reject":
+      return failed(`${verdict.by} rejected step ${at.step.id}: ${at.step.approval}`);
+    case "choice":
+      return done({ choice: verdict.choice, content });
+  }
+}
+
+function recordedDetail(at: StepAt<ApprovalStep>, verdict: ApprovalVerdict, hash: string): Json {
+  const { by } = verdict;
+  switch (verdict.decision) {
+    case "approve":
+    case "reject":
+      return { stepKey: at.key, hash, decision: verdict.decision, by };
+    case "choice":
+      return { stepKey: at.key, hash, decision: verdict.decision, choice: verdict.choice, by };
+  }
+}
+
 async function settleApproval(walk: Walk, at: StepAt<ApprovalStep>, shown: Shown): Promise<Progress> {
   const recordedHash = shown.detail.hash;
   if (recordedHash !== shown.hash) {
-    const question = shown.detail.question;
-    const detail = { question, hash: shown.hash, previousHash: recordedHash, shown: shown.content };
+    const problems = shownProblems(at.step, shown.detail, shown.content);
+    if (problems.length > 0) {
+      return refuse(walk, { key: at.key, kind: "approval", input: shown.content }, problems.join(" "));
+    }
+    const { question, choices } = shown.detail;
+    const kept = choices === undefined ? {} : { choices };
+    const detail = { question, hash: shown.hash, previousHash: recordedHash, shown: shown.content, ...kept };
     await changeDetail(walk, { key: at.key, kind: "approval", detail });
     return approvalWaiting(at, detail, shown.content);
   }
@@ -124,10 +172,8 @@ async function settleApproval(walk: Walk, at: StepAt<ApprovalStep>, shown: Shown
   if (verdict === undefined) {
     return approvalWaiting(at, shown.detail, shown.content);
   }
-  const { decision, by } = verdict;
-  const recorded = eventOf(walk, "approval.recorded", { stepKey: at.key, hash: shown.hash, decision, by });
-  const settled =
-    decision === "approve" ? done(shown.content) : failed(`${by} rejected step ${at.step.id}: ${at.step.approval}`);
+  const recorded = eventOf(walk, "approval.recorded", recordedDetail(at, verdict, shown.hash));
+  const settled = decided(at, verdict, shown.content);
   return endRecord(walk, { ...settled, key: at.key, spent: noSpend }, [recorded]);
 }
 
@@ -145,8 +191,14 @@ async function runApproval(walk: Walk, scope: WorkflowScope, at: UnsettledStep<A
   const shown = approvalContentOf(content.value, walk.services.scrubber);
   const detail = at.record === undefined ? undefined : approvalDetailOf(at.record);
   if (detail === undefined) {
-    const started = { question: at.step.approval, hash: shown.hash };
-    await startRecord(walk, { key: at.key, kind: "approval", input: shown.content, detail: started });
+    const start = { key: at.key, kind: "approval" as const, input: shown.content };
+    const choices = choicesOf(scope, at.step, shown.content);
+    if (!choices.ok) {
+      return refuse(walk, start, problemText(choices.problems));
+    }
+    const offered = choices.value === undefined ? {} : { choices: choices.value };
+    const started = { question: at.step.approval, hash: shown.hash, ...offered };
+    await startRecord(walk, { ...start, detail: started });
     return approvalWaiting(at, started, shown.content);
   }
   return settleApproval(walk, at, { ...shown, detail });

@@ -1,5 +1,6 @@
 import type { Overrun } from "./budget.ts";
 import type { Json, Permissions, StepPlace, Tier } from "../contracts.ts";
+import type { ApprovalAnswer, Choice } from "./choices.ts";
 
 export type SkillTask = {
   readonly runId: string;
@@ -24,6 +25,7 @@ export type Waiting<HandedTask extends SkillTask = SkillTask> =
       readonly hash: string;
       readonly content: Json;
       readonly previousHash?: string;
+      readonly choices?: readonly Choice[];
     }
   | { readonly reason: "time"; readonly stepKey: string; readonly until: string }
   | { readonly reason: "budget"; readonly stepKey: string; readonly overrun: Overrun }
@@ -50,8 +52,7 @@ export type RunState<HandedTask extends SkillTask = SkillTask> =
 
 export type RunStatus = Exclude<RunState, { readonly status: "running" }>;
 
-export type ApprovalDecision = {
+export type ApprovalDecision = ApprovalAnswer & {
   readonly hash: string;
-  readonly decision: "approve" | "reject";
   readonly by: string;
 };

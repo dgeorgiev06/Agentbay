@@ -25,6 +25,8 @@ import {
 } from "./run-store.ts";
 import type { ApprovalDecision, RunStatus } from "./run-state.ts";
 import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
+import { answerRefusal } from "./choices.ts";
+import type { ApprovalVerdict } from "./step-detail.ts";
 import { scrubbedStore } from "./scrubbed-store.ts";
 import { startedSkillOf, submissionProblems, type StartedSkill } from "./skill-steps.ts";
 import { skillRoundOf } from "./step-key.ts";
@@ -167,6 +169,27 @@ function waitingSkill(run: RunWithSteps, stepKey: string): Outcome<StartedSkill>
 
 function startedApprovalOf(record: StepRecord | undefined): StartedApproval | undefined {
   return record?.kind === "approval" && record.status === "started" ? record : undefined;
+}
+
+function verdictOf(decision: ApprovalDecision): ApprovalVerdict {
+  const { by } = decision;
+  switch (decision.decision) {
+    case "approve":
+    case "reject":
+      return { decision: decision.decision, by };
+    case "choice":
+      return { decision: decision.decision, choice: decision.choice, by };
+  }
+}
+
+function answeredApproval(run: RunWithSteps, stepKey: string, decision: ApprovalDecision): Outcome<StartedApproval> {
+  const found = waitingApproval(run, stepKey, decision.hash);
+  if (!found.ok) {
+    return found;
+  }
+  const { detail, input } = found.value;
+  const refused = answerRefusal(stepKey, detail.choices, { answer: decision, shown: detail.shown ?? input });
+  return refused === undefined ? found : refusal(run.id, { message: refused });
 }
 
 function waitingApproval(run: RunWithSteps, stepKey: string, hash: string): Outcome<StartedApproval> {
@@ -372,11 +395,11 @@ export class Engine {
 
   approve(runId: string, stepKey: string, decision: ApprovalDecision): Promise<Outcome<AdvancedRun>> {
     return this.#withRun(runId, this.#services.clock.now(), async (run, writer, now) => {
-      const found = waitingApproval(run, stepKey, decision.hash);
+      const found = answeredApproval(run, stepKey, decision);
       if (!found.ok) {
         return found;
       }
-      const detail = { ...found.value.detail, verdict: { decision: decision.decision, by: decision.by } };
+      const detail = { ...found.value.detail, verdict: verdictOf(decision) };
       const change = { key: stepKey, kind: "approval" as const, detail, at: now.toISOString() };
       await this.#services.store.saveStepDetail(writer, change, []);
       return this.#continue(writer, { now, cause: "approve", rerunUnfinished: false }, {});

@@ -518,6 +518,23 @@ test("a call a long script makes draws from the same budget, less the minutes th
   opened.close();
 });
 
+test("the check scripts of a skill step keep the kernel's eight minutes, whatever the action declares", async () => {
+  const longDraft: Action = {
+    description: "When a test drafts a text in an action that declares a long limit.",
+    input: "schemas/anything.json",
+    output: "schemas/draft.json",
+    effects: ["read"],
+    run: [{ skill: "skills/draft", tier: "balanced", checks: ["scripts/long-enough.ts"] }],
+    scriptTimeLimitSeconds: 900,
+  };
+  const { runs, runner, close } = await openedRuns({ changes: { notesActions: { "long-draft": longDraft } } });
+  const started = runOf(await runs.start({ action: "notes.long-draft" }, {}));
+  const run = runOf(await runs.submit(tokenOf(started), answer({ text: "long enough" })));
+  assert.equal(run.state.status, "done");
+  assert.deepEqual(timeLimitsOf(runner.calls), [["long-draft", 480_000, "kernel"]]);
+  close();
+});
+
 test("a script that calls an action is charged once: its own spend plus the call's, from the call's records", async () => {
   const scripts = {
     "notes:scripts/log.ts": async (request: ScriptRequest) => {

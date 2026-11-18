@@ -1214,6 +1214,31 @@ test("context.now() is the kernel clock's time when the step started, so a fake 
   });
 });
 
+function databaseStarts(children: WatchedChildren): number {
+  return children.started.filter((request) => request.arguments.some((part) => part.endsWith("database-child.ts")))
+    .length;
+}
+
+test("a step that asks nothing of the database starts no database process, and one that asks starts one", async () => {
+  await withProject(async (root) => {
+    await writeProjectFile(root, "components/modes/notes/migrations/0001-notes.sql", "create table notes (text text);");
+    const quiet = watchedChildren(nodeChildProcesses.start);
+    const asking = watchedChildren(nodeChildProcesses.start);
+    const write = { permissions: { effects: ["read", "write"] } } as const;
+    const silent = await attempt(root, "return 1;", { ...write, childProcesses: quiet });
+    const body = [
+      '  const notes = context.db.partition("alpha");',
+      "  await notes.migrate();",
+      '  const rows = await notes.query("select count(*) as n from notes");',
+      "  return rows.ok ? rows.value : rows.message;",
+    ].join("\n");
+    const counted = await attempt(root, body, { ...write, childProcesses: asking });
+    assert.deepEqual([outputOf(silent), outputOf(counted)], [1, [{ n: 0 }]]);
+    assert.deepEqual([databaseStarts(quiet), quiet.started.length], [0, 1]);
+    assert.deepEqual([databaseStarts(asking), asking.started.length], [1, 2]);
+  });
+});
+
 test("a script reaches a database partition through its context: migrate, execute, query and agent query", async () => {
   await withProject(async (root) => {
     await writeProjectFile(root, "components/modes/notes/migrations/0001-notes.sql", "create table notes (text text);");

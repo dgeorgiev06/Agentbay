@@ -46,10 +46,10 @@ function copyNameOf(input: Json): string {
   return typeof name === "string" ? name : "";
 }
 
-function callAnswer(reference: string, input: Json): Json {
+function callAnswer(reference: string, input: Json, changed: readonly string[]): Json {
   switch (reference) {
     case "worktrees.changed":
-      return { paths: [{ path: manifest, how: "modified" }] };
+      return { paths: changed.map((path) => ({ path, how: "modified" })) };
     case "worktrees.copy":
       return { folder: `.forge/copies/${copyNameOf(input)}` };
     default:
@@ -57,7 +57,7 @@ function callAnswer(reference: string, input: Json): Json {
   }
 }
 
-function contextOf(asked: Asked, reads: readonly Read[]): ScriptContext {
+function contextOf(asked: Asked, reads: readonly Read[], changed: readonly string[]): ScriptContext {
   const unanswered = (): Promise<typeof notHere> => Promise.resolve(notHere);
   const statements = { execute: unanswered, query: unanswered };
   let readsMade = 0;
@@ -86,7 +86,7 @@ function contextOf(asked: Asked, reads: readonly Read[]): ScriptContext {
     },
     call: (reference, input) => {
       asked.calls.push(reference);
-      return Promise.resolve({ ok: true, value: callAnswer(reference, input) });
+      return Promise.resolve({ ok: true, value: callAnswer(reference, input, changed) });
     },
     schemas: { check: unanswered },
     settings: {},
@@ -100,12 +100,33 @@ function contextOf(asked: Asked, reads: readonly Read[]): ScriptContext {
 async function gathered(
   spentBefore: number,
   reads: readonly Read[],
+  changed: readonly string[] = [manifest],
 ): Promise<{ readonly asked: Asked; readonly found: unknown }> {
   const asked: Asked = { calls: [], reads: [] };
-  const step = new ProofStep(contextOf(asked, reads));
+  const step = new ProofStep(contextOf(asked, reads, changed));
   step.spend(spentBefore);
   return { asked, found: await asDeclaredEvidence(step, request) };
 }
+
+test("as-declared: an action changed in the kit's interface file and in a project's interface file is seen, and other yaml is not read", async () => {
+  const kitInterface = "components/base/interfaces/worktrees.yaml";
+  const projectInterface = "components/interfaces/notes.yaml";
+  const notInterfaces = ["components/base/interfaces/worktrees/changed.yaml", "fixtures/notes.yaml"];
+  const worktreesBefore = "name: worktrees\nversion: 1\nactions:\n  changed:\n    effects: [read]\n";
+  const worktreesAfter = "name: worktrees\nversion: 1\nactions:\n  changed:\n    effects: [read, write]\n";
+  const reads = [worktreesBefore, notesBefore, worktreesAfter, notesAfter].map((text) => printed(text, 0));
+  const changed = [kitInterface, projectInterface, ...notInterfaces];
+  const { asked, found } = await gathered(0, reads, changed);
+  assert.deepEqual(found, {
+    found: "changed",
+    paths: [kitInterface, projectInterface, ...notInterfaces],
+    names: { gained: [], lost: [], changed: ["worktrees.changed", "notes.write"] },
+  });
+  assert.deepEqual(
+    asked.reads.map((read) => read.arguments),
+    [[kitInterface], [projectInterface], [kitInterface], [projectInterface]],
+  );
+});
 
 const copiedTwice = ["worktrees.changed", "worktrees.copy", "worktrees.remove", "worktrees.copy", "worktrees.remove"];
 
@@ -257,4 +278,15 @@ test("as-declared with the real git-worktrees mode: action names read in two cop
     },
   ]);
   assert.deepEqual(await readdir(join(project.root, ".forge", "copies")), []);
+});
+
+test("in-scope: the request's schema refuses a scope entry that is not a pattern before proof runs", async () => {
+  const input = fieldsOf(sliceOnly("base", "head"));
+  const slice = { ...fieldsOf(input.slice ?? null), scope: ["../up/**"] };
+  assert.equal(
+    await project.refusal("proof.prove", { ...input, slice }),
+    "input.slice.scope.0 is not in the expected form. Expected: A path relative to the repository's root, or a pattern " +
+      "of paths. A * stands for any characters inside one folder or file name; a ** that is a whole part stands for " +
+      "any number of folders. bay/broker/** holds every file under bay/broker/, and not bay/brokers.ts.",
+  );
 });

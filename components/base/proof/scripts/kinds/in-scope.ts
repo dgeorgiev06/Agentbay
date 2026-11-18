@@ -6,8 +6,17 @@ import { changedBetween, changedNotKnown, touchedPaths, type Changed } from "./t
 
 const namedCharacters = 1500;
 
+const anyPath = "any";
+
 function inScope(scope: readonly string[], path: string): boolean {
   return scope.some((pattern) => pathMatch(pattern, path).kind === "matched");
+}
+
+function patternFaults(scope: readonly string[]): readonly string[] {
+  return scope.flatMap((pattern) => {
+    const answer = pathMatch(pattern, anyPath);
+    return answer.kind === "not a pattern" ? [answer.reason] : [];
+  });
 }
 
 function namesThatFit(paths: readonly string[]): readonly string[] {
@@ -37,6 +46,13 @@ function outsideSaid(outside: readonly string[]): string {
 export function inScopeParts(scope: readonly string[], changed: Changed): Parts {
   if (!changed.known) {
     return { parts: [unknown(changedNotKnown)], whenPassed: "" };
+  }
+  const [fault] = patternFaults(scope);
+  if (fault !== undefined) {
+    return {
+      parts: [unknown(`The write scope holds an entry that is not a pattern, so nothing is known: ${fault}`)],
+      whenPassed: "",
+    };
   }
   const touched = touchedPaths(changed.paths);
   const outside = touched.filter((path) => !inScope(scope, path));

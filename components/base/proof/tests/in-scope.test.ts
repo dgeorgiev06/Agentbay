@@ -98,3 +98,21 @@ test("in-scope: a path outside too long to name is counted and not named", () =>
     failedWith("1 changed path is outside the scope, and its name is too long to show here."),
   );
 });
+
+test("in-scope: a scope entry that is not a pattern is inconclusive with the matcher's reason, never passed", () => {
+  const changed = known([{ how: "modified", path: "src/sum.txt" }]);
+  const notPattern = {
+    item: "scope",
+    kind: "in-scope",
+    verdict: "inconclusive",
+    reason:
+      'The write scope holds an entry that is not a pattern, so nothing is known: "../up/**" is not a pattern: it holds two dots in a row.',
+  };
+  assert.deepEqual(judged(["src/**", "../up/**"], changed), notPattern);
+  assert.deepEqual(judged(["src/**", "../up/**"], known([])), notPattern);
+});
+
+test("in-scope: a changed path the matcher refuses as a path is outside the scope, even of a scope of every path", () => {
+  const changed = known([{ how: "added", path: "src/../escape.txt" }]);
+  assert.deepEqual(judged(["**"], changed), failedWith("1 changed path is outside the scope: src/../escape.txt."));
+});

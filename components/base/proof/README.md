@@ -18,7 +18,7 @@ Built. A copy of the base with the item's test files laid over it as they are at
 
 ### in-scope
 
-Built. Proof adds it to every slice as the item `scope`. It asks the worktrees interface what changed between the base and the head, and matches each changed path against the slice's write scope with the toolbox's `pathMatch`; a move counts as its old path and its new path. It reads no copy. Passed when every path is in the scope. Each path outside fails the item and is named as the worktrees interface gave it, as many as fit in the detail, and the rest are counted. What changed not known makes the item inconclusive.
+Built. Proof adds it to every slice as the item `scope`. It asks the worktrees interface what changed between the base and the head, and matches each changed path against the slice's write scope with the toolbox's `pathMatch`; a move counts as its old path and its new path. It reads no copy. Passed when every path is in the scope. Each path outside fails the item and is named as the worktrees interface gave it, as many as fit in the detail, and the rest are counted. What changed not known, or a scope entry that is not a pattern, makes the item inconclusive; the request's schema already refuses such an entry. A changed path the matcher refuses as a path is outside the scope.
 
 ### as-declared
 

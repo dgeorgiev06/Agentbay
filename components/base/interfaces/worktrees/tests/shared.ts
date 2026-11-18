@@ -202,10 +202,6 @@ async function filesIn(world: World, folder: string): Promise<Files> {
   return (await treeIn(world, folder)).files;
 }
 
-function copyTree(world: World, folder: string): Promise<Tree> {
-  return walk(join(world.root, folder), []);
-}
-
 function forgeTree(world: World): Promise<Tree> {
   return walk(join(world.root, forgeData), []);
 }
@@ -420,7 +416,7 @@ const cases: readonly Case[] = [
     },
   },
   {
-    name: "a copy holds exactly the commit's files as they are at the commit, and none of the repository's own data",
+    name: "a copy holds exactly the commit's files as they are at the commit, and none of the project's own data",
     restsOn: "copy-request (commit: the commit whose files the copy holds), copy-response",
     run: async (world) => {
       await world.makeBranch("history", world.base);
@@ -429,7 +425,7 @@ const cases: readonly Case[] = [
       );
       await written(world, ".", { "README.md": "Changed after the commit.\n", "loose.txt": "not committed\n" });
       const folder = await copied(world, { commit: "history", name: "plain" });
-      const tree = await copyTree(world, folder);
+      const tree = await treeIn(world, folder);
       assert.deepEqual(tree, { files: await world.filesOf(commit), links: {} });
       assert.equal(tree.files["src/main.txt"], "at the commit\n");
       assert.equal(tree.files["README.md"], "A small repository.\n");
@@ -441,7 +437,7 @@ const cases: readonly Case[] = [
     run: async (world) => {
       await written(world, ".", { "deps/package/index.txt": "installed\n", "loose.txt": "not committed\n" });
       const folder = await copied(world, { commit: ownersBranch, name: "linked", links: ["deps"] });
-      assert.deepEqual(await copyTree(world, folder), {
+      assert.deepEqual(await treeIn(world, folder), {
         files: await world.filesOf(world.base),
         links: { deps: join(world.root, "deps") },
       });
@@ -451,7 +447,7 @@ const cases: readonly Case[] = [
       assert.equal(sentenceOf(await world.failure("copy", refused)), givenReason);
       assert.deepEqual(await forgeTree(world), before);
       const later = await copied(world, { commit: ownersBranch, name: "refused" });
-      assert.deepEqual(await copyTree(world, later), { files: await world.filesOf(world.base), links: {} });
+      assert.deepEqual(await treeIn(world, later), { files: await world.filesOf(world.base), links: {} });
     },
   },
   {
@@ -460,9 +456,9 @@ const cases: readonly Case[] = [
     run: async (world) => {
       const folder = await copied(world, { commit: ownersBranch, name: "twice" });
       await written(world, folder, { "stray.txt": "made in the copy\n" });
-      const before = await copyTree(world, folder);
+      const before = await treeIn(world, folder);
       assert.equal(sentenceOf(await world.failure("copy", { commit: ownersBranch, name: "twice" })), givenReason);
-      assert.deepEqual(await copyTree(world, folder), before);
+      assert.deepEqual(await treeIn(world, folder), before);
     },
   },
   {
@@ -483,7 +479,7 @@ const cases: readonly Case[] = [
         "kept.txt": "earlier\n",
         "dir/a.txt": "a\n",
       };
-      assert.deepEqual(await copyTree(world, folder), { files: expected, links: {} });
+      assert.deepEqual(await treeIn(world, folder), { files: expected, links: {} });
     },
   },
   {
@@ -502,7 +498,7 @@ const cases: readonly Case[] = [
         "kept.txt": "one\nthree\n",
         "dir/new.txt": "new\n",
       };
-      assert.deepEqual(await copyTree(world, folder), { files: expected, links: {} });
+      assert.deepEqual(await treeIn(world, folder), { files: expected, links: {} });
     },
   },
   {
@@ -522,9 +518,9 @@ const cases: readonly Case[] = [
     run: async (world) => {
       const files = { "kept.txt": "one\ntwo\n", "other.txt": "other\n" };
       const { folder } = await copyToPatch(world, files);
-      const before = await copyTree(world, folder);
+      const before = await treeIn(world, folder);
       assert.equal(sentenceOf(await world.failure("apply", { folder, patch: changeKeptThenFailOnOther })), givenReason);
-      assert.deepEqual(await copyTree(world, folder), before);
+      assert.deepEqual(await treeIn(world, folder), before);
     },
   },
   {
@@ -534,7 +530,7 @@ const cases: readonly Case[] = [
     run: async (world) => {
       await written(world, ".", { "deps/package.txt": "installed\n" });
       const folder = await copied(world, { commit: ownersBranch, name: "patched", links: ["deps"] });
-      const before = { copy: await copyTree(world, folder), forge: await forgeTree(world) };
+      const before = { copy: await treeIn(world, folder), forge: await forgeTree(world) };
       const owner = await ownersCheckout(world);
       const outside = join(world.root, "escaped.txt");
       const newFile = (path: string): string =>
@@ -543,7 +539,7 @@ const cases: readonly Case[] = [
       for (const patch of patches) {
         assert.equal(sentenceOf(await world.failure("apply", { folder, patch })), givenReason);
       }
-      assert.deepEqual({ copy: await copyTree(world, folder), forge: await forgeTree(world) }, before);
+      assert.deepEqual({ copy: await treeIn(world, folder), forge: await forgeTree(world) }, before);
       assert.deepEqual(await walk(join(world.root, "deps"), []), {
         files: { "package.txt": "installed\n" },
         links: {},

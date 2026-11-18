@@ -44,7 +44,7 @@ resources:
       run: --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 ls-files -z --others --directory --end-of-options
       effects: [read]
     restore-paths:
-      run: --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --work-tree=. restore --worktree --source
+      run: --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --git-dir=../../../.git --work-tree=. restore --worktree --source
       effects: [read, write, network, spend, delete]
     is-ancestor:
       run: --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 merge-base --is-ancestor --end-of-options
@@ -68,13 +68,25 @@ resources:
       run: --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 add --all --
       effects: [read, write, delete]
     commit-staged:
-      run: --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 -c user.name=agentbay-git-worktrees -c user.email=git-worktrees@agentbay.invalid -c gc.auto=0 commit --quiet --no-verify --no-gpg-sign --file=- --end-of-options
+      run: --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 -c user.name=agentbay-git-worktrees -c user.email=git-worktrees@agentbay.invalid -c gc.auto=0 commit --quiet --allow-empty --no-verify --no-gpg-sign --file=- --end-of-options
       effects: [read, write, delete]
     filters-of-paths:
       run: --work-tree=. check-attr -z filter --
       effects: [read]
     apply-patch:
       run: --work-tree=. apply --end-of-options
+      effects: [read, write, delete]
+    make-repository:
+      run: --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 init --quiet --template= --initial-branch=copy --end-of-options
+      effects: [read, write]
+    repository-top:
+      run: --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 rev-parse --show-prefix --absolute-git-dir --show-toplevel
+      effects: [read]
+    forget-paths:
+      run: --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --work-tree=. rm --cached -r --quiet --ignore-unmatch --
+      effects: [read, write, delete]
+    stage-paths:
+      run: --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --work-tree=. add --all --force --
       effects: [read, write, delete]
 
 actions:

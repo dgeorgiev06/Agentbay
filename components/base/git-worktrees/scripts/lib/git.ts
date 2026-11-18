@@ -23,6 +23,10 @@ const subcommands = {
   "commit-staged": "commit",
   "filters-of-paths": "check-attr",
   "apply-patch": "apply",
+  "make-repository": "init",
+  "repository-top": "rev-parse",
+  "forget-paths": "rm",
+  "stage-paths": "add",
 } as const;
 
 export type GitCommand = keyof typeof subcommands;
@@ -37,7 +41,7 @@ export type GitEnd = {
   readonly stderr: string;
 };
 
-const changesTheCheckout: readonly string[] = ["restore", "switch", "merge", "add", "commit", "apply"];
+const changesTheCheckout: readonly string[] = ["restore", "switch", "merge", "add", "commit", "apply", "init", "rm"];
 
 function isUnderForge(folder: string): boolean {
   return folder.startsWith(".forge/") && !folder.split("/").includes("..");
@@ -113,12 +117,22 @@ export function nulFields(output: string): readonly string[] {
   return output.split("\0").filter((field) => field !== "");
 }
 
-export async function commitOf(context: ScriptContext, folder: string, commit: string): Promise<string> {
-  const ended = await git(context, folder, ["commit-of", `${commit}^{commit}`]);
+type Peeled = { readonly commit: string; readonly to: "commit" | "tree" };
+
+async function objectOf(context: ScriptContext, folder: string, peeled: Peeled): Promise<string> {
+  const ended = await git(context, folder, ["commit-of", `${peeled.commit}^{${peeled.to}}`]);
   if (ended.exitCode !== 0) {
-    return fail(`There is no commit ${commit} in the repository.`);
+    return fail(`There is no commit ${peeled.commit} in the repository.`);
   }
   return ended.stdout.trim();
+}
+
+export function commitOf(context: ScriptContext, folder: string, commit: string): Promise<string> {
+  return objectOf(context, folder, { commit, to: "commit" });
+}
+
+export function treeOf(context: ScriptContext, folder: string, commit: string): Promise<string> {
+  return objectOf(context, folder, { commit, to: "tree" });
 }
 
 export async function isMerged(context: ScriptContext, branch: string, into: string): Promise<boolean> {

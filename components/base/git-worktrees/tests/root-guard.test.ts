@@ -55,6 +55,9 @@ const changingCommands: readonly { readonly named: string; readonly call: GitCal
   { named: "add", call: ["stage-everything"] },
   { named: "commit", call: ["commit-staged"] },
   { named: "apply", call: ["apply-patch"] },
+  { named: "init", call: ["make-repository"] },
+  { named: "rm", call: ["forget-paths", "."] },
+  { named: "add", call: ["stage-paths", "."] },
 ];
 
 for (const { named, call } of changingCommands) {

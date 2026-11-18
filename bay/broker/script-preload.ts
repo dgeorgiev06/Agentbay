@@ -106,6 +106,7 @@ registerHooks({
 
 for (const name of networkGlobals) {
   const get = unavailable(name, "reach the network through context.http.");
+  Reflect.deleteProperty(globalThis, name);
   Object.defineProperty(globalThis, name, { get, configurable: false, enumerable: false });
 }
 

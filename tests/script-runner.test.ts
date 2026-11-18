@@ -567,6 +567,20 @@ test("a script cannot reach the network through fetch, WebSocket or getBuiltinMo
   });
 });
 
+test("a script host takes WebSocket away without building node's network library", async () => {
+  await withScriptProject(async (root) => {
+    const run = await attempt(
+      root,
+      [
+        "const loaded = process.moduleLoadList.filter((name) => name.includes('undici'));",
+        "const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'WebSocket');",
+        "return { loaded, configurable: descriptor.configurable, getter: typeof descriptor.get };",
+      ].join("\n"),
+    );
+    assert.deepEqual(outputOf(run), { loaded: [], configurable: false, getter: "function" });
+  });
+});
+
 test("a script cannot connect through the socket class behind its own standard streams", async () => {
   await withListener(async (port, connections) => {
     await withScriptProject(async (root) => {

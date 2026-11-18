@@ -116,3 +116,7 @@ Longest chain: I1, P1, P2, F1, F2, F4, X1. Sixteen slices after the design.
 ## Time
 
 Slices so far have taken 50 to 80 minutes of a builder and 30 to 40 of review, two at a time. Sixteen slices at that rate is about 9 hours of building and about 9 of review and full checks, less whatever SP1 saves on each check. The todo mode through forge adds about 3. So about 21 hours of machine time to the todo mode, in a range of 17 to 30.
+
+### CO1: a command whose output passes its limit is stopped (found in P2's review)
+
+A listed command that prints without end runs until its time limit: the process adapter keeps only the last part of the output and the broker marks it cut only after the process ends. Proof's `read-file` (`cat --`) on a changed `mode.yaml` that is a link to an endless source can therefore burn up to 1,000 seconds of a step and end inconclusive. The verdict is never a pass, so nothing unsafe follows; what is lost is time. The slice: the caller of `commands.run` may ask that the command be stopped when its output passes the limit, and proof's reads ask for it. Scope: `bay/node-ports.ts`, the broker's command operation, their tests, and one line of proof's `as-declared.ts`. After: nothing. Not needed before F1.

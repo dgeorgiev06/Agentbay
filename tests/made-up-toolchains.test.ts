@@ -7,6 +7,7 @@ import { addMode, copyOfTheKit, failedTests } from "./kit-copy.ts";
 import {
   besideTally,
   kernelStateTally,
+  lacksNothingTally,
   notSetUpTally,
   onceTally,
   rootTally,
@@ -33,6 +34,7 @@ const modes: Readonly<Record<string, TallyVariant>> = {
   [kernelStateTally]: "writes its build output in the kernel's state folder",
   [onceTally]: "builds only into a folder with no build output",
   [notSetUpTally]: "passes a check the checkout is not set up for",
+  [lacksNothingTally]: "says the project lacks nothing",
 };
 
 const writesOutsideTheFolder =
@@ -137,5 +139,16 @@ test("a made-up toolchain that reports passed for a check the checkout is not se
   assert.equal(tested.status, 1, tested.output);
   assert.deepEqual(failedTests(tested.output), [
     caseOf(notSetUpTally, "a check the checkout is not set up for is inconclusive, and the checks after it still run"),
+  ]);
+});
+
+test("a made-up toolchain whose describe says the project lacks nothing fails the shared test's case on what the project is set up for", () => {
+  const tested = ranFor(lacksNothingTally);
+  assert.equal(tested.status, 1, tested.output);
+  assert.deepEqual(failedTests(tested.output), [
+    caseOf(
+      lacksNothingTally,
+      "describe says which checks and whether the test run the project is set up for, and what to add for the rest",
+    ),
   ]);
 });

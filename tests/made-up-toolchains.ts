@@ -9,7 +9,8 @@ export type TallyVariant =
   | "writes its build output in the project's root"
   | "writes its build output in the kernel's state folder"
   | "builds only into a folder with no build output"
-  | "passes a check the checkout is not set up for";
+  | "passes a check the checkout is not set up for"
+  | "says the project lacks nothing";
 
 export const tally = "tally";
 
@@ -25,6 +26,8 @@ export const onceTally = "tally-once";
 
 export const notSetUpTally = "tally-not-set-up";
 
+export const lacksNothingTally = "tally-lacks-nothing";
+
 const sdkFromScripts = "../../../../bay/sdk.ts";
 
 const sdkFromLibrary = "../../../../../bay/sdk.ts";
@@ -39,6 +42,7 @@ const buildCommands: Readonly<Record<TallyVariant, string>> = {
   "writes its build output in the kernel's state folder": "sh build.sh ../../.agentbay/build -p",
   "builds only into a folder with no build output": "sh build.sh build",
   "passes a check the checkout is not set up for": "sh build.sh build -p",
+  "says the project lacks nothing": "sh build.sh build -p",
 };
 
 const effectsOfARun = ["read", "write", "network", "spend", "delete"];
@@ -224,6 +228,8 @@ export function testResult(result: Ran): Json {
 }
 `;
 
+const missingLine = '      missing.push({ name, reason: lacking("The project", file) });';
+
 const describeScript = lines(
   `import { defineScript } from "${sdkFromScripts}";`,
   'import { checks, fileOfCheck, lacking, testRunFile } from "./lib/tally.ts";',
@@ -238,7 +244,7 @@ const describeScript = lines(
   "    if (read.ok) {",
   "      present.push(name);",
   "    } else {",
-  '      missing.push({ name, reason: lacking("The project", file) });',
+  missingLine,
   "    }",
   "  }",
   "  return {",
@@ -410,13 +416,32 @@ const examples = {
   },
 };
 
+type Replacement = { readonly file: string; readonly from: string; readonly to: string };
+
 export function tallyFiles(name: string, variant: TallyVariant): ModeFiles {
-  const replacements: Partial<Record<TallyVariant, readonly [string, string]>> = {
-    "passes a check stopped at its limit": [stoppedLine, passedWhenStoppedLine],
-    "passes a check the checkout is not set up for": [notSetUpLine, passedWhenNotSetUpLine],
+  const replacements: Partial<Record<TallyVariant, Replacement>> = {
+    "passes a check stopped at its limit": {
+      file: "scripts/lib/tally.ts",
+      from: stoppedLine,
+      to: passedWhenStoppedLine,
+    },
+    "passes a check the checkout is not set up for": {
+      file: "scripts/lib/tally.ts",
+      from: notSetUpLine,
+      to: passedWhenNotSetUpLine,
+    },
+    "says the project lacks nothing": { file: "scripts/describe.ts", from: missingLine, to: "      present.length;" },
   };
+  const files = filesOfTally(name, variant);
   const replacement = replacements[variant];
-  const chosen = replacement === undefined ? library : library.replace(...replacement);
+  if (replacement === undefined) {
+    return files;
+  }
+  const { file, from, to } = replacement;
+  return { ...files, [file]: (files[file] ?? "").replace(from, to) };
+}
+
+function filesOfTally(name: string, variant: TallyVariant): ModeFiles {
   return {
     "mode.yaml": manifestOf(name, variant),
     "README.md": lines(
@@ -425,7 +450,7 @@ export function tallyFiles(name: string, variant: TallyVariant): ModeFiles {
       "Checks and tests Tally, a made-up language. A test adds it to a copy of the kit.",
     ),
     "practices.md": lines("# Tally practices", "", "A made-up language has no practices yet."),
-    "scripts/lib/tally.ts": chosen,
+    "scripts/lib/tally.ts": library,
     "scripts/describe.ts": describeScript,
     "scripts/check.ts": checkScript,
     "scripts/run-tests.ts": testScript,

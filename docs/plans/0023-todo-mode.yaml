@@ -1,0 +1,52 @@
+title: The todo mode, the first product built through forge
+oneAfterAnotherBecause: Both slices write the one mode's folder, and the second adds to what the first makes.
+slices:
+  - title: A todo mode that adds a todo and lists the open ones
+    slice:
+      name: TD1
+      kind: mode
+      scope:
+        - components/modes/todo/**
+      after: []
+      done:
+        - id: DOD-TD1-1
+          says: The kit's checks and its whole test run pass with the todo mode in it.
+          level: must
+          proof:
+            kind: checks
+        - id: DOD-TD1-2
+          says: The mode's own test fails without the mode's code and passes with it. It adds two todos through the kernel and lists them in the order added, each with an id, its text and that it is open; an empty text is refused by the action's schema.
+          level: must
+          proof:
+            kind: fails-first
+            tests:
+              - components/modes/todo/tests/todo.test.ts
+        - id: DOD-TD1-3
+          says: The actions are add and list and nothing else; each has a description that says when to use it, a request and a response schema, and an example; todos are kept in the mode's own database partition; the README says in a few lines what the mode does.
+          level: should
+
+  - title: The todo mode marks a todo done and removes one
+    slice:
+      name: TD2
+      kind: mode
+      scope:
+        - components/modes/todo/**
+      after:
+        - slice: TD1
+          because: It adds two actions to the mode TD1 makes.
+      done:
+        - id: DOD-TD2-1
+          says: The kit's checks and its whole test run pass.
+          level: must
+          proof:
+            kind: checks
+        - id: DOD-TD2-2
+          says: The mode's test of done and remove fails without their code and passes with it. A todo marked done is no longer listed as open and is listed when all are asked for; a removed todo is listed nowhere; an id that names no todo is refused with a sentence that says so, for both.
+          level: must
+          proof:
+            kind: fails-first
+            tests:
+              - components/modes/todo/tests/done-remove.test.ts
+        - id: DOD-TD2-3
+          says: The sentences a person reads from these actions are plain and say what to do next.
+          level: should

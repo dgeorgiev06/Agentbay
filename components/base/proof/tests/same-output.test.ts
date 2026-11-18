@@ -107,6 +107,12 @@ test("same-output: inconclusive when the item names commands the project does no
     verdict: "inconclusive",
     reason: "The item names 2 commands in differ that the project does not declare, so nothing is known.",
   });
+  assert.deepEqual(judged(["sound-check", "made-up"], [same("sound-check")]), {
+    item: "output",
+    kind: "same-output",
+    verdict: "inconclusive",
+    reason: "The item names 1 command in differ that the project does not declare, so nothing is known.",
+  });
 });
 
 test("same-output: inconclusive with the worktrees interface's reason when a copy was not made", () => {

@@ -125,6 +125,34 @@ test("same-output: the copy's bay.sh runs at the base and the head, each run ask
   assert.deepEqual(asked.calls, copiedTwice);
 });
 
+test("same-output: each declared command gets its own run at the base and at the head, whichever of them changed", async () => {
+  const twoCommands: Request = {
+    ...request,
+    sameOutput: [
+      { name: "first", bay: ["print", "first.txt"] },
+      { name: "second", bay: ["print", "second.txt"] },
+    ],
+  };
+  const unchanged = { ran: "ended", exitCode: 0, stdout: "first\n" } as const;
+  const second = { ran: "ended", exitCode: 0, stdout: "second\n" } as const;
+  const louder = { ran: "ended", exitCode: 0, stdout: "louder\n" } as const;
+  const cases = [
+    { head: ["first\n", "louder\n"], first: unchanged, second: louder },
+    { head: ["louder\n", "second\n"], first: louder, second },
+  ];
+  for (const each of cases) {
+    const answers = ["first\n", "second\n", ...each.head].map((text) => ended(0, text, 0));
+    const { step } = stepWith(0, answers);
+    assert.deepEqual(await sameOutputEvidence(step, twoCommands), {
+      found: "ran",
+      commands: [
+        { name: "first", base: unchanged, head: each.first },
+        { name: "second", base: second, head: each.second },
+      ],
+    });
+  }
+});
+
 test("same-output: a project that declares no commands makes no copy and runs nothing", async () => {
   const { asked, step } = stepWith(0, []);
   assert.deepEqual(await sameOutputEvidence(step, { ...request, sameOutput: [] }), { found: "ran", commands: [] });

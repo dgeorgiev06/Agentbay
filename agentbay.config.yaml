@@ -7,6 +7,8 @@ bindings:
   proof: proof
 adapter: claude-code
 settings:
+  proof:
+    links: [node_modules]
   forge:
     featureMap: framework/features.yaml
   feed-briefing:

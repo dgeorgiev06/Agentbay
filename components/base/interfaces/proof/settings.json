@@ -5,6 +5,18 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "links": {
+      "type": "array",
+      "maxItems": 50,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^(?!.*\\.\\.)\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*(/\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+        "maxLength": 1000,
+        "description": "A path git ignores in the project, relative to the project's root."
+      },
+      "description": "The paths every throwaway copy gets as links to the project's own, for what its checks and tests need and a commit does not hold, such as a folder of installed packages; each must be ignored by git in the project. Left out, a copy gets no links."
+    },
     "sameOutput": {
       "type": "array",
       "maxItems": 100,

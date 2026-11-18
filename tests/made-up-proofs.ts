@@ -240,10 +240,15 @@ export function textOf(value: Json, name: string): string {
   return typeof field === "string" ? field : "";
 }
 
+function linksOf(context: ScriptContext): readonly string[] {
+  const links = context.settings.links;
+  return Array.isArray(links) ? links.filter((link) => typeof link === "string") : [];
+}
+
 export async function inCopy<Result>(context: ScriptContext, commit: string, use: (copy: Copy) => Promise<Result>): Promise<Result> {
   copiesMade += 1;
   const name = "proof-" + String(context.now().getTime()) + "-" + String(copiesMade);
-  const copy = await called(context, "worktrees.copy", { commit, name });
+  const copy = await called(context, "worktrees.copy", { commit, name, links: linksOf(context) });
   if (!copy.ok) {
     return use({ made: false, reason: "No copy of " + commit + " could be made. " + copy.reason });
   }

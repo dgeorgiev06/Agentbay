@@ -30,7 +30,7 @@ Slice I1 wrote `proof@1` from ADR 22 and the designs in this folder. These are t
 
 16. **One made-up mode serves both `toolchain@1` and `worktrees@1`** and records what it is asked in `.recorder/asked.json`. It keeps commits as files the test writes, so a case controls every commit and runs no git. A shared test may import only the test toolbox, so the mode's files are text inside `shared.ts`, written into a project folder of the test's own and trusted there.
 17. **The made-up toolchain's time limit is simulated.** A file that says `hang` makes its run return the toolchain's inconclusive verdict for a run stopped at its limit, at once. A file that says `break` makes its call fail. So the paths "a time limit" and "a failure" cost no waiting. Proof's own script limit (eight minutes, `bay/runs/action-steps.ts`) is not tested: a script stopped there cannot remove its copies, and nothing in `proof@1` can.
-18. **The made-up worktrees mode makes no links.** A proof that needs installed packages in a copy names them in `links`; the shared test does not check links.
+18. **The made-up worktrees mode makes no links, and a proof asks for the links its settings name.** A project names in proof's setting `links` the paths a copy needs and a commit does not hold, such as installed packages; left out, a copy gets none. The kit names `node_modules`. Held by the case on links: with the setting left out every copy is asked with no links, and with two links named every copy is asked with those two and no other.
 19. **A `bay.sh` at the project's root writes a file when it runs.** A proof that runs `bay` outside a copy leaves that file, and the case "nothing is written in the project outside throwaway copies" fails.
 
 ## TR2 in the form

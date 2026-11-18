@@ -12,20 +12,25 @@ export type Called = { readonly ok: true; readonly value: Json } | { readonly ok
 
 export type Copy = { readonly made: true; readonly folder: string } | { readonly made: false; readonly reason: string };
 
-const linkedIntoEveryCopy = ["node_modules"];
-
 export function secondsToAsk(spentSeconds: number, sharing: number): number {
   const left = (stepSeconds - keptSeconds - spentSeconds) / Math.max(1, sharing);
   return Math.max(0, Math.min(longestCallSeconds, Math.floor(left)));
 }
 
+function linksOf(settings: Readonly<Record<string, Json>>): readonly string[] {
+  const links = settings.links;
+  return Array.isArray(links) ? links.filter((link) => typeof link === "string") : [];
+}
+
 export class ProofStep {
   readonly context: ScriptContext;
+  readonly links: readonly string[];
   #spentSeconds = 0;
   #copiesMade = 0;
 
   constructor(context: ScriptContext) {
     this.context = context;
+    this.links = linksOf(context.settings);
   }
 
   secondsLeft(sharing: number): number {
@@ -58,7 +63,7 @@ export async function inCopy<Result>(
   commit: string,
   use: (copy: Copy) => Promise<Result>,
 ): Promise<Result> {
-  const made = await step.called("worktrees.copy", { commit, name: step.copyName(), links: linkedIntoEveryCopy });
+  const made = await step.called("worktrees.copy", { commit, name: step.copyName(), links: step.links });
   if (!made.ok) {
     return use({ made: false, reason: `No copy of ${commit} could be made: ${made.reason}` });
   }

@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { test } from "node:test";
+import { testProof } from "../../interfaces/proof/tests/shared.ts";
 
 type Ran = { readonly passed: readonly string[]; readonly failed: readonly string[]; readonly output: string };
+
+const sharedRunVariable = "PROOF_SHARED_TEST_ALONE";
 
 const caseOfThisMode = "proof@1, proof: ";
 
@@ -41,9 +44,9 @@ function casesEnded(output: string, how: "ok" | "not ok"): readonly string[] {
 }
 
 function sharedTestRan(): Promise<Ran> {
-  const file = join(import.meta.dirname, "shared-run.ts");
+  const file = join(import.meta.dirname, "proof.test.ts");
   const child = spawn(process.execPath, ["--test", "--test-reporter=tap", file], {
-    env: { PATH: process.env.PATH ?? "/usr/bin:/bin" },
+    env: { PATH: process.env.PATH ?? "/usr/bin:/bin", [sharedRunVariable]: "yes" },
     timeout: sharedTestMilliseconds,
   });
   let output = "";
@@ -60,8 +63,12 @@ function sharedTestRan(): Promise<Ran> {
   });
 }
 
-test("proof passes every case of proof@1's shared test but those of the kinds not built yet, which are named here and fail", async () => {
-  const ran = await sharedTestRan();
-  assert.deepEqual([...ran.failed].sort(), [...notBuilt].sort(), ran.output);
-  assert.ok(ran.passed.length > 0, ran.output);
-});
+if (process.env[sharedRunVariable] === "yes") {
+  testProof({ mode: "proof" });
+} else {
+  test("proof passes every case of proof@1's shared test but those of the kinds not built yet, which are named here and fail", async () => {
+    const ran = await sharedTestRan();
+    assert.deepEqual([...ran.failed].sort(), [...notBuilt].sort(), ran.output);
+    assert.ok(ran.passed.length > 0, ran.output);
+  });
+}

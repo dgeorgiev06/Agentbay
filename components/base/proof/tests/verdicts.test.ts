@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
-import { secondsToAsk, stepSeconds } from "../scripts/lib/step.ts";
+import { secondsToAsk } from "../scripts/lib/step.ts";
 import { broken, held, notBuiltParts, unknown, verdictOf } from "../scripts/lib/verdicts.ts";
 
 test("an item whose parts all passed is passed, with the sentence for a pass", () => {
@@ -56,5 +56,6 @@ test("a check call shares what is left among its checks, each asked at most 1000
 
 test("the step's seconds proof counts with are the seconds its manifest declares for prove", async () => {
   const manifest = await readFile(join(import.meta.dirname, "..", "mode.yaml"), "utf8");
-  assert.deepEqual(/scriptTimeLimitSeconds: (\d+)/.exec(manifest)?.[1], String(stepSeconds));
+  const declared = Number(/scriptTimeLimitSeconds: (\d+)/.exec(manifest)?.[1]);
+  assert.deepEqual([secondsToAsk(declared - 65, 1), secondsToAsk(declared - 60, 1)], [5, 0]);
 });

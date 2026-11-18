@@ -1,12 +1,12 @@
 import { fieldsOf, type Json, type ScriptContext } from "../../../../../bay/sdk.ts";
 
-export const stepSeconds = 1800;
+const stepSeconds = 1800;
 
-export const longestCallSeconds = 1000;
+const longestCallSeconds = 1000;
 
-export const keptSeconds = 60;
+const keptSeconds = 60;
 
-export const secondsPerOtherCall = 5;
+const secondsPerOtherCall = 5;
 
 export type Called = { readonly ok: true; readonly value: Json } | { readonly ok: false; readonly reason: string };
 

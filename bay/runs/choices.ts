@@ -8,11 +8,12 @@ export const choiceStatuses = ["offered", "withheld"] as const;
 export type ChoiceStatus = {
   readonly name: string;
   readonly status: (typeof choiceStatuses)[number];
+  readonly does: string;
 };
 
 export type Choice =
-  | { readonly name: string; readonly status: "offered" }
-  | { readonly name: string; readonly status: "withheld"; readonly reason: string };
+  | { readonly name: string; readonly status: "offered"; readonly does: string }
+  | { readonly name: string; readonly status: "withheld"; readonly does: string; readonly reason: string };
 
 export type ApprovalAnswer =
   { readonly decision: "approve" | "reject" } | { readonly decision: "choice"; readonly choice: string };
@@ -44,9 +45,10 @@ function described(value: Json): string {
   return isRecord(value) ? "a mapping" : JSON.stringify(value);
 }
 
-function statusOf(rules: Rules, name: string, rule: string | undefined): ChoiceStatus | string {
+function statusOf(rules: Rules, name: string, choice: WorkflowChoice): ChoiceStatus | string {
+  const { when: rule, does } = choice;
   if (rule === undefined) {
-    return { name, status: "offered" };
+    return { name, status: "offered", does };
   }
   const value = rules.resolve(rule);
   const cannot = `Step ${rules.stepId} cannot offer the choice ${name}`;
@@ -56,11 +58,11 @@ function statusOf(rules: Rules, name: string, rule: string | undefined): ChoiceS
   if (typeof value.value !== "boolean") {
     return `${cannot}: its rule ${rule} is ${described(value.value)}, not true or false.`;
   }
-  return { name, status: value.value ? "offered" : "withheld" };
+  return { name, status: value.value ? "offered" : "withheld", does };
 }
 
 export function evaluatedChoices(rules: Rules): Outcome<readonly ChoiceStatus[]> {
-  const evaluated = Object.entries(rules.choices).map(([name, choice]) => statusOf(rules, name, choice.when));
+  const evaluated = Object.entries(rules.choices).map(([name, choice]) => statusOf(rules, name, choice));
   const problems = evaluated.filter((status) => typeof status === "string");
   if (problems.length > 0) {
     return failedWith(problems.map((message) => unplacedProblem(message)));
@@ -114,12 +116,12 @@ export function reasonProblems(stepId: string, statuses: readonly ChoiceStatus[]
 
 export function shownChoices(statuses: readonly ChoiceStatus[], content: Json): readonly Choice[] {
   const reasons = reasonsOf(content);
-  return statuses.map(({ name, status }) => {
+  return statuses.map(({ name, status, does }) => {
     switch (status) {
       case "offered":
-        return { name, status };
+        return { name, status, does };
       case "withheld":
-        return { name, status, reason: (reasons === undefined ? undefined : textField(reasons, name)) ?? "" };
+        return { name, status, does, reason: (reasons === undefined ? undefined : textField(reasons, name)) ?? "" };
     }
   });
 }

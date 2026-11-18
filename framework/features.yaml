@@ -226,6 +226,7 @@ features:
       - bay/commands/secret.ts
       - bay/commands/submit.ts
       - bay/run-report.ts
+      - bay/approval-card.ts
       - bay/terminal.ts
       - bay/trust-card.ts
       - bay/last-resort.ts

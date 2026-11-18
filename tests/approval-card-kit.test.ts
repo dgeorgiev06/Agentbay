@@ -43,7 +43,10 @@ const workflow = {
       id: "card",
       approval: "Merge this slice?",
       show: "$steps.draw.output.card",
-      choices: { merge: { when: "$steps.draw.output.merge" }, keep: {} },
+      choices: {
+        merge: { when: "$steps.draw.output.merge", does: "Merge the slice" },
+        keep: { does: "Stop; the slice stays as it is" },
+      },
     },
     { id: "after", action: "draw", input: { printed: "$steps.card.output.choice" } },
   ],
@@ -139,8 +142,8 @@ test("in a real kit, a card citing a command its script ran through the broker i
         hash: hashOf(content),
         content,
         choices: [
-          { name: "merge", status: "withheld", reason: "No test ran." },
-          { name: "keep", status: "offered" },
+          { name: "merge", status: "withheld", does: "Merge the slice", reason: "No test ran." },
+          { name: "keep", status: "offered", does: "Stop; the slice stays as it is" },
         ],
         card: {
           title: "Merge this slice?",

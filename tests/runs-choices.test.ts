@@ -40,10 +40,10 @@ function mergeSteps(chosen: Rules = rules): Workflow["steps"] {
       approval: "Merge this slice?",
       show: "$steps.offer.output.given.shown",
       choices: {
-        merge: { when: chosen.merge },
-        "send-back": { when: chosen.sendBack },
-        keep: {},
-        discard: {},
+        merge: { when: chosen.merge, does: "Merge into feat/0022-agentbay5" },
+        "send-back": { when: chosen.sendBack, does: "Round 2, a fresh builder" },
+        keep: { does: "Stop; forge/tr2 stays" },
+        discard: { does: "Stop; forge/tr2 is removed" },
       },
     },
     { id: "after", action: "pass", input: { taken: "$steps.card.output.choice" } },
@@ -55,10 +55,10 @@ function changesOf(steps: Workflow["steps"]): ReturnType<typeof withFlow> & { re
 }
 
 const everyChoiceOffered = [
-  { name: "merge", status: "offered" },
-  { name: "send-back", status: "offered" },
-  { name: "keep", status: "offered" },
-  { name: "discard", status: "offered" },
+  { name: "merge", status: "offered", does: "Merge into feat/0022-agentbay5" },
+  { name: "send-back", status: "offered", does: "Round 2, a fresh builder" },
+  { name: "keep", status: "offered", does: "Stop; forge/tr2 stays" },
+  { name: "discard", status: "offered", does: "Stop; forge/tr2 is removed" },
 ];
 
 const allPassed = { summary: "11 of 11 items passed" };
@@ -119,10 +119,15 @@ describe("an approval with choices", () => {
       hash: hashOf(inconclusive),
       content: inconclusive,
       choices: [
-        { name: "merge", status: "withheld", reason: "1 must item is inconclusive." },
-        { name: "send-back", status: "offered" },
-        { name: "keep", status: "offered" },
-        { name: "discard", status: "offered" },
+        {
+          name: "merge",
+          status: "withheld",
+          does: "Merge into feat/0022-agentbay5",
+          reason: "1 must item is inconclusive.",
+        },
+        { name: "send-back", status: "offered", does: "Round 2, a fresh builder" },
+        { name: "keep", status: "offered", does: "Stop; forge/tr2 stays" },
+        { name: "discard", status: "offered", does: "Stop; forge/tr2 is removed" },
       ],
     });
     const decision = { stepKey: "card", hash: hashOf(inconclusive), by: "owner at the terminal" };
@@ -225,6 +230,16 @@ describe("an approval with choices", () => {
     ]);
   });
 
+  test("a choice whose sentence of what it does is blank is refused when the workflow loads", async () => {
+    const steps = mergeSteps().map((step) =>
+      "choices" in step ? { ...step, choices: { ...step.choices, keep: { does: "  " } } } : step,
+    );
+    assert.deepEqual(await fixtureRefusal(changesOf(steps)), [
+      "steps.1.choices.keep.does is not in the expected form. Expected: What taking the choice does, " +
+        "in one sentence the owner reads beside its name on the card.",
+    ]);
+  });
+
   test("a decision must name a choice where the step has choices, and only there", async () => {
     const plain = [{ id: "keep", approval: "Keep it?", show: "$trigger" }];
     const { runs, close } = await openedRuns({ changes: changesOf(mergeSteps()) });
@@ -249,7 +264,11 @@ describe("an approval with choices", () => {
     const id = runOf(started).id;
     const first = waitingOf(started);
     runs.close();
-    const swapped = mergeSteps({ merge: rules.sendBack, sendBack: rules.merge });
+    const swapped = mergeSteps({ merge: rules.sendBack, sendBack: rules.merge }).map((step) =>
+      "choices" in step
+        ? { ...step, choices: { ...step.choices, keep: { does: "Keep it, as the file now says" } } }
+        : step,
+    );
     const edited = await fixtureSystem(changesOf(swapped));
     const later = await reopen(edited.system);
     assert.deepEqual(waitingOf(await later.resume(id)), first);

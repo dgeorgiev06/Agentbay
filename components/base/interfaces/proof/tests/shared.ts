@@ -47,6 +47,8 @@ type Proof = {
   readonly asked: () => Promise<readonly Asked[]>;
   readonly provenEverywhere: () => Promise<void>;
   readonly outsideTheCopies: () => Promise<Files>;
+  readonly describedByTheMadeUpToolchain: () => Promise<Value>;
+  readonly linksOfCopiesWhenSettingsName: (links: readonly string[]) => Promise<readonly (readonly string[])[]>;
   readonly asOpened: Files;
 };
 
@@ -161,6 +163,8 @@ const declaredCommands = {
 
 const declaredCounts = { noRise: declaredCommands.noRise };
 
+const linksASettingNames = ["vendor/packages", ".cache"];
+
 const fixtures: Files = {
   "fixtures/sound.txt": "sound checks\n",
   "fixtures/sound.json": '{ "sound": "checks" }\n',
@@ -271,7 +275,7 @@ const inconclusiveHead: Files = {
 };
 
 const commits: Readonly<Record<string, Files>> = {
-  "33cd559": tr2Base,
+  c7f0d13: tr2Base,
   c9bb216: tr2Head,
   "failed-base": failedBase,
   "failed-head": failedHead,
@@ -524,6 +528,17 @@ function askedOf(value: unknown): Asked {
   };
 }
 
+function linksOfCopies(asked: readonly Asked[]): readonly (readonly string[])[] {
+  const linked = asked
+    .filter((entry) => entry.action === "copy")
+    .map((entry) => {
+      const links = entry.request.links ?? [];
+      return Array.isArray(links) ? links.filter((link): link is string => typeof link === "string").sort() : [];
+    });
+  const distinct = new Map(linked.map((links) => [JSON.stringify(links), links]));
+  return [...distinct.values()];
+}
+
 function found(result: Result, id: string): Verdict {
   const verdict = result.verdicts.find((entry) => entry.item === id);
   assert.ok(verdict !== undefined, `no verdict for ${id} in ${JSON.stringify(result.verdicts)}`);
@@ -559,6 +574,28 @@ function folderOf(asked: Asked): string {
 }
 
 const cases: readonly Case[] = [
+  {
+    name: "a copy gets the links proof's settings name and no other, and none when the settings name none",
+    run: async (proof) => {
+      await proof.provenEverywhere();
+      assert.deepEqual(linksOfCopies(await proof.asked()), [[]]);
+      assert.deepEqual(await proof.linksOfCopiesWhenSettingsName(linksASettingNames), [[...linksASettingNames].sort()]);
+    },
+  },
+  {
+    name: "the made-up toolchain answers describe as toolchain@1 requires, so a proof may call describe",
+    run: async (proof) => {
+      assert.deepEqual(await proof.describedByTheMadeUpToolchain(), {
+        language: "Recorded",
+        sourceFiles: ["**"],
+        testFiles: ["tests/**/*.test.ts"],
+        practices: "framework/practices.md",
+        checks: ["format", "lint", "types"],
+        present: ["format", "lint", "types", "test"],
+        missing: [],
+      });
+    },
+  },
   {
     name: "checks: passed when every check and then the test run passed on a copy of the head (TR2, K1)",
     run: async (proof) => {
@@ -1124,6 +1161,8 @@ export const run = defineScript(() =>
     testFiles: ["tests/**/*.test.ts"],
     practices: "framework/practices.md",
     checks: ["format", "lint", "types"],
+    present: ["format", "lint", "types", "test"],
+    missing: [],
   }),
 );
 `,
@@ -1415,20 +1454,34 @@ function proofFor(state: State, mode: string, requests: Readonly<Record<Scenario
     results.set(scenario, started);
     return started;
   };
+  const asked = async (): Promise<readonly Asked[]> => {
+    const parsed: unknown = JSON.parse(await readFile(join(state.project.root, askedFile), "utf8"));
+    assert.ok(Array.isArray(parsed), "the recorder keeps a list of what it was asked");
+    return parsed.map(askedOf);
+  };
   return {
     proven,
     requestOf: (scenario) => requests[scenario],
-    asked: async () => {
-      const parsed: unknown = JSON.parse(await readFile(join(state.project.root, askedFile), "utf8"));
-      assert.ok(Array.isArray(parsed), "the recorder keeps a list of what it was asked");
-      return parsed.map(askedOf);
-    },
+    asked,
     provenEverywhere: async () => {
       for (const scenario of scenarios) {
         await proven(scenario);
       }
     },
     outsideTheCopies: () => entriesOutside(state.project.root, state.project.root),
+    describedByTheMadeUpToolchain: () => state.project.output(`${recorder}.describe`, {}),
+    linksOfCopiesWhenSettingsName: async (links) => {
+      const askedFileText = await readFile(join(state.project.root, askedFile), "utf8");
+      const askedBefore = await asked();
+      state.project = await state.project.reopen(configWith(mode, { ...declaredCommands, links }));
+      try {
+        await state.project.output(`${mode}.prove`, requests.failed);
+        return linksOfCopies((await asked()).slice(askedBefore.length));
+      } finally {
+        state.project = await state.project.reopen(configWith(mode, declaredCommands));
+        await writeFile(join(state.project.root, askedFile), askedFileText, "utf8");
+      }
+    },
     asOpened: state.asOpened,
   };
 }

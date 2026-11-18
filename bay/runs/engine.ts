@@ -210,7 +210,10 @@ function waitingApproval(run: RunWithSteps, stepKey: string, hash: string): Outc
   }
   return refusal(run.id, {
     message: `The hash ${hash} is not the hash of what step ${stepKey} showed (${shownHash}).`,
-    fix: "Approve or reject exactly what the waiting approval shows, naming its hash.",
+    fix:
+      record.detail.choices === undefined
+        ? "Approve or reject exactly what the waiting approval shows, naming its hash."
+        : "Take one of the choices the waiting approval offers, naming the hash it shows.",
   });
 }
 

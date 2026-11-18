@@ -268,7 +268,8 @@ test("the coordinator block states the protocol between its markers in under 50 
     "as its whole prompt and nothing else",
     "`./bay.sh runs <runId> --json`",
     "An approval is the owner's decision, never yours",
-    "the content to approve and its hash",
+    "Run `./bay.sh runs <runId>` and show the owner every line\n   it prints for the approval, unchanged and whole",
+    "its card when it has one, and its choices when it has\n   them.",
     '`./bay.sh approve <runId> <stepKey> --hash <hash> --via chat --quote "<the owner\'s exact words>" --json`',
     "with `<runId>` the run's `id`, and `<stepKey>` and `<hash>` the `stepKey` and `hash` of its `waiting`,\n" +
       "   as bay printed them when the run stopped for the approval.",

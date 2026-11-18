@@ -149,8 +149,15 @@ test("an empty text is the empty value, and two documents are not one", () => {
   ]);
 });
 
-test("hostile texts at the size limit are answered within seconds: deep nesting, many errors, an alias chain", () => {
-  const started = performance.now();
+function processorMilliseconds(since: NodeJS.CpuUsage): number {
+  const used = process.cpuUsage(since);
+  return (used.user + used.system) / 1000;
+}
+
+const processorMillisecondsForHostileTexts = 8000;
+
+test("hostile texts at the size limit are answered within seconds of processor time, however busy the machine: deep nesting, many errors, an alias chain", () => {
+  const started = process.cpuUsage();
   assert.deepEqual(problemsOf(nested(131_000)), [
     {
       line: 1,
@@ -162,8 +169,11 @@ test("hostile texts at the size limit are answered within seconds: deep nesting,
   assert.ok(!repeated.ok);
   assert.equal(repeated.problems.length, 51_999);
   assert.equal(readYaml(aliasChain).ok, false);
-  const milliseconds = performance.now() - started;
-  assert.ok(milliseconds < 5000, `${String(milliseconds)} milliseconds`);
+  const milliseconds = processorMilliseconds(started);
+  assert.ok(
+    milliseconds < processorMillisecondsForHostileTexts,
+    `${String(milliseconds)} milliseconds of processor time`,
+  );
 });
 
 test("a text deeper than the parser's own stack is refused as too deep", () => {

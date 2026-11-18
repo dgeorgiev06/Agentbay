@@ -399,13 +399,13 @@ Not slices, but found, and each should be in a brief before its slice starts:
   `call_action` takes only read-only actions (`engine.ts:302-311`) and `toolchain.test` has every effect
   (`components/base/interfaces/toolchain.yaml:12-15`); forge's agents have no shell (`agent-file.ts:24`).
   C3's brief must say how a builder asks, and that reaches the kernel's rule on what a skill may call.
-- **The kit's own tools may read `.forge/`.** `.forge/` is ignored by git (`.gitignore:8`), but the kit's `lint` is
-  `eslint … .` with no ignore for it (`package.json:13`, `components/base/typescript/eslint.config.js`), and
-  `node --test` with no file names searches the folder (`package.json:10`). **Not known** whether either reads a
-  worktree under `.forge/worktrees/`. Experiment: with one worktree there, run `npm run lint` and
-  `node --test --test-name-pattern=none` in the kit and look for `.forge/` in what they name. If they do, a
-  one-line ignore in the typescript mode's config, before the owner's first live session. Proof is not touched:
-  its copies hold a commit, which has no `.forge/`.
+- **The kit's own tools and `.forge/`: lint read it, the test runner does not.** Shown by slice FX1 in a throwaway
+  copy of the kit with a worktree at `.forge/worktrees/EXP` holding a test file with a lint error and a failing
+  test. `npm run lint` named that file and sixteen others in the worktree and failed; the kit's typescript mode
+  now ignores `.forge/` in its lint config, held by `tests/lint-ignores.test.ts`.
+  `node --test` with no file names, as `npm test` runs it, searched 159 files, none under `.forge/`: node's search
+  passes over a folder whose name starts with a dot. It was shown by loading a module before each test file that
+  wrote the file's path and exited. Proof is not touched: its copies hold a commit, which has no `.forge/`.
 
 ### What the owner decides
 

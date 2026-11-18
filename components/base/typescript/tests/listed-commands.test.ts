@@ -41,7 +41,16 @@ function listedAt(
   ];
 }
 
-test("bay check on the kit warns once for each command the typescript mode lists, and for nothing else", () => {
+function longStepAt(line: number, action: string): readonly unknown[] {
+  return [
+    "warning",
+    line,
+    `Action ${action} of mode typescript declares scriptTimeLimitSeconds: 1030, so each of its script steps may run ` +
+      "unattended for 1030 seconds, longer than the kernel's 480.",
+  ];
+}
+
+test("bay check on the kit warns once for each command the typescript mode lists and each long step, and for nothing else", () => {
   assert.deepEqual(warningsOf(manifest), [
     listedAt(12, "read-package", { run: "cat -- package.json", effects: "read" }),
     listedAt(15, "check-generated-types", { run: "npm run generate:check --" }),
@@ -50,5 +59,7 @@ test("bay check on the kit warns once for each command the typescript mode lists
     listedAt(24, "check-format", { run: "npm run format:check --" }),
     listedAt(27, "find-dead-code", { run: "npm run deadcode --" }),
     listedAt(30, "run-tests", { run: "npm test -- --test-reporter=tap" }),
+    longStepAt(44, "check"),
+    longStepAt(50, "test"),
   ]);
 });

@@ -41,10 +41,12 @@ actions:
   check:
     description: When a mode or a skill needs to know whether a checkout passes the type check, lint, format and dead-code checks, or a named few of them.
     effects: [read, write, network, spend, delete]
+    scriptTimeLimitSeconds: &suite 1030
     run:
       - script: scripts/check.ts
   test:
     description: When a mode or a skill needs to know whether the tests of a checkout pass, all of them or the named test files.
     effects: [read, write, network, spend, delete]
+    scriptTimeLimitSeconds: *suite
     run:
       - script: scripts/run-tests.ts

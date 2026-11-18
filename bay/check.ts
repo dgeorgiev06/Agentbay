@@ -2,17 +2,21 @@ import {
   checkContextOf,
   counted,
   errors,
+  isLoaded,
   warnings,
   type CheckContext,
   type FileListing,
   type Finding,
+  type LoadedModeFolder,
 } from "./check-context.ts";
 import { checkImports, checkKernelImports } from "./check-imports.ts";
 import { checkKitLayout, checkLayout } from "./check-layout.ts";
 import { checkLimits } from "./check-limits.ts";
 import { checkSkills } from "./check-skills.ts";
 import { checkTrust } from "./check-trust.ts";
+import { defaultScriptTimeLimitSeconds } from "./contracts.ts";
 import { isProjectTheKit, shownPath, type Layout } from "./layout.ts";
+import type { Problem } from "./outcome.ts";
 import type { FileSystem } from "./ports.ts";
 import { inspectSystem } from "./manifests/manifests.ts";
 import { readTrustRecord } from "./trust.ts";
@@ -39,6 +43,28 @@ async function kitFindings(context: CheckContext): Promise<readonly Finding[]> {
   ];
 }
 
+function longStepWarning(mode: LoadedModeFolder, action: string, seconds: number): Problem {
+  const shown = String(seconds);
+  return mode.at(["actions", action, "scriptTimeLimitSeconds"], {
+    message:
+      `Action ${action} of mode ${mode.manifest.name} declares scriptTimeLimitSeconds: ${shown}, so each of its ` +
+      `script steps may run unattended for ${shown} seconds, longer than the kernel's ` +
+      `${String(defaultScriptTimeLimitSeconds)}.`,
+    fix: "Keep the longer limit only if a step needs it, such as one that runs a whole test suite.",
+  });
+}
+
+function longStepWarnings(context: CheckContext): readonly Finding[] {
+  const found = context.modes.filter(isLoaded).flatMap((mode) =>
+    Object.entries(mode.manifest.actions).flatMap(([action, declared]) => {
+      const seconds = declared.scriptTimeLimitSeconds;
+      const longer = seconds !== undefined && seconds > defaultScriptTimeLimitSeconds;
+      return longer ? [longStepWarning(mode, action, seconds)] : [];
+    }),
+  );
+  return warnings(found);
+}
+
 function shownFindings(layout: Layout, findings: readonly Finding[]): readonly Finding[] {
   return findings.map((finding) => ({ ...finding, file: shownPath(layout, finding.file) }));
 }
@@ -54,6 +80,7 @@ export async function checkSystem(ports: CheckPorts, layout: Layout): Promise<Ch
     ...(await checkLayout(context)),
     ...(await checkImports(context)),
     ...(await checkTrust(context, record)),
+    ...longStepWarnings(context),
     ...(await kitFindings(context)),
   ]);
   const errorCount = findings.filter((finding) => finding.severity === "error").length;

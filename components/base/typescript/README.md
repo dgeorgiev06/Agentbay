@@ -46,4 +46,4 @@ Not enforced here: import cycles and files that only re-export (they need an esl
 
 ## Time limits
 
-Left out, a check may take 90 seconds and a test run 420. A call may ask for at most 420 seconds. Today the kernel stops a script step after 8 minutes, so all the checks of one call must end within that.
+Left out, a check may take 90 seconds and a test run 420. A call may ask for at most 1,000 seconds. The `check` and `test` actions declare `scriptTimeLimitSeconds: 1030`: the 1,000 a call may ask for, and 30 seconds for the script to answer. All the checks of one call must end within that step limit; a check that starts late gets only what is left, and one with no time left is inconclusive.

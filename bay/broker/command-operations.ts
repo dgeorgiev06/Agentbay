@@ -34,7 +34,7 @@ type CommandToRun = {
   readonly milliseconds: number;
 };
 
-type NoFolder = { readonly found: "no folder"; readonly failure: string };
+type NotStarted = { readonly found: "no folder" | "no time"; readonly failure: string };
 
 function describedCommand(request: CommandRequest): string {
   return `run the listed command ${request.name} with ${JSON.stringify(request.arguments)} in ${request.folder}`;
@@ -83,10 +83,10 @@ async function listedCommand(request: CommandRequest, asking: Asking): Promise<R
   });
 }
 
-function commandMilliseconds(request: CommandRequest, asking: Asking): Ruling<number> {
+function askedMilliseconds(request: CommandRequest, asking: Asking): Ruling<number> {
   const seconds = request.timeLimitSeconds;
   if (Number.isFinite(seconds) && seconds > 0) {
-    return allowedWith(Math.min(seconds * 1000, asking.limits.commandMilliseconds));
+    return allowedWith(seconds * 1000);
   }
   return refusedWith({
     resource: "commands",
@@ -106,7 +106,40 @@ function outsideProject(request: CommandRequest, asking: Asking, declared: strin
   });
 }
 
-async function commandFolder(request: CommandRequest, asking: Asking): Promise<Ruling<string | NoFolder>> {
+function noTimeLeft(request: CommandRequest, stepMilliseconds: number): NotStarted {
+  return {
+    found: "no time",
+    failure:
+      `The listed command ${request.name} was not started: the step has no time left to run it and still answer ` +
+      `before the script's own time limit of ${String(stepMilliseconds / 1000)} seconds.`,
+  };
+}
+
+type Found = {
+  readonly command: GrantedCommand;
+  readonly asked: number;
+  readonly directory: string;
+};
+
+function commandToRun(request: CommandRequest, asking: Asking, found: Found): CommandToRun | NotStarted {
+  const left = asking.commandTimeLeft();
+  if (left.kind === "none") {
+    return noTimeLeft(request, left.stepMilliseconds);
+  }
+  const { input } = request;
+  const { command, directory } = found;
+  return {
+    found: "folder",
+    name: command.name,
+    command: [...command.words, ...request.arguments],
+    ...(input === undefined ? {} : { input }),
+    directory,
+    shownDirectory: shownPath(asking.layout, directory),
+    milliseconds: Math.min(found.asked, left.milliseconds),
+  };
+}
+
+async function commandFolder(request: CommandRequest, asking: Asking): Promise<Ruling<string | NotStarted>> {
   const { layout, inspector } = asking;
   const permitted = [layout.project];
   const check = await checkPath(inspector, { layout, path: request.folder, permitted, purpose: "read" });
@@ -152,7 +185,7 @@ async function recordCommand(
   });
 }
 
-const commandsRun: Definition<"commands.run", CommandToRun | NoFolder> = {
+const commandsRun: Definition<"commands.run", CommandToRun | NotStarted> = {
   operation: "commands.run",
   needs: () => [],
   described: describedCommand,
@@ -161,9 +194,9 @@ const commandsRun: Definition<"commands.run", CommandToRun | NoFolder> = {
     if (!command.allowed) {
       return command;
     }
-    const milliseconds = commandMilliseconds(request, asking);
-    if (!milliseconds.allowed) {
-      return milliseconds;
+    const asked = askedMilliseconds(request, asking);
+    if (!asked.allowed) {
+      return asked;
     }
     const folder = await commandFolder(request, asking);
     if (!folder.allowed) {
@@ -172,20 +205,12 @@ const commandsRun: Definition<"commands.run", CommandToRun | NoFolder> = {
     if (typeof folder.value !== "string") {
       return allowedWith(folder.value);
     }
-    const { input } = request;
-    const directory = folder.value;
-    return allowedWith({
-      found: "folder",
-      name: command.value.name,
-      command: [...command.value.words, ...request.arguments],
-      ...(input === undefined ? {} : { input }),
-      directory,
-      shownDirectory: shownPath(asking.layout, directory),
-      milliseconds: milliseconds.value,
-    });
+    return allowedWith(
+      commandToRun(request, asking, { command: command.value, asked: asked.value, directory: folder.value }),
+    );
   },
   handler: async (toRun, doing) => {
-    if (toRun.found === "no folder") {
+    if (toRun.found !== "folder") {
       return failed(toRun.failure);
     }
     const [program, ...rest] = toRun.command;

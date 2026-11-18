@@ -4,7 +4,15 @@ import { mkdir, readdir, readFile, symlink } from "node:fs/promises";
 import { createServer, type Server } from "node:net";
 import { join, relative } from "node:path";
 import { test } from "node:test";
-import type { ActionCaller, Json, RunEvent, ScriptRequest, StepOutcome } from "../bay/contracts.ts";
+import type {
+  ActionCaller,
+  Json,
+  RunEvent,
+  ScriptRequest,
+  ScriptRunner,
+  StepOutcome,
+  StepTimeLimit,
+} from "../bay/contracts.ts";
 import { fieldOf } from "../bay/json.ts";
 import {
   nodeChildProcesses,
@@ -13,7 +21,7 @@ import {
   nodeThrowawayFolders,
   systemClock,
 } from "../bay/node-ports.ts";
-import type { Clock } from "../bay/ports.ts";
+import type { ChildProcesses, ChildRequest, Clock, Processes } from "../bay/ports.ts";
 import { createBroker } from "../bay/broker/broker.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import {
@@ -21,8 +29,10 @@ import {
   noProcesses,
   permissionsIn,
   place,
+  recordingProcesses,
   type PermissionChanges,
   projectLayout,
+  type RecordingSink,
   recordingSink,
   scriptedHttp,
   sdkFile,
@@ -30,6 +40,7 @@ import {
   writeProjectFile,
 } from "./broker-fixture.ts";
 import { fakeClock } from "./fakes.ts";
+import { grantedCommand } from "./grants-fixture.ts";
 
 const madeUpToken = "made-up-script-token-31337";
 
@@ -43,13 +54,16 @@ type RunOptions = {
   readonly input?: Json;
   readonly permissions?: PermissionChanges;
   readonly timeLimit?: number;
+  readonly timeLimitSetBy?: StepTimeLimit["timeLimitSetBy"];
   readonly call?: ActionCaller;
   readonly outputBytes?: number;
   readonly script?: string;
   readonly caller?: string;
   readonly skillInput?: Json;
   readonly clock?: Clock;
-  readonly events?: ReturnType<typeof recordingSink>;
+  readonly events?: RecordingSink;
+  readonly childProcesses?: ChildProcesses;
+  readonly processes?: Processes;
 };
 
 function scriptSource(body: string): string {
@@ -68,15 +82,13 @@ async function attempt(root: string, body: string, options: RunOptions = {}): Pr
   return runScript(root, options);
 }
 
-async function runScript(root: string, options: RunOptions): Promise<Run> {
-  const events = options.events ?? recordingSink();
-  const calls: (readonly [string, Json])[] = [];
+function runnerFor(root: string, options: RunOptions, events: RecordingSink): ScriptRunner {
   const secrets = new SecretStore({
     environment: { AGENTBAY_SECRET_API_TOKEN: madeUpToken },
     processes: noProcesses,
     platform: "linux",
   });
-  const runner = createBroker({
+  return createBroker({
     layout: projectLayout(root),
     files: nodeFileSystem,
     throwawayFolders: nodeThrowawayFolders,
@@ -93,11 +105,17 @@ async function runScript(root: string, options: RunOptions): Promise<Run> {
     secrets,
     events,
     clock: options.clock ?? systemClock,
-    childProcesses: nodeChildProcesses,
-    processes: noProcesses,
+    childProcesses: options.childProcesses ?? nodeChildProcesses,
+    processes: options.processes ?? noProcesses,
     commandSearchPath: "/usr/bin:/bin",
     limits: { scriptOutputBytes: options.outputBytes ?? 1_000_000 },
   }).scripts;
+}
+
+async function runScript(root: string, options: RunOptions): Promise<Run> {
+  const events = options.events ?? recordingSink();
+  const calls: (readonly [string, Json])[] = [];
+  const runner = runnerFor(root, options, events);
   const request: ScriptRequest = {
     place,
     script: options.script ?? "scripts/probe.ts",
@@ -106,6 +124,7 @@ async function runScript(root: string, options: RunOptions): Promise<Run> {
     settings: { lookback: "3d" },
     remaining: {},
     timeLimitMilliseconds: options.timeLimit ?? 30_000,
+    timeLimitSetBy: options.timeLimitSetBy ?? "kernel",
     call:
       options.call ??
       ((reference, input) => {
@@ -761,6 +780,147 @@ test("a busy loop is killed at the time limit too", async () => {
   await withScriptProject(async (root) => {
     const run = await attempt(root, "for (;;) {}", { timeLimit: 1200 });
     assert.match(reasonOf(run), /time limit/);
+  });
+});
+
+type WatchedChildren = ChildProcesses & { readonly started: ChildRequest[] };
+
+function watchedChildren(start: ChildProcesses["start"]): WatchedChildren {
+  const started: ChildRequest[] = [];
+  return {
+    started,
+    start: (request, onLine) => {
+      started.push(request);
+      return start(request, onLine);
+    },
+  };
+}
+
+const stoppedAtTheirLimit = watchedChildren(() => ({
+  send: () => undefined,
+  kill: () => undefined,
+  ended: Promise.resolve({ how: "timed-out", errorOutput: "" }),
+}));
+
+test("a script stopped at its time limit is told which limit it was and where it was set", async () => {
+  await withScriptProject(async (root) => {
+    const manifest = join(root, "components/modes/notes/mode.yaml");
+    const limits = [
+      { timeLimit: 900_000, timeLimitSetBy: "action" },
+      { timeLimit: 480_000, timeLimitSetBy: "kernel" },
+      { timeLimit: 180_000, timeLimitSetBy: "budget" },
+    ] as const;
+    const reasons = [];
+    for (const limit of limits) {
+      reasons.push(reasonOf(await attempt(root, "return 'ran';", { ...limit, childProcesses: stoppedAtTheirLimit })));
+    }
+    assert.deepEqual(reasons, [
+      `The script was stopped at its time limit of 900 seconds, set by actions.look.scriptTimeLimitSeconds in ${manifest}.`,
+      "The script was stopped at its time limit of 480 seconds, the kernel's limit for a script step. " +
+        `Its action may declare a longer one in actions.look.scriptTimeLimitSeconds in ${manifest}.`,
+      "The script was stopped at its time limit of 180 seconds, the minutes left of the run's budget.",
+    ]);
+    assert.deepEqual(
+      stoppedAtTheirLimit.started.map((request) => request.timeoutMilliseconds),
+      [900_000, 480_000, 180_000],
+    );
+  });
+});
+
+test("a script whose action declares 900 seconds runs past eight minutes on the kernel's clock and is done", async () => {
+  await withScriptProject(async (root) => {
+    const clock = fakeClock(new Date("2026-11-17T09:00:00.000Z"));
+    const children = watchedChildren(nodeChildProcesses.start);
+    const call: ActionCaller = () => {
+      clock.advance(10 * 60_000);
+      return Promise.resolve({ status: "done", output: null, spent: noSpend });
+    };
+    const body = "await context.call('items-store.get', {}); return 'finished';";
+    const run = await attempt(root, body, {
+      timeLimit: 900_000,
+      timeLimitSetBy: "action",
+      clock,
+      call,
+      childProcesses: children,
+    });
+    assert.deepEqual([run.outcome.status, run.outcome.spent.minutes], ["done", 10]);
+    assert.deepEqual(
+      children.started.map((request) => request.timeoutMilliseconds),
+      [900_000],
+    );
+  });
+});
+
+const stoppedCommand = {
+  end: { how: "timed-out" },
+  stdout: { text: "", characters: 0, hash: "" },
+  stderr: { text: "", characters: 0, hash: "" },
+} as const;
+
+const waitCommand = { commands: [grantedCommand("wait", "sleep", ["read"])] };
+
+function runWait(seconds: number): string {
+  return `await context.commands.run({ name: 'wait', arguments: [], folder: '.', timeLimitSeconds: ${String(seconds)} })`;
+}
+
+async function commandLimitsGiven(
+  root: string,
+  steps: { readonly limit: number; readonly body: string; readonly advance: number },
+): Promise<{ readonly run: Run; readonly given: readonly number[] }> {
+  const clock = fakeClock(new Date("2026-11-17T09:00:00.000Z"));
+  const processes = recordingProcesses(() => stoppedCommand);
+  const call: ActionCaller = () => {
+    clock.advance(steps.advance);
+    return Promise.resolve({ status: "done", output: null, spent: noSpend });
+  };
+  const run = await attempt(root, steps.body, {
+    timeLimit: steps.limit,
+    timeLimitSetBy: "action",
+    clock,
+    call,
+    processes,
+    permissions: waitCommand,
+  });
+  return { run, given: processes.requests.map((request) => request.timeoutMilliseconds) };
+}
+
+test("a command gets what is left of its step's limit less 30 seconds, at the start and after half the step is used", async () => {
+  await withScriptProject(async (root) => {
+    const body = [
+      `const first = ${runWait(1200)};`,
+      "await context.call('items-store.get', {});",
+      `const second = ${runWait(1000)};`,
+      `const third = ${runWait(100)};`,
+      "return [first, second, third].map((answer) => (answer.ok ? answer.value.end.how : answer.message));",
+    ].join("\n");
+    const { run, given } = await commandLimitsGiven(root, { limit: 1_030_000, body, advance: 515_000 });
+    assert.deepEqual(given, [1_000_000, 485_000, 100_000]);
+    assert.deepEqual(outputOf(run), ["timed-out", "timed-out", "timed-out"]);
+  });
+});
+
+test("a step limit under a minute keeps half of it for the script, not 30 seconds", async () => {
+  await withScriptProject(async (root) => {
+    const body = `const ran = ${runWait(60)}; return ran.ok ? ran.value.end.how : ran.message;`;
+    const { run, given } = await commandLimitsGiven(root, { limit: 10_000, body, advance: 0 });
+    assert.deepEqual([given, outputOf(run)], [[5000], "timed-out"]);
+  });
+});
+
+test("a command is not started when its step has no time left for it, and the script is told why", async () => {
+  await withScriptProject(async (root) => {
+    const body = [
+      "await context.call('items-store.get', {});",
+      `const ran = ${runWait(60)};`,
+      "return ran.ok ? ran.value.end.how : ran.message;",
+    ].join("\n");
+    const { run, given } = await commandLimitsGiven(root, { limit: 1_030_000, body, advance: 1_001_000 });
+    assert.deepEqual(given, []);
+    assert.equal(
+      outputOf(run),
+      "The listed command wait was not started: the step has no time left to run it and still answer " +
+        "before the script's own time limit of 1030 seconds.",
+    );
   });
 });
 

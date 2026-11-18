@@ -461,6 +461,80 @@ test("a script's time limit is the smaller of eight minutes and the minutes left
   close();
 });
 
+const longStep: Action = {
+  description: "When a test runs a script that takes long.",
+  input: "schemas/anything.json",
+  output: "schemas/anything.json",
+  effects: ["read", "write"],
+  run: [{ script: "scripts/slow.ts" }],
+  scriptTimeLimitSeconds: 900,
+};
+
+function timeLimitsOf(calls: readonly ScriptRequest[]): readonly (readonly [string, number, string])[] {
+  return calls.map((call) => [call.place.action, call.timeLimitMilliseconds, call.timeLimitSetBy]);
+}
+
+test("a script step may run as long as its action declares, and eight minutes where its action declares none", async () => {
+  const scripts = { "notes:scripts/slow.ts": (request: ScriptRequest) => finished(request.input, { minutes: 10 }) };
+  const { runs, runner, close } = await openedRuns({ scripts, changes: { notesActions: { "long-step": longStep } } });
+  const long = runOf(await runs.start({ action: "notes.long-step" }, {}));
+  assert.deepEqual([long.state.status, long.spent.minutes], ["done", 10]);
+  runOf(await runs.start({ action: "notes.log" }, {}));
+  assert.deepEqual(timeLimitsOf(runner.calls), [
+    ["long-step", 900_000, "action"],
+    ["log", 480_000, "kernel"],
+  ]);
+  close();
+});
+
+test("a budget of fewer minutes than the declared limit sets the step's limit, and the step that uses them all stops the run", async () => {
+  const scripts = { "notes:scripts/slow.ts": (request: ScriptRequest) => finished(request.input, { minutes: 5 }) };
+  const changes = { notesActions: { "long-step": longStep }, config: { budget: { minutes: 5 } } };
+  const { runs, runner, close } = await openedRuns({ scripts, changes });
+  const run = runOf(await runs.start({ action: "notes.long-step" }, {}));
+  assert.deepEqual(timeLimitsOf(runner.calls), [["long-step", 300_000, "budget"]]);
+  assert.deepEqual([run.state.status, run.spent.minutes], ["done", 5]);
+  close();
+});
+
+test("a call a long script makes draws from the same budget, less the minutes the script has used so far", async () => {
+  const later: { clock?: { readonly advance: (milliseconds: number) => void } } = {};
+  const scripts = {
+    "notes:scripts/slow.ts": async (request: ScriptRequest) => {
+      later.clock?.advance(6 * 60_000);
+      await request.call("items-store.put", { id: "inner" });
+      return finished(request.input, { minutes: 7 });
+    },
+  };
+  const changes = { notesActions: { "long-step": longStep }, config: { budget: { minutes: 10 } } };
+  const opened = await openedRuns({ scripts, changes });
+  later.clock = opened.clock;
+  const run = runOf(await opened.runs.start({ action: "notes.long-step" }, {}));
+  assert.deepEqual(timeLimitsOf(opened.runner.calls), [
+    ["long-step", 600_000, "budget"],
+    ["put", 240_000, "budget"],
+  ]);
+  assert.deepEqual([run.state.status, run.spent.minutes], ["done", 7]);
+  opened.close();
+});
+
+test("the check scripts of a skill step keep the kernel's eight minutes, whatever the action declares", async () => {
+  const longDraft: Action = {
+    description: "When a test drafts a text in an action that declares a long limit.",
+    input: "schemas/anything.json",
+    output: "schemas/draft.json",
+    effects: ["read"],
+    run: [{ skill: "skills/draft", tier: "balanced", checks: ["scripts/long-enough.ts"] }],
+    scriptTimeLimitSeconds: 900,
+  };
+  const { runs, runner, close } = await openedRuns({ changes: { notesActions: { "long-draft": longDraft } } });
+  const started = runOf(await runs.start({ action: "notes.long-draft" }, {}));
+  const run = runOf(await runs.submit(tokenOf(started), answer({ text: "long enough" })));
+  assert.equal(run.state.status, "done");
+  assert.deepEqual(timeLimitsOf(runner.calls), [["long-draft", 480_000, "kernel"]]);
+  close();
+});
+
 test("a script that calls an action is charged once: its own spend plus the call's, from the call's records", async () => {
   const scripts = {
     "notes:scripts/log.ts": async (request: ScriptRequest) => {

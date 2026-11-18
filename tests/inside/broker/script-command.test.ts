@@ -20,6 +20,7 @@ test("the runner starts node with the permission model, the grants and the prelo
     settings: {},
     remaining: {},
     timeLimitMilliseconds: 1000,
+    timeLimitSetBy: "kernel",
     call: () => Promise.resolve({ status: "failed", reason: "no", spent: noSpend }),
   };
   const bay = join(kitFolder, "bay");
@@ -54,6 +55,7 @@ test("the runner tells the preload that files may be removed only when the actio
       settings: {},
       remaining: {},
       timeLimitMilliseconds: 1000,
+      timeLimitSetBy: "kernel",
       call: () => Promise.resolve({ status: "failed", reason: "no", spent: noSpend }),
     });
   assert.equal(commandFor(["read", "write", "delete"]).at(-1), "--agentbay-may-remove-files");
@@ -70,6 +72,7 @@ test("a script is granted direct file writes only when its action declares write
     settings: {},
     remaining: {},
     timeLimitMilliseconds: 1000,
+    timeLimitSetBy: "kernel" as const,
     call: () => Promise.reject(new Error("no calls")),
   });
   const writeGrants = (effects: readonly Effect[]): readonly string[] =>

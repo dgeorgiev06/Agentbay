@@ -12,7 +12,7 @@ import type { Outcome } from "../outcome.ts";
 import type { SecretStore } from "../secrets.ts";
 import { readTrustRecord, type TrustRecord } from "../trust.ts";
 import type { OperationName } from "./operations.ts";
-import type { Asking, Doing, Entries, RefusalDetail, SpendAmounts, Step, StepLimits } from "./rule.ts";
+import type { Asking, CommandTimeLeft, Doing, Entries, RefusalDetail, SpendAmounts, Step, StepLimits } from "./rule.ts";
 
 export type StepBrokerLimits = StepLimits & {
   readonly databaseMilliseconds: number;
@@ -32,11 +32,17 @@ export type StepServices = {
   readonly commandSearchPath: string;
 };
 
+export type StepTime = {
+  readonly startedAt: Date;
+  readonly milliseconds: number;
+};
+
 type StepOptions = StepServices & {
   readonly permissions: Permissions;
   readonly place: StepPlace;
   readonly limits?: Partial<StepBrokerLimits>;
   readonly call?: ActionCaller;
+  readonly stepTime?: StepTime;
 };
 
 const defaultStepBrokerLimits: StepBrokerLimits = {
@@ -51,6 +57,10 @@ const defaultStepBrokerLimits: StepBrokerLimits = {
   commandMilliseconds: 10 * 60 * 1000,
   commandOutputCharacters: 64 * 1024,
 };
+
+const longestTimeToAnswerMilliseconds = 30_000;
+
+const shareOfAStepToAnswer = 0.5;
 
 export type OpenStep = {
   readonly entries: Entries<OperationName>;
@@ -132,12 +142,29 @@ function databasesOf(options: StepOptions, lifetimeMilliseconds: number): Databa
   };
 }
 
+function timeToAnswer(step: StepTime): number {
+  return Math.min(longestTimeToAnswerMilliseconds, step.milliseconds * shareOfAStepToAnswer);
+}
+
+function commandTimeLeftOf(options: StepOptions, limits: StepLimits): () => CommandTimeLeft {
+  const step = options.stepTime;
+  if (step === undefined) {
+    return () => ({ kind: "left", milliseconds: limits.commandMilliseconds });
+  }
+  const commandsEndAt = step.startedAt.getTime() + step.milliseconds - timeToAnswer(step);
+  return () => {
+    const milliseconds = commandsEndAt - options.clock.now().getTime();
+    return milliseconds > 0 ? { kind: "left", milliseconds } : { kind: "none", stepMilliseconds: step.milliseconds };
+  };
+}
+
 function askingOf(options: StepOptions, limits: StepLimits): Asking {
   const { grants, actionEffects } = options.permissions;
   const { place, layout, inspector } = options;
   const at = { stepKey: place.stepKey, action: place.action, manifest: manifestOf(grants) };
   const trustRecordNow = (): Promise<Outcome<TrustRecord>> => readTrustRecord(options.files, layout);
-  return { grants, effects: actionEffects, at, layout, inspector, limits, trustRecordNow };
+  const commandTimeLeft = commandTimeLeftOf(options, limits);
+  return { grants, effects: actionEffects, at, layout, inspector, limits, commandTimeLeft, trustRecordNow };
 }
 
 type StepState = {

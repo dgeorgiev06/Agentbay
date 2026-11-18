@@ -58,6 +58,30 @@ test("a listed command in a base mode is a warning that names the command and it
   assert.equal(report.errors, 0);
 });
 
+async function longStepsWith(seconds: number): Promise<readonly (readonly unknown[])[]> {
+  const add = notesMode.actions.add;
+  assert.ok(add);
+  const actions = { add: { ...add, scriptTimeLimitSeconds: seconds } };
+  const report = await check({ ...cleanFiles(), [paths.notes]: yamlText({ ...notesMode, actions }) });
+  assert.equal(report.errors, 0);
+  return report.findings
+    .filter((finding) => finding.message.includes("scriptTimeLimitSeconds"))
+    .map((finding) => [finding.severity, finding.path, finding.message, finding.fix]);
+}
+
+test("an action whose script steps may run longer than eight minutes is a warning with the mode, the action and the seconds", async () => {
+  assert.deepEqual(await longStepsWith(1030), [
+    [
+      "warning",
+      "/actions/add/scriptTimeLimitSeconds",
+      "Action add of mode notes declares scriptTimeLimitSeconds: 1030, so each of its script steps may run " +
+        "unattended for 1030 seconds, longer than the kernel's 480.",
+      "Keep the longer limit only if a step needs it, such as one that runs a whole test suite.",
+    ],
+  ]);
+  assert.deepEqual(await longStepsWith(480), []);
+});
+
 test("a listed command with no effects in a base mode is an error with a fix", async () => {
   const commands = { tests: { run: "node --test", effects: [] } };
   const manifest = yamlText({ ...storeMode, resources: { commands } });

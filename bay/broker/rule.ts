@@ -59,6 +59,10 @@ export type StepLimits = AgentQueryLimits & {
   readonly commandOutputCharacters: number;
 };
 
+export type CommandTimeLeft =
+  | { readonly kind: "left"; readonly milliseconds: number }
+  | { readonly kind: "none"; readonly stepMilliseconds: number };
+
 export type Asking = {
   readonly grants: ModeGrants;
   readonly effects: readonly Effect[];
@@ -66,6 +70,7 @@ export type Asking = {
   readonly layout: Layout;
   readonly inspector: FileInspector;
   readonly limits: StepLimits;
+  readonly commandTimeLeft: () => CommandTimeLeft;
   readonly trustRecordNow: () => Promise<Outcome<TrustRecord>>;
 };
 

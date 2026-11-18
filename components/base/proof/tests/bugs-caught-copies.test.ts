@@ -332,3 +332,32 @@ test("bugs-caught with the real git-worktrees mode and toolchain: each bug runs 
   assert.deepEqual(await readdir(join(project.root, ".forge", "copies")), []);
   assert.equal(await readFile(join(project.root, "src", "value.txt"), "utf8"), "2\n");
 });
+
+test("bugs-caught with the real toolchain: a bug that names a test file missing at the head is not known, and a bug that stops its test file from loading is counted caught today, since the toolchain answers both as one failed test", async () => {
+  const head = await committed({
+    "src/loaded.ts": "export const loaded = 1;\n",
+    "tests/loads.test.ts": 'import "../src/loaded.ts";\n',
+  });
+  const missing = { ...realBugs.caught, name: "the tests are missing", tests: ["tests/missing.test.ts"] };
+  const unloaded = await project.output("proof.prove", sliceWith(head, head, [missing]));
+  assert.deepEqual(ownVerdict(unloaded), [
+    {
+      item: "bugs",
+      kind: "bugs-caught",
+      verdict: "inconclusive",
+      reason:
+        "The run with the bug the tests are missing is not known: The output ended without a summary of the tests, so the mode cannot tell whether they passed.",
+    },
+  ]);
+  const syntax = {
+    name: "the module does not load",
+    patch: patchOf("src/loaded.ts", "export const loaded = 1;", "export const loaded = ;"),
+    tests: ["tests/loads.test.ts"],
+  };
+  const harmless = { ...realBugs.survives, tests: ["tests/loads.test.ts"] };
+  const loaded = await project.output("proof.prove", sliceWith(head, head, [syntax, harmless]));
+  assert.deepEqual(ownVerdict(loaded), [
+    { item: "bugs", kind: "bugs-caught", verdict: "failed", detail: "A bug survived: the name is changed." },
+  ]);
+  assert.deepEqual(await readdir(join(project.root, ".forge", "copies")), []);
+});

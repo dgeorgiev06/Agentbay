@@ -1,6 +1,6 @@
 import type { Step as WorkflowStep } from "../generated/workflow.ts";
 import { workflowReferenceIssues } from "./references.ts";
-import { problemAt, type PathSegments } from "./spec.ts";
+import { problemAt, type PathSegments } from "../value-check.ts";
 import type { Problem } from "../outcome.ts";
 import type { ModeSource, Context, ModeWorkflow } from "./loaded.ts";
 import { interfaceName, requiredReferences } from "./interfaces.ts";

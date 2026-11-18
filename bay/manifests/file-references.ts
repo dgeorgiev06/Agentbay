@@ -1,7 +1,7 @@
 import { dirname, join } from "node:path/posix";
 import type { Interface } from "../generated/interface.ts";
 import type { Step } from "../generated/mode.ts";
-import { problemAt, type Loaded, type PathSegments } from "./spec.ts";
+import { problemAt, type Loaded, type PathSegments } from "../value-check.ts";
 import type { Problem } from "../outcome.ts";
 import { schemaDirections } from "./schemas.ts";
 import {
@@ -116,7 +116,7 @@ function interfaceReferences(loaded: Loaded<Interface>): readonly FileReference[
   );
 }
 
-async function fileReferenceProblem(context: Context, reference: FileReference): Promise<Problem | undefined> {
+async function fileReferenceProblems(context: Context, reference: FileReference): Promise<readonly Problem[]> {
   const file = shown(context, reference.file);
   const missing = {
     message: `${reference.subject}, but ${file} does not exist.`,
@@ -124,19 +124,28 @@ async function fileReferenceProblem(context: Context, reference: FileReference):
   };
   if (reference.kind === "file") {
     const exists = await context.files.exists(reference.file);
-    return exists ? undefined : problemAt(reference.owner, reference.path, missing);
+    return exists ? [] : [problemAt(reference.owner, reference.path, missing)];
   }
   const schemaFile = await context.readSchema(reference.file);
   switch (schemaFile.state) {
     case "missing":
-      return problemAt(reference.owner, reference.path, missing);
+      return [problemAt(reference.owner, reference.path, missing)];
     case "invalid":
-      return problemAt(reference.owner, reference.path, {
-        message: `${reference.subject}, but ${file} is not valid JSON: ${schemaFile.reason}.`,
-        fix: `Correct the JSON in ${file}.`,
-      });
+      return [
+        problemAt(reference.owner, reference.path, {
+          message: `${reference.subject}, but ${file} is not valid JSON: ${schemaFile.reason}.`,
+          fix: `Correct the JSON in ${file}.`,
+        }),
+      ];
+    case "unfollowed":
+      return schemaFile.references.map((unfollowed) =>
+        problemAt(reference.owner, reference.path, {
+          message: `${reference.subject}, but ${file} ${unfollowed.clause}.`,
+          fix: unfollowed.fix,
+        }),
+      );
     case "valid":
-      return undefined;
+      return [];
   }
 }
 
@@ -147,10 +156,7 @@ export async function referenceProblems(context: Context): Promise<readonly Prob
   ];
   const problems: Problem[] = [];
   for (const reference of references) {
-    const problem = await fileReferenceProblem(context, reference);
-    if (problem !== undefined) {
-      problems.push(problem);
-    }
+    problems.push(...(await fileReferenceProblems(context, reference)));
   }
   return problems;
 }

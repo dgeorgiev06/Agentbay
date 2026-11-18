@@ -132,6 +132,7 @@ export const refusedRequests: { readonly [Name in OperationName]: readonly Refus
   "files.link": twoTextCases("files.link", { path: ".forge/copies/k3/node_modules", target: "node_modules" }),
   "files.remove": pathCases("files.remove", ".forge/copies/k3"),
   "secrets.get": twoTextCases("secrets.get", { name: "API_TOKEN" }),
+  "schemas.read": twoTextCases("schemas.read", { schema: "schemas/plan.json" }),
   "http.request": [
     notAMapping("http.request", "https://api.example.com"),
     missing(httpRequest, "method", fieldIsMissing(http, "method", httpMethods)),
@@ -215,6 +216,12 @@ function answerCase(what: string, value: Json, sentence: string): Refused {
   return { what, value, sentence };
 }
 
+const validSchema = { state: "valid", schema: { type: "object" }, parts: {} };
+
+const schemaAnswer = answerTo("schemas.read");
+
+const schemaStates = "one of missing, invalid, unfollowed, valid";
+
 function onlyNull(operation: OperationName): readonly Refused[] {
   const sentence = wholeIsNot(answerTo(operation), "null");
   return [
@@ -292,6 +299,18 @@ export const refusedResults: { readonly [Name in Exclude<OperationName, "call">]
   "files.link": onlyNull("files.link"),
   "files.remove": onlyNull("files.remove"),
   "secrets.get": onlyText("secrets.get"),
+  "schemas.read": [
+    answerCase("not a mapping", [validSchema], wholeIsNot(schemaAnswer, "a mapping")),
+    given(validSchema, { state: "fine" }, fieldIsNot(schemaAnswer, "state", schemaStates)),
+    missing(validSchema, "schema", fieldIsMissing(schemaAnswer, "schema", "a JSON value")),
+    given(validSchema, { parts: [] }, fieldIsNot(schemaAnswer, "parts", "a mapping")),
+    answerCase("invalid with no reason", { state: "invalid" }, fieldIsMissing(schemaAnswer, "reason", "text")),
+    answerCase(
+      "unfollowed with a reference that has no fix",
+      { state: "unfollowed", references: [{ clause: "refers to x" }] },
+      fieldIsNot(schemaAnswer, "references[0]", "a reference with a clause and a fix"),
+    ),
+  ],
   "http.request": [
     answerCase("not a mapping", [response], wholeIsNot(httpAnswer, "a mapping")),
     answerCase("null", null, wholeIsNot(httpAnswer, "a mapping")),

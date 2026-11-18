@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { lstat, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
+import { noInterfaceSchemas } from "./broker-fixture.ts";
 import type { Answer } from "../bay/answers.ts";
 import { createBroker, type StepBroker } from "../bay/broker/broker.ts";
 import type { Effect, GrantedCommand, ListTrust, ModeList, TrustGiven } from "../bay/contracts.ts";
@@ -111,6 +112,7 @@ async function withListBroker(loaded: Loaded, run: (setup: Setup) => Promise<voi
       childProcesses: nodeChildProcesses,
       processes: nodeProcesses,
       commandSearchPath: process.env.PATH ?? "/usr/bin:/bin",
+      interfaceSchemas: noInterfaceSchemas,
     }).forStep(place, permissionsIn(root, { effects: everyEffect, listTrust: loaded.listTrust, ...listGrants }));
     try {
       await run({ root, broker, recordReads: counting.reads });

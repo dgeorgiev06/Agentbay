@@ -1,3 +1,4 @@
+import { noInterfaceSchemas } from "./broker-fixture.ts";
 import { join } from "node:path";
 import {
   nodeChildProcesses,
@@ -23,6 +24,7 @@ async function main(root: string): Promise<void> {
     childProcesses: nodeChildProcesses,
     processes: noProcesses,
     commandSearchPath: "/usr/bin:/bin",
+    interfaceSchemas: noInterfaceSchemas,
   }).scripts;
   const outcome = await runner.run({
     place,

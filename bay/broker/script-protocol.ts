@@ -21,7 +21,7 @@ export function packageArgument(specifier: string, url: string): string {
 }
 
 export function packageFolderOf(specifier: string, entry: string): string {
-  const folder = `/node_modules/${specifier}`;
+  const folder = `/node_modules/${specifier.split("/")[0] ?? specifier}`;
   return entry.slice(0, entry.lastIndexOf(`${folder}/`) + folder.length);
 }
 
@@ -56,20 +56,21 @@ export type ParentMessage =
 
 type Fields = { readonly [key: string]: Json };
 
-const resources: readonly string[] = [
-  "db",
-  "files",
-  "secrets",
-  "http",
-  "events",
-  "call",
-  "spend",
-  "script",
-  "commands",
-];
+const resources: { readonly [Name in Resource]: Name } = {
+  db: "db",
+  files: "files",
+  secrets: "secrets",
+  http: "http",
+  events: "events",
+  call: "call",
+  spend: "spend",
+  script: "script",
+  commands: "commands",
+  schemas: "schemas",
+};
 
 function isResource(value: Json | undefined): value is Resource {
-  return typeof value === "string" && resources.includes(value);
+  return typeof value === "string" && Object.hasOwn(resources, value);
 }
 
 function askedOf<Name extends OperationName>(operation: Name, value: Json): Reading<AskedFor<Name>> {

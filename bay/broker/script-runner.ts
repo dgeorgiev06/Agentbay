@@ -59,6 +59,8 @@ const filesTheHostReads: readonly string[] = [
   `${bayFolder}protocol-json.ts`,
   `${bayFolder}sdk.ts`,
   `${bayFolder}yaml-text.ts`,
+  `${bayFolder}value-check.ts`,
+  `${bayFolder}json.ts`,
 ];
 
 type KernelPackage = {
@@ -72,7 +74,13 @@ function kernelPackage(specifier: string): KernelPackage {
   return { specifier, url, folder: packageFolderOf(specifier, fileURLToPath(url)) };
 }
 
-const packagesTheHostReads: readonly KernelPackage[] = ["yaml"].map(kernelPackage);
+const packagesTheHostReads: readonly KernelPackage[] = [
+  "yaml",
+  "ajv/dist/2020.js",
+  "fast-deep-equal",
+  "fast-uri",
+  "json-schema-traverse",
+].map(kernelPackage);
 
 function grants(access: "read" | "write", path: string): readonly string[] {
   if (filesTheHostReads.includes(path)) {
@@ -319,6 +327,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
       childProcesses: options.childProcesses,
       processes: options.processes,
       commandSearchPath: options.commandSearchPath,
+      interfaceSchemas: options.interfaceSchemas,
       call: request.call,
       stepTime: { startedAt, milliseconds },
       limits: { databaseMilliseconds: milliseconds, ...options.limits },

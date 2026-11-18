@@ -1,7 +1,7 @@
 import { basename } from "node:path/posix";
 import type { Interface } from "../generated/interface.ts";
 import { shownPath, type Layout } from "../layout.ts";
-import { problemAt, type Loaded, type Wording } from "./spec.ts";
+import { problemAt, type Loaded, type Wording } from "../value-check.ts";
 import type { Problem } from "../outcome.ts";
 import { manifestFileOf } from "./folders.ts";
 import { type ModeSource, type LoadedModes, type Context, shown, activeModesOf } from "./loaded.ts";

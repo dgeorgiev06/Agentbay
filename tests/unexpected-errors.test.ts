@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
+import { noInterfaceSchemas } from "./broker-fixture.ts";
 import { stringify } from "yaml";
 import type { Json } from "../bay/contracts.ts";
 import { fieldOf, parseJson, textField } from "../bay/json.ts";
@@ -125,6 +126,7 @@ test("a script whose call to another action throws gets a failed answer and the 
       childProcesses: nodeChildProcesses,
       processes: noProcesses,
       commandSearchPath: "/usr/bin:/bin",
+      interfaceSchemas: noInterfaceSchemas,
     }).scripts;
     const outcome = await runner.run({
       place,

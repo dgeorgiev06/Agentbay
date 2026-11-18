@@ -94,6 +94,13 @@ const examples: Examples = {
     requests: [{ name: "API_TOKEN" }, { name: "" }],
     results: ["made-up-value", ""],
   },
+  "schemas.read": {
+    requests: [{ schema: "schemas/plan.json" }, { schema: "proof@1/prove-request.json" }],
+    results: [
+      { state: "valid", schema: { type: "object" }, parts: { "proof@1/prove-request.json": { $defs: {} } } },
+      { state: "unfollowed", references: [{ clause: "refers to x, which names nothing", fix: "Correct it." }] },
+    ],
+  },
   "http.request": {
     requests: [
       { method: "POST", url: "https://api.example.com/items", headers: { "content-type": "text/plain" }, body: "x" },
@@ -156,9 +163,10 @@ const operationNames: readonly OperationName[] = [
   "call",
   "spend",
   "commands.run",
+  "schemas.read",
 ];
 
-test("the table holds the sixteen operations a script can ask for, each with its resource", () => {
+test("the table holds the seventeen operations a script can ask for, each with its resource", () => {
   assert.deepEqual(
     Object.entries(shapes).map(([name, shape]) => `${name} ${shape.resource}`),
     [
@@ -178,6 +186,7 @@ test("the table holds the sixteen operations a script can ask for, each with its
       "call call",
       "spend spend",
       "commands.run commands",
+      "schemas.read schemas",
     ],
   );
 });

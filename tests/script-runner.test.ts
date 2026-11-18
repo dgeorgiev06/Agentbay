@@ -4,6 +4,7 @@ import { mkdir, readdir, readFile, symlink } from "node:fs/promises";
 import { createServer, type Server } from "node:net";
 import { join, relative } from "node:path";
 import { test } from "node:test";
+import { noInterfaceSchemas } from "./broker-fixture.ts";
 import type {
   ActionCaller,
   Json,
@@ -108,6 +109,7 @@ function runnerFor(root: string, options: RunOptions, events: RecordingSink): Sc
     childProcesses: options.childProcesses ?? nodeChildProcesses,
     processes: options.processes ?? noProcesses,
     commandSearchPath: "/usr/bin:/bin",
+    interfaceSchemas: noInterfaceSchemas,
     limits: { scriptOutputBytes: options.outputBytes ?? 1_000_000 },
   }).scripts;
 }
@@ -257,7 +259,7 @@ test("a script cannot read /etc/passwd, the kit's own files or the mode's databa
   });
 });
 
-test("of the kernel's files a script can read only the seven the host and its toolbox are made of", async () => {
+test("of the kernel's files a script can read only the nine the host and its toolbox are made of", async () => {
   await withScriptProject(async (root) => {
     const entries = await readdir(join(kitFolder, "bay"), { recursive: true, withFileTypes: true });
     const kernelFiles = entries
@@ -285,8 +287,10 @@ test("of the kernel's files a script can read only the seven the host and its to
       "bay/broker/script-host.ts",
       "bay/broker/script-preload.ts",
       "bay/broker/script-protocol.ts",
+      "bay/json.ts",
       "bay/protocol-json.ts",
       "bay/sdk.ts",
+      "bay/value-check.ts",
       "bay/yaml-text.ts",
     ]);
   });

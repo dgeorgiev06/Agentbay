@@ -1,6 +1,7 @@
 import type { Answer, Resource } from "../answers.ts";
 import type { Json } from "../contracts.ts";
 import { isJson, isJsonRecord } from "../protocol-json.ts";
+import type { SchemaFile, UnfollowedReference } from "../value-check.ts";
 import type {
   AgentQueryResult,
   CommandEnd,
@@ -41,6 +42,7 @@ export type Requests = {
   readonly call: { readonly reference: string; readonly input: Json };
   readonly spend: { readonly spending: Json };
   readonly "commands.run": CommandRequest;
+  readonly "schemas.read": { readonly schema: string };
 };
 
 export type Results = {
@@ -60,6 +62,7 @@ export type Results = {
   readonly call: Json;
   readonly spend: null;
   readonly "commands.run": CommandRan;
+  readonly "schemas.read": SchemaFile;
 };
 
 export type OperationName = keyof Requests;
@@ -277,6 +280,10 @@ const commandRequestOf = takingFields(
   },
 );
 
+const schemaRequestOf = takingFields(["schema"], ({ schema }): Reading<Requests["schemas.read"]> =>
+  isText(schema) ? read({ schema }) : misfitAt(["schema"], schema, "text"),
+);
+
 function executeResultOf(value: Json): Reading<ExecuteResult> {
   if (!isJsonRecord(value)) {
     return misfitAt([], value, "a mapping");
@@ -385,6 +392,40 @@ function commandRanOf(value: Json): Reading<CommandRan> {
   return stderr.ok ? read({ end: end.value, milliseconds, stdout: stdout.value, stderr: stderr.value }) : stderr;
 }
 
+function isUnfollowedReference(value: Json): value is UnfollowedReference {
+  return isJsonRecord(value) && isText(value.clause) && isText(value.fix);
+}
+
+const listOfUnfollowed: ListOf<UnfollowedReference> = {
+  list: "a list of references",
+  item: "a reference with a clause and a fix",
+  isItem: isUnfollowedReference,
+};
+
+function schemaFileOf(value: Json): Reading<SchemaFile> {
+  if (!isJsonRecord(value)) {
+    return misfitAt([], value, "a mapping");
+  }
+  const { state, reason, schema, parts } = value;
+  if (state === "missing") {
+    return read({ state });
+  }
+  if (state === "invalid") {
+    return isText(reason) ? read({ state, reason }) : misfitAt(["reason"], reason, "text");
+  }
+  if (state === "unfollowed") {
+    const references = listAt(["references"], value.references, listOfUnfollowed);
+    return references.ok ? read({ state, references: references.value }) : references;
+  }
+  if (state !== "valid") {
+    return misfitAt(["state"], state, "one of missing, invalid, unfollowed, valid");
+  }
+  if (schema === undefined) {
+    return misfitAt(["schema"], schema, "a JSON value");
+  }
+  return isJsonRecord(parts) ? read({ state, schema, parts }) : misfitAt(["parts"], parts, "a mapping");
+}
+
 export const shapes: { readonly [Name in OperationName]: Shape<Name> } = {
   "db.execute": { resource: "db", request: statementRequestOf, result: executeResultOf },
   "db.query": { resource: "db", request: statementRequestOf, result: rowsOf },
@@ -402,6 +443,7 @@ export const shapes: { readonly [Name in OperationName]: Shape<Name> } = {
   call: { resource: "call", request: callRequestOf, result: anyJsonOf },
   spend: { resource: "spend", request: spendRequestOf, result: nothingOf },
   "commands.run": { resource: "commands", request: commandRequestOf, result: commandRanOf },
+  "schemas.read": { resource: "schemas", request: schemaRequestOf, result: schemaFileOf },
 };
 
 export function isOperationName(value: Json | undefined): value is OperationName {
@@ -503,6 +545,16 @@ export function contextOver(asking: Asking, start: ScriptStart): ScriptContext {
     events: { emit: (kind, detail) => asked("events.emit", { kind, detail }) },
     commands: { run: (request) => asked("commands.run", request) },
     call: (reference, input) => asked("call", { reference, input }),
+    schemas: {
+      check: async (schema, value) => {
+        const answer = await asked("schemas.read", { schema });
+        if (!answer.ok) {
+          return answer;
+        }
+        const { checkedValue } = await import("../value-check.ts");
+        return { ok: true, value: checkedValue(schema, answer.value, value) };
+      },
+    },
     settings: start.settings,
     now: () => new Date(start.now),
     spend: (spending) => asked("spend", { spending: { ...spending } }),

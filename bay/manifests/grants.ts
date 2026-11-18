@@ -1,6 +1,6 @@
 import type { ModeGrants } from "../contracts.ts";
 import { grantsOf, type GrantProblem } from "../policy.ts";
-import { problemAt } from "./spec.ts";
+import { problemAt } from "../value-check.ts";
 import { failedWith, succeededWith, type Outcome, type Problem } from "../outcome.ts";
 import type { TrustRecord } from "../trust.ts";
 import type { ModeSource, Context } from "./loaded.ts";

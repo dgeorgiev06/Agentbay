@@ -25,7 +25,7 @@ import type {
   Removal,
   ThrowawayFolders,
 } from "./ports.ts";
-import { loadSystem, type System } from "./manifests/manifests.ts";
+import { interfaceSchemasOf, loadSystem, type System } from "./manifests/manifests.ts";
 import { openRuns, type Runs } from "./runs/runs.ts";
 import { SecretStore, type SecretStoreOptions } from "./secrets.ts";
 import type { Outcome } from "./outcome.ts";
@@ -116,6 +116,7 @@ export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel
     inspector: ports.inspector,
     http: ports.http,
     secrets,
+    interfaceSchemas: interfaceSchemasOf(system),
   };
   const processes = {
     clock: ports.clock,

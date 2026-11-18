@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { noInterfaceSchemas } from "./broker-fixture.ts";
 import type { Answer } from "../bay/answers.ts";
 import { createBroker } from "../bay/broker/broker.ts";
 import type { ModeGrants, Scrubber } from "../bay/contracts.ts";
@@ -41,6 +42,7 @@ async function askedThroughTheBroker(store: SecretStore, name: string, grants: M
     childProcesses: nodeChildProcesses,
     processes: noProcesses,
     commandSearchPath: "/usr/bin:/bin",
+    interfaceSchemas: noInterfaceSchemas,
   }).forStep(place, { grants, actionEffects: [] });
   try {
     return await broker.ask("secrets.get", { name });

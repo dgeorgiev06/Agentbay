@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, readdir, readFile, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
+import { noInterfaceSchemas } from "./broker-fixture.ts";
 import type { Answer } from "../bay/answers.ts";
 import { createBroker, type StepBroker } from "../bay/broker/broker.ts";
 import {
@@ -46,6 +47,7 @@ async function withFilesBroker(run: (setup: Setup) => Promise<void>): Promise<vo
       childProcesses: nodeChildProcesses,
       processes: noProcesses,
       commandSearchPath: "/usr/bin:/bin",
+      interfaceSchemas: noInterfaceSchemas,
     }).forStep(place, permissionsIn(root, { effects: ["read", "write"] }));
     try {
       await run({ root, broker, events });
@@ -162,6 +164,7 @@ test("a granted path that is itself a link to another folder of the project is r
       childProcesses: nodeChildProcesses,
       processes: noProcesses,
       commandSearchPath: "/usr/bin:/bin",
+      interfaceSchemas: noInterfaceSchemas,
     }).forStep(place, permissionsIn(root));
     try {
       assert.match(refusalOf(await broker.ask("files.read", { path: "notes-in/store.db" })), /link/);
@@ -189,6 +192,7 @@ test("the broker gives the kernel a script runner and a broker for a step, which
     childProcesses: nodeChildProcesses,
     processes: noProcesses,
     commandSearchPath: "/usr/bin:/bin",
+    interfaceSchemas: noInterfaceSchemas,
   });
   assert.deepEqual(Object.keys(broker).sort(), ["forStep", "scripts"]);
   assert.deepEqual(Object.keys(broker.scripts), ["run"]);

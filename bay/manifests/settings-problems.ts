@@ -1,5 +1,5 @@
 import { join } from "node:path/posix";
-import { checkValue, problemAt } from "./spec.ts";
+import { checkValue, problemAt } from "../value-check.ts";
 import type { Problem } from "../outcome.ts";
 import { type ModeSource, type Context, shown, settingsOf } from "./loaded.ts";
 
@@ -14,7 +14,7 @@ export async function modeSettingsProblems(context: Context, mode: ModeSource): 
     return [];
   }
   const given = settingsOf(config.value, mode.value.name);
-  const check = checkValue(schemaFile.schema, given, { loaded: config, path: ["settings", mode.value.name] });
+  const check = checkValue(schemaFile, given, { loaded: config, path: ["settings", mode.value.name] });
   if (check.kind === "checked") {
     return check.problems;
   }

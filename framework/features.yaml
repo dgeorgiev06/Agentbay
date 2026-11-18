@@ -5,8 +5,9 @@
 features:
   vocabulary:
     purpose:
-      The types and small helpers every feature shares, including the generated manifest types, and the one YAML
-      reader that manifests and the toolbox share. No behaviour of its own beyond reading.
+      The types and small helpers every feature shares, including the generated manifest types, and the readers
+      that manifests, the broker and the toolbox share - YAML text to a value, a schema file and the parts it
+      refers to, a value checked against a schema. No behaviour of its own beyond reading and checking.
     entry:
       - bay/contracts.ts
       - bay/outcome.ts
@@ -22,6 +23,8 @@ features:
       - bay/answers.ts
       - bay/protocol-json.ts
       - bay/yaml-text.ts
+      - bay/value-check.ts
+      - bay/schema-files.ts
     private: []
     may_import: []
   platform:
@@ -109,6 +112,7 @@ features:
       - bay/broker/http-operations.ts
       - bay/broker/command-operations.ts
       - bay/broker/list-in-force.ts
+      - bay/broker/schema-operations.ts
     may_import:
       - vocabulary
       - safety

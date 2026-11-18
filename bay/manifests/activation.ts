@@ -1,5 +1,5 @@
 import { isProjectTheKit } from "../layout.ts";
-import { problemAt } from "./spec.ts";
+import { problemAt } from "../value-check.ts";
 import type { Problem } from "../outcome.ts";
 import type { ModeFolder } from "./folders.ts";
 import type { LoadedModes, Context } from "./loaded.ts";

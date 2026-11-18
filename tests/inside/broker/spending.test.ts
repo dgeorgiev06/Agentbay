@@ -19,6 +19,7 @@ import {
   recordingSink,
   scriptedHttp,
   type RecordingSink,
+  noInterfaceSchemas,
 } from "../../broker-fixture.ts";
 
 async function withBroker(
@@ -40,6 +41,7 @@ async function withBroker(
     childProcesses: nodeChildProcesses,
     processes: noProcesses,
     commandSearchPath: "/usr/bin:/bin",
+    interfaceSchemas: noInterfaceSchemas,
   });
   try {
     await run(broker, journal);

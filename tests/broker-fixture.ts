@@ -16,6 +16,7 @@ import type {
   Processes,
 } from "../bay/ports.ts";
 import { layoutOf, type Layout } from "../bay/layout.ts";
+import type { NameableSchemas } from "../bay/schema-files.ts";
 import { grantsWith } from "./grants-fixture.ts";
 
 export const kitFolder = fileURLToPath(new URL("..", import.meta.url));
@@ -94,6 +95,10 @@ export function exitedProcess(exitCode: number, stdout: string, stderr: string):
 export const noProcesses: Processes = {
   run: () => Promise.reject(new Error("no process may be started in this test")),
 };
+
+export function noInterfaceSchemas(mode: string): NameableSchemas {
+  return { owner: `mode ${mode}`, files: new Map() };
+}
 
 export const place: StepPlace = { runId: "run-1", mode: "notes", action: "look", stepKey: "look.0" };
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { noInterfaceSchemas } from "./broker-fixture.ts";
 import { createBroker, type StepBroker } from "../bay/broker/broker.ts";
 import type { Effect } from "../bay/contracts.ts";
 import { fieldOf } from "../bay/json.ts";
@@ -54,6 +55,7 @@ async function withCommandBroker(
       childProcesses: nodeChildProcesses,
       processes: nodeProcesses,
       commandSearchPath: process.env.PATH ?? "/usr/bin:/bin",
+      interfaceSchemas: noInterfaceSchemas,
       limits,
     }).forStep(
       place,

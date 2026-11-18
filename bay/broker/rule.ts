@@ -5,6 +5,7 @@ import type { Outcome } from "../outcome.ts";
 import type { ChildProcesses, Clock, FileInspector, FileSystem, Http, Processes, ThrowawayFolders } from "../ports.ts";
 import type { SecretStore } from "../secrets.ts";
 import type { TrustRecord } from "../trust.ts";
+import type { SchemaFile } from "../value-check.ts";
 import type { DatabaseProcess } from "./database-process.ts";
 import { type OperationName, type Requests, type Results, shapes } from "./operations.ts";
 
@@ -63,6 +64,10 @@ export type CommandTimeLeft =
   | { readonly kind: "left"; readonly milliseconds: number }
   | { readonly kind: "none"; readonly stepMilliseconds: number };
 
+export type SchemaNaming =
+  | { readonly named: true; readonly file: string }
+  | { readonly named: false; readonly declared: string; readonly change: string };
+
 export type Asking = {
   readonly grants: ModeGrants;
   readonly effects: readonly Effect[];
@@ -72,6 +77,7 @@ export type Asking = {
   readonly limits: StepLimits;
   readonly commandTimeLeft: () => CommandTimeLeft;
   readonly trustRecordNow: () => Promise<Outcome<TrustRecord>>;
+  readonly schemaNamed: (name: string) => Promise<SchemaNaming>;
 };
 
 export type Doing = {
@@ -92,6 +98,7 @@ export type Doing = {
   readonly call: ActionCaller;
   readonly databaseOf: (file: string) => DatabaseProcess;
   readonly migratedOnce: (migrate: () => Promise<Answer<readonly string[]>>) => Promise<Answer<readonly string[]>>;
+  readonly readSchema: (file: string) => Promise<SchemaFile>;
 };
 
 export type RefusalDetail = { readonly [key: string]: Json };

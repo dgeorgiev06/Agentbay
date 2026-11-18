@@ -107,7 +107,7 @@ const noComments = {
 const agentbayPlugin = { rules: { "no-comments": noComments } };
 
 export default defineConfig(
-  globalIgnores(["node_modules/", "tests/fixtures/"]),
+  globalIgnores(["node_modules/", "tests/fixtures/", ".forge/"]),
   {
     linterOptions: { noInlineConfig: true, reportUnusedDisableDirectives: "error" },
   },

@@ -14,8 +14,9 @@ export type Copy = { readonly made: true; readonly folder: string } | { readonly
 
 const linkedIntoEveryCopy = ["node_modules"];
 
-export function secondsToAsk(spentSeconds: number): number {
-  return Math.max(0, Math.min(longestCallSeconds, Math.floor(stepSeconds - keptSeconds - spentSeconds)));
+export function secondsToAsk(spentSeconds: number, sharing: number): number {
+  const left = (stepSeconds - keptSeconds - spentSeconds) / Math.max(1, sharing);
+  return Math.max(0, Math.min(longestCallSeconds, Math.floor(left)));
 }
 
 export class ProofStep {
@@ -27,8 +28,8 @@ export class ProofStep {
     this.context = context;
   }
 
-  secondsLeft(): number {
-    return secondsToAsk(this.#spentSeconds);
+  secondsLeft(sharing: number): number {
+    return secondsToAsk(this.#spentSeconds, sharing);
   }
 
   spend(seconds: number): void {

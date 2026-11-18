@@ -57,7 +57,7 @@ function listOf(value: Json): readonly Json[] {
 }
 
 export async function testRun(step: ProofStep, folder: string, files?: readonly string[]): Promise<TestRun> {
-  const seconds = step.secondsLeft();
+  const seconds = step.secondsLeft(1);
   if (seconds < 1) {
     return { ran: "not started", reason: noTimeLeft };
   }
@@ -73,7 +73,7 @@ export async function testRun(step: ProofStep, folder: string, files?: readonly 
 }
 
 export async function checkRun(step: ProofStep, folder: string, checks: number): Promise<CheckRun> {
-  const seconds = Math.floor(step.secondsLeft() / Math.max(1, checks));
+  const seconds = step.secondsLeft(checks);
   if (seconds < 1) {
     return { ran: "not started", reason: noTimeLeft };
   }

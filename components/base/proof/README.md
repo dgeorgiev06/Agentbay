@@ -54,7 +54,7 @@ A detail or a reason holds only sentences of proof's own, paths and check names 
 
 ## Time
 
-`prove` is one script step of at most 1,800 seconds, the kernel's ceiling. The number of toolchain calls depends on the slice, so it cannot be one step per call. Each toolchain call is asked for what is left of the step by proof's own count, at most 1,000 seconds: 1,800 less 60 kept (30 for the toolchain to answer after its own limit, 30 for proof to remove its copies and answer), less what earlier calls reported or were asked, less 5 for each other call. A call with no time left is not made, and its part is inconclusive. `bay check` warns of the long step.
+`prove` is one script step of at most 1,800 seconds, the kernel's ceiling. The number of toolchain calls depends on the slice, so it cannot be one step per call. Each toolchain call is asked for what is left of the step by proof's own count, at most 1,000 seconds: 1,800 less 60 kept (30 for the toolchain to answer after its own limit, 30 for proof to remove its copies and answer), less what earlier calls reported or were asked, less 5 for each other call. A check call shares that time among the checks `describe` lists, since a time limit is asked per check; when `describe` does not answer, the whole time is asked per check, and the toolchain's own step bounds the call. A call with no time left is not made, and its part is inconclusive. `bay check` warns of the long step.
 
 ## How a reviewer calls it by hand
 

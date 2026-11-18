@@ -44,7 +44,14 @@ test("a kind that is not built answers inconclusive with a sentence that says so
 });
 
 test("a toolchain call is asked what is left of proof's step, less the 60 seconds kept, and never more than 1000", () => {
-  assert.deepEqual([0, 739, 740, 1000, 1739.5, 1740, 2000].map(secondsToAsk), [1000, 1000, 1000, 740, 0, 0, 0]);
+  const asked = [0, 739, 740, 1000, 1739.5, 1740, 2000].map((spent) => secondsToAsk(spent, 1));
+  assert.deepEqual(asked, [1000, 1000, 1000, 740, 0, 0, 0]);
+});
+
+test("a check call shares what is left among its checks, each asked at most 1000", () => {
+  const asked = [0, 1000, 1740].map((spent) => secondsToAsk(spent, 5));
+  assert.deepEqual(asked, [348, 148, 0]);
+  assert.equal(secondsToAsk(0, 1), 1000);
 });
 
 test("the step's seconds proof counts with are the seconds its manifest declares for prove", async () => {

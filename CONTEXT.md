@@ -67,6 +67,9 @@ One meaning per word. Briefs, plans, code names and reviews use these words and 
 | **Write scope** | The paths a slice may change, as patterns. Proof fails the slice's item `scope` for any changed path outside it. | allowed files, ownership |
 | **Declaration** | What a builder states it will change before its first edit: files, and the action names that modes and interfaces gain, lose or change. Proof compares it with what changed and shows it only as counts. | plan of change, intent, manifest |
 | **Judgement item** | An item of a definition of done that names no kind of proof. Proof returns it as it was given; a person or a named model judges it, and every card labels it as judgement. | manual item, soft item, review item |
+| **Plan** | A YAML file of the forge mode, under `docs/plans/`: a title and the slices of one piece of work, each with its title. `forge.waves` works out its table, its waves and its longest chain; nobody edits those by hand. A merged slice stays in its plan. | roadmap, backlog, schedule |
+| **Wave** | The slices of a plan that can be built side by side: no order between them, and scopes that share no path. A wave can use one builder per slice. | batch, stage, phase |
+| **Longest chain** | The longest run of slices in a plan in which each comes after the one before. A plan takes at least as many waves as its longest chain has slices. | critical path |
 
 ## Words with two meanings elsewhere
 

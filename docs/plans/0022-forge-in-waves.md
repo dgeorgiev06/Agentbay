@@ -1,5 +1,7 @@
 # Forge, from here to the todo mode, as a plan in waves
 
+The plan is now the file `docs/plans/0022-forge-in-waves.yaml`; `bay call forge.waves '{"plan":"docs/plans/0022-forge-in-waves.yaml"}'` prints its table and waves, and where they differ from this page the file is right.
+
 Date: 2026-11-17. Written by the reviewer, by hand, in the form `docs/adr/0017` item 8 asks of every plan that forge will later write itself. Words are used as `CONTEXT.md` defines them. Redrawn the same day after the design round and the owner's four answers (`docs/adr/0022`). It replaces the flat list G4 to G8 of `docs/adr/0015` with slices that have a kind, a write scope and an order, so that two builders can work side by side.
 
 ## What is in place

@@ -285,7 +285,7 @@ test("a project's toolchain and worktrees modes, trusted in their tests, pass ev
     `toolchain@1, ${tally}: describe names a language, a practices file in the kit, and checks with distinct names, ` +
       "and runs nothing",
   ]);
-  assert.deepEqual(passedPerMode(trustedToolchainRan.output), { [tally]: 15 });
+  assert.deepEqual(passedPerMode(trustedToolchainRan.output), { [tally]: 16 });
   assert.equal(trustedWorktreesRan.status, 1, trustedWorktreesRan.output);
   assert.deepEqual(
     failedTests(trustedWorktreesRan.output),
@@ -296,7 +296,7 @@ test("a project's toolchain and worktrees modes, trusted in their tests, pass ev
 
 test("without trusted in their tests, a project's toolchain and worktrees modes load from the project, and a case that needs a listed command is refused with the broker's sentence and a sentence for the test's author", () => {
   assert.equal(toolchainRan.status, 1, toolchainRan.output);
-  assert.deepEqual(passedPerMode(toolchainRan.output), { [tally]: 6 });
+  assert.deepEqual(passedPerMode(toolchainRan.output), { [tally]: 7 });
   assert.equal(worktreesRan.status, 1, worktreesRan.output);
   assert.deepEqual(passedPerMode(worktreesRan.output), { [shelf]: 5 });
   for (const [mode, tested] of [

@@ -282,3 +282,52 @@ test("a schema whose parts differ is compiled for each set of parts", () => {
   assert.deepEqual(checkValue(strict, value, placeFor(value)), oldCheck(strict, value));
   assert.deepEqual(checkValue(loose, value, placeFor(value)), { kind: "checked", problems: [] });
 });
+
+test("a caller that changes its schema object after a check cannot change what that content answers later", () => {
+  const name = { type: "string", description: "first" };
+  const schema = validSchema({
+    title: "Changed by its caller",
+    type: "object",
+    required: ["name"],
+    properties: { name },
+  });
+  const original = copied(schema);
+  const expected = (description: string): ReturnType<typeof checkValue> => ({
+    kind: "checked",
+    problems: [
+      {
+        file: "value.json",
+        path: "/input",
+        message: "input is missing the required field name.",
+        fix: `Add name. Expected: ${description}`,
+      },
+    ],
+  });
+  assert.deepEqual(checkValue(schema, {}, placeFor({})), expected("first"));
+  name.description = "second";
+  assert.deepEqual(checkValue(copied(original), {}, placeFor({})), expected("first"));
+  assert.deepEqual(checkValue(schema, {}, placeFor({})), expected("second"));
+});
+
+test("the cache keeps the 256 schemas checked last and compiles an older one again", () => {
+  const schemas = Array.from({ length: 257 }, (_, index) =>
+    validSchema({ title: `Kept ${String(index)}`, type: "object", required: ["kept"] }),
+  );
+  const counter = compileCounter();
+  try {
+    for (const schema of schemas) {
+      checkValue(copied(schema), {}, placeFor({}));
+    }
+    assert.equal(counter.count(), 257);
+    for (const schema of schemas.slice(1)) {
+      checkValue(copied(schema), {}, placeFor({}));
+    }
+    assert.equal(counter.count(), 257);
+    const [first] = schemas;
+    assert.ok(first !== undefined);
+    checkValue(copied(first), {}, placeFor({}));
+    assert.equal(counter.count(), 258);
+  } finally {
+    counter.stop();
+  }
+});

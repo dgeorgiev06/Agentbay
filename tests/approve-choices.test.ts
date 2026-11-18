@@ -330,7 +330,7 @@ test("a decision on a stale hash is refused beside the card as it is now", async
     assert.equal(
       withId(refused.output, stopped),
       `${withheldCard(withheldHash)}\n\n.agentbay/kernel.db: The hash ${stale} is not the hash of what step card showed (${withheldHash}).\n` +
-        "  fix: Approve or reject exactly what the waiting approval shows, naming its hash.",
+        "  fix: Take one of the choices the waiting approval offers, naming the hash it shows.",
     );
     assert.equal(await recorded(stopped), undefined);
   });

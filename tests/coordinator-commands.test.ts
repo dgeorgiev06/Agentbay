@@ -49,7 +49,7 @@ const shipMode = {
       run: [{ script: "scripts/take.ts" }],
     },
   },
-  workflows: ["workflows/ship.yaml"],
+  workflows: ["workflows/ship.yaml", "workflows/carded.yaml"],
 };
 
 const shipWorkflow = {
@@ -67,6 +67,22 @@ const shipWorkflow = {
   ],
 };
 
+const cardedWorkflow = {
+  name: "carded",
+  trigger: { manual: true },
+  steps: [
+    {
+      id: "draw",
+      action: "take",
+      input: {
+        title: "Ship 1.2.0?",
+        lines: [{ mark: "computed", words: "every check passed", source: { step: "draw" } }],
+      },
+    },
+    { id: "decide", approval: "Ship it?", show: "$steps.draw.output" },
+  ],
+};
+
 async function withBuiltProject(body: (project: Project, coordinator: string) => Promise<void>): Promise<void> {
   const project = await makeProject({ adapter: "claude-code", approvalsFrom: ["chat"] });
   try {
@@ -77,6 +93,7 @@ async function withBuiltProject(body: (project: Project, coordinator: string) =>
     await project.write("components/modes/shipper/schemas/anything.json", '{ "type": "object" }\n');
     await project.write("components/modes/shipper/scripts/take.ts", takeScript);
     await project.write("components/modes/shipper/workflows/ship.yaml", stringify(shipWorkflow));
+    await project.write("components/modes/shipper/workflows/carded.yaml", stringify(cardedWorkflow));
     const built = await bay(["build", "--project", project.root]);
     assert.equal(built.exitCode, 0, built.output);
     await body(project, await project.read("CLAUDE.md"));
@@ -94,6 +111,13 @@ function commandLike(coordinator: string, pattern: RegExp): string {
   const found = approveCommands(coordinator).filter((command) => pattern.test(command));
   assert.equal(found.length, 1, `one approve command like ${String(pattern)}, found: ${JSON.stringify(found)}`);
   return found[0] ?? "";
+}
+
+function stepOf(coordinator: string, number: number): string {
+  const start = coordinator.indexOf(`\n${String(number)}. `);
+  const end = coordinator.indexOf(`\n${String(number + 1)}. `, start);
+  assert.ok(start !== -1 && end !== -1, `the coordinator has a step ${String(number)} and a step after it`);
+  return coordinator.slice(start + 1, end);
 }
 
 function wordsOf(command: string): readonly string[] {
@@ -176,5 +200,68 @@ test("the coordinator's two commands for trust, filled from the mode and the car
     });
     assert.equal(answered.exitCode, 0, answered.output);
     assert.equal(textField(toJson(answered.json), "trusted"), goToolchain);
+  });
+});
+
+test("the coordinator's step 4 shows an approval with a card and no choices as the command line prints it, never its content", async () => {
+  await withBuiltProject(async (project, coordinator) => {
+    const call = ["call", "--workflow", "shipper:workflows/carded.yaml", "{}", "--project", project.root];
+    const stopped = fieldOf(toJson((await bay([...call, "--json"])).json), "run") ?? null;
+    const waiting = fieldOf(stopped, "waiting") ?? null;
+    assert.equal(textField(waiting, "reason"), "approval");
+    assert.equal(fieldOf(waiting, "choices"), undefined);
+    const runId = textField(stopped, "id") ?? "";
+    const hash = textField(waiting, "hash") ?? "";
+    const step = stepOf(coordinator, 4);
+    assert.doesNotMatch(step, /content/);
+    const shows = [...step.matchAll(/`([^`]+ runs <runId>)`/g)].map((match) => match[1] ?? "");
+    assert.equal(shows.length, 1, step);
+    const shown = await ranAsWritten(shows[0] ?? "", { "<runId>": runId });
+    assert.equal(shown.exitCode, 0, shown.output);
+    assert.equal(
+      shown.output,
+      [
+        `run ${runId} (workflow shipper:workflows/carded.yaml): waiting for approval at decide`,
+        "Ship 1.2.0?",
+        "computed every check passed",
+        "checked: 0 ran, 1 computed, 0 judged",
+        `hash ${hash.slice(0, 12)}`,
+        `decide with: bay approve ${runId} decide --hash ${hash} [--reject]`,
+        "steps:",
+        "  draw  action  done",
+        "  draw/0  script  done",
+        "  decide  approval  started",
+      ].join("\n"),
+    );
+  });
+});
+
+test("the coordinator's commands for an approval, filled with a stale hash, are refused with a fix that fits a card and choices", async () => {
+  await withBuiltProject(async (project, coordinator) => {
+    const stale = "0".repeat(64);
+    const fixes: string[] = [];
+    for (const [workflow, pattern, choice] of [
+      ["carded", / approve (?!--trust)(?!.*--choice)/, {}],
+      ["ship", / approve (?!--trust).*--choice /, { "<name>": "hold" }],
+    ] as const) {
+      const call = ["call", "--workflow", `shipper:workflows/${workflow}.yaml`, "{}", "--project", project.root];
+      const stopped = fieldOf(toJson((await bay([...call, "--json"])).json), "run") ?? null;
+      const waiting = fieldOf(stopped, "waiting") ?? null;
+      const refused = await ranAsWritten(commandLike(coordinator, pattern), {
+        "<runId>": textField(stopped, "id") ?? "",
+        "<stepKey>": textField(waiting, "stepKey") ?? "",
+        "<hash>": stale,
+        "<the owner's exact words>": "Yes",
+        ...choice,
+      });
+      assert.equal(refused.exitCode, 1, refused.output);
+      const problems: unknown = fieldOf(toJson(refused.json), "problems");
+      const fix = Array.isArray(problems) ? textField(toJson(problems[0]), "fix") : undefined;
+      fixes.push(fix ?? "no fix");
+    }
+    assert.deepEqual(fixes, [
+      "Approve or reject exactly what the waiting approval shows, naming its hash.",
+      "Take one of the choices the waiting approval offers, naming the hash it shows.",
+    ]);
   });
 });

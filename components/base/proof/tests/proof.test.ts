@@ -18,12 +18,6 @@ const notBuilt: readonly string[] = [
   "bugs-caught: a bug whose patch does not apply makes the item inconclusive, with a reason that names the bug and says it could not be applied, never passed or failed",
   "a bug's run is a copy of the head with only that bug applied, and runs only the bug's covering test files",
 
-  "same-output: passed when every declared command prints the same at the base and the head, and those the item names differ (TR2, K1)",
-  "same-output: failed when a declared command prints otherwise at the head and the item does not name it",
-  "same-output: in a project that declares no commands it is inconclusive with the sentence that says so (K6)",
-  "real-thing: passed when every run in a fresh copy of the head printed the expected text and exit code",
-  "real-thing: failed when a run printed other than the expected text",
-
   "count: passed when the head has at most the most, and when a declared count did not rise (TR2, K1)",
   "count: failed when the head has more than the most",
 ];

@@ -1,6 +1,8 @@
 import { proveChecks } from "./kinds/checks.ts";
 import { proveFailsFirst } from "./kinds/fails-first.ts";
 import { proveAsDeclared } from "./kinds/as-declared.ts";
+import { proveRealThing } from "./kinds/real-thing.ts";
+import { proveSameOutput } from "./kinds/same-output.ts";
 import { proveInScope } from "./kinds/in-scope.ts";
 import type { KindName, ProofOf, Request } from "./lib/request.ts";
 import type { ProofStep } from "./lib/step.ts";
@@ -23,8 +25,8 @@ export const kinds: Table = {
 
   "bugs-caught": notBuilt,
 
-  "same-output": notBuilt,
-  "real-thing": notBuilt,
+  "same-output": proveSameOutput,
+  "real-thing": proveRealThing,
 
   count: notBuilt,
 };

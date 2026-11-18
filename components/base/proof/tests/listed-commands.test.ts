@@ -42,7 +42,13 @@ test("bay check on the kit warns once for each command the proof mode lists and 
     ],
     [
       "warning",
-      25,
+      21,
+      "Mode proof lists the command bay, which runs ./bay.sh and which the mode says has the effects: read, write; " +
+        "a listed command can run code the agent wrote.",
+    ],
+    [
+      "warning",
+      28,
       "Action prove of mode proof declares scriptTimeLimitSeconds: 1800, so each of its script steps may run " +
         "unattended for 1800 seconds, longer than the kernel's 480.",
     ],

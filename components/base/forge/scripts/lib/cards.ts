@@ -1,4 +1,4 @@
-import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
+import { fieldsOf, type Json, type JsonFields } from "../../../../../bay/sdk.ts";
 
 const proofKinds = [
   "checks",
@@ -15,11 +15,20 @@ export type ProofKind = (typeof proofKinds)[number];
 
 export type Level = "must" | "should";
 
+export type Proof =
+  | { readonly kind: "checks" | "bugs-caught" }
+  | { readonly kind: "fails-first"; readonly tests: readonly string[] }
+  | { readonly kind: "same-output"; readonly differ: readonly string[] }
+  | { readonly kind: "count"; readonly pattern: string; readonly paths: readonly string[]; readonly most: number }
+  | { readonly kind: "count"; readonly pattern: string; readonly paths: readonly string[]; readonly noRise: true }
+  | { readonly kind: "count"; readonly use: string }
+  | { readonly kind: "real-thing"; readonly runs: readonly { readonly bay: readonly string[] }[] };
+
 export type Item = {
   readonly id: string;
   readonly says: string;
   readonly level: Level;
-  readonly proof?: { readonly kind: ProofKind };
+  readonly proof?: Proof;
 };
 
 export type After = {
@@ -74,6 +83,7 @@ export type StartCardInput = {
   readonly slice: Slice;
   readonly title: string;
   readonly base: string;
+  readonly bugs: readonly string[];
 };
 
 export type StartCard = {
@@ -138,6 +148,30 @@ const checksPassed = /^Every check passed \(([^()]+)\), and so did the test run:
 
 const checkName = /^[A-Za-z0-9:._-]+$/;
 
+const heldSaid: Readonly<Record<Proof["kind"], string>> = {
+  checks: "checks",
+  "fails-first": "a test fails first",
+  "bugs-caught": "bugs caught",
+  "same-output": "same output",
+  count: "a count",
+  "real-thing": "the real thing",
+};
+
+const plannedKinds: readonly Proof["kind"][] = [
+  "checks",
+  "fails-first",
+  "bugs-caught",
+  "same-output",
+  "count",
+  "real-thing",
+];
+
+const cardWidth = 44;
+
+const lineRoom = cardWidth - "computed ".length;
+
+const unsafe = /[\p{Cc}\p{Cf}]/gu;
+
 const sliceKinds: readonly Slice["kind"][] = ["interface", "capability", "mode"];
 
 const lacking: readonly Missing["lacks"][] = ["kernel", "toolbox", "test-toolbox", "interface"];
@@ -158,12 +192,44 @@ function oneOf<Name extends string>(names: readonly Name[], value: Json | undefi
   return names.find((name) => name === value);
 }
 
+function textsOf(value: Json | undefined): readonly string[] {
+  return entriesOf(value).map(textOf);
+}
+
+function countOf(fields: JsonFields): Proof {
+  if (typeof fields.use === "string") {
+    return { kind: "count", use: fields.use };
+  }
+  const counted = { kind: "count", pattern: textOf(fields.pattern), paths: textsOf(fields.paths) } as const;
+  return typeof fields.most === "number" ? { ...counted, most: fields.most } : { ...counted, noRise: true };
+}
+
+function proofOf(value: Json | undefined): Proof | undefined {
+  const fields = fieldsOf(value ?? null);
+  const kind = oneOf(plannedKinds, fields.kind);
+  switch (kind) {
+    case undefined:
+      return undefined;
+    case "checks":
+    case "bugs-caught":
+      return { kind };
+    case "fails-first":
+      return { kind, tests: textsOf(fields.tests) };
+    case "same-output":
+      return { kind, differ: textsOf(fields.differ) };
+    case "count":
+      return countOf(fields);
+    case "real-thing":
+      return { kind, runs: entriesOf(fields.runs).map((run) => ({ bay: textsOf(fieldsOf(run).bay) })) };
+  }
+}
+
 function itemOf(value: Json): Item {
   const fields = fieldsOf(value);
   const level: Level = fields.level === "should" ? "should" : "must";
   const item = { id: textOf(fields.id), says: textOf(fields.says), level };
-  const kind = oneOf(proofKinds, fieldsOf(fields.proof ?? null).kind);
-  return kind === undefined ? item : { ...item, proof: { kind } };
+  const proof = proofOf(fields.proof);
+  return proof === undefined ? item : { ...item, proof };
 }
 
 export function sliceOf(value: Json | undefined): Slice {
@@ -258,38 +324,90 @@ function scopeWords(scope: readonly string[]): string {
   return rest.length === 0 ? `scope: ${first}` : `scope: ${first} and ${counted(rest.length, "more path")}`;
 }
 
-function itemsWords(done: readonly Item[]): string {
-  const proved = done.filter((item) => item.proof !== undefined).length;
-  const judged = done.length - proved;
-  return (
-    `${counted(done.length, "item")}: ` +
-    `${String(proved)} ${proved === 1 ? "names" : "name"} a kind of proof, ` +
-    `${String(judged)} ${judged === 1 ? "is" : "are"} judgement`
-  );
+function piecesOf(word: string): readonly string[] {
+  const pieces: string[] = [];
+  let left = Array.from(word);
+  while (left.length > lineRoom) {
+    const slash = left.lastIndexOf("/", lineRoom - 1);
+    const cut = slash > 0 ? slash + 1 : lineRoom;
+    pieces.push(left.slice(0, cut).join(""));
+    left = left.slice(cut);
+  }
+  return [...pieces, left.join("")];
 }
 
-function judgementWords(slice: Slice): readonly string[] {
-  const prefix = itemPrefix(slice);
-  const judged = slice.done.filter((item) => item.proof === undefined);
-  if (judged.length === 0) {
-    return [];
+function wrapped(text: string): readonly string[] {
+  const words = text
+    .replace(unsafe, " ")
+    .split(" ")
+    .filter((word) => word !== "");
+  const lines: string[] = [];
+  for (const piece of words.flatMap(piecesOf)) {
+    const last = lines.at(-1);
+    const longer = `${last ?? ""} ${piece}`;
+    if (last !== undefined && Array.from(longer).length <= lineRoom) {
+      lines[lines.length - 1] = longer;
+    } else {
+      lines.push(piece);
+    }
   }
-  const ids = judged.map((item) => (item.id.startsWith(prefix) ? item.id.slice(prefix.length) : item.id));
-  return [`judgement, by you: ${ids.join(", ")}`];
+  return lines;
+}
+
+function countWords(proof: Extract<Proof, { readonly kind: "count" }>): string {
+  if ("use" in proof) {
+    return `the settings' count ${proof.use}: no rise`;
+  }
+  const limit = "most" in proof ? `at most ${String(proof.most)}` : "no rise";
+  return `lines with "${proof.pattern}" in ${proof.paths.join(", ")}: ${limit}`;
+}
+
+function differWords(differ: readonly string[]): string {
+  const compared = "compares the settings' commands";
+  return differ.length === 0 ? compared : `${compared}; ${differ.join(", ")} must differ`;
+}
+
+function shownProof(proof: Proof, bugs: readonly string[]): readonly string[] {
+  switch (proof.kind) {
+    case "checks":
+      return [];
+    case "fails-first":
+      return [`tests: ${proof.tests.join(", ")}`];
+    case "bugs-caught":
+      return [bugs.length === 0 ? "no bugs given to inject" : "injects the bugs named at the end"];
+    case "same-output":
+      return [differWords(proof.differ)];
+    case "count":
+      return [countWords(proof)];
+    case "real-thing":
+      return [`${counted(proof.runs.length, "run")}: ${proof.runs.map((run) => `bay ${run.bay[0] ?? ""}`).join(", ")}`];
+  }
+}
+
+function itemWords(item: Item, bugs: readonly string[]): readonly string[] {
+  const opening = `${item.id}, ${item.level}: ${item.says}`;
+  if (item.proof === undefined) {
+    return [opening, "held by: your judgement"];
+  }
+  return [opening, `held by: ${heldSaid[item.proof.kind]}`, ...shownProof(item.proof, bugs)];
+}
+
+function bugsWords(bugs: readonly string[]): readonly string[] {
+  return bugs.length === 0 ? [] : [`${counted(bugs.length, "bug")} to inject: ${bugs.join("; ")}`];
 }
 
 export function startCard(input: StartCardInput): StartCard {
-  const { slice, title, base } = input;
+  const { slice, title, base, bugs } = input;
   const afters = slice.after.map((after) => `after ${after.slice}: ${after.because}`);
   const words = [
     title,
     `kind ${slice.kind}; base ${base}`,
     scopeWords(slice.scope),
     ...(afters.length === 0 ? ["after no other slice"] : afters),
-    itemsWords(slice.done),
-    ...judgementWords(slice),
+    ...slice.done.flatMap((item) => itemWords(item, bugs)),
+    ...bugsWords(bugs),
   ];
-  return { title: `Build slice ${slice.name}?`, lines: words.map((said) => computed("slice", said)) };
+  return { title: `Build slice ${slice.name}?`, lines: words.flatMap(wrapped).map((line) => computed("slice", line)) };
 }
 
 function isNotBuilt(verdict: Verdict): boolean {

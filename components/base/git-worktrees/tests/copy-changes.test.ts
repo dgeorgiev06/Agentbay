@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { rm, writeFile } from "node:fs/promises";
+import { access, chmod, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { ModeProject } from "../../../../tests/test-toolbox.ts";
@@ -160,5 +160,26 @@ test("a copy whose own configuration names a filter is refused by apply, and the
         "or merge driver, so the mode does nothing in this repository until it is removed.",
     );
     assert.equal(inCopy(project, ["rev-list", "--count", "HEAD"]), "1");
+  });
+});
+
+test("a copy whose own configuration demands signing gets apply's commit unsigned, and the signer does not run", async () => {
+  await withCopy(async (project) => {
+    const ran = join(project.root, "signer-ran");
+    const signer = join(project.root, "signer.sh");
+    await writeFile(signer, `#!/bin/sh\ntouch "${ran}"\n`, "utf8");
+    await chmod(signer, 0o755);
+    const settings: readonly (readonly [string, string])[] = [
+      ["commit.gpgsign", "true"],
+      ["gpg.format", "openpgp"],
+      ["gpg.program", signer],
+      ["user.signingkey", "someone"],
+    ];
+    for (const [key, value] of settings) {
+      git(project, folder, ["config", key, value]);
+    }
+    await project.output("git-worktrees.apply", { folder, patch: keptAddedGone });
+    assert.doesNotMatch(inCopy(project, ["cat-file", "commit", "HEAD"]), /^gpgsig/m);
+    await assert.rejects(access(ran));
   });
 });

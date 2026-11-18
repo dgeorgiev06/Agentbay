@@ -310,6 +310,7 @@ const pinnedSurface: readonly string[] = [
   "function isWithinWindow(time: Date, window: TimeWindow): boolean",
   "function parseIsoTime(text: string): Date | undefined",
   "function pathMatch(pattern: string, path: string): PathMatch",
+  "function readYaml(text: string): YamlRead",
   "function shortHash(value: Json): string",
   "reached type Answer<T> = { readonly ok: true; readonly value: T; } | Refusal | Failure",
   "reached type Failure = {",
@@ -327,6 +328,13 @@ const pinnedSurface: readonly string[] = [
   "  readonly Refusal.message: string",
   "}",
   'reached type Resource = "db" | "files" | "secrets" | "http" | "events" | "call" | "spend" | "script" | "commands"',
+  "reached type YamlPath = readonly (string | number)[]",
+  "reached type YamlProblem = {",
+  "  readonly YamlProblem.line: number",
+  "  readonly YamlProblem.message: string",
+  "  readonly YamlProblem.fix: string",
+  "}",
+  "reached type YamlRead = { readonly ok: true; readonly value: Json; readonly lineOf: (path: YamlPath) => number | undefined; } | { readonly ok: false; readonly problems: readonly YamlProblem[]; }",
 ];
 
 test("the toolbox's surface is the pinned one, line for line", () => {

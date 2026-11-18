@@ -8,7 +8,14 @@ import { mayRemoveFiles, writableFolders } from "./rule.ts";
 import { escapingLinks } from "./folder-links.ts";
 import { notAValidMessage, type OperationName, type Requests, type Results, shapes } from "./operations.ts";
 import { isInsideOrEqual, shownPath } from "../layout.ts";
-import { type AskedFor, type ChildMessage, childMessageOf, removalAllowedArgument } from "./script-protocol.ts";
+import {
+  type AskedFor,
+  type ChildMessage,
+  childMessageOf,
+  packageArgument,
+  packageFolderOf,
+  removalAllowedArgument,
+} from "./script-protocol.ts";
 
 type ScriptRunnerLimits = StepBrokerLimits & {
   readonly scriptOutputBytes: number;
@@ -51,7 +58,21 @@ const filesTheHostReads: readonly string[] = [
   `${bayFolder}broker/script-protocol.ts`,
   `${bayFolder}protocol-json.ts`,
   `${bayFolder}sdk.ts`,
+  `${bayFolder}yaml-text.ts`,
 ];
+
+type KernelPackage = {
+  readonly specifier: string;
+  readonly url: string;
+  readonly folder: string;
+};
+
+function kernelPackage(specifier: string): KernelPackage {
+  const url = import.meta.resolve(specifier);
+  return { specifier, url, folder: packageFolderOf(specifier, fileURLToPath(url)) };
+}
+
+const packagesTheHostReads: readonly KernelPackage[] = ["yaml"].map(kernelPackage);
 
 function grants(access: "read" | "write", path: string): readonly string[] {
   if (filesTheHostReads.includes(path)) {
@@ -62,7 +83,14 @@ function grants(access: "read" | "write", path: string): readonly string[] {
 
 export function scriptCommand(scriptFile: string, request: ScriptRequest): readonly string[] {
   const granted = request.permissions.grants;
-  const readable = [...new Set([...filesTheHostReads, granted.modeFolder, ...granted.readPaths])];
+  const readable = [
+    ...new Set([
+      ...filesTheHostReads,
+      ...packagesTheHostReads.map((kernel) => kernel.folder),
+      granted.modeFolder,
+      ...granted.readPaths,
+    ]),
+  ];
   return [
     "--permission",
     ...readable.flatMap((path) => grants("read", path)),
@@ -71,6 +99,7 @@ export function scriptCommand(scriptFile: string, request: ScriptRequest): reado
     `--import=${pathToFileURL(preloadFile).href}`,
     hostFile,
     scriptFile,
+    ...packagesTheHostReads.map((kernel) => packageArgument(kernel.specifier, kernel.url)),
     ...(mayRemoveFiles(request.permissions) ? [removalAllowedArgument] : []),
   ];
 }

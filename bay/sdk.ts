@@ -4,6 +4,8 @@ import type { Json } from "./contracts.ts";
 
 export type { Json } from "./contracts.ts";
 
+export { readYaml } from "./yaml-text.ts";
+
 export type ScriptError = {
   readonly kind: "script-error";
   readonly reason: string;

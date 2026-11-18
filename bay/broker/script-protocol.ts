@@ -14,6 +14,23 @@ import {
 
 export const removalAllowedArgument = "--agentbay-may-remove-files";
 
+const packageArgumentStart = "--agentbay-package=";
+
+export function packageArgument(specifier: string, url: string): string {
+  return `${packageArgumentStart}${specifier}=${url}`;
+}
+
+export function packageFolderOf(specifier: string, entry: string): string {
+  const folder = `/node_modules/${specifier}`;
+  return entry.slice(0, entry.lastIndexOf(`${folder}/`) + folder.length);
+}
+
+export function packageUrlsOf(argv: readonly string[]): ReadonlyMap<string, string> {
+  const given = argv.filter((argument) => argument.startsWith(packageArgumentStart));
+  const pairs = given.map((argument) => argument.slice(packageArgumentStart.length).split("="));
+  return new Map(pairs.map(([specifier = "", ...url]) => [specifier, url.join("=")]));
+}
+
 export type AskedFor<Name extends OperationName> = { readonly operation: Name; readonly request: Requests[Name] };
 
 type Final =

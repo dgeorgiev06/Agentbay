@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { realpathSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { test } from "node:test";
 import type { Effect, ScriptRequest } from "../../../bay/contracts.ts";
 import { scriptCommand } from "../../../bay/broker/script-runner.ts";
@@ -24,6 +26,7 @@ test("the runner starts node with the permission model, the grants and the prelo
     call: () => Promise.resolve({ status: "failed", reason: "no", spent: noSpend }),
   };
   const bay = join(kitFolder, "bay");
+  const yaml = realpathSync(join(kitFolder, "node_modules/yaml"));
   assert.deepEqual(scriptCommand("/project/components/modes/notes/scripts/a.ts", request), [
     "--permission",
     `--allow-fs-read=${bay}/broker/script-host.ts`,
@@ -32,6 +35,9 @@ test("the runner starts node with the permission model, the grants and the prelo
     `--allow-fs-read=${bay}/broker/script-protocol.ts`,
     `--allow-fs-read=${bay}/protocol-json.ts`,
     `--allow-fs-read=${bay}/sdk.ts`,
+    `--allow-fs-read=${bay}/yaml-text.ts`,
+    `--allow-fs-read=${yaml}`,
+    `--allow-fs-read=${yaml}/*`,
     "--allow-fs-read=/project/components/modes/notes",
     "--allow-fs-read=/project/components/modes/notes/*",
     "--allow-fs-read=/project/in",
@@ -42,6 +48,7 @@ test("the runner starts node with the permission model, the grants and the prelo
     `--import=file://${bay}/broker/script-preload.ts`,
     `${bay}/broker/script-host.ts`,
     "/project/components/modes/notes/scripts/a.ts",
+    `--agentbay-package=yaml=${pathToFileURL(join(yaml, "dist/index.js")).href}`,
   ]);
 });
 

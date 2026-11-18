@@ -5,8 +5,8 @@
 features:
   vocabulary:
     purpose:
-      The types and small helpers every feature shares, including the generated manifest types. No behaviour
-      of its own.
+      The types and small helpers every feature shares, including the generated manifest types, and the one YAML
+      reader that manifests and the toolbox share. No behaviour of its own beyond reading.
     entry:
       - bay/contracts.ts
       - bay/outcome.ts
@@ -21,6 +21,7 @@ features:
       - bay/generated/workflow.ts
       - bay/answers.ts
       - bay/protocol-json.ts
+      - bay/yaml-text.ts
     private: []
     may_import: []
   platform:

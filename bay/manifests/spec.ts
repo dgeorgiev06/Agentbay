@@ -1,5 +1,4 @@
 import { Ajv2020, type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
-import { isNode, LineCounter, parseDocument } from "yaml";
 import configSchema from "../../schemas/config.schema.json" with { type: "json" };
 import interfaceSchema from "../../schemas/interface.schema.json" with { type: "json" };
 import modeSchema from "../../schemas/mode.schema.json" with { type: "json" };
@@ -12,6 +11,7 @@ import type { SkillFrontMatter } from "../generated/skill.ts";
 import type { Workflow } from "../generated/workflow.ts";
 import { isRecord } from "../json.ts";
 import { failedWith, type Outcome, type Problem } from "../outcome.ts";
+import { readYaml } from "../yaml-text.ts";
 import type { FileSystem } from "../ports.ts";
 
 export type Wording = {
@@ -361,25 +361,18 @@ export function checkValue(schema: unknown, value: unknown, place: ValuePlace): 
 }
 
 function parseSpec<Kind extends keyof Kinds>(source: Source, kind: Kind): Outcome<Loaded<Kinds[Kind]>> {
-  const lineCounter = new LineCounter();
-  const document = parseDocument(source.text, { lineCounter, prettyErrors: false });
-  const lineAt = (offset: number): number => lineCounter.linePos(offset).line + source.firstLine - 1;
-  const lineOf = (path: PathSegments): number | undefined => {
-    const node = document.getIn(path, true);
-    return isNode(node) && node.range ? lineAt(node.range[0]) : undefined;
-  };
-  if (document.errors.length > 0) {
+  const shift = source.firstLine - 1;
+  const read = readYaml(source.text);
+  if (!read.ok) {
     return failedWith(
-      document.errors.map((error) => ({
-        file: source.file,
-        path: "",
-        line: lineAt(error.pos[0]),
-        message: `The YAML cannot be read: ${error.message}.`,
-        fix: "Correct the YAML syntax at this line.",
-      })),
+      read.problems.map((problem) => ({ file: source.file, path: "", ...problem, line: problem.line + shift })),
     );
   }
-  const value: unknown = document.toJS();
+  const lineOf = (path: PathSegments): number | undefined => {
+    const line = read.lineOf(path);
+    return line === undefined ? undefined : line + shift;
+  };
+  const value: unknown = read.value;
   const validate = validators[kind];
   if (validate(value)) {
     return { ok: true, value: { file: source.file, value, lineOf } };

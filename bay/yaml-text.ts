@@ -1,4 +1,5 @@
-import { isCollection, isNode, isScalar, LineCounter, parseDocument, visit, type Document, type Node } from "yaml";
+import { createRequire } from "node:module";
+import type * as Yaml from "yaml";
 import type { Json } from "./contracts.ts";
 import { isJson } from "./protocol-json.ts";
 
@@ -30,16 +31,38 @@ const unresolvedTag = "TAG_RESOLVE_FAILED";
 
 const exhausted = "RESOURCE_EXHAUSTION";
 
+type YamlPackage = typeof Yaml;
+
 type Reading = {
-  readonly document: Document.Parsed;
+  readonly yaml: YamlPackage;
+  readonly document: Yaml.Document.Parsed;
   readonly lineAt: (offset: number) => number;
 };
+
+const requireFromKernel = createRequire(import.meta.url);
+
+let loadedYaml: YamlPackage | undefined;
+
+function isYamlPackage(value: unknown): value is YamlPackage {
+  return typeof value === "object" && value !== null && "parseDocument" in value && "visit" in value;
+}
+
+function yamlPackage(): YamlPackage {
+  if (loadedYaml === undefined) {
+    const required: unknown = requireFromKernel("yaml");
+    if (!isYamlPackage(required)) {
+      throw new Error("The yaml package did not load as a package with parseDocument and visit.");
+    }
+    loadedYaml = required;
+  }
+  return loadedYaml;
+}
 
 function failed(problems: readonly YamlProblem[]): YamlRead {
   return { ok: false, problems };
 }
 
-function lineOfNode(reading: Reading, node: Node): number {
+function lineOfNode(reading: Reading, node: Yaml.Node): number {
   return node.range === undefined || node.range === null ? 1 : reading.lineAt(node.range[0]);
 }
 
@@ -69,7 +92,7 @@ function tooDeep(line: number): YamlProblem {
   };
 }
 
-function nodeProblem(reading: Reading, node: Node, depth: number): YamlProblem | undefined {
+function nodeProblem(reading: Reading, node: Yaml.Node, depth: number): YamlProblem | undefined {
   const line = lineOfNode(reading, node);
   if (depth > yamlLimits.nesting) {
     return tooDeep(line);
@@ -81,7 +104,7 @@ function nodeProblem(reading: Reading, node: Node, depth: number): YamlProblem |
       fix: "Remove the tag and write the value as plain YAML.",
     };
   }
-  if (isScalar(node) && typeof node.value === "number" && !Number.isFinite(node.value)) {
+  if (reading.yaml.isScalar(node) && typeof node.value === "number" && !Number.isFinite(node.value)) {
     return {
       line,
       message: `The YAML has the number ${node.source ?? String(node.value)} at this line, which JSON cannot hold.`,
@@ -93,6 +116,7 @@ function nodeProblem(reading: Reading, node: Node, depth: number): YamlProblem |
 
 function nodeProblems(reading: Reading): readonly YamlProblem[] {
   const problems: YamlProblem[] = [];
+  const { isCollection, isNode, visit } = reading.yaml;
   visit(reading.document, (_key, node, path) => {
     if (!isNode(node)) {
       return undefined;
@@ -124,6 +148,7 @@ function syntaxProblems(reading: Reading): readonly YamlProblem[] {
 
 function firstAliasLine(reading: Reading): number {
   let line = 1;
+  const { visit } = reading.yaml;
   visit(reading.document, {
     Alias: (_key, node) => {
       line = lineOfNode(reading, node);
@@ -154,7 +179,7 @@ function valueOf(reading: Reading): YamlRead {
   }
   const lineOf = (path: YamlPath): number | undefined => {
     const node = reading.document.getIn(path, true);
-    return isNode(node) && node.range ? reading.lineAt(node.range[0]) : undefined;
+    return reading.yaml.isNode(node) && node.range ? reading.lineAt(node.range[0]) : undefined;
   };
   return { ok: true, value, lineOf };
 }
@@ -163,9 +188,10 @@ export function readYaml(text: string): YamlRead {
   if (text.length > yamlLimits.characters) {
     return failed([tooLong(text)]);
   }
-  const lineCounter = new LineCounter();
-  const document = parseDocument(text, { lineCounter, prettyErrors: false, schema: "core" });
-  const reading: Reading = { document, lineAt: (offset) => lineCounter.linePos(offset).line };
+  const yaml = yamlPackage();
+  const lineCounter = new yaml.LineCounter();
+  const document = yaml.parseDocument(text, { lineCounter, prettyErrors: false, schema: "core" });
+  const reading: Reading = { yaml, document, lineAt: (offset) => lineCounter.linePos(offset).line };
   const syntax = syntaxProblems(reading);
   if (syntax.length > 0) {
     return failed(syntax);

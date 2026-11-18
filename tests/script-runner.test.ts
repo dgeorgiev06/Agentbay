@@ -328,6 +328,29 @@ test("a script reads YAML with the toolbox's reader, and cannot import the yaml 
   });
 });
 
+const yamlLoadingProbe = [
+  "import { createRequire } from 'node:module';",
+  "const cached = createRequire(import.meta.url).cache;",
+  "const yamlLoaded = () => Object.keys(cached).some((file) => file.includes('/node_modules/yaml/'));",
+  `const { readYaml } = await import(${JSON.stringify(sdkFile)});`,
+  "const before = yamlLoaded();",
+  "const read = readYaml('a: 1\\n');",
+  "process.stdout.write(JSON.stringify({ before, read: read.ok ? read.value : null, after: yamlLoaded() }));",
+].join("\n");
+
+test("importing the toolbox loads no yaml package, and its first YAML read does", async () => {
+  const child = spawn(process.execPath, ["--input-type=module", "--eval", yamlLoadingProbe], {
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  let stdout = "";
+  child.stdout.on("data", (chunk: Buffer) => {
+    stdout += chunk.toString("utf8");
+  });
+  const exitCode = await new Promise<number | null>((resolve) => child.on("close", resolve));
+  assert.equal(exitCode, 0);
+  assert.deepEqual(JSON.parse(stdout), { before: false, read: { a: 1 }, after: true });
+});
+
 test("a script cannot write outside its write paths directly, even inside a read path", async () => {
   await withScriptProject(async (root) => {
     for (const file of [join(root, "outside/new.txt"), join(root, "notes-in/today.md"), join(root, "x.txt")]) {

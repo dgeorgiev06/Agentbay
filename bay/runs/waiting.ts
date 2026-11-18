@@ -3,6 +3,7 @@ import { numberField, textField } from "../json.ts";
 import type { System } from "../manifests/manifests.ts";
 import type { RunWithSteps, StepRecord } from "./run-store.ts";
 import type { Waiting } from "./run-state.ts";
+import { shownChoices } from "./choices.ts";
 import { approvalContentOf } from "./scrubbed-store.ts";
 import { skillTaskOf, startedSkillOf } from "./skill-steps.ts";
 import { skillRoundOf } from "./step-key.ts";
@@ -47,13 +48,16 @@ function approvalWaiting(context: WaitingContext, run: RunWithSteps, stepKey: st
     return undefined;
   }
   const shown = approvalContentOf(detail.shown ?? record.input, context.scrubber);
+  const content = shown.hash === detail.hash ? shown.content : null;
   return {
     reason: "approval",
     stepKey,
     question: detail.question,
     hash: detail.hash,
-    content: shown.hash === detail.hash ? shown.content : null,
+    content,
     ...(detail.previousHash === undefined ? {} : { previousHash: detail.previousHash }),
+    ...(detail.choices === undefined ? {} : { choices: shownChoices(detail.choices, content) }),
+    ...(detail.card === undefined ? {} : { card: detail.card }),
   };
 }
 

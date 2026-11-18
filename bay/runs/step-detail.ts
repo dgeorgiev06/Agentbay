@@ -1,6 +1,8 @@
 import { noSpend, spendFromJson } from "./budget.ts";
-import type { Json, Spend, Submission, Tier } from "../contracts.ts";
-import { fieldOf, numberField, textField, textsField } from "../json.ts";
+import { tiers, type Json, type Spend, type Submission, type Tier } from "../contracts.ts";
+import { fieldOf, numberField, textField, textsField, toJson } from "../json.ts";
+import { storedCardOf, type Card } from "./card.ts";
+import { choiceStatuses, type ApprovalAnswer, type ChoiceStatus } from "./choices.ts";
 
 export const stepKinds = ["script", "check", "skill", "call", "action", "undo", "approval", "wait", "foreach"] as const;
 
@@ -21,6 +23,7 @@ export type SkillDetail = {
   readonly feedback: readonly string[];
   readonly earlierSpent: Spend;
   readonly calledSpent: Spend;
+  readonly calledRuns?: readonly string[];
   readonly submission?: Submission;
 };
 
@@ -30,8 +33,7 @@ type NestedDetail = {
   readonly caller?: string;
 };
 
-type ApprovalVerdict = {
-  readonly decision: "approve" | "reject";
+export type ApprovalVerdict = ApprovalAnswer & {
   readonly by: string;
 };
 
@@ -40,6 +42,8 @@ export type ApprovalDetail = {
   readonly hash: string;
   readonly previousHash?: string;
   readonly shown?: Json;
+  readonly choices?: readonly ChoiceStatus[];
+  readonly card?: Card;
   readonly verdict?: ApprovalVerdict;
 };
 
@@ -60,9 +64,7 @@ export type RefusedDetail = {
   readonly detail: null;
 };
 
-const tiers: readonly Tier[] = ["fast", "balanced", "deep"];
-
-const decisions: readonly ApprovalVerdict["decision"][] = ["approve", "reject"];
+const decisions: readonly ApprovalVerdict["decision"][] = ["approve", "reject", "choice"];
 
 function malformed(kind: StepKind, field: string): Error {
   return new Error(`kernel.db holds a ${kind} step whose detail has no valid ${field}.`);
@@ -116,6 +118,7 @@ function tierOf(value: Json): Tier {
 
 function skillDetailOf(value: Json): SkillDetail {
   const submission = submissionOf(value);
+  const calledRuns = textsField(value, "calledRuns");
   return {
     mode: requiredText(value, "mode", "skill"),
     action: requiredText(value, "action", "skill"),
@@ -126,6 +129,7 @@ function skillDetailOf(value: Json): SkillDetail {
     feedback: textsField(value, "feedback"),
     earlierSpent: optionalSpend(value, "earlierSpent") ?? noSpend,
     calledSpent: optionalSpend(value, "calledSpent") ?? noSpend,
+    ...(calledRuns.length === 0 ? {} : { calledRuns }),
     ...(submission === undefined ? {} : { submission }),
   };
 }
@@ -140,21 +144,53 @@ function nestedDetailOf(value: Json, kind: StepKind): NestedDetail {
 }
 
 function verdictOf(value: Json): ApprovalVerdict | undefined {
-  const verdict = fieldOf(value, "verdict");
-  const decision = decisions.find((candidate) => candidate === textField(verdict ?? null, "decision"));
-  const by = textField(verdict ?? null, "by");
-  return decision === undefined || by === undefined ? undefined : { decision, by };
+  const verdict = fieldOf(value, "verdict") ?? null;
+  const decision = decisions.find((candidate) => candidate === textField(verdict, "decision"));
+  const by = textField(verdict, "by");
+  const choice = textField(verdict, "choice");
+  switch (decision) {
+    case undefined:
+      return undefined;
+    case "approve":
+    case "reject":
+      return by === undefined ? undefined : { decision, by };
+    case "choice":
+      return by === undefined || choice === undefined ? undefined : { decision, choice, by };
+  }
+}
+
+function choiceStatusesOf(value: Json): readonly ChoiceStatus[] | undefined {
+  const listed = fieldOf(value, "choices");
+  if (listed === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(listed)) {
+    throw malformed("approval", "choices");
+  }
+  return listed.map((element: unknown) => {
+    const entry = toJson(element);
+    const name = textField(entry, "name");
+    const status = choiceStatuses.find((candidate) => candidate === textField(entry, "status"));
+    if (name === undefined || status === undefined) {
+      throw malformed("approval", "choices");
+    }
+    return { name, status };
+  });
 }
 
 function approvalDetailOf(value: Json): ApprovalDetail {
   const previousHash = textField(value, "previousHash");
   const shown = fieldOf(value, "shown");
   const verdict = verdictOf(value);
+  const choices = choiceStatusesOf(value);
+  const card = storedCardOf(fieldOf(value, "card"));
   return {
     question: requiredText(value, "question", "approval"),
     hash: requiredText(value, "hash", "approval"),
     ...(previousHash === undefined ? {} : { previousHash }),
     ...(shown === undefined ? {} : { shown }),
+    ...(choices === undefined ? {} : { choices }),
+    ...(card === undefined ? {} : { card }),
     ...(verdict === undefined ? {} : { verdict }),
   };
 }

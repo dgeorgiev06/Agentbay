@@ -70,9 +70,8 @@ type Start = { readonly action: string } | { readonly workflow: { readonly mode:
 type Decision = {
   readonly stepKey: string;
   readonly hash: string;
-  readonly verdict: "approve" | "reject";
   readonly by: string;
-};
+} & ({ readonly verdict: "approve" | "reject" } | { readonly choice: string });
 
 type Called = { readonly output: Json; readonly runId: string };
 
@@ -367,8 +366,14 @@ function runsOf(opened: Opened): Runs {
     show: (runId) => shownRun(opened, runId, shownOnly),
     list: () => summaries(store),
     approve: (runId, decision) => {
-      const { stepKey, hash, verdict, by } = decision;
-      return changed(opened, runId, () => engine.approve(runId, stepKey, { hash, decision: verdict, by }));
+      const { stepKey, hash, by } = decision;
+      const answer =
+        "choice" in decision
+          ? { decision: "choice" as const, choice: decision.choice }
+          : {
+              decision: decision.verdict,
+            };
+      return changed(opened, runId, () => engine.approve(runId, stepKey, { hash, by, ...answer }));
     },
     resume: (runId, options) =>
       changed(opened, runId, () => engine.resume(runId, { rerunUnfinished: options?.rerun ?? false })),

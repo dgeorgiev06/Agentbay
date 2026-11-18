@@ -16,8 +16,16 @@ export type Budget = {
   readonly minutes?: number;
 };
 
+export type Choice = { readonly when?: Reference };
+
 export type Step =
   | { readonly action: string; readonly input?: Readonly<Record<string, unknown>>; readonly id: Name }
-  | { readonly approval: string; readonly show?: Reference; readonly id: Name }
+  | {
+      readonly approval: string;
+      readonly show?: Reference;
+      readonly choices?: Readonly<Record<string, Choice>>;
+      readonly quotes?: ReadonlyArray<Name>;
+      readonly id: Name;
+    }
   | { readonly wait: string; readonly id: Name }
   | { readonly foreach: Reference; readonly id: Name; readonly steps: ReadonlyArray<Step> };

@@ -1,5 +1,5 @@
 import type { Json } from "../contracts.ts";
-import type { Step as WorkflowStep } from "../generated/workflow.ts";
+import type { Choice, Step as WorkflowStep } from "../generated/workflow.ts";
 import { toJson, isRecord } from "../json.ts";
 import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
 import type { PathSegments, Wording } from "./spec.ts";
@@ -22,6 +22,7 @@ type ReferenceIssue = Wording & { readonly path: PathSegments };
 type ReferencePlace = {
   readonly text: string;
   readonly path: PathSegments;
+  readonly ruleOf?: string;
 };
 
 type StaticScope = {
@@ -164,6 +165,12 @@ export function resolveInput(input: Readonly<Record<string, unknown>>, scope: Re
   return problems.length === 0 ? succeededWith(resolved) : failedWith(problems);
 }
 
+function rulePlaces(choices: Readonly<Record<string, Choice>>, path: PathSegments): readonly ReferencePlace[] {
+  return Object.entries(choices).flatMap(([name, choice]) =>
+    choice.when === undefined ? [] : [{ text: choice.when, path: [...path, name, "when"], ruleOf: name }],
+  );
+}
+
 function referencePlaces(step: WorkflowStep, path: PathSegments): readonly ReferencePlace[] {
   if ("action" in step) {
     return Object.entries(step.input ?? {}).flatMap(([key, value]) =>
@@ -171,7 +178,8 @@ function referencePlaces(step: WorkflowStep, path: PathSegments): readonly Refer
     );
   }
   if ("approval" in step) {
-    return step.show === undefined ? [] : [{ text: step.show, path: [...path, "show"] }];
+    const shown = step.show === undefined ? [] : [{ text: step.show, path: [...path, "show"] }];
+    return [...shown, ...rulePlaces(step.choices ?? {}, [...path, "choices"])];
   }
   if ("foreach" in step) {
     return [{ text: step.foreach, path: [...path, "foreach"] }];
@@ -200,13 +208,42 @@ function scopeIssue(reference: Reference, scope: StaticScope): Wording | undefin
   }
 }
 
-function placeIssue(place: ReferencePlace, scope: StaticScope): ReferenceIssue | undefined {
+function ruleIssue(reference: Reference, ruleOf: string | undefined): Wording | undefined {
+  if (ruleOf === undefined || reference.kind === "steps") {
+    return undefined;
+  }
+  return {
+    message:
+      `the rule of the choice ${ruleOf} is ${reference.text}, ` +
+      "but a rule reads an earlier step's output: $steps.<id>.output with an optional path.",
+    fix: "Name the output of an earlier step that is true or false, such as one a script computed.",
+  };
+}
+
+function placeIssues(place: ReferencePlace, scope: StaticScope): readonly ReferenceIssue[] {
   const parsed = parseReference(place.text);
   if (!parsed.ok) {
-    return { path: place.path, message: problemText(parsed.problems), fix: `Correct the reference: ${grammar}.` };
+    return [{ path: place.path, message: problemText(parsed.problems), fix: `Correct the reference: ${grammar}.` }];
   }
-  const issue = scopeIssue(parsed.value, scope);
-  return issue === undefined ? undefined : { path: place.path, ...issue };
+  const issues = [ruleIssue(parsed.value, place.ruleOf), scopeIssue(parsed.value, scope)];
+  return issues.flatMap((issue) => (issue === undefined ? [] : [{ path: place.path, ...issue }]));
+}
+
+function quoteIssues(step: WorkflowStep, path: PathSegments, earlier: readonly string[]): readonly ReferenceIssue[] {
+  const quotes = "approval" in step ? (step.quotes ?? []) : [];
+  return quotes.flatMap((id, index) =>
+    earlier.includes(id)
+      ? []
+      : [
+          {
+            path: [...path, "quotes", index],
+            message:
+              `the approval quotes the step ${id}, which is not defined before this step in its scope ` +
+              `(earlier steps: ${listed(earlier)}).`,
+            fix: "Quote a step that comes earlier in the same list of steps or in a list that encloses it.",
+          },
+        ],
+  );
 }
 
 function issuesIn(steps: readonly WorkflowStep[], prefix: PathSegments, scope: StaticScope): readonly ReferenceIssue[] {
@@ -215,7 +252,8 @@ function issuesIn(steps: readonly WorkflowStep[], prefix: PathSegments, scope: S
   for (const [index, step] of steps.entries()) {
     const path = [...prefix, "steps", index];
     const current = { earlier: [...earlier], insideForeach: scope.insideForeach };
-    issues.push(...referencePlaces(step, path).flatMap((place) => placeIssue(place, current) ?? []));
+    issues.push(...referencePlaces(step, path).flatMap((place) => placeIssues(place, current)));
+    issues.push(...quoteIssues(step, path, earlier));
     if ("foreach" in step) {
       issues.push(...issuesIn(step.steps, path, { earlier: [...earlier], insideForeach: true }));
     }

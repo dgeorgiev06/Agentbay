@@ -37,14 +37,14 @@ const exampleTexts: Readonly<Record<string, string>> = {
   cut: String.raw`{
   "input": { "slice": "mail-source", "base": "main" },
   "output": {
-    "folder": ".forge/worktrees/mail-source",
+    "folder": ".shelved/worktrees/mail-source",
     "branch": "forge/mail-source",
     "commit": "79fe81d1c4a6b0e2f3d5a7c9e1b3d5f7a9c1e3b5"
   }
 }
 `,
   status: String.raw`{
-  "input": { "folder": ".forge/worktrees/mail-source", "base": "main" },
+  "input": { "folder": ".shelved/worktrees/mail-source", "base": "main" },
   "output": {
     "head": "5b1f3c2d4e6a8b0c1d3e5f7a9b1c3d5e7f9a1b3c",
     "commits": [{ "hash": "5b1f3c2d4e6a8b0c1d3e5f7a9b1c3d5e7f9a1b3c", "subject": "Add the mail source mode" }],
@@ -77,12 +77,12 @@ const exampleTexts: Readonly<Record<string, string>> = {
 }
 `,
   remove: String.raw`{
-  "input": { "folder": ".forge/worktrees/mail-source", "into": "main" },
-  "output": { "folder": ".forge/worktrees/mail-source", "kind": "worktree", "branch": "forge/mail-source" }
+  "input": { "folder": ".shelved/worktrees/mail-source", "into": "main" },
+  "output": { "folder": ".shelved/worktrees/mail-source", "kind": "worktree", "branch": "forge/mail-source" }
 }
 `,
   merge: String.raw`{
-  "input": { "folder": ".forge/worktrees/mail-source", "into": "integration" },
+  "input": { "folder": ".shelved/worktrees/mail-source", "into": "integration" },
   "output": {
     "how": "merged",
     "branch": "forge/mail-source",
@@ -92,10 +92,10 @@ const exampleTexts: Readonly<Record<string, string>> = {
 }
 `,
   "set-aside": String.raw`{
-  "input": { "folder": ".forge/worktrees/mail-source" },
+  "input": { "folder": ".shelved/worktrees/mail-source" },
   "output": {
     "how": "set-aside",
-    "folder": ".forge/worktrees/mail-source",
+    "folder": ".shelved/worktrees/mail-source",
     "branch": "forge/wip/mail-source/1",
     "commit": "9a1c3e5b7d9f1a3c5e7b9d1f3a5c7e9b1d3f5a7c"
   }
@@ -335,7 +335,7 @@ import { answered, branches, commitOf, marker, place, readCommit, record, textFi
 export const run = defineScript(async (input, context) => {
   const slice = textField(input, "slice");
   const branch = "forge/" + slice;
-  const folder = ".forge/worktrees/" + slice;
+  const folder = ".shelved/worktrees/" + slice;
   const commit = await commitOf(context, textField(input, "base"));
   const all = await branches(context);
   if (all[branch] !== undefined) {
@@ -521,7 +521,7 @@ resources:
   files:
     read: [.shelf]
     write: [.shelf]
-    throwaway: [.forge/worktrees/, .forge/copies/]
+    throwaway: [.shelved/worktrees/, .forge/copies/]
   commands:
     list-files: { run: ls -R -A -1 --file-type --, effects: [read] }
     read-file: { run: cat --, effects: [read] }

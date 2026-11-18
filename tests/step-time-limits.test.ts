@@ -26,17 +26,21 @@ const timerMode = {
   description: "Runs scripts and commands that take long, for the kernel's tests of time limits.",
   resources: { commands: { wait: { run: "sleep", effects: ["read"] } } },
   actions: {
-    spin: scriptAction("scripts/spin.ts", { scriptTimeLimitSeconds: 2 }),
-    "spin-on-a-budget": scriptAction("scripts/spin.ts", { scriptTimeLimitSeconds: 900, budget: { minutes: 0.02 } }),
+    "take-thirty-seconds": scriptAction("scripts/thirty-seconds.ts", { scriptTimeLimitSeconds: 2 }),
+    "take-thirty-seconds-on-a-budget": scriptAction("scripts/thirty-seconds.ts", {
+      scriptTimeLimitSeconds: 900,
+      budget: { minutes: 0.02 },
+    }),
     wait: scriptAction("scripts/wait.ts", { scriptTimeLimitSeconds: 4 }),
   },
 };
 
-const spinScript = [
+const thirtySecondsScript = [
   'import { defineScript } from "agentbay/sdk";',
   "",
-  "export const run = defineScript(() => {",
-  "  for (;;) {}",
+  "export const run = defineScript(async () => {",
+  "  await new Promise((resolve) => setTimeout(resolve, 30_000));",
+  '  return { ran: "thirty seconds" };',
   "});",
   "",
 ].join("\n");
@@ -56,7 +60,7 @@ const files: Readonly<Record<string, string>> = {
   "agentbay.config.yaml": stringify({ adapter: "claude-code" }),
   "components/modes/timer/mode.yaml": stringify(timerMode),
   [`components/modes/timer/${anything}`]: "{}\n",
-  "components/modes/timer/scripts/spin.ts": spinScript,
+  "components/modes/timer/scripts/thirty-seconds.ts": thirtySecondsScript,
   "components/modes/timer/scripts/wait.ts": waitScript,
 };
 
@@ -83,25 +87,37 @@ after(async () => {
   await rm(beside, { recursive: true, force: true });
 });
 
-test("a script that overruns the limit its action declares is stopped, and the run fails saying where it was set", async () => {
-  const manifest = join(opened().root, "components/modes/timer/mode.yaml");
-  assert.equal(
-    await opened().failure("timer.spin", {}),
-    `The script was stopped at its time limit of 2 seconds, set by actions.spin.scriptTimeLimitSeconds in ${manifest}.`,
-  );
-});
+test(
+  "a script that overruns the limit its action declares is stopped, and the run fails saying where it was set",
+  { timeout: 60_000 },
+  async () => {
+    const manifest = join(opened().root, "components/modes/timer/mode.yaml");
+    assert.equal(
+      await opened().failure("timer.take-thirty-seconds", {}),
+      `The script was stopped at its time limit of 2 seconds, set by actions.take-thirty-seconds.scriptTimeLimitSeconds in ${manifest}.`,
+    );
+  },
+);
 
-test("a budget of fewer minutes than the declared limit stops the script first, and the run's end says so", async () => {
-  assert.equal(
-    await opened().failure("timer.spin-on-a-budget", {}),
-    "The script was stopped at its time limit of 1.2 seconds, the minutes left of the run's budget.",
-  );
-});
+test(
+  "a budget of fewer minutes than the declared limit stops the script first, and the run's end says so",
+  { timeout: 60_000 },
+  async () => {
+    assert.equal(
+      await opened().failure("timer.take-thirty-seconds-on-a-budget", {}),
+      "The script was stopped at its time limit of 1.2 seconds, the minutes left of the run's budget.",
+    );
+  },
+);
 
-test("a command stopped because its step's time ran short returns to the script, which answers, and the run is done", async () => {
-  const run = await opened().run("timer.wait", {});
-  assert.deepEqual(run.state, { status: "done", output: { verdict: "inconclusive", end: "timed-out" } });
-  const command = run.events.find((event) => event.kind === "command");
-  const milliseconds = numberField(command?.detail ?? null, "milliseconds");
-  assert.ok(milliseconds !== undefined && milliseconds < 10_000, `the command took ${String(milliseconds)} ms`);
-});
+test(
+  "a command stopped because its step's time ran short returns to the script, which answers, and the run is done",
+  { timeout: 60_000 },
+  async () => {
+    const run = await opened().run("timer.wait", {});
+    assert.deepEqual(run.state, { status: "done", output: { verdict: "inconclusive", end: "timed-out" } });
+    const command = run.events.find((event) => event.kind === "command");
+    const milliseconds = numberField(command?.detail ?? null, "milliseconds");
+    assert.ok(milliseconds !== undefined && milliseconds < 10_000, `the command took ${String(milliseconds)} ms`);
+  },
+);

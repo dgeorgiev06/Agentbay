@@ -119,6 +119,32 @@ test("a document beside a mode's script does not raise the tier", () => {
   );
 });
 
+test("a mode's README needs that mode's own tests", () => {
+  assert.deepEqual(affected(["components/base/store/README.md"]), {
+    tier: "mode",
+    files: storeTests,
+    why: "Every changed path is inside components/base/store, and none is a manifest, schema, workflow or skill.",
+  });
+});
+
+test("the root README and CONTEXT.md need no test", () => {
+  assert.deepEqual(affected(["README.md", "CONTEXT.md"]), {
+    tier: "mode",
+    files: [],
+    why: "Only documents changed, and they need no test.",
+  });
+});
+
+test("Markdown outside docs/ and every mode folder needs the whole suite, and the reason names it", () => {
+  assert.deepEqual(affected(["framework/practices.md"]), {
+    tier: "all",
+    files: testFiles,
+    why: "framework/practices.md is outside every mode folder, so the whole suite runs.",
+  });
+  assert.equal(affected(["adapters/claude-code/README.md"]).tier, "all");
+  assert.equal(affected(["bay/templates/mode/README.md"]).tier, "all");
+});
+
 test("an unknown top-level file needs the whole suite, and the reason names it", () => {
   assert.deepEqual(affected(["Makefile"]), {
     tier: "all",

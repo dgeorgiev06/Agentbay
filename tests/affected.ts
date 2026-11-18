@@ -53,8 +53,10 @@ function isInside(path: string, folder: string): boolean {
   return path.startsWith(`${folder}/`);
 }
 
+const documentsNoTestReads: readonly string[] = ["README.md", "CONTEXT.md"];
+
 function isDocument(path: string): boolean {
-  return path.startsWith("docs/") || path.endsWith(".md");
+  return path.startsWith("docs/") || documentsNoTestReads.includes(path);
 }
 
 function placed(path: string, modeFolders: readonly string[]): Placed {
@@ -66,7 +68,7 @@ function placed(path: string, modeFolders: readonly string[]): Placed {
   if (inFolder === "mode.yaml" || manifestFolders.some((manifest) => inFolder.startsWith(manifest))) {
     return { kind: "manifest", path, folder };
   }
-  return isDocument(path) ? { kind: "document", path } : { kind: "mode", path, folder };
+  return { kind: "mode", path, folder };
 }
 
 function noTests(changed: readonly string[]): Affected {

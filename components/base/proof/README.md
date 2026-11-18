@@ -18,11 +18,11 @@ Built. A copy of the base with the item's test files laid over it as they are at
 
 ### in-scope
 
-Not built: the item `scope` is inconclusive.
+Built. Proof adds it to every slice as the item `scope`. It asks the worktrees interface what changed between the base and the head, and matches each changed path against the slice's write scope with the toolbox's `pathMatch`; a move counts as its old path and its new path. It reads no copy. Passed when every path is in the scope. Each path outside fails the item and is named as the worktrees interface gave it, as many as fit in the detail, and the rest are counted. What changed not known makes the item inconclusive.
 
 ### as-declared
 
-Not built: the item `declared` is inconclusive.
+Built. Proof adds it to every slice as the item `declared`. It compares the files that changed, a move counting as its old path and its new path, with the files the builder declared, and the action names that changed with the names declared as gained, lost and changed. Action names are read from each changed `mode.yaml` and each changed interface `.yaml` file, in a copy of the base and a copy of the head, by the listed command `read-file` (`cat`, effect read; each read asked for what is left of the step, as a toolchain call is), and read as YAML with the toolbox's `readYaml`. An action is named `name.action`; it is changed when its block reads to another value at the head, so a change only to a comment or to quoting is not seen. Passed when both agree. Otherwise the detail gives counts only, never a declared path or name. What changed not known, a copy not made, or a file that could not be read or is not YAML makes the item inconclusive.
 
 ### bugs-caught
 

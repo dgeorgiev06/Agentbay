@@ -1,5 +1,7 @@
 import { proveChecks } from "./kinds/checks.ts";
 import { proveFailsFirst } from "./kinds/fails-first.ts";
+import { proveAsDeclared } from "./kinds/as-declared.ts";
+import { proveInScope } from "./kinds/in-scope.ts";
 import type { KindName, ProofOf, Request } from "./lib/request.ts";
 import type { ProofStep } from "./lib/step.ts";
 import { notBuiltParts, type Parts } from "./lib/verdicts.ts";
@@ -16,8 +18,8 @@ export const kinds: Table = {
   checks: proveChecks,
   "fails-first": proveFailsFirst,
 
-  "in-scope": notBuilt,
-  "as-declared": notBuilt,
+  "in-scope": proveInScope,
+  "as-declared": proveAsDeclared,
 
   "bugs-caught": notBuilt,
 

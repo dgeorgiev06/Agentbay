@@ -38,14 +38,14 @@
       {
         "item": "scope",
         "kind": "in-scope",
-        "verdict": "inconclusive",
-        "reason": "The kind in-scope is not built in this version of the proof mode, so nothing is known."
+        "verdict": "passed",
+        "detail": "Every changed path is in the scope: 2 of 2."
       },
       {
         "item": "declared",
         "kind": "as-declared",
-        "verdict": "inconclusive",
-        "reason": "The kind as-declared is not built in this version of the proof mode, so nothing is known."
+        "verdict": "passed",
+        "detail": "What changed is as declared: 2 files and 0 action names."
       }
     ],
     "judgement": [{ "id": "DOD-ONE-3", "says": "The words tell the owner what to do.", "level": "should" }],

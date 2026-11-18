@@ -35,7 +35,7 @@ Kinds: **I** an interface, merged first, with its schemas and a test any impleme
 | C1p | A card is printed as lines, not JSON; `bay approve` takes the choice | C, command line | `bay/run-report.ts`, `bay/commands/approve.ts`, its tests | C1r | what a choice and a card are |
 | C3 | The kernel counts the times a step asks for tests and refuses past the limit | C, runs | `bay/runs/`, `bay/broker/command-operations.ts`, its tests | C1r | both change runs, so one after the other |
 | P1 | Proof: its folder, manifest and table of kinds; the checks pass; a test fails on the base and passes on the slice. Copy, call, remove | M | `components/base/proof/` manifest, table, lib, two kinds and their tests | I1, T1, KL1 | the interface; a ceiling the suite fits |
-| W1 | Waves from a plan file: order, disjoint scopes, longest chain, builders per wave, the table drawn; a plan where every slice waits is sent back | M | `components/base/forge/` plan scripts and their tests | I1 | the slice's form |
+| W1 | Waves from a plan file: order, disjoint scopes, longest chain, builders per wave, the table drawn; a plan where every slice waits is sent back | M | `components/base/forge/` plan scripts and their tests | I1, TB1 | the slice's form; reading and checking a YAML file |
 | P2 | Proof: changes are in scope; files outside are untouched; what changed matches the declaration; size | M | one file per kind and its test | P1 | the folder and table |
 | P3 | Proof: injected bugs are caught, in a throwaway copy, each run naming the test files that cover it, with a time limit | M | one kind file and its test | P1 | it calls tests as P1 does |
 | P4 | Proof: output is unchanged, or changed only as the plan says; the real thing runs in a fresh project with literal expected output | M | two kind files and their tests | P1 | the folder and table |
@@ -56,6 +56,9 @@ Each was found by a builder or in review, and none was in the designs.
 | EK1 | The broker reserves the event kinds the kernel itself reads (`run.asked-by`, `tool.called`, `budget.exceeded`) | C, broker | `bay/broker/other-operations.ts`, its tests | C1r | C1r found that a script can write them; one changes what the owner reads while a run waits for budget |
 | MN1 | The adapter tells the kernel which model each tier is, so a judged line on a card names the model | C, adapter and runs | `adapters/claude-code/`, the config, one field in runs | C1p | The owner chose that the kernel adds the model's name; the kernel does not know it today and shows the skill and tier |
 | KS1 | The kernel compiles each schema once; the cost of starting a script host is measured and cut where it is safe | C, manifests and broker | `bay/manifests/spec.ts`, the script runner | - | SP1 measured it: at least 119 of the suite's 870 processor seconds |
+
+| WT1 | A throwaway copy is a repository of its own, so tools and the kit's own tests see its files | M | `components/base/git-worktrees/`, `components/base/interfaces/worktrees/` | KL1 | KL1's real run: in a copy, git lists no files, `bay` sees an empty project and 34 of the kit's tests fail. Proof's kinds run in copies |
+| TB1 | The toolbox reads YAML to a value, checks a value against a schema, and matches a path against a pattern | C, toolbox | `bay/sdk.ts` and the kernel files behind three functions | - | W1 stopped: a mode's script could do none of these, and a plan is a YAML file a script checks. P2 and W1 need the matching |
 
 KL1 runs in wave 1 beside T1. EK1 and MN1 run in wave 2 or 3 where a seat is free; F1 needs MN1. KS1 runs when the machine is quiet, since it times the suite.
 

@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { ESLint } from "eslint";
 
-const kit = fileURLToPath(new URL("../../../..", import.meta.url));
+const kit = fileURLToPath(new URL("..", import.meta.url));
 
 const lint = new ESLint({ cwd: kit, overrideConfigFile: "components/base/typescript/eslint.config.js" });
 

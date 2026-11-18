@@ -402,7 +402,7 @@ Not slices, but found, and each should be in a brief before its slice starts:
 - **The kit's own tools and `.forge/`: lint read it, the test runner does not.** Shown by slice FX1 in a throwaway
   copy of the kit with a worktree at `.forge/worktrees/EXP` holding a test file with a lint error and a failing
   test. `npm run lint` named that file and sixteen others in the worktree and failed; the kit's typescript mode
-  now ignores `.forge/` in its lint config, held by `components/base/typescript/tests/lint-ignores.test.ts`.
+  now ignores `.forge/` in its lint config, held by `tests/lint-ignores.test.ts`.
   `node --test` with no file names, as `npm test` runs it, searched 159 files, none under `.forge/`: node's search
   passes over a folder whose name starts with a dot. It was shown by loading a module before each test file that
   wrote the file's path and exited. Proof is not touched: its copies hold a commit, which has no `.forge/`.

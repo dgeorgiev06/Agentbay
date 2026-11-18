@@ -13,11 +13,6 @@ const caseOfThisMode = "proof@1, proof: ";
 const sharedTestMilliseconds = 15 * 60_000;
 
 const notBuilt: readonly string[] = [
-  "bugs-caught: passed when the covering tests fail with each bug applied (TR2, K1)",
-  "bugs-caught: a bug that survives fails the item and is named (K2)",
-  "bugs-caught: a bug whose patch does not apply makes the item inconclusive, with a reason that names the bug and says it could not be applied, never passed or failed",
-  "a bug's run is a copy of the head with only that bug applied, and runs only the bug's covering test files",
-
   "count: passed when the head has at most the most, and when a declared count did not rise (TR2, K1)",
   "count: failed when the head has more than the most",
 ];

@@ -26,7 +26,7 @@ Built. Proof adds it to every slice as the item `declared`. It compares the file
 
 ### bugs-caught
 
-Not built.
+Built. For each bug of the request, one after another: a fresh copy of the head, the bug's patch applied with the worktrees interface's `apply`, the toolchain's `test` with only the bug's covering test files, and the copy removed. Passed when every run failed. A run that passed is a bug that survived: it fails the item, and the detail names it by the name the request gives it. No bugs, a patch that does not apply, a run that was stopped or could not start, and a copy that could not be made each make the item inconclusive; such a bug is never counted as caught. Each run is asked for what is left of the step, as every toolchain call is, and reports what it spent; so a dozen quick bugs each get the full 1,000 seconds, while a bug whose run hangs takes what it is given and the bugs after it get what remains, or are not run and are inconclusive.
 
 ### same-output
 

@@ -91,7 +91,7 @@ test("a slice is moved to a later wave only past the slices it shares a path wit
 });
 
 test("a slice goes after the slice it comes after, even when that one was moved to a later wave", () => {
-  const slices = [slice("Y", ["x/**"]), slice("Z", ["x/y.ts"]), slice("D", ["d/**"], ["Z"])];
+  const slices = [slice("D", ["d/**"], ["Z"]), slice("Y", ["x/**"]), slice("Z", ["x/y.ts"])];
   assert.deepEqual(workOut(plan(slices), noFeatures).waves, [
     { wave: 1, slices: ["Y"], builders: 1 },
     { wave: 2, slices: ["Z"], builders: 1 },

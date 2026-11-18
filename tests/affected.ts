@@ -103,14 +103,14 @@ export function affectedTests(change: Change): Affected {
   };
 }
 
-function gitLines(parameters: readonly string[], folder = "."): readonly string[] {
+function gitLines(parameters: readonly string[], folder: string): readonly string[] {
   return execFileSync("git", parameters, { cwd: folder, encoding: "utf8" })
     .split("\n")
     .filter((line) => line !== "");
 }
 
 function repositoryFiles(): readonly string[] {
-  return gitLines(["ls-files", "--cached", "--others", "--exclude-standard"]).filter((file) => existsSync(file));
+  return gitLines(["ls-files", "--cached", "--others", "--exclude-standard"], ".").filter((file) => existsSync(file));
 }
 
 export function repositoryTestFiles(): readonly string[] {

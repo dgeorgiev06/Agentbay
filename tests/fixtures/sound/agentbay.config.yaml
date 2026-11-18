@@ -1,0 +1,6 @@
+bindings:
+  greeting-source: greeter
+adapter: fake
+settings:
+  writer:
+    signature: Yours, the writer

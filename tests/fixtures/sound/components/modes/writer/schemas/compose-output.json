@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "text",
+    "saved"
+  ],
+  "properties": {
+    "text": {
+      "type": "string"
+    },
+    "saved": {
+      "type": "string"
+    }
+  }
+}

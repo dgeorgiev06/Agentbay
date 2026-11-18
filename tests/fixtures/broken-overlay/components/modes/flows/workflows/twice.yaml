@@ -1,0 +1,10 @@
+name: twice
+trigger:
+  manual: true
+steps:
+  - id: one
+    action: go
+  - id: one
+    action: nowhere
+    input:
+      x: $steps.later.output

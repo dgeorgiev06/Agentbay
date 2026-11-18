@@ -4,7 +4,9 @@
     "language": "TypeScript",
     "sourceFiles": ["**/*.ts"],
     "testFiles": ["**/*.test.ts"],
-    "practices": "components/base/typescript/practices.md",
-    "checks": ["generate:check", "typecheck", "lint", "format:check", "deadcode"]
+    "practices": "practices.md",
+    "checks": ["generate:check", "typecheck", "lint", "format:check", "deadcode"],
+    "present": ["generate:check", "typecheck", "lint", "format:check", "deadcode", "test"],
+    "missing": []
   }
 }

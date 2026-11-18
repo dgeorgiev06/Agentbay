@@ -15,5 +15,6 @@
     "noEmit": true,
     "skipLibCheck": false
   },
-  "include": ["bay/**/*.ts", "adapters/**/*.ts", "components/**/*.ts", "tests/**/*.ts", "schemas/**/*.ts"]
+  "include": ["bay/**/*.ts", "adapters/**/*.ts", "components/**/*.ts", "tests/**/*.ts", "schemas/**/*.ts"],
+  "exclude": ["tests/fixtures"]
 }

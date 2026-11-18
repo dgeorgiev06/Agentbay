@@ -66,6 +66,7 @@ test("test runs npm test with the TAP reporter, followed by the named test files
   const folder = await checkoutWith("named", files);
   const run = await project.run("typescript.test", { folder, files: ["tests/sums.test.ts", "tests/words.test.ts"] });
   assert.deepEqual(commandsRun(run.events), [
+    ["cat", "--", "package.json"],
     ["npm", "test", "--", "--test-reporter=tap", "tests/sums.test.ts", "tests/words.test.ts"],
   ]);
   assert.ok(run.state.status === "done", JSON.stringify(run.state));
@@ -95,11 +96,24 @@ test("a run whose output has no summary of the tests is inconclusive", async () 
   });
 });
 
-test("a checkout without a test script cannot be started and is inconclusive", async () => {
+test("a checkout without a test script, or whose package.json is not JSON, is inconclusive with what to add, and npm is not run", async () => {
   const folder = await writeCheckout(project, "no-script", { "package.json": packageWith({}) });
-  assert.deepEqual(await tested({ folder }), {
+  const run = await project.run("typescript.test", { folder });
+  assert.deepEqual(commandsRun(run.events), [["cat", "--", "package.json"]]);
+  assert.ok(run.state.status === "done", JSON.stringify(run.state));
+  assert.deepEqual(shownResult(run.state.output), {
     verdict: "inconclusive",
-    reason: "The checkout's package.json has no script test, so it could not be started.",
+    reason:
+      'The checkout\'s package.json has no script test: add "test": "node --test" to its scripts, ' +
+      "or another command that runs the tests with node's test runner.",
+  });
+  const broken = await writeCheckout(project, "test-not-json", { "package.json": "test: node --test\n" });
+  assert.deepEqual(await tested({ folder: broken }), {
+    verdict: "inconclusive",
+    reason:
+      "The checkout's package.json is not JSON, so the mode cannot tell whether it has the script test: " +
+      'make it JSON, with "test": "node --test" in its scripts, ' +
+      "or another command that runs the tests with node's test runner.",
   });
 });
 

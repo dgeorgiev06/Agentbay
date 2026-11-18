@@ -73,28 +73,104 @@ test("a check that ends with an exit code the mode does not recognise is inconcl
   ]);
 });
 
-test("a check whose script the checkout does not have cannot be started and is inconclusive", async () => {
+function notSetUp(name: string, reason: string): object {
+  return { name, verdict: "inconclusive", reason, stdout: "", stderr: "" };
+}
+
+const lintToAdd =
+  'add "lint": "eslint ." to its scripts, or another command that lints the code and exits 1 on a finding';
+
+test("a required check whose script the checkout lacks is inconclusive with what to add, and npm is not run for it", async () => {
   const scripts = Object.entries(passingScripts()).filter(([name]) => name !== "lint");
   const folder = await checkoutWith("no-lint", Object.fromEntries(scripts));
-  const [lint, deadcode] = await verdicts({ folder, checks: ["lint", "deadcode"] });
-  assert.match(typeof lint?.stderr === "string" ? lint.stderr : "", /^npm error Missing script: "lint"\n/);
+  const run = await project.run("typescript.check", { folder, checks: ["lint", "deadcode"] });
+  assert.deepEqual(commandsRun(run.events), [
+    ["cat", "--", "package.json"],
+    ["npm", "run", "deadcode", "--"],
+  ]);
+  assert.ok(run.state.status === "done", JSON.stringify(run.state));
   assert.deepEqual(
-    { ...lint, stderr: "npm's message" },
-    {
-      name: "lint",
-      verdict: "inconclusive",
-      reason: "The checkout's package.json has no script lint, so it could not be started.",
-      stdout: "",
-      stderr: "npm's message",
-    },
+    listed(run.state.output, "verdicts").map((verdict) => withoutSeconds(verdict)),
+    [notSetUp("lint", `The checkout's package.json has no script lint: ${lintToAdd}.`), passed("deadcode")],
   );
-  assert.deepEqual(deadcode, passed("deadcode"));
+});
+
+test("generate:check runs only where the checkout has the script, and when named where it has not, it is inconclusive", async () => {
+  const required = Object.entries(passingScripts()).filter(([name]) => name !== "generate:check");
+  const folder = await checkoutWith("no-generate", Object.fromEntries(required));
+  assert.deepEqual(await verdicts({ folder }), names.slice(1).map(passed));
+  assert.deepEqual(await verdicts({ folder, checks: ["generate:check", "lint"] }), [
+    notSetUp(
+      "generate:check",
+      "The checkout's package.json has no script generate:check, which only some projects have.",
+    ),
+    passed("lint"),
+  ]);
+  const withIt = await checkoutWith("with-generate", passingScripts());
+  assert.deepEqual(await verdicts({ folder: withIt }), names.map(passed));
+});
+
+test("a checkout whose package.json is not JSON gives each required check an inconclusive verdict, runs no check and shows none of the file", async () => {
+  const folder = await writeCheckout(project, "not-json", { "package.json": '{ "scripts": { "lint": "eslint ." ' });
+  const run = await project.run("typescript.check", { folder });
+  assert.deepEqual(commandsRun(run.events), [["cat", "--", "package.json"]]);
+  assert.ok(run.state.status === "done", JSON.stringify(run.state));
+  assert.deepEqual(
+    listed(run.state.output, "verdicts").map((verdict) => withoutSeconds(verdict)),
+    [
+      notSetUp(
+        "typecheck",
+        "The checkout's package.json is not JSON, so the mode cannot tell whether it has the script typecheck: " +
+          'make it JSON, with "typecheck": "tsc --noEmit" in its scripts, ' +
+          "or another command that checks the types and exits 1 or 2 on a type error.",
+      ),
+      notSetUp(
+        "lint",
+        "The checkout's package.json is not JSON, so the mode cannot tell whether it has the script lint: " +
+          'make it JSON, with "lint": "eslint ." in its scripts, or another command that lints the code and exits 1 on a finding.',
+      ),
+      notSetUp(
+        "format:check",
+        "The checkout's package.json is not JSON, so the mode cannot tell whether it has the script format:check: " +
+          'make it JSON, with "format:check": "prettier --check ." in its scripts, ' +
+          "or another command that checks the format and exits 1 on a finding.",
+      ),
+      notSetUp(
+        "deadcode",
+        "The checkout's package.json is not JSON, so the mode cannot tell whether it has the script deadcode: " +
+          'make it JSON, with "deadcode": "knip" in its scripts, ' +
+          "or another command that finds unused files and exports and exits 1 on a finding.",
+      ),
+    ],
+  );
+});
+
+test("a checkout whose package.json has no scripts, or none at all, gives each required check what to add", async () => {
+  const bare = await writeCheckout(project, "no-scripts", { "package.json": '{ "name": "checkout" }\n' });
+  const [typecheck] = await verdicts({ folder: bare, checks: ["typecheck"] });
+  assert.deepEqual(
+    typecheck,
+    notSetUp(
+      "typecheck",
+      'The checkout\'s package.json has no script typecheck: add "typecheck": "tsc --noEmit" to its scripts, ' +
+        "or another command that checks the types and exits 1 or 2 on a type error.",
+    ),
+  );
+  const empty = await writeCheckout(project, "no-package", { "src/two.ts": "export const two = 2;\n" });
+  assert.deepEqual(await verdicts({ folder: empty, checks: ["lint"] }), [
+    notSetUp(
+      "lint",
+      'The checkout has no package.json: add one with "lint": "eslint ." in its scripts, ' +
+        "or another command that lints the code and exits 1 on a finding.",
+    ),
+  ]);
 });
 
 test("each check asked runs npm run with its name, in describe's order, and its output is npm's and the script's", async () => {
   const folder = await checkoutWith("subset", passingScripts());
   const run = await project.run("typescript.check", { folder, checks: ["lint", "typecheck"] });
   assert.deepEqual(commandsRun(run.events), [
+    ["cat", "--", "package.json"],
     ["npm", "run", "typecheck", "--"],
     ["npm", "run", "lint", "--"],
   ]);

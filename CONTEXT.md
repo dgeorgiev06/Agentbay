@@ -38,6 +38,8 @@ One meaning per word. Briefs, plans, code names and reviews use these words and 
 | **Choice** | One named answer an approval offers. It may have a rule: an earlier step's output that is true or false. The owner's decision names one choice, and later steps read it as the approval's output. | button, option (in prose "option" is fine), verdict |
 | **Withheld choice** | A choice whose rule was false when the approval was first shown. It stays on the approval with the reason a script wrote, and the kernel refuses it. The rules are not evaluated again. | disabled, hidden or blocked choice |
 | **Mark** (of a card's line) | Where a line of an approval's card came from: `ran`, a command the kernel recorded in this run or in a run one of its skills called; `computed`, a step that ran no skill; `judged`, a skill step the approval quotes, to which the kernel adds the skill and its tier. The kernel checks the kind of step a line cites, not whether its words are true. | label, tag, calc, source (the source is what a line cites) |
+| **Not set up** | What a checkout or a project is for a check, or for the test run, when it lacks what the toolchain needs to run it, such as an agreed script in `package.json`. The verdict is inconclusive, with a sentence saying what to add, and `describe` lists it under `missing`. | missing tool, unconfigured |
+| **Agreed script** | A `package.json` script the typescript mode runs by name: `typecheck`, `lint`, `format:check`, `deadcode` and `test`, which every project needs, and `generate:check`, which only some have. | npm task, target |
 
 ## What a builder of the kit sees
 

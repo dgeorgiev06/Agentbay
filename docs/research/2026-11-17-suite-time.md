@@ -211,3 +211,61 @@ Three runs of `npm run test:times` before the change, median per file. Wall time
 | 128 | 0.1 | 0.1 / 0.1 / 0.1 | 2 | components/base/store/tests/store-schemas.test.ts |
 | 129 | 0.1 | 0.1 / 0.1 / 0.1 | 8 | components/base/git-worktrees/tests/root-guard.test.ts |
 | 130 | 0.1 | 0.1 / 0.1 / 0.2 | 39 | adapters/claude-code/tests/guard-decide.test.ts |
+
+## KS1: where one start of a script host and of a database process goes
+
+Profiled on `ks1/kernel-speed` on 2026-11-18, before any change to the host or the database process. Other builders were running tests at the time (load average 8 to 30 on 2 cores), so the milliseconds are inflated; the shares are the finding. Each table is the mean of five starts profiled with `node --cpu-prof --cpu-prof-interval=100`, each sample put in the first category its stack matches. The host started the kernel's own command line (`scriptCommand`) without `--permission`, because node writes no profile under the permission model; twenty starts with and without `--permission` cost the same CPU (3.9 and 3.9 s).
+
+A script host, one start of a script that returns 1:
+
+| Where | ms |
+|---|---|
+| type stripping (amaro's WebAssembly set up, then each .ts file) | 111.1 |
+| the yaml package, loaded because `bay/sdk.ts` re-exports `readYaml` from `bay/yaml-text.ts` | 73.3 |
+| undici (node's fetch and WebSocket library), loaded by the preload | 51.0 |
+| module loading (resolve, read, compile) | 30.0 |
+| the sandbox's setup in the preload, beyond the above | 10.1 |
+| garbage collection | 9.6 |
+| node's bootstrap and the kernel's and script's own code | 3.4 |
+
+- Type stripping is mostly fixed cost: the first file stripped in a process takes about 30 ms (amaro compiles its WebAssembly); every later kernel file the host strips takes about 17 ms together. Node's compile cache (`NODE_COMPILE_CACHE`) does not keep stripped TypeScript in node 22.23, and under `--permission` it writes nothing.
+- undici is loaded by one line: the preload redefines `globalThis.WebSocket`, and node holds `WebSocket` as a lazy property that is built (undici compiled) the moment it is redefined or even described. `fetch` and `EventSource` load nothing.
+- The yaml package is about 40 CommonJS files. Every script loads it through the toolbox, whether it reads YAML or not. Two scripts in the kit read YAML (forge, proof).
+- Opening the database is not part of a host start.
+
+A database process, one start that answers one query on an existing database:
+
+| Where | ms |
+|---|---|
+| type stripping | 37.5 |
+| module loading | 13.4 |
+| the kernel's code, node's bootstrap, garbage collection | 5.0 |
+| opening the database (`node:sqlite`) | 0.1 |
+
+- A step broker starts a database process only on the step's first database request (`DatabaseProcess.request`); a step that asks nothing of the database starts none. That already holds, so it is not a saving here.
+- The database process runs only kernel code, and nearly all of its start is stripping that code's types. Nothing the frame allows cuts it: it would need the kernel's TypeScript stripped ahead of time (see below).
+
+Twenty starts each, without the profiler, under the same load: bare `node` 0.023 CPU s a start, the script host 0.195, the database process 0.081.
+
+## KS1: what changed, and the time after
+
+Three changes, one commit each:
+
+- `checkValue` (`bay/value-check.ts`) keeps one compiled validator per schema content (the schema and its parts as JSON text), at most 256, for the life of the process. Schemas reach it read afresh from disk (step broker) or over the wire (script host), so the same schema is a new object each time; keying by object would miss. A schema changed on disk has new content and is compiled again.
+- The script host's preload deletes node's lazy `WebSocket` before it defines the refusing getter, so undici is no longer compiled in every host.
+- `bay/yaml-text.ts` loads the yaml package on the first YAML read, not when the toolbox is imported.
+
+Per start, measured as twenty starts by hand under load: the host went from about 0.19-0.21 to about 0.17 CPU s. The database process was not changed: it starts only when a step asks the database (already so), and its start is type stripping of kernel code.
+
+Single files alone, CPU seconds (user and system, every process), three runs each, median. Before is `da3ca0a`, after is this branch. Other builders and a reviewer's full check were running on the 2 cores (load average 1 to 22, see each run), so wall times are not evidence; CPU seconds are less affected but not free of it.
+
+| File | Before CPU s | After CPU s | Change |
+|---|---|---|---|
+| tests/script-runner.test.ts (53 tests before, 56 after) | 23.26 / 23.03 / 22.85, median 23.03 | 19.65 / 20.66 / 19.45, median 19.65 | -15 per cent, with three more tests |
+| components/base/store/tests/items-store.test.ts | 47.08 / 47.92 / 49.66, median 47.92 | 36.21 / 35.44 / 36.53, median 36.21 | -24 per cent |
+| tests/tools.test.ts | 15.77 / 15.26 / 15.25, median 15.26 | 11.37 / 11.13 / 11.19, median 11.19 | -27 per cent |
+
+## Further savings this slice did not build
+
+- **A host kept alive across the steps of a run.** It would save nearly all of a start (about 0.17 CPU s) for every step after a run's first: up to about 350 CPU s of a suite run at 2,307 starts. It would put at risk: one step's globals, patched prototypes and module state reaching the next step; one process holding the union of the steps' grants (an action's read-only step would run with a write action's permissions, and `--permission` cannot be narrowed after start); removal functions taken away per action at start; a secret read in one step still in memory for the next; a time limit killing the host for every later step. Shared between modes, one mode's code would run beside another's files and secrets. Not built.
+- **TypeScript stripped by the kernel ahead of time.** Type stripping is about 60 per cent of a host start and about 70 per cent of a database process start. The kernel could strip once and give children JavaScript, but the code a confined process runs would then be a copy the kernel wrote: any place that copy is kept must be writable by nothing a mode can reach, and node's `stripTypeScriptTypes` is still experimental in node 22. Not built; it needs its own design.

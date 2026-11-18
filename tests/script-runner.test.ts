@@ -328,6 +328,29 @@ test("a script reads YAML with the toolbox's reader, and cannot import the yaml 
   });
 });
 
+const yamlLoadingProbe = [
+  "import { createRequire } from 'node:module';",
+  "const cached = createRequire(import.meta.url).cache;",
+  "const yamlLoaded = () => Object.keys(cached).some((file) => file.includes('/node_modules/yaml/'));",
+  `const { readYaml } = await import(${JSON.stringify(sdkFile)});`,
+  "const before = yamlLoaded();",
+  "const read = readYaml('a: 1\\n');",
+  "process.stdout.write(JSON.stringify({ before, read: read.ok ? read.value : null, after: yamlLoaded() }));",
+].join("\n");
+
+test("importing the toolbox loads no yaml package, and its first YAML read does", async () => {
+  const child = spawn(process.execPath, ["--input-type=module", "--eval", yamlLoadingProbe], {
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  let stdout = "";
+  child.stdout.on("data", (chunk: Buffer) => {
+    stdout += chunk.toString("utf8");
+  });
+  const exitCode = await new Promise<number | null>((resolve) => child.on("close", resolve));
+  assert.equal(exitCode, 0);
+  assert.deepEqual(JSON.parse(stdout), { before: false, read: { a: 1 }, after: true });
+});
+
 test("a script cannot write outside its write paths directly, even inside a read path", async () => {
   await withScriptProject(async (root) => {
     for (const file of [join(root, "outside/new.txt"), join(root, "notes-in/today.md"), join(root, "x.txt")]) {
@@ -564,6 +587,20 @@ test("a script cannot reach the network through fetch, WebSocket or getBuiltinMo
       }
       assert.equal(connections(), 0);
     });
+  });
+});
+
+test("a script host takes WebSocket away without building node's network library", async () => {
+  await withScriptProject(async (root) => {
+    const run = await attempt(
+      root,
+      [
+        "const loaded = process.moduleLoadList.filter((name) => name.includes('undici'));",
+        "const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'WebSocket');",
+        "return { loaded, configurable: descriptor.configurable, getter: typeof descriptor.get };",
+      ].join("\n"),
+    );
+    assert.deepEqual(outputOf(run), { loaded: [], configurable: false, getter: "function" });
   });
 });
 
@@ -1174,6 +1211,31 @@ test("context.now() is the kernel clock's time when the step started, so a fake 
     clock.advance(1000);
     const after = await attempt(root, body, { clock });
     assert.equal(fieldOf(outputOf(after), "now"), "2026-12-01T00:00:00.000Z");
+  });
+});
+
+function databaseStarts(children: WatchedChildren): number {
+  return children.started.filter((request) => request.arguments.some((part) => part.endsWith("database-child.ts")))
+    .length;
+}
+
+test("a step that asks nothing of the database starts no database process, and one that asks starts one", async () => {
+  await withProject(async (root) => {
+    await writeProjectFile(root, "components/modes/notes/migrations/0001-notes.sql", "create table notes (text text);");
+    const quiet = watchedChildren(nodeChildProcesses.start);
+    const asking = watchedChildren(nodeChildProcesses.start);
+    const write = { permissions: { effects: ["read", "write"] } } as const;
+    const silent = await attempt(root, "return 1;", { ...write, childProcesses: quiet });
+    const body = [
+      '  const notes = context.db.partition("alpha");',
+      "  await notes.migrate();",
+      '  const rows = await notes.query("select count(*) as n from notes");',
+      "  return rows.ok ? rows.value : rows.message;",
+    ].join("\n");
+    const counted = await attempt(root, body, { ...write, childProcesses: asking });
+    assert.deepEqual([outputOf(silent), outputOf(counted)], [1, [{ n: 0 }]]);
+    assert.deepEqual([databaseStarts(quiet), quiet.started.length], [0, 1]);
+    assert.deepEqual([databaseStarts(asking), asking.started.length], [1, 2]);
   });
 });
 

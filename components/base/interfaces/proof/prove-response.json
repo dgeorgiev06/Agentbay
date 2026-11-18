@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProveResponse",
+  "description": "A verdict for each item that names a kind of proof and for the two items proof adds, the judgement items as they were given, and the size of each changed file. No field holds a builder's words.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdicts", "judgement", "size"],
+  "properties": {
+    "verdicts": {
+      "type": "array",
+      "maxItems": 102,
+      "items": {
+        "$ref": "#/$defs/verdict"
+      },
+      "description": "One verdict per item that names a kind, in the slice's order, then the item scope and then the item declared, which proof adds to every slice."
+    },
+    "judgement": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "says", "level"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "The item's id."
+          },
+          "says": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "What must be true, as the slice says it."
+          },
+          "level": {
+            "enum": ["must", "should"],
+            "description": "Must or should, as the slice says it."
+          }
+        },
+        "description": "A judgement item, exactly as the slice gives it. Proof has no verdict on it."
+      },
+      "description": "The items with no kind of proof, in the slice's order. A person or a named model judges them."
+    },
+    "size": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "maxLength": 4096,
+            "description": "A changed path, as the worktrees interface's changed gives it."
+          },
+          "base": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Its lines at the base, or for a move at its old path; left out when it did not exist there."
+          },
+          "head": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Its lines at the head; left out when it is gone there."
+          }
+        },
+        "description": "The lines of one changed file at the base and at the head."
+      },
+      "description": "The size of every changed file, in the order the paths changed. It is reported so a rise can be explained; no verdict rests on it. Empty when what changed is not known."
+    }
+  },
+  "$defs": {
+    "item": {
+      "type": "string",
+      "maxLength": 64,
+      "description": "The item's id as the slice gives it, or scope or declared for the two items proof adds."
+    },
+    "kind": {
+      "enum": ["checks", "fails-first", "in-scope", "as-declared", "bugs-caught", "same-output", "count", "real-thing"],
+      "description": "The kind of proof the verdict comes from. The item scope is always in-scope, and the item declared always as-declared."
+    },
+    "detail": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000,
+      "description": "One sentence that says what was found, from what the toolchain and the worktrees interface reported. It names paths only as the worktrees interface printed them and gives what the builder declared only as counts."
+    },
+    "verdict": {
+      "description": "What proof says of one item: passed, failed, or inconclusive when any part of it is not known.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["item", "kind", "verdict", "detail"],
+          "description": "Every part of the item was known and held.",
+          "properties": {
+            "item": {
+              "$ref": "#/$defs/item"
+            },
+            "kind": {
+              "$ref": "#/$defs/kind"
+            },
+            "verdict": {
+              "const": "passed",
+              "description": "The item holds."
+            },
+            "detail": {
+              "$ref": "#/$defs/detail"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["item", "kind", "verdict", "detail"],
+          "description": "Every part of the item was known, and at least one did not hold.",
+          "properties": {
+            "item": {
+              "$ref": "#/$defs/item"
+            },
+            "kind": {
+              "$ref": "#/$defs/kind"
+            },
+            "verdict": {
+              "const": "failed",
+              "description": "The item does not hold; the detail says where."
+            },
+            "detail": {
+              "$ref": "#/$defs/detail"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["item", "kind", "verdict", "reason"],
+          "description": "At least one part of the item is not known, so nothing is known of the item.",
+          "properties": {
+            "item": {
+              "$ref": "#/$defs/item"
+            },
+            "kind": {
+              "$ref": "#/$defs/kind"
+            },
+            "verdict": {
+              "const": "inconclusive",
+              "description": "Nothing is known; never read it as passed."
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000,
+              "description": "One sentence that says what is not known and why, such as a test run that did not finish in its time limit."
+            }
+          }
+        }
+      ]
+    }
+  }
+}

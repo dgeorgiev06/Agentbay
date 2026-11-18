@@ -1,0 +1,468 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProveRequest",
+  "description": "A slice and what is to be judged of it: the commit it was cut from, the commit its work ends at, what its builder declared before the first edit, and the bugs to inject. Proof gives a verdict for each item of the slice that names a kind of proof, and for the two items it adds to every slice. It uses no model, and it reaches the code only through throwaway copies.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["slice", "base", "head", "declared", "bugs"],
+  "properties": {
+    "slice": {
+      "$ref": "#/$defs/slice"
+    },
+    "base": {
+      "$ref": "#/$defs/commit",
+      "description": "The commit the slice was cut from: the code as it was before the work. A full or short hash, or a branch name, with no .. and no dash at the start."
+    },
+    "head": {
+      "$ref": "#/$defs/commit",
+      "description": "The commit the slice's work ends at: the code that is judged. A full or short hash, or a branch name, with no .. and no dash at the start."
+    },
+    "declared": {
+      "$ref": "#/$defs/declaration"
+    },
+    "bugs": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "#/$defs/bug"
+      },
+      "description": "The bugs to inject, written by whoever plans or reviews the slice, never by its builder. An item of the kind bugs-caught is judged on all of them; with none, it is inconclusive."
+    }
+  },
+  "$defs": {
+    "commit": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*(/\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+      "maxLength": 1000,
+      "description": "A path relative to the repository's root: letters, digits, dots, dashes and underscores in folders, with no .. and no dash at the start."
+    },
+    "sliceName": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*$",
+      "maxLength": 64,
+      "description": "A slice's name, such as TR2: letters, digits and dashes, starting with a letter or digit."
+    },
+    "sentence": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "One sentence, written by whoever plans the slice, never by its builder."
+    },
+    "actionName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*\\.[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "maxLength": 129,
+      "description": "A mode's or an interface's name and one of its actions, joined by a dot, such as proof.prove."
+    },
+    "slice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind", "scope", "after", "done"],
+      "description": "One piece of work for one builder, in the form its plan gives it. It is read from the request, never from the head, so the work cannot change what it is judged by.",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/sliceName"
+        },
+        "kind": {
+          "enum": ["interface", "capability", "mode"],
+          "description": "What the slice builds: an interface and its shared test, a capability of the kernel, or a mode."
+        },
+        "scope": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 200,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*\\.\\.)(?!.*//)[A-Za-z0-9_.*][A-Za-z0-9_.*/-]*(?<!/)$",
+            "maxLength": 1000,
+            "description": "A path relative to the repository's root, or a pattern of paths. A * stands for any characters inside one folder or file name; a ** that is a whole part stands for any number of folders. bay/broker/** holds every file under bay/broker/, and not bay/brokers.ts."
+          },
+          "description": "The write scope: the paths the slice may change. Proof fails the item scope for every changed path outside it."
+        },
+        "after": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["slice", "because"],
+            "properties": {
+              "slice": {
+                "$ref": "#/$defs/sliceName",
+                "description": "The name of a slice that must be merged before this one starts."
+              },
+              "because": {
+                "$ref": "#/$defs/sentence",
+                "description": "Why this slice must wait for it, such as what it reads that the other slice adds."
+              }
+            }
+          },
+          "description": "The slices this one comes after, each with the reason; empty when it can start at once."
+        },
+        "against": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*@[0-9]+$",
+          "maxLength": 80,
+          "description": "The interface the slice builds against, as name@major, such as proof@1; left out when it builds against none."
+        },
+        "done": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/item"
+          },
+          "description": "The definition of done: the items that must or should be true when the slice is merged, in the order a reader takes them."
+        }
+      }
+    },
+    "itemId": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9-]*$",
+      "maxLength": 64,
+      "not": {
+        "enum": ["scope", "declared"]
+      },
+      "description": "The item's id, such as DOD-TR2-1. The ids scope and declared are the two items proof adds, so no item of the slice takes them."
+    },
+    "level": {
+      "enum": ["must", "should"],
+      "description": "Must: the slice is not merged unless the item holds. Should: the item is wanted, and the owner may merge without it."
+    },
+    "item": {
+      "description": "One item of the definition of done: proved by a kind of proof, or, with no kind, a judgement item that proof returns as it was given.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "says", "level", "proof"],
+          "description": "An item proof gives a verdict on.",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/itemId"
+            },
+            "says": {
+              "$ref": "#/$defs/sentence",
+              "description": "What must be true, in one sentence the owner reads."
+            },
+            "level": {
+              "$ref": "#/$defs/level"
+            },
+            "proof": {
+              "$ref": "#/$defs/proof"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "says", "level"],
+          "description": "A judgement item: no script can prove it, so a person or a named model judges it, and every card labels it as judgement.",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/itemId"
+            },
+            "says": {
+              "$ref": "#/$defs/sentence",
+              "description": "What must be true, in one sentence the owner reads."
+            },
+            "level": {
+              "$ref": "#/$defs/level"
+            }
+          }
+        }
+      ]
+    },
+    "proof": {
+      "description": "The kind of proof for the item, with what that kind needs. Every kind copies a commit, runs its tools in the copy, and removes the copy. Any part that is inconclusive makes the item inconclusive, never passed. The kinds in-scope and as-declared are not named here: proof gives them to every slice as the items scope and declared.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "description": "The checks pass: every check of the toolchain, and then a run of every test, on a copy of the head. Passed when every check passed and the test run passed.",
+          "properties": {
+            "kind": {
+              "const": "checks",
+              "description": "The checks pass."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "tests"],
+          "description": "A test fails first: the named test files are run on a copy of the base with those files laid over it as they are at the head, and then on a copy of the head. Passed when the run on the base failed and the run on the head passed. A run on the base that passed fails the item: the tests do not show the change.",
+          "properties": {
+            "kind": {
+              "const": "fails-first",
+              "description": "A test fails first."
+            },
+            "tests": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 200,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/path"
+              },
+              "description": "The test files that show the item, as they are at the head."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "description": "Injected bugs are caught: each bug of the request is applied to its own copy of the head, and only its covering test files are run there. Passed when every run failed. A run that passed is a bug that survived: it fails the item and is named in the detail.",
+          "properties": {
+            "kind": {
+              "const": "bugs-caught",
+              "description": "Injected bugs are caught."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "description": "Output is the same: every command the project declares in proof's settings, under sameOutput, is run on a copy of the base and on a copy of the head, and what each prints and its exit code are compared. Passed when each is the same, except those named in differ, which must differ. A project that declares none makes the item inconclusive.",
+          "properties": {
+            "kind": {
+              "const": "same-output",
+              "description": "Output is the same."
+            },
+            "differ": {
+              "type": "array",
+              "maxItems": 50,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+                "maxLength": 64,
+                "description": "The name of a command the project declares."
+              },
+              "description": "The commands whose output the slice changes on purpose; left out, every command must print the same."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "pattern", "paths", "most"],
+          "description": "A count: the lines that hold a text, in files under the paths, on a copy of the head. Passed when there are at most the most.",
+          "properties": {
+            "kind": {
+              "const": "count",
+              "description": "A count."
+            },
+            "pattern": {
+              "$ref": "#/$defs/countedText"
+            },
+            "paths": {
+              "$ref": "#/$defs/countedPaths"
+            },
+            "most": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "The most lines that may hold the text at the head."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "pattern", "paths", "noRise"],
+          "description": "A count that may not rise: the lines that hold a text, in files under the paths, on copies of the base and the head. Passed when the head has no more than the base.",
+          "properties": {
+            "kind": {
+              "const": "count",
+              "description": "A count."
+            },
+            "pattern": {
+              "$ref": "#/$defs/countedText"
+            },
+            "paths": {
+              "$ref": "#/$defs/countedPaths"
+            },
+            "noRise": {
+              "const": true,
+              "description": "The count at the head may not be more than at the base."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "use"],
+          "description": "A count the project declares in proof's settings, under noRise, which may not rise. Passed when the head has no more than the base.",
+          "properties": {
+            "kind": {
+              "const": "count",
+              "description": "A count."
+            },
+            "use": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+              "maxLength": 64,
+              "description": "The name of the count in the project's settings, such as debt. A name the project does not declare makes the item inconclusive."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "runs"],
+          "description": "The real thing: the runs are made one after another in one fresh copy of the head, as the owner would type them. Passed when each printed exactly the expected text and ended with the expected exit code. This is the kind for a new mode, which has no output at the base to compare with.",
+          "properties": {
+            "kind": {
+              "const": "real-thing",
+              "description": "The real thing."
+            },
+            "runs": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 20,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["bay", "stdout", "exitCode"],
+                "properties": {
+                  "bay": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000,
+                      "description": "One word given to the command."
+                    },
+                    "description": "The words given to the copy's own ./bay.sh, run at the copy's root, such as check --project tests/fixtures/sound."
+                  },
+                  "stdout": {
+                    "type": "string",
+                    "maxLength": 100000,
+                    "description": "The exact text the run must print to its standard output."
+                  },
+                  "exitCode": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255,
+                    "description": "The exit code the run must end with."
+                  }
+                },
+                "description": "One run of the kit's command line and what it must print."
+              },
+              "description": "The runs, in the order they are made."
+            }
+          }
+        }
+      ]
+    },
+    "countedText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "The text a counted line holds, matched as it is written: a dot is a dot, not a pattern."
+    },
+    "countedPaths": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/path"
+      },
+      "description": "Files or folders; a folder counts every file under it. A path that does not exist makes the item inconclusive."
+    },
+    "declaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files", "names"],
+      "description": "What the builder stated it would change, recorded before its first edit. Proof compares it with what changed and shows it only as counts: no path or name it holds reaches a detail.",
+      "properties": {
+        "files": {
+          "type": "array",
+          "maxItems": 2000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/path"
+          },
+          "description": "Every file the builder would add, change, delete or move; a move names the old path and the new."
+        },
+        "names": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["gained", "lost", "changed"],
+          "description": "The action names that modes and interfaces would gain, lose or change, read from each mode.yaml and each interface's .yaml file.",
+          "properties": {
+            "gained": {
+              "type": "array",
+              "maxItems": 500,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/actionName"
+              },
+              "description": "Actions that would be new at the head."
+            },
+            "lost": {
+              "type": "array",
+              "maxItems": 500,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/actionName"
+              },
+              "description": "Actions that would be gone at the head."
+            },
+            "changed": {
+              "type": "array",
+              "maxItems": 500,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/actionName"
+              },
+              "description": "Actions at both commits whose lines would differ."
+            }
+          }
+        }
+      }
+    },
+    "bug": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "patch", "tests"],
+      "description": "One bug to inject: a patch that breaks the head on purpose, and the test files that must catch it.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "What the bug does, in a few words, such as the record is not read again. A bug that survives is named by it."
+        },
+        "patch": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000000,
+          "description": "The bug as git diff writes it, against the head."
+        },
+        "tests": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 200,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/path"
+          },
+          "description": "The test files that cover the bug: the only ones run with it, so a bug costs a few files and not the whole suite."
+        }
+      }
+    }
+  }
+}

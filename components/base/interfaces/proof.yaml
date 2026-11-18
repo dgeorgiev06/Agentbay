@@ -1,0 +1,7 @@
+name: proof
+version: 1
+actions:
+  prove:
+    input: proof/prove-request.json
+    output: proof/prove-response.json
+    effects: [read, write, network, spend, delete]

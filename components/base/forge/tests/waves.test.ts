@@ -16,8 +16,7 @@ const kit = fileURLToPath(new URL("../../../..", import.meta.url));
 
 let copy: string;
 
-async function copyOfTheKit(): Promise<string> {
-  const folder = await realpath(await mkdtemp(join(tmpdir(), "agentbay-forge-")));
+async function copyKitInto(folder: string): Promise<void> {
   const listing = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: kit });
   const paths = listing
     .toString("utf8")
@@ -28,7 +27,17 @@ async function copyOfTheKit(): Promise<string> {
     await cp(join(kit, path), join(folder, path));
   }
   await symlink(await realpath(join(kit, "node_modules")), join(folder, "node_modules"));
-  return folder;
+}
+
+async function copyOfTheKit(): Promise<string> {
+  const folder = await realpath(await mkdtemp(join(tmpdir(), "agentbay-forge-")));
+  try {
+    await copyKitInto(folder);
+    return folder;
+  } catch (error) {
+    await rm(folder, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 before(async () => {

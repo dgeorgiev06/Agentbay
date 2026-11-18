@@ -220,8 +220,8 @@ export function builtOf(value: Json | undefined): Built {
   };
 }
 
-function counted(count: number, one: string, many: string): string {
-  return `${String(count)} ${count === 1 ? one : many}`;
+function counted(count: number, noun: string): string {
+  return `${String(count)} ${noun}${count === 1 ? "" : "s"}`;
 }
 
 function grouped(count: number): string {
@@ -255,16 +255,14 @@ function shortIds(slice: Slice, ids: readonly string[]): string {
 
 function scopeWords(scope: readonly string[]): string {
   const [first = "", ...rest] = scope;
-  return rest.length === 0
-    ? `scope: ${first}`
-    : `scope: ${first} and ${counted(rest.length, "more path", "more paths")}`;
+  return rest.length === 0 ? `scope: ${first}` : `scope: ${first} and ${counted(rest.length, "more path")}`;
 }
 
 function itemsWords(done: readonly Item[]): string {
   const proved = done.filter((item) => item.proof !== undefined).length;
   const judged = done.length - proved;
   return (
-    `${counted(done.length, "item", "items")}: ` +
+    `${counted(done.length, "item")}: ` +
     `${String(proved)} ${proved === 1 ? "names" : "name"} a kind of proof, ` +
     `${String(judged)} ${judged === 1 ? "is" : "are"} judgement`
   );
@@ -370,7 +368,7 @@ function builtWords(built: Built): readonly string[] {
 }
 
 function changedWords(size: readonly Sized[], work: string): string {
-  const changed = size.length === 0 ? "what changed is not known" : `${counted(size.length, "file", "files")} changed`;
+  const changed = size.length === 0 ? "what changed is not known" : `${counted(size.length, "file")} changed`;
   return `${changed}; the work is set aside on ${work}`;
 }
 
@@ -432,7 +430,7 @@ function unmetMust(slice: Slice, verdicts: readonly Verdict[]): Unmet {
 function unmetClause(ids: readonly string[], verb: { readonly one: string; readonly many: string }): string[] {
   const items = ids.filter((id) => !addedItems.includes(id)).length;
   const named = ids.filter((id) => addedItems.includes(id));
-  const parts = [...(items === 0 ? [] : [counted(items, "must item", "must items")]), ...named];
+  const parts = [...(items === 0 ? [] : [counted(items, "must item")]), ...named];
   if (parts.length === 0) {
     return [];
   }

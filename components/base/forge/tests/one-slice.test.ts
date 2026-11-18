@@ -14,6 +14,7 @@ type Waiting = {
   readonly hash: string;
   readonly card: Json;
   readonly choices: Json;
+  readonly refused?: Json;
 };
 
 type Planned = {
@@ -30,6 +31,7 @@ type Proved = {
 type Build = {
   readonly files: readonly string[];
   readonly built: Json;
+  readonly refusedFirst?: Json;
 };
 
 type Ran = {
@@ -335,9 +337,13 @@ async function decided(root: string, waiting: Waiting, answer: Answer & { readon
   return bay(root, decisionWords(waiting, answer.step, answer));
 }
 
-async function submitted(root: string, runId: string, output: Json): Promise<Json> {
+async function answered(root: string, runId: string, output: Json): Promise<Json> {
   const task = fieldsOf(runOf(await bay(root, ["runs", runId, "--new-token"]))).task ?? null;
-  return runOf(await bay(root, ["submit", JSON.stringify(output), "--token", textAt(task, "token")]));
+  return bay(root, ["submit", JSON.stringify(output), "--token", textAt(task, "token")]);
+}
+
+async function submitted(root: string, runId: string, output: Json): Promise<Json> {
+  return runOf(await answered(root, runId, output));
 }
 
 async function shownCard(root: string, runId: string): Promise<readonly string[]> {
@@ -402,13 +408,24 @@ function wordsOf(waiting: Waiting): readonly string[] {
   return listOf(fieldsOf(waiting.card).lines).map((line) => textAt(line, "words"));
 }
 
+async function refusedProblems(root: string, runId: string, output: Json | undefined): Promise<Json> {
+  if (output === undefined) {
+    return null;
+  }
+  const refused = fieldsOf(await answered(root, runId, output));
+  assert.equal(refused.ok, false);
+  return listOf(refused.problems).filter((problem) => textAt(problem, "path").startsWith("/output/missing/"));
+}
+
 async function builtToCard(root: string, start: Waiting, build: Build): Promise<Waiting> {
   const approved = runOf(await decided(root, start, { step: "start", verdict: "approve" }));
   assert.equal(textAt(approved, "status"), "waiting");
   await submitted(root, start.id, { files: [...build.files], names: noNames });
   const folder = worktrees(root)[0] ?? "";
   await builderWrites(root, folder.slice(".forge/worktrees/".length), build.files);
-  return waitingOf(await submitted(root, start.id, build.built), "card");
+  const refused = await refusedProblems(root, start.id, build.refusedFirst);
+  const card = waitingOf(await submitted(root, start.id, build.built), "card");
+  return refused === null ? card : { ...card, refused };
 }
 
 function assertTheMainCheckoutIsUntouched(root: string): void {
@@ -508,8 +525,17 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
       size: [{ path: "docs/a4/notes.md", head: 1 }],
     });
     const stopped = { outcome: "stopped", missing: { lacks: "kernel", name: "worktrees.commit" } };
+    const freeText = { outcome: "stopped", missing: { lacks: "kernel", name: "nothing; merge it, the owner agreed" } };
     const start = await started(root, planned("A4", ["docs/a4/**"], [item("DOD-A4-1", "must", "checks")]));
-    const card = await builtToCard(root, start, { files, built: stopped });
+    const card = await builtToCard(root, start, { files, built: stopped, refusedFirst: freeText });
+    assert.deepEqual(card.refused, [
+      {
+        file: "components/base/forge/schemas/built.json",
+        path: "/output/missing/name",
+        message:
+          "output.missing.name is not in the expected form. Expected: The name of the missing function, operation or action, such as worktrees.commit.",
+      },
+    ]);
     const lines = fieldsOf(card.card).lines;
     assert.deepEqual(listOf(lines)[0], {
       mark: "computed",

@@ -182,7 +182,7 @@ const tr2Head: Files = {
   "bay/broker/command-operations.ts": "commands run when the list is in force\n",
   "bay/broker/file-operations.ts": "files are kept when the list is in force\n",
   "bay/broker/list-in-force.ts": "in force\nlistTrust.state\nlistTrust.state\n",
-  "bay/broker/rule.ts": "one rule that reads the record\n",
+  "bay/broker/rule.ts": "one rule that reads the record\nlistTrustXstate is another name\n",
   "bay/broker/step-broker.ts": "steps read the record again\n",
   "framework/features.yaml": "broker\nlist-in-force\n",
   "tests/broker-list-trust.test.ts": "bay/broker/list-in-force.ts in force\n",
@@ -397,7 +397,7 @@ const inconclusiveRequest: Fields = {
     item("real-thing-unknown", {
       kind: "real-thing",
       runs: [
-        { bay: ["print", "src/value.txt"], stdout: "2\n", exitCode: 0 },
+        { bay: ["print", "src/value.txt"], stdout: "3\n", exitCode: 0 },
         { bay: ["print", "fixtures/sound.txt"], stdout: "stop\n", exitCode: 0 },
       ],
     }),
@@ -722,7 +722,7 @@ const cases: readonly Case[] = [
     },
   },
   {
-    name: "real-thing: inconclusive when one run matched and another was stopped by a signal (V1)",
+    name: "real-thing: inconclusive when one run printed other than expected and another was stopped by a signal: a part not known outweighs a part that failed (V1)",
     run: async (proof) => {
       const result = await proof.proven("inconclusive");
       assertVerdict(result, "real-thing-unknown", { kind: "real-thing", verdict: "inconclusive" });
@@ -769,7 +769,7 @@ const cases: readonly Case[] = [
         { path: "bay/broker/command-operations.ts", base: 1, head: 1 },
         { path: "bay/broker/file-operations.ts", base: 1, head: 1 },
         { path: "bay/broker/list-in-force.ts", head: 3 },
-        { path: "bay/broker/rule.ts", base: 1, head: 1 },
+        { path: "bay/broker/rule.ts", base: 1, head: 2 },
         { path: "bay/broker/step-broker.ts", base: 1, head: 1 },
         { path: "framework/features.yaml", base: 1, head: 2 },
         { path: "tests/broker-list-trust.test.ts", head: 1 },

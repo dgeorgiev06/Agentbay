@@ -24,7 +24,8 @@ One meaning per word. Briefs, plans, code names and reviews use these words and 
 | **Trust** | The owner's statement that one named mode outside the kit's `components/base/` may have its list, bound to that exact list by its hash. A changed list is not trusted until the owner trusts it again. Trust stops a mode's script and an agent inside a run's step from granting commands to themselves; it does not stop an agent that has the owner's shell. | allow-list, permission, approval (an approval is a step of a run) |
 | **Trust record** | The file `.agentbay/trust.json`: for each mode the owner trusts, the list as trusted, its hash, when and how the trust was given. The kernel reads it at each load, and no mode may name it. | trust file, trust store, allow-list |
 | **Throwaway copy** | The folder a caller makes for a toolchain's check or test, holding a copy of the code, and removes afterwards (the worktrees interface's `copy`). The check or test may write inside it and nowhere else. It is not a throwaway folder, which a mode names in its manifest, and not a worktree a builder works in. | scratch copy, temporary copy, sandbox, clone |
-| **Card** | What the kernel prints for the owner to answer `bay approve --trust <mode>`: the mode and its folder, every command of its list with its resolved words and effects, its throwaway folders, what trust means, and the start of the list's hash; after a change, only what changed, and what stayed in one line. Drawn from the manifest alone, at most 44 columns wide. The command `bay approve` is how the owner answers an approval or a card. | prompt, dialog, approval |
+| **Card** | Any text the kernel prints for the owner to read before answering with `bay approve`, at most 44 columns wide. The trust card is one card. The command `bay approve` is how the owner answers an approval or a card. | prompt, dialog, approval, summary |
+| **Trust card** | The card the owner reads to answer `bay approve --trust <mode>`: the mode and its folder, every command of its list with its resolved words and effects, its throwaway folders, what trust means, and the start of the list's hash; after a change, only what changed, and what stayed in one line. Drawn from the manifest alone, at most 44 columns wide. | trust prompt, trust dialog |
 | **Approval** | A workflow step that waits for the owner and is bound to the content shown. | gate |
 | **Budget** | A limit on a run: items, dollars, tokens, minutes. | quota |
 | **Toolbox** | `bay/sdk.ts`. The only kernel file mode code may import. | SDK internals, helpers |
@@ -33,7 +34,7 @@ One meaning per word. Briefs, plans, code names and reviews use these words and 
 | **Operation** | One thing a script or an agent's tool asks the broker to do, such as `files.read` or `commands.run`. Each has one entry in the broker's table: its request, its result and their guards. | call, request kind, broker method |
 | **Ruling** | What an operation's rule returns: the value it allowed, which is all its handler is given, or the refusal. | permission, verdict |
 | **Toolchain** | A mode that implements `toolchain@1` for one language: it names the language's files and practices, runs its checks in a checkout, and runs its tests there. | language mode, linter |
-| **Verdict** | What a toolchain says of one check or one test run: `passed`, `failed` or `inconclusive`. Inconclusive means nothing is known, and it is never a pass. | result, status |
+| **Verdict** | What a toolchain says of one check or one test run, or what proof says of one item of a definition of done: `passed`, `failed` or `inconclusive`. Inconclusive means nothing is known, and it is never a pass; any part of an item that is inconclusive makes the item inconclusive. | result, status, outcome |
 
 ## What a builder of the kit sees
 
@@ -50,12 +51,17 @@ One meaning per word. Briefs, plans, code names and reviews use these words and 
 | **Seam** | A place where behaviour can be swapped without editing the code around it. | hook, extension point |
 | **Port** | An interface at a seam to the outside world (files, clock, processes, network). Exists only when two adapters exist. | abstraction, wrapper |
 | **Adapter (port)** | A thing that satisfies a port: the real one or the test one. Always say which kind of adapter is meant. | mock, stub, fake (as a type name is fine) |
-| **Slice** | One piece of work for one builder: one feature or one mode, with its own definition of done. | ticket, task, phase |
+| **Slice** | One piece of work for one builder: one interface, one capability of the kernel or one mode. It has a name, a kind, a write scope, the slices it comes after with the reason, the interface it builds against if any, and its definition of done; its form is the slice in `proof@1`'s request. | ticket, task, phase |
 | **Task** | What the kernel hands a harness for one skill step. Not a piece of build work. | job |
 | **Brief** | The seven-section instruction a builder receives for a slice. | prompt |
 | **Builder** | An agent that writes a slice. | worker, dev |
 | **Reviewer** | The agent that checks a slice against its definition of done and attacks it. Never the builder. | approver |
 | **Bug injection** | Flipping one line on purpose to see whether a test at the feature's interface fails. | mutation testing (fine as a synonym in prose) |
+| **Proof** | The base mode that turns each item of a slice's definition of done into a verdict by script, with no model, behind the interface `proof@1`. It reaches code only by copy, call, remove: a throwaway copy, a toolchain's call in it, and the copy removed. | review, QA, verification mode |
+| **Kind of proof** | One of eight ways proof judges an item, each a script: `checks`, `fails-first`, `in-scope`, `as-declared`, `bugs-caught`, `same-output`, `count`, `real-thing`. The set is closed. | check type, rule, assertion |
+| **Write scope** | The paths a slice may change, as patterns. Proof fails the slice's item `scope` for any changed path outside it. | allowed files, ownership |
+| **Declaration** | What a builder states it will change before its first edit: files, and the action names that modes and interfaces gain, lose or change. Proof compares it with what changed and shows it only as counts. | plan of change, intent, manifest |
+| **Judgement item** | An item of a definition of done that names no kind of proof. Proof returns it as it was given; a person or a named model judges it, and every card labels it as judgement. | manual item, soft item, review item |
 
 ## Words with two meanings elsewhere
 

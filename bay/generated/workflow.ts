@@ -16,7 +16,7 @@ export type Budget = {
   readonly minutes?: number;
 };
 
-export type Choice = { readonly when?: Reference };
+export type Choice = { readonly does: string; readonly when?: Reference };
 
 export type Step =
   | { readonly action: string; readonly input?: Readonly<Record<string, unknown>>; readonly id: Name }

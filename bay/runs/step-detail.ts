@@ -171,10 +171,11 @@ function choiceStatusesOf(value: Json): readonly ChoiceStatus[] | undefined {
     const entry = toJson(element);
     const name = textField(entry, "name");
     const status = choiceStatuses.find((candidate) => candidate === textField(entry, "status"));
-    if (name === undefined || status === undefined) {
+    const does = textField(entry, "does");
+    if (name === undefined || status === undefined || does === undefined) {
       throw malformed("approval", "choices");
     }
-    return { name, status };
+    return { name, status, does };
   });
 }
 

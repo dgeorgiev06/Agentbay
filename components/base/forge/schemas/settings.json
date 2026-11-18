@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ForgeSettings",
+  "description": "What a project declares for forge, under settings.forge in agentbay.config.yaml.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "featureMap": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*\\.yaml$",
+      "maxLength": 1000,
+      "description": "The project's map of features, a YAML file whose features each list entry and private files, such as framework/features.yaml. forge.waves warns of a scope that holds every private file of one feature. Left out, no scope is compared with a feature."
+    }
+  }
+}

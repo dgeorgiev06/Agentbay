@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Plan",
+  "description": "A plan: the slices that make one piece of work, each with its title, in a YAML file under docs/plans/. The owner writes it by hand today and forge will write it later. Nobody edits the table of slices or the waves: forge.waves works them out from this file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "slices"],
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "What the plan builds, in a few words the owner reads first."
+    },
+    "slices": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "$ref": "#/$defs/plannedSlice"
+      },
+      "description": "The slices, in the order a reader takes them. The order of work comes from each slice's after, never from this order. A slice that is merged stays here: a plan is a record."
+    },
+    "oneAfterAnotherBecause": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "Why no other order exists, in one sentence, when every slice waits for the one before. Left out, such a plan is sent back, since slices that wait for each other cannot run side by side."
+    }
+  },
+  "$defs": {
+    "plannedSlice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "slice"],
+      "description": "One slice of the plan: the slice as proof@1 judges it, and the title only a plan gives it.",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "What the slice delivers that can be seen working on its own, in one sentence the owner reads."
+        },
+        "slice": {
+          "$ref": "proof@1/prove-request.json#/$defs/slice"
+        }
+      }
+    }
+  }
+}

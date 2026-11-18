@@ -1,0 +1,21 @@
+name: forge
+version: 1.0.0
+description: Builds a piece of work in slices that run side by side. Today it reads a plan file and works out its waves; later it carries each slice through a builder, proof and the merge.
+
+requires:
+  interfaces: [proof@1]
+
+settings: schemas/settings.json
+
+resources:
+  files:
+    read: [docs/plans/, framework/features.yaml]
+
+actions:
+  waves:
+    description: When a plan file needs its table of slices, its waves, its longest chain and every problem with it, worked out by script from each slice's scope and order.
+    input: schemas/waves-request.json
+    output: schemas/waves-response.json
+    effects: [read]
+    run:
+      - script: scripts/waves.ts

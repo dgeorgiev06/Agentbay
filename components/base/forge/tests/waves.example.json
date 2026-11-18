@@ -1,0 +1,4 @@
+{
+  "input": { "plan": "docs/plans/one.yaml" },
+  "output": { "answer": "refused", "problems": [{ "at": "", "sentence": "x" }], "lines": [] }
+}

@@ -4,8 +4,11 @@ bindings:
   items-store: store
   toolchain: typescript
   worktrees: git-worktrees
+  proof: proof
 adapter: claude-code
 settings:
+  forge:
+    featureMap: framework/features.yaml
   feed-briefing:
     selector:
       labels: [staking, custody]

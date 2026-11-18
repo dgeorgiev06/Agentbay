@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FeatureMap",
+  "description": "The part of a project's map of features that forge reads: each feature's entry and private files. Every other field of the map is left as it is.",
+  "type": "object",
+  "required": ["features"],
+  "properties": {
+    "features": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["entry", "private"],
+        "properties": {
+          "entry": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "description": "The files other features may import."
+          },
+          "private": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "description": "The files only the feature itself imports."
+          }
+        }
+      },
+      "description": "Each feature by its name."
+    }
+  }
+}

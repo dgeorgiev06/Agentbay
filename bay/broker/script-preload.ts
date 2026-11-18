@@ -1,7 +1,7 @@
 import { isBuiltin, registerHooks, syncBuiltinESMExports } from "node:module";
 import { Socket } from "node:net";
 import { sdkSpecifier } from "../protocol-json.ts";
-import { removalAllowedArgument } from "./script-protocol.ts";
+import { packageFolderOf, packageUrlsOf, removalAllowedArgument } from "./script-protocol.ts";
 
 const availableBuiltins: ReadonlySet<string> = new Set([
   "assert",
@@ -30,6 +30,19 @@ const availableBuiltins: ReadonlySet<string> = new Set([
 ]);
 
 const sdkUrl = new URL("../sdk.ts", import.meta.url).href;
+
+const kernelFolderUrl = new URL("..", import.meta.url).href;
+
+const kernelPackageUrls = packageUrlsOf(process.argv);
+
+const kernelCodeUrls: readonly string[] = [
+  kernelFolderUrl,
+  ...[...kernelPackageUrls].map(([specifier, url]) => `${packageFolderOf(specifier, url)}/`),
+];
+
+function isKernelCode(url: string | undefined): boolean {
+  return url !== undefined && kernelCodeUrls.some((start) => url.startsWith(start));
+}
 
 const networkGlobals: readonly string[] = ["fetch", "WebSocket", "EventSource"];
 
@@ -76,11 +89,15 @@ registerHooks({
     if (specifier === sdkSpecifier) {
       return { url: sdkUrl, format: "module-typescript", shortCircuit: true };
     }
-    if (isBuiltin(specifier) && !isAvailable(specifier)) {
+    const packageUrl = kernelPackageUrls.get(specifier);
+    if (packageUrl !== undefined && isKernelCode(context.parentURL)) {
+      return { url: packageUrl, shortCircuit: true };
+    }
+    if (isBuiltin(specifier) && !isAvailable(specifier) && !isKernelCode(context.parentURL)) {
       throw unavailableModule(specifier);
     }
     const resolved = nextResolve(specifier, context);
-    if (resolved.url.startsWith("node:") && !isAvailable(resolved.url)) {
+    if (resolved.url.startsWith("node:") && !isAvailable(resolved.url) && !isKernelCode(context.parentURL)) {
       throw unavailableModule(resolved.url);
     }
     return resolved;

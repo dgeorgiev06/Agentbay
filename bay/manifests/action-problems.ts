@@ -1,4 +1,4 @@
-import { problemAt, type PathSegments } from "./spec.ts";
+import { problemAt, type PathSegments } from "../value-check.ts";
 import type { Problem } from "../outcome.ts";
 import { type Context, type ActionPlace, actionLabel } from "./loaded.ts";
 import { interfaceName, requiredReferences } from "./interfaces.ts";

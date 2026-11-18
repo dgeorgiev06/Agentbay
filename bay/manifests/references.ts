@@ -2,7 +2,7 @@ import type { Json } from "../contracts.ts";
 import type { Choice, Step as WorkflowStep } from "../generated/workflow.ts";
 import { toJson, isRecord } from "../json.ts";
 import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
-import type { PathSegments, Wording } from "./spec.ts";
+import type { PathSegments, Wording } from "../value-check.ts";
 
 type Reference =
   | { readonly kind: "trigger"; readonly text: string }

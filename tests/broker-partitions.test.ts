@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { noInterfaceSchemas } from "./broker-fixture.ts";
 import { createBroker, type StepBroker } from "../bay/broker/broker.ts";
 import type { Effect } from "../bay/contracts.ts";
 import {
@@ -42,6 +43,7 @@ function brokerFor(root: string, effects: readonly Effect[]): Setup {
     childProcesses: nodeChildProcesses,
     processes: noProcesses,
     commandSearchPath: "/usr/bin:/bin",
+    interfaceSchemas: noInterfaceSchemas,
     limits: { agentQueryMilliseconds: 1500 },
   }).forStep(place, permissionsIn(root, { effects }));
   return { root, broker, events };

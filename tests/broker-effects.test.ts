@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { noInterfaceSchemas } from "./broker-fixture.ts";
 import type { Answer } from "../bay/answers.ts";
 import { createBroker, type StepBroker } from "../bay/broker/broker.ts";
 import type { Effect } from "../bay/contracts.ts";
@@ -81,6 +82,7 @@ function brokerWith(root: string, effects: readonly Effect[], ports: Ports): Ste
     layout: projectLayout(root),
     clock: systemClock,
     commandSearchPath: process.env.PATH ?? "/usr/bin:/bin",
+    interfaceSchemas: noInterfaceSchemas,
     limits: { agentQueryMilliseconds: 1500 },
     ...ports,
   }).forStep(
@@ -325,6 +327,11 @@ const brokerMethods: { readonly [Name in Parameters<StepBroker["ask"]>[0]]: Meth
   "commands.run": {
     call: (broker) => broker.ask("commands.run", { name: "version", arguments: [], folder: ".", timeLimitSeconds: 30 }),
     needs: everyEffect,
+    usesPorts: true,
+  },
+  "schemas.read": {
+    call: (broker) => broker.ask("schemas.read", { schema: "schemas/none.json" }),
+    needs: [],
     usesPorts: true,
   },
 };

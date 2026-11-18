@@ -1,6 +1,6 @@
 import { dirname } from "node:path/posix";
 import type { Interface } from "../generated/interface.ts";
-import { problemAt, type Loaded } from "./spec.ts";
+import { problemAt, type Loaded } from "../value-check.ts";
 import type { Problem } from "../outcome.ts";
 import { schemaDirections } from "./schemas.ts";
 import { type ModeSource, type Context, type ActionPlace, actionLabel, actionsOf } from "./loaded.ts";

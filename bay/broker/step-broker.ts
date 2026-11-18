@@ -7,6 +7,8 @@ import { fileEntries } from "./file-operations.ts";
 import { httpEntries } from "./http-operations.ts";
 import { otherEntries } from "./other-operations.ts";
 import { commandEntries } from "./command-operations.ts";
+import { schemaEntries, schemaNaming } from "./schema-operations.ts";
+import { type NameableSchemas, readSchemaFile } from "../schema-files.ts";
 import type { Layout } from "../layout.ts";
 import type { Outcome } from "../outcome.ts";
 import type { SecretStore } from "../secrets.ts";
@@ -30,6 +32,7 @@ export type StepServices = {
   readonly childProcesses: ChildProcesses;
   readonly processes: Processes;
   readonly commandSearchPath: string;
+  readonly interfaceSchemas: (mode: string) => NameableSchemas;
 };
 
 export type StepTime = {
@@ -158,13 +161,28 @@ function commandTimeLeftOf(options: StepOptions, limits: StepLimits): () => Comm
   };
 }
 
+function interfaceSchemasOf(options: StepOptions): NameableSchemas {
+  return options.interfaceSchemas(options.permissions.grants.mode);
+}
+
 function askingOf(options: StepOptions, limits: StepLimits): Asking {
   const { grants, actionEffects } = options.permissions;
   const { place, layout, inspector } = options;
   const at = { stepKey: place.stepKey, action: place.action, manifest: manifestOf(grants) };
   const trustRecordNow = (): Promise<Outcome<TrustRecord>> => readTrustRecord(options.files, layout);
   const commandTimeLeft = commandTimeLeftOf(options, limits);
-  return { grants, effects: actionEffects, at, layout, inspector, limits, commandTimeLeft, trustRecordNow };
+  const schemaNamed = schemaNaming({ grants, layout, inspector, interfaceSchemas: interfaceSchemasOf(options) });
+  return {
+    grants,
+    effects: actionEffects,
+    at,
+    layout,
+    inspector,
+    limits,
+    commandTimeLeft,
+    trustRecordNow,
+    schemaNamed,
+  };
 }
 
 type StepState = {
@@ -202,6 +220,7 @@ function doingOf(options: StepOptions, state: StepState): Doing {
       unnamedMigration ??= migrate();
       return unnamedMigration;
     },
+    readSchema: (file) => readSchemaFile(options.files, file, interfaceSchemasOf(options)),
   };
 }
 
@@ -220,6 +239,7 @@ export function openStep(options: StepOptions): OpenStep {
       ...otherEntries(step),
       ...httpEntries(step),
       ...commandEntries(step),
+      ...schemaEntries(step),
     },
     settled: (answer) => settled(answer, {}),
     spent: () => ({ ...spent }),

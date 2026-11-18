@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path/posix";
 import type { Interface, Signature } from "../generated/interface.ts";
-import type { Loaded } from "./spec.ts";
+import type { Loaded } from "../value-check.ts";
 import type { Context, ActionPlace } from "./loaded.ts";
 
 export type ImplementedSignature = {

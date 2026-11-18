@@ -1,5 +1,5 @@
 import type { Config } from "../generated/config.ts";
-import { problemAt, type Loaded } from "./spec.ts";
+import { problemAt, type Loaded } from "../value-check.ts";
 import type { Problem } from "../outcome.ts";
 import { type ModeSource, type Context, activeModesOf } from "./loaded.ts";
 import {

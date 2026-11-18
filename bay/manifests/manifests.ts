@@ -10,18 +10,19 @@ import { toJson } from "../json.ts";
 import { readTrustRecord } from "../trust.ts";
 import type { FileSystem } from "../ports.ts";
 import { resolveInput, resolveValue } from "./references.ts";
+import { parseSkill, readSkill, type SkillText } from "./spec.ts";
 import {
-  parseSkill,
   problemAt,
-  readSkill,
   type Loaded,
   type PathSegments,
-  type SkillText,
+  type SchemaSource,
+  valueProblems,
   type Wording,
-} from "./spec.ts";
+} from "../value-check.ts";
 import { failedWith, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
 import { type KitLayout, type ModeTier, folderRules, kitLayoutOf, modeInInterfacesProblems } from "./folders.ts";
-import { type SchemaSource, schemaReader, valueProblems } from "./schemas.ts";
+import { type InterfaceSource, interfaceSchemas, type SchemaOwner, schemaReader } from "./schemas.ts";
+import type { NameableSchemas } from "../schema-files.ts";
 import { schemaFilesOf, signaturesNaming } from "./action-schemas.ts";
 import {
   type ModeRead,
@@ -245,8 +246,18 @@ async function actionSchemasOf(context: Context, mode: ModeSource): Promise<Read
       continue;
     }
     actionSchemas.set(place.name, {
-      input: schemaOf({ file: files.input, schemaFile: await context.readSchema(files.input), label: "input" }),
-      output: schemaOf({ file: files.output, schemaFile: await context.readSchema(files.output), label: "output" }),
+      input: schemaOf({
+        file: files.input,
+        schemaFile: await context.readSchema(files.input),
+        label: "input",
+        path: ["input"],
+      }),
+      output: schemaOf({
+        file: files.output,
+        schemaFile: await context.readSchema(files.output),
+        label: "output",
+        path: ["output"],
+      }),
     });
   }
   return actionSchemas;
@@ -370,7 +381,12 @@ async function skillAnswer(context: Context, mode: ModeSource, name: string): Pr
   const output =
     outputFile === undefined
       ? undefined
-      : schemaOf({ file: outputFile, schemaFile: await context.readSchema(outputFile), label: "output" });
+      : schemaOf({
+          file: outputFile,
+          schemaFile: await context.readSchema(outputFile),
+          label: "output",
+          path: ["output"],
+        });
   return succeededWith({ name, file, frontMatter, tools, output });
 }
 
@@ -452,15 +468,24 @@ function inspectedFolder(context: Context, read: ModeRead): InspectedFolder {
   };
 }
 
+function schemaOwnerOf(name: string, folder: string, manifest: Mode): SchemaOwner {
+  return { name, folder, interfaces: [...(manifest.implements ?? []), ...requiredReferences(manifest)] };
+}
+
+function interfaceSourceOf(loaded: Loaded<Interface> | undefined): InterfaceSource | undefined {
+  return loaded === undefined ? undefined : { file: loaded.file, definition: loaded.value };
+}
+
 async function inspect(files: FileSystem, layout: Layout): Promise<Pass> {
   const modes = await loadModes(files, layout);
   const interfaces = await loadInterfaces(files, layout);
   const config = await loadConfig(files, layout);
   const modeIndex = indexModes(modes, layout);
   const interfaceIndex = indexInterfaces(interfaces.values, layout);
+  const owners = [...modeIndex.index.values()].map((mode) => schemaOwnerOf(mode.value.name, mode.folder, mode.value));
   const loaded = {
     files,
-    readSchema: schemaReader(files),
+    readSchema: schemaReader(files, owners, (reference) => interfaceSourceOf(interfaceIndex.index.get(reference))),
     layout,
     modes: modeIndex.index,
     interfaces: interfaceIndex.index,
@@ -506,6 +531,18 @@ async function inspect(files: FileSystem, layout: Layout): Promise<Pass> {
 
 export async function inspectSystem(files: FileSystem, layout: Layout): Promise<Inspection> {
   return (await inspect(files, layout)).inspection;
+}
+
+export function interfaceSchemasOf(system: System): (mode: string) => NameableSchemas {
+  return (name) => {
+    const mode = system.modes.get(name);
+    if (mode === undefined) {
+      return { owner: `mode ${name}`, files: new Map() };
+    }
+    return interfaceSchemas(schemaOwnerOf(name, mode.folder, mode.manifest), (reference) =>
+      system.interfaces.get(reference),
+    );
+  };
 }
 
 export async function loadSystem(files: FileSystem, layout: Layout): Promise<Outcome<System>> {

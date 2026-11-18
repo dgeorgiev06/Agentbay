@@ -26,6 +26,7 @@ import {
   scriptedHttp,
   withProject,
   writeProjectFile,
+  noInterfaceSchemas,
 } from "../../broker-fixture.ts";
 
 type Moved = keyof OpenStep["entries"];
@@ -136,7 +137,40 @@ const writing: readonly Effect[] = ["read", "write"];
 
 const throwaway = (did: string, path: string): Json => ({ kind: "throwaway", detail: { step: "look.0", did, path } });
 
+const nameASchema = "Name one of those, written <file> or <interface>@<major>/<file>.";
+
 const proofs: Proofs = {
+  "schemas.read": {
+    withoutEffect: "needs no effect",
+    outsideGrant: [
+      {
+        ask: (broker) => broker.entries["schemas.read"]({ schema: "../../../outside/plan.json" }),
+        effects: every,
+        change: nameASchema,
+        detail: { schema: "../../../outside/plan.json" },
+      },
+      {
+        ask: (broker) => broker.entries["schemas.read"]({ schema: "schemas/escape.json" }),
+        effects: every,
+        change: "Remove the link: a mode may not reach files through a link that leaves its folders.",
+        detail: { schema: "schemas/escape.json" },
+      },
+    ],
+    allowed: [
+      {
+        ask: (broker) => broker.entries["schemas.read"]({ schema: "schemas/day.json" }),
+        effects: [],
+        value: { state: "valid", schema: { type: "object" }, parts: {} },
+        recorded: [],
+      },
+      {
+        ask: (broker) => broker.entries["schemas.read"]({ schema: "schemas/none.json" }),
+        effects: [],
+        value: { state: "missing" },
+        recorded: [],
+      },
+    ],
+  },
   "files.read": {
     withoutEffect: "needs no effect",
     outsideGrant: [
@@ -845,6 +879,9 @@ async function projectWithNotes(root: string): Promise<void> {
   await writeProjectFile(root, "scratch/old/a.txt", "old");
   await writeProjectFile(root, "components/modes/notes/migrations/0001-notes.sql", "create table notes (text text);\n");
   await symlink(join(root, "outside/secret.txt"), join(root, "notes-in/escape.txt"));
+  await writeProjectFile(root, "components/modes/notes/schemas/day.json", '{ "type": "object" }\n');
+  await writeProjectFile(root, "outside/plan.json", '{ "type": "string" }\n');
+  await symlink(join(root, "outside/plan.json"), join(root, "components/modes/notes/schemas/escape.json"));
 }
 
 function shownJson(value: Json, root: string): Json {
@@ -907,6 +944,7 @@ async function asked(asking: Asking): Promise<Asked> {
       childProcesses: nodeChildProcesses,
       processes,
       commandSearchPath: "/usr/bin:/bin",
+      interfaceSchemas: noInterfaceSchemas,
       ...(asking.call === undefined ? {} : { call: asking.call }),
     });
     const before = (await treeOf(root)).join("\n");

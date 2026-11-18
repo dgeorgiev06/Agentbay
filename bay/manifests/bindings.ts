@@ -1,5 +1,5 @@
 import type { Config } from "../generated/config.ts";
-import type { PathSegments } from "./spec.ts";
+import type { PathSegments } from "../value-check.ts";
 import type { Context } from "./loaded.ts";
 import { interfaceName, requiredReferences } from "./interfaces.ts";
 

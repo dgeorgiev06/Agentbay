@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
+import { noInterfaceSchemas } from "./broker-fixture.ts";
 import type { Answer } from "../bay/answers.ts";
 import { createBroker, type StepBroker } from "../bay/broker/broker.ts";
 import type { Effect, ModeGrants } from "../bay/contracts.ts";
@@ -43,6 +44,7 @@ function brokerFor(root: string, effects: readonly Effect[], extra: Partial<Mode
     childProcesses: nodeChildProcesses,
     processes: noProcesses,
     commandSearchPath: "/usr/bin:/bin",
+    interfaceSchemas: noInterfaceSchemas,
     limits: { agentQueryMilliseconds: 1500 },
   }).forStep(place, permissionsIn(root, { effects, ...extra }));
   return { root, broker, events };
@@ -334,6 +336,7 @@ test("closing a step's broker ends the database processes it opened", async () =
       childProcesses: watchedChildProcesses(started),
       processes: noProcesses,
       commandSearchPath: "/usr/bin:/bin",
+      interfaceSchemas: noInterfaceSchemas,
     }).forStep(place, permissionsIn(root, { effects: ["read", "write"] }));
     try {
       valueOf(await broker.ask("db.execute", { sql: "create table notes (title text)", parameters: [] }));

@@ -5,10 +5,12 @@ import type { Action, Mode } from "../generated/mode.ts";
 import type { Workflow } from "../generated/workflow.ts";
 import { shownPath, type Layout } from "../layout.ts";
 import type { FileSystem } from "../ports.ts";
-import { loadSpec, type Loaded } from "./spec.ts";
+import { loadSpec } from "./spec.ts";
+import type { Loaded, SchemaFile } from "../value-check.ts";
 import type { Outcome, Problem } from "../outcome.ts";
 import { type ModeFolder, type TierFolder, manifestFileOf, findModeFolders, findInterfaceFiles } from "./folders.ts";
-import type { SchemaReader } from "./schemas.ts";
+
+export type SchemaReader = (file: string) => Promise<SchemaFile>;
 
 export type ModeRead = {
   readonly found: TierFolder;

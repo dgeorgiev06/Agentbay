@@ -14,6 +14,23 @@ import {
 
 export const removalAllowedArgument = "--agentbay-may-remove-files";
 
+const packageArgumentStart = "--agentbay-package=";
+
+export function packageArgument(specifier: string, url: string): string {
+  return `${packageArgumentStart}${specifier}=${url}`;
+}
+
+export function packageFolderOf(specifier: string, entry: string): string {
+  const folder = `/node_modules/${specifier.split("/")[0] ?? specifier}`;
+  return entry.slice(0, entry.lastIndexOf(`${folder}/`) + folder.length);
+}
+
+export function packageUrlsOf(argv: readonly string[]): ReadonlyMap<string, string> {
+  const given = argv.filter((argument) => argument.startsWith(packageArgumentStart));
+  const pairs = given.map((argument) => argument.slice(packageArgumentStart.length).split("="));
+  return new Map(pairs.map(([specifier = "", ...url]) => [specifier, url.join("=")]));
+}
+
 export type AskedFor<Name extends OperationName> = { readonly operation: Name; readonly request: Requests[Name] };
 
 type Final =
@@ -39,20 +56,21 @@ export type ParentMessage =
 
 type Fields = { readonly [key: string]: Json };
 
-const resources: readonly string[] = [
-  "db",
-  "files",
-  "secrets",
-  "http",
-  "events",
-  "call",
-  "spend",
-  "script",
-  "commands",
-];
+const resources: { readonly [Name in Resource]: Name } = {
+  db: "db",
+  files: "files",
+  secrets: "secrets",
+  http: "http",
+  events: "events",
+  call: "call",
+  spend: "spend",
+  script: "script",
+  commands: "commands",
+  schemas: "schemas",
+};
 
 function isResource(value: Json | undefined): value is Resource {
-  return typeof value === "string" && resources.includes(value);
+  return typeof value === "string" && Object.hasOwn(resources, value);
 }
 
 function askedOf<Name extends OperationName>(operation: Name, value: Json): Reading<AskedFor<Name>> {

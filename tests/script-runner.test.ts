@@ -4,6 +4,7 @@ import { mkdir, readdir, readFile, symlink } from "node:fs/promises";
 import { createServer, type Server } from "node:net";
 import { join, relative } from "node:path";
 import { test } from "node:test";
+import { noInterfaceSchemas } from "./broker-fixture.ts";
 import type {
   ActionCaller,
   Json,
@@ -108,6 +109,7 @@ function runnerFor(root: string, options: RunOptions, events: RecordingSink): Sc
     childProcesses: options.childProcesses ?? nodeChildProcesses,
     processes: options.processes ?? noProcesses,
     commandSearchPath: "/usr/bin:/bin",
+    interfaceSchemas: noInterfaceSchemas,
     limits: { scriptOutputBytes: options.outputBytes ?? 1_000_000 },
   }).scripts;
 }
@@ -257,7 +259,7 @@ test("a script cannot read /etc/passwd, the kit's own files or the mode's databa
   });
 });
 
-test("of the kernel's files a script can read only the six the host and its toolbox are made of", async () => {
+test("of the kernel's files a script can read only the nine the host and its toolbox are made of", async () => {
   await withScriptProject(async (root) => {
     const entries = await readdir(join(kitFolder, "bay"), { recursive: true, withFileTypes: true });
     const kernelFiles = entries
@@ -285,9 +287,44 @@ test("of the kernel's files a script can read only the six the host and its tool
       "bay/broker/script-host.ts",
       "bay/broker/script-preload.ts",
       "bay/broker/script-protocol.ts",
+      "bay/json.ts",
       "bay/protocol-json.ts",
       "bay/sdk.ts",
+      "bay/value-check.ts",
+      "bay/yaml-text.ts",
     ]);
+  });
+});
+
+test("a script reads YAML with the toolbox's reader, and cannot import the yaml package itself", async () => {
+  await withScriptProject(async (root) => {
+    const run = await attempt(
+      root,
+      [
+        `const { readYaml } = await import(${JSON.stringify(sdkFile)});`,
+        "const good = readYaml('slices:\\n  - name: TB1\\n');",
+        "const tagged = readYaml('run: !shell ls\\n');",
+        "let own = 'imported';",
+        "try {",
+        "  await import('yaml');",
+        "} catch (error) {",
+        "  own = error.code;",
+        "}",
+        "return { good: good.ok ? good.value : null, tagged: tagged.ok ? null : tagged.problems, own };",
+      ].join("\n"),
+    );
+    assert.deepEqual(outputOf(run), {
+      good: { slices: [{ name: "TB1" }] },
+      tagged: [
+        {
+          line: 1,
+          message:
+            "The YAML has the tag !shell, which is not one of YAML's own: str, int, float, bool, null, map and seq.",
+          fix: "Remove the tag and write the value as plain YAML.",
+        },
+      ],
+      own: "ERR_MODULE_NOT_FOUND",
+    });
   });
 });
 

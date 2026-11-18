@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { test } from "node:test";
+import { noInterfaceSchemas } from "./broker-fixture.ts";
 import type { Json, Permissions, StepOutcome } from "../bay/contracts.ts";
 import { layoutOf, type Layout } from "../bay/layout.ts";
 import {
@@ -58,6 +59,7 @@ async function run(layout: Layout, modeFolder: string): Promise<StepOutcome> {
     childProcesses: nodeChildProcesses,
     processes: noProcesses,
     commandSearchPath: "/usr/bin:/bin",
+    interfaceSchemas: noInterfaceSchemas,
   }).scripts;
   return runner.run({
     place,

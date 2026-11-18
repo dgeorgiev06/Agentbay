@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { noInterfaceSchemas } from "./broker-fixture.ts";
 import type { Answer } from "../bay/answers.ts";
 import { createBroker, type StepBroker } from "../bay/broker/broker.ts";
 import type { HttpRequest, HttpResponse } from "../bay/ports.ts";
@@ -49,6 +50,7 @@ function setup(answer: (request: HttpRequest) => HttpResponse, limits: Limits = 
     childProcesses: nodeChildProcesses,
     processes: noProcesses,
     commandSearchPath: "/usr/bin:/bin",
+    interfaceSchemas: noInterfaceSchemas,
     limits,
   }).forStep(
     place,

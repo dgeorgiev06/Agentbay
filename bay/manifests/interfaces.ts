@@ -1,6 +1,6 @@
 import type { Interface } from "../generated/interface.ts";
 import type { Mode } from "../generated/mode.ts";
-import type { Wording } from "./spec.ts";
+import type { Wording } from "../value-check.ts";
 import { interfaceFolders } from "./folders.ts";
 import { type Context, shown } from "./loaded.ts";
 

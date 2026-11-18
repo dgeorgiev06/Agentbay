@@ -1,6 +1,6 @@
 import type { Interface } from "../generated/interface.ts";
 import { shownPath, type Home, type Layout } from "../layout.ts";
-import { checkValue } from "./spec.ts";
+import { checkValue } from "../value-check.ts";
 import type { Problem } from "../outcome.ts";
 import { type ModeTier, manifestFileOf } from "./folders.ts";
 import {
@@ -82,7 +82,7 @@ export function schemaProblemsOf(
       return [];
     }
     const loaded = { file: against.file, value, lineOf: () => undefined };
-    const check = checkValue(schemaFile.schema, value, { loaded, path: [against.direction] });
+    const check = checkValue(schemaFile, value, { loaded, path: [against.direction] });
     return check.kind === "checked" ? check.problems : [];
   };
 }

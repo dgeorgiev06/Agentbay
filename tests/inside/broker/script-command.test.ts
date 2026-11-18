@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { realpathSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { test } from "node:test";
 import type { Effect, ScriptRequest } from "../../../bay/contracts.ts";
 import { scriptCommand } from "../../../bay/broker/script-runner.ts";
@@ -24,6 +26,16 @@ test("the runner starts node with the permission model, the grants and the prelo
     call: () => Promise.resolve({ status: "failed", reason: "no", spent: noSpend }),
   };
   const bay = join(kitFolder, "bay");
+  const packages = ["yaml", "ajv", "fast-deep-equal", "fast-uri", "json-schema-traverse"].map((name) =>
+    realpathSync(join(kitFolder, "node_modules", name)),
+  );
+  const entries = [
+    "yaml/dist/index.js",
+    "ajv/dist/2020.js",
+    "fast-deep-equal/index.js",
+    "fast-uri/index.js",
+    "json-schema-traverse/index.js",
+  ];
   assert.deepEqual(scriptCommand("/project/components/modes/notes/scripts/a.ts", request), [
     "--permission",
     `--allow-fs-read=${bay}/broker/script-host.ts`,
@@ -32,6 +44,10 @@ test("the runner starts node with the permission model, the grants and the prelo
     `--allow-fs-read=${bay}/broker/script-protocol.ts`,
     `--allow-fs-read=${bay}/protocol-json.ts`,
     `--allow-fs-read=${bay}/sdk.ts`,
+    `--allow-fs-read=${bay}/yaml-text.ts`,
+    `--allow-fs-read=${bay}/value-check.ts`,
+    `--allow-fs-read=${bay}/json.ts`,
+    ...packages.flatMap((folder) => [`--allow-fs-read=${folder}`, `--allow-fs-read=${folder}/*`]),
     "--allow-fs-read=/project/components/modes/notes",
     "--allow-fs-read=/project/components/modes/notes/*",
     "--allow-fs-read=/project/in",
@@ -42,6 +58,10 @@ test("the runner starts node with the permission model, the grants and the prelo
     `--import=file://${bay}/broker/script-preload.ts`,
     `${bay}/broker/script-host.ts`,
     "/project/components/modes/notes/scripts/a.ts",
+    ...["yaml", "ajv/dist/2020.js", "fast-deep-equal", "fast-uri", "json-schema-traverse"].map(
+      (specifier, index) =>
+        `--agentbay-package=${specifier}=${pathToFileURL(realpathSync(join(kitFolder, "node_modules", entries[index] ?? ""))).href}`,
+    ),
   ]);
 });
 

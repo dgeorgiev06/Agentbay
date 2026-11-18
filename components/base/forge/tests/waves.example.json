@@ -1,4 +1,33 @@
 {
-  "input": { "plan": "docs/plans/one.yaml" },
-  "output": { "answer": "refused", "problems": [{ "at": "", "sentence": "x" }], "lines": [] }
+  "input": { "plan": "docs/plans/two.yaml" },
+  "output": {
+    "answer": "worked out",
+    "title": "Two slices",
+    "slices": [
+      { "name": "A", "title": "The slice A", "kind": "mode", "scope": ["a/**"], "after": [] },
+      { "name": "B", "title": "The slice B", "kind": "mode", "scope": ["b/**"], "after": [] }
+    ],
+    "waves": [{ "wave": 1, "slices": ["A", "B"], "builders": 2 }],
+    "notPlaced": [],
+    "longestChain": ["A"],
+    "problems": [],
+    "lines": [
+      "Two slices",
+      "2 slices in 1 wave. Longest chain, 1 slice: A.",
+      "",
+      "Slices",
+      "A (mode) The slice A",
+      "  scope: a/**",
+      "  after nothing",
+      "B (mode) The slice B",
+      "  scope: b/**",
+      "  after nothing",
+      "",
+      "Waves",
+      "wave 1: A, B (2 builders)",
+      "",
+      "Problems",
+      "No problems."
+    ]
+  }
 }

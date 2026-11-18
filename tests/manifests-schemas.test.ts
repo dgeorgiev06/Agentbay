@@ -311,6 +311,27 @@ test("limits on lists, text, numbers and constants are described in plain senten
   ]);
 });
 
+test("an action's script time limit loads as whole seconds up to 1800, and anything else is refused", async () => {
+  const declared = { ...addAction(), scriptTimeLimitSeconds: 1800 };
+  const notes = await readFolder(
+    { ...validFiles(), [paths.notes]: yamlText({ ...notesMode, actions: { add: declared } }) },
+    "/kit/components/modes/notes",
+  );
+  assert.equal(notes.manifest.actions.add?.scriptTimeLimitSeconds, 1800);
+  const refused = await Promise.all(
+    [1801, 0, -5, 2.5].map(async (seconds) => {
+      const add = { ...addAction(), scriptTimeLimitSeconds: seconds };
+      return messages(await notesProblems({ ...notesMode, actions: { add } }));
+    }),
+  );
+  assert.deepEqual(refused, [
+    ["actions.add.scriptTimeLimitSeconds must be at most 1800, but it is 1801.", notesBindingRefused.message],
+    ["actions.add.scriptTimeLimitSeconds must be at least 1, but it is 0.", notesBindingRefused.message],
+    ["actions.add.scriptTimeLimitSeconds must be at least 1, but it is -5.", notesBindingRefused.message],
+    ["actions.add.scriptTimeLimitSeconds must be a whole number, but it is 2.5.", notesBindingRefused.message],
+  ]);
+});
+
 test("a key that is not kebab-case is named and placed at the key", async () => {
   const problems = await notesProblems({ ...notesMode, actions: { Add_Note: addAction() } });
   assert.deepEqual(

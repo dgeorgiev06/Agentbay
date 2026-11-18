@@ -255,6 +255,11 @@ function describeMinimum(error: ErrorObject, place: string): Wording {
   return { message: `${place} must be at least ${String(limit)}, but it is ${describeValue(error.data)}.` };
 }
 
+function describeMaximum(error: ErrorObject, place: string): Wording {
+  const limit = numberParameter(error, "limit");
+  return { message: `${place} must be at most ${String(limit)}, but it is ${describeValue(error.data)}.` };
+}
+
 function describeConst(error: ErrorObject, place: string): Wording {
   const allowed = JSON.stringify(parameter(error, "allowedValue"));
   return { message: `${place} must be ${allowed}, but it is ${describeValue(error.data)}.` };
@@ -278,6 +283,7 @@ const describers: ReadonlyMap<string, (error: ErrorObject, place: string) => Wor
   ["minItems", describeMinItems],
   ["minLength", describeMinLength],
   ["minimum", describeMinimum],
+  ["maximum", describeMaximum],
   ["const", describeConst],
   ["uniqueItems", describeUniqueItems],
 ]);

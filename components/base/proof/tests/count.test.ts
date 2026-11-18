@@ -11,43 +11,31 @@ const notCounted =
   "Counting at the head ended with the exit code 2: a path to count in does not exist or could not be read.";
 
 test("count: passed when the head has exactly the most", () => {
-  assert.deepEqual(
-    judged({ found: "most", most: 2, head: { known: true, lines: 2 } }),
-    {
-      item: "count",
-      kind: "count",
-      verdict: "passed",
-      detail: "2 lines hold the counted text at the head, and at most 2 may.",
-    },
-  );
+  assert.deepEqual(judged({ found: "most", most: 2, head: { known: true, lines: 2 } }), {
+    item: "count",
+    kind: "count",
+    verdict: "passed",
+    detail: "2 lines hold the counted text at the head, and at most 2 may.",
+  });
 });
 
 test("count: failed when the head has one more than the most, and the detail gives both numbers", () => {
-  assert.deepEqual(
-    judged({ found: "most", most: 2, head: { known: true, lines: 3 } }),
-    {
-      item: "count",
-      kind: "count",
-      verdict: "failed",
-      detail: "3 lines hold the counted text at the head, and at most 2 may.",
-    },
-  );
+  assert.deepEqual(judged({ found: "most", most: 2, head: { known: true, lines: 3 } }), {
+    item: "count",
+    kind: "count",
+    verdict: "failed",
+    detail: "3 lines hold the counted text at the head, and at most 2 may.",
+  });
 });
 
 test("count: a most of zero passes with no line and fails with one", () => {
-  assert.equal(
-    judged({ found: "most", most: 0, head: { known: true, lines: 0 } }).verdict,
-    "passed",
-  );
-  assert.deepEqual(
-    judged({ found: "most", most: 0, head: { known: true, lines: 1 } }),
-    {
-      item: "count",
-      kind: "count",
-      verdict: "failed",
-      detail: "1 line holds the counted text at the head, and at most 0 may.",
-    },
-  );
+  assert.equal(judged({ found: "most", most: 0, head: { known: true, lines: 0 } }).verdict, "passed");
+  assert.deepEqual(judged({ found: "most", most: 0, head: { known: true, lines: 1 } }), {
+    item: "count",
+    kind: "count",
+    verdict: "failed",
+    detail: "1 line holds the counted text at the head, and at most 0 may.",
+  });
 });
 
 test("count: passed when the head has as many as the base", () => {
@@ -88,8 +76,7 @@ test("count: failed when the head has one more than the base", () => {
     item: "count",
     kind: "count",
     verdict: "failed",
-    detail:
-      "27 lines hold the counted text at the head, more than the 26 at the base.",
+    detail: "27 lines hold the counted text at the head, more than the 26 at the base.",
   });
 });
 
@@ -151,7 +138,6 @@ test("count: inconclusive when the item uses a count the project does not declar
     item: "count",
     kind: "count",
     verdict: "inconclusive",
-    reason:
-      "The project declares no count named debt in proof's settings, so nothing is known.",
+    reason: "The project declares no count named debt in proof's settings, so nothing is known.",
   });
 });

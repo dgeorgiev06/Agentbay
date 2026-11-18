@@ -20,6 +20,9 @@ resources:
     bay:
       run: ./bay.sh
       effects: [read, write]
+    count-matches:
+      run: grep -r -c -h -F -e
+      effects: [read]
 
 actions:
   prove:

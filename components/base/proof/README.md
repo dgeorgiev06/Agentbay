@@ -6,7 +6,7 @@ Proof reaches code only by copy, call, remove. It asks the worktrees interface f
 
 ## What it proves in this version
 
-Each kind of proof is one file under `scripts/kinds/`, and `scripts/kinds.ts` is the table from each kind to its file. A kind that is not built yet answers inconclusive with a sentence that says so, never passed.
+Each kind of proof is one file under `scripts/kinds/`, and `scripts/kinds.ts` is the table from each kind to its file.
 
 ### checks
 
@@ -38,7 +38,7 @@ Built. The item's runs are made one after another in one fresh copy of the head,
 
 ### count
 
-Not built.
+Built. Counts the lines that hold the item's text under its paths, in a copy of the head, by the listed command `count-matches` (`grep -r -c -h -F -e`, effect read; asked for what is left of the step, as a toolchain call is). The text is matched as written, not as a pattern, and a folder counts every file under it. With `most`, passed when the head has at most that many lines. A count that may not rise, given in the item with `noRise` or named with `use` from proof's settings under `noRise`, is counted in a copy of the base too, by the same code, and passed when the head has no more than the base. The detail gives the numbers, never the text. A path that does not exist, a count that was stopped or printed more than proof reads, a copy that could not be made, and a name the settings do not declare make the item inconclusive.
 
 ## What every verdict comes with
 

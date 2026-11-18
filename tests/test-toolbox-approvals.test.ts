@@ -188,8 +188,10 @@ async function atCard(project: ModeProject, rules: Rules): Promise<Run> {
 }
 
 function waitingOf(run: Run): unknown {
-  assert.equal(run.state.status, "waiting", JSON.stringify(run.state));
-  return run.state.status === "waiting" ? run.state.waiting : undefined;
+  if (run.state.status !== "waiting") {
+    assert.fail(`expected the run to wait, got ${JSON.stringify(run.state)}`);
+  }
+  return run.state.waiting;
 }
 
 function contentOf(withheld: Readonly<Record<string, string>>): Json {
@@ -349,7 +351,7 @@ test("an approval waits for the same thing after the kernel under its run ends a
     const run = await atCard(project, { merge: false, sendBack: true });
     assert.deepEqual(waitingOf(run), waitingWithMergeWithheld);
     const root = project.root;
-    const ended = await project.endKernel();
+    const ended = project.endKernel();
     assert.equal(ended.root, root);
     assert.ok(existsSync(root));
     project = await ended.openAgain();
@@ -375,7 +377,7 @@ test("a project whose kernel has ended is removed when it is closed", async () =
   const beside = await projectWithChooser();
   try {
     const project = await openModeProject(config, { project: beside.root });
-    const ended = await project.endKernel();
+    const ended = project.endKernel();
     assert.ok(existsSync(ended.root));
     await ended.close();
     assert.ok(!existsSync(ended.root));

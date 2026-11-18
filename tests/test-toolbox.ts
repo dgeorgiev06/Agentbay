@@ -5,7 +5,7 @@ import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/p
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { parse, stringify } from "yaml";
-import type { Json, ModeList, RunEvent, Spend, StepPlace } from "../bay/contracts.ts";
+import type { Json, ModeList, RunEvent, Spend, StepPlace, Tier } from "../bay/contracts.ts";
 import type { Config } from "../bay/generated/config.ts";
 import type { Budget } from "../bay/generated/mode.ts";
 import { fieldOf, isRecord, numberField, toJson } from "../bay/json.ts";
@@ -41,6 +41,32 @@ type Task = {
   readonly feedback: readonly string[];
 };
 
+type Choice =
+  | { readonly name: string; readonly status: "offered"; readonly does: string }
+  | { readonly name: string; readonly status: "withheld"; readonly does: string; readonly reason: string };
+
+type StepSource = { readonly step: string };
+
+type CardLine =
+  | {
+      readonly mark: "ran";
+      readonly words: string;
+      readonly source: StepSource & { readonly command: string; readonly run?: string };
+    }
+  | { readonly mark: "computed"; readonly words: string; readonly source: StepSource }
+  | {
+      readonly mark: "judged";
+      readonly words: string;
+      readonly source: StepSource;
+      readonly skills: readonly { readonly mode: string; readonly skill: string; readonly tier: Tier }[];
+    };
+
+type Card = {
+  readonly title: string;
+  readonly lines: readonly CardLine[];
+  readonly counted: { readonly ran: number; readonly computed: number; readonly judged: number };
+};
+
 type Waiting =
   | { readonly reason: "skill"; readonly stepKey: string; readonly task: Task }
   | {
@@ -49,6 +75,8 @@ type Waiting =
       readonly question: string;
       readonly hash: string;
       readonly content: Json;
+      readonly choices?: readonly Choice[];
+      readonly card?: Card;
     }
   | { readonly reason: "time"; readonly stepKey: string; readonly until: string }
   | { readonly reason: "budget"; readonly stepKey: string }
@@ -76,8 +104,13 @@ type ListedRun = {
 export type Decision = {
   readonly stepKey: string;
   readonly hash: string;
-  readonly verdict: "approve" | "reject";
   readonly by: string;
+} & ({ readonly verdict: "approve" | "reject" } | { readonly choice: string });
+
+type EndedProject = {
+  readonly root: string;
+  readonly openAgain: () => Promise<ModeProject>;
+  readonly close: () => Promise<void>;
 };
 
 export type ModeProject = {
@@ -91,11 +124,15 @@ export type ModeProject = {
   readonly answer: (token: string, output: Json) => Promise<Run>;
   readonly answerRefusal: (token: string, output: Json) => Promise<string>;
   readonly approve: (runId: string, decision: Decision) => Promise<Run>;
+  readonly approveRefusal: (runId: string, decision: Decision) => Promise<string>;
+  readonly show: (runId: string) => Promise<Run>;
+  readonly resume: (runId: string) => Promise<Run>;
   readonly extend: (runId: string, extra: Budget) => Promise<Run>;
   readonly runs: () => Promise<readonly ListedRun[]>;
   readonly partition: (mode: string, name: string) => DatabasePartition;
   readonly setTime: (time: string) => void;
   readonly reopen: (config: Config) => Promise<ModeProject>;
+  readonly endKernel: () => EndedProject;
   readonly close: () => Promise<void>;
 };
 
@@ -381,6 +418,9 @@ async function projectIn(root: string, opening: Opening): Promise<ModeProject> {
     answerRefusal: async (token, output) =>
       refusalOf(await runs.submit(token, { output, spent: nothingSpent }), "the answer"),
     approve: async (runId, decision) => accepted(await runs.approve(runId, decision)),
+    approveRefusal: async (runId, decision) => refusalOf(await runs.approve(runId, decision), "the decision"),
+    show: async (runId) => accepted(await runs.show(runId)),
+    resume: async (runId) => accepted(await runs.resume(runId)),
     extend: async (runId, extra) => accepted(await runs.extend(runId, extra)),
     runs: async () => (await runs.list()).map((listed) => ({ id: listed.id, status: listed.status })),
     partition: (mode, name) => partitionOf(kernel, mode, name),
@@ -388,6 +428,14 @@ async function projectIn(root: string, opening: Opening): Promise<ModeProject> {
     reopen: async (changed) => {
       kernel.close();
       return projectIn(root, { config: changed, projectConfig, clock });
+    },
+    endKernel: () => {
+      kernel.close();
+      return {
+        root,
+        openAgain: () => projectIn(root, opening),
+        close: () => rm(root, { recursive: true, force: true }),
+      };
     },
     close: async () => {
       kernel.close();

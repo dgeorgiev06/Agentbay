@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { test } from "node:test";
 import { stringify } from "yaml";
 import type { Json } from "../bay/contracts.ts";
-import { hashOf } from "../bay/json.ts";
+import { hashOf, isRecord } from "../bay/json.ts";
 import { makeProject, type Project } from "./project-fixture.ts";
 import { openModeProject, type ModeProject, type Run } from "./test-toolbox.ts";
 
@@ -238,6 +240,11 @@ const waitingWithMergeWithheld = {
 
 const by = "the owner";
 
+function resumedBy(run: Run): readonly unknown[] {
+  const resumed = run.events.filter((event) => event.kind === "run.resumed");
+  return resumed.map((event) => (isRecord(event.detail) ? event.detail.cause : event.detail));
+}
+
 test("a waiting approval shows its question, its hash, each choice with what it does and why one is withheld, and its card", async () => {
   await withChooser(async (project) => {
     const run = await atCard(project, { merge: false, sendBack: true });
@@ -346,18 +353,24 @@ test("a decision on a hash that is not the one the approval shows is refused", a
 
 test("an approval waits for the same thing after the kernel under its run ends and the project is opened again, and a choice taken then completes the run", async () => {
   const beside = await projectWithChooser();
-  let project = await openModeProject(config, { project: beside.root });
+  const given = { ...config, settings: { writer: { signature: "From the test" } } };
+  let project = await openModeProject(given, { project: beside.root });
   try {
     const run = await atCard(project, { merge: false, sendBack: true });
     assert.deepEqual(waitingOf(run), waitingWithMergeWithheld);
     const root = project.root;
+    const written = await readFile(join(root, "agentbay.config.yaml"), "utf8");
+    assert.match(written, /signature: From the test/);
     const ended = project.endKernel();
     assert.equal(ended.root, root);
     assert.ok(existsSync(root));
     project = await ended.openAgain();
     assert.equal(project.root, root);
+    assert.equal(await readFile(join(root, "agentbay.config.yaml"), "utf8"), written);
     assert.deepEqual(waitingOf(await project.show(run.id)), waitingWithMergeWithheld);
-    assert.deepEqual(waitingOf(await project.resume(run.id)), waitingWithMergeWithheld);
+    const resumed = await project.resume(run.id);
+    assert.deepEqual(waitingOf(resumed), waitingWithMergeWithheld);
+    assert.deepEqual(resumedBy(resumed), ["submit", "resume"]);
     const decision = { stepKey: "card", hash: hashOf(mergeWithheld), by };
     assert.equal(
       await project.approveRefusal(run.id, { ...decision, choice: "merge" }),

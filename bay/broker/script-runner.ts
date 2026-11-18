@@ -275,6 +275,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
     if (milliseconds <= 0) {
       return failure("The step has no time left, so the script was not started.");
     }
+    const startedAt = options.clock.now();
     const broker = openStep({
       layout: options.layout,
       permissions: request.permissions,
@@ -290,7 +291,8 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
       processes: options.processes,
       commandSearchPath: options.commandSearchPath,
       call: request.call,
-      limits: { databaseMilliseconds: milliseconds, commandMilliseconds: milliseconds, ...options.limits },
+      stepTime: { startedAt, milliseconds },
+      limits: { databaseMilliseconds: milliseconds, ...options.limits },
     });
     try {
       const refusal = await refusedBeforeStart(request, broker);

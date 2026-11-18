@@ -21,7 +21,7 @@ import {
   nodeThrowawayFolders,
   systemClock,
 } from "../bay/node-ports.ts";
-import type { ChildProcesses, ChildRequest, Clock } from "../bay/ports.ts";
+import type { ChildProcesses, ChildRequest, Clock, Processes } from "../bay/ports.ts";
 import { createBroker } from "../bay/broker/broker.ts";
 import { SecretStore } from "../bay/secrets.ts";
 import {
@@ -29,6 +29,7 @@ import {
   noProcesses,
   permissionsIn,
   place,
+  recordingProcesses,
   type PermissionChanges,
   projectLayout,
   type RecordingSink,
@@ -39,6 +40,7 @@ import {
   writeProjectFile,
 } from "./broker-fixture.ts";
 import { fakeClock } from "./fakes.ts";
+import { grantedCommand } from "./grants-fixture.ts";
 
 const madeUpToken = "made-up-script-token-31337";
 
@@ -61,6 +63,7 @@ type RunOptions = {
   readonly clock?: Clock;
   readonly events?: RecordingSink;
   readonly childProcesses?: ChildProcesses;
+  readonly processes?: Processes;
 };
 
 function scriptSource(body: string): string {
@@ -103,7 +106,7 @@ function runnerFor(root: string, options: RunOptions, events: RecordingSink): Sc
     events,
     clock: options.clock ?? systemClock,
     childProcesses: options.childProcesses ?? nodeChildProcesses,
-    processes: noProcesses,
+    processes: options.processes ?? noProcesses,
     commandSearchPath: "/usr/bin:/bin",
     limits: { scriptOutputBytes: options.outputBytes ?? 1_000_000 },
   }).scripts;
@@ -844,6 +847,79 @@ test("a script whose action declares 900 seconds runs past eight minutes on the 
     assert.deepEqual(
       children.started.map((request) => request.timeoutMilliseconds),
       [900_000],
+    );
+  });
+});
+
+const stoppedCommand = {
+  end: { how: "timed-out" },
+  stdout: { text: "", characters: 0, hash: "" },
+  stderr: { text: "", characters: 0, hash: "" },
+} as const;
+
+const waitCommand = { commands: [grantedCommand("wait", "sleep", ["read"])] };
+
+function runWait(seconds: number): string {
+  return `await context.commands.run({ name: 'wait', arguments: [], folder: '.', timeLimitSeconds: ${String(seconds)} })`;
+}
+
+async function commandLimitsGiven(
+  root: string,
+  steps: { readonly limit: number; readonly body: string; readonly advance: number },
+): Promise<{ readonly run: Run; readonly given: readonly number[] }> {
+  const clock = fakeClock(new Date("2026-11-17T09:00:00.000Z"));
+  const processes = recordingProcesses(() => stoppedCommand);
+  const call: ActionCaller = () => {
+    clock.advance(steps.advance);
+    return Promise.resolve({ status: "done", output: null, spent: noSpend });
+  };
+  const run = await attempt(root, steps.body, {
+    timeLimit: steps.limit,
+    timeLimitSetBy: "action",
+    clock,
+    call,
+    processes,
+    permissions: waitCommand,
+  });
+  return { run, given: processes.requests.map((request) => request.timeoutMilliseconds) };
+}
+
+test("a command gets what is left of its step's limit less 30 seconds, at the start and after half the step is used", async () => {
+  await withScriptProject(async (root) => {
+    const body = [
+      `const first = ${runWait(1200)};`,
+      "await context.call('items-store.get', {});",
+      `const second = ${runWait(1000)};`,
+      `const third = ${runWait(100)};`,
+      "return [first, second, third].map((answer) => (answer.ok ? answer.value.end.how : answer.message));",
+    ].join("\n");
+    const { run, given } = await commandLimitsGiven(root, { limit: 1_030_000, body, advance: 515_000 });
+    assert.deepEqual(given, [1_000_000, 485_000, 100_000]);
+    assert.deepEqual(outputOf(run), ["timed-out", "timed-out", "timed-out"]);
+  });
+});
+
+test("a step limit under a minute keeps half of it for the script, not 30 seconds", async () => {
+  await withScriptProject(async (root) => {
+    const body = `const ran = ${runWait(60)}; return ran.ok ? ran.value.end.how : ran.message;`;
+    const { run, given } = await commandLimitsGiven(root, { limit: 10_000, body, advance: 0 });
+    assert.deepEqual([given, outputOf(run)], [[5000], "timed-out"]);
+  });
+});
+
+test("a command is not started when its step has no time left for it, and the script is told why", async () => {
+  await withScriptProject(async (root) => {
+    const body = [
+      "await context.call('items-store.get', {});",
+      `const ran = ${runWait(60)};`,
+      "return ran.ok ? ran.value.end.how : ran.message;",
+    ].join("\n");
+    const { run, given } = await commandLimitsGiven(root, { limit: 1_030_000, body, advance: 1_001_000 });
+    assert.deepEqual(given, []);
+    assert.equal(
+      outputOf(run),
+      "The listed command wait was not started: the step has no time left to run it and still answer " +
+        "before the script's own time limit of 1030 seconds.",
     );
   });
 });

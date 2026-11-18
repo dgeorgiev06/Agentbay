@@ -386,11 +386,17 @@ test("an approval waits for the same thing after the kernel under its run ends a
   assert.ok(!existsSync(project.root));
 });
 
-test("a project whose kernel has ended is removed when it is closed", async () => {
+test("a project whose kernel has ended answers nothing more, and is removed when it is closed", async () => {
   const beside = await projectWithChooser();
   try {
     const project = await openModeProject(config, { project: beside.root });
+    const run = await atCard(project, { merge: false, sendBack: true });
     const ended = project.endKernel();
+    const closed = { name: "Error", message: "database is not open" };
+    await assert.rejects(project.show(run.id), closed);
+    const decision = { stepKey: "card", hash: hashOf(mergeWithheld), choice: "keep", by };
+    await assert.rejects(project.approve(run.id, decision), closed);
+    await assert.rejects(project.output("greeter.fetch", { name: "Ada" }), closed);
     assert.ok(existsSync(ended.root));
     await ended.close();
     assert.ok(!existsSync(ended.root));

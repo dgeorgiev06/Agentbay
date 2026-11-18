@@ -22,10 +22,10 @@ type Reading =
   | { readonly kind: "unknown"; readonly reason: string }
   | { readonly kind: "counted"; readonly exitCode: number; readonly summary: Summary };
 
-const testRun = { subject: "The test run", script: "test" };
+export const testRunSubject = "The test run";
 
 function readingOf(finished: Finished, timeLimitSeconds: number): Reading {
-  const ended = endedOf(testRun, finished, timeLimitSeconds);
+  const ended = endedOf(testRunSubject, finished, timeLimitSeconds);
   if (ended.kind === "unfinished") {
     return { kind: "unknown", reason: ended.reason };
   }

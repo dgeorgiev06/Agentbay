@@ -6,19 +6,21 @@ The mode `typescript` implements `toolchain@1`. It checks and tests TypeScript c
 
 | Action | What it does |
 |---|---|
-| `describe` | Names the language, the patterns of its source and test files, its practices file and its checks. It runs nothing. |
+| `describe` | Names the language, the patterns of its source and test files, its practices file and its checks, and which agreed scripts the project's `package.json` has and lacks. It reads that file and runs nothing. |
 | `check` | Runs each check, or the named ones, in the folder it is given, one after another, and gives each a verdict. |
 | `test` | Runs `npm test` in the folder it is given with the TAP reporter, on every test or on named files, and gives one verdict with the counts. |
 
 The folder given to `check` and `test` is a throwaway copy of the code. The caller makes it for the call and removes it afterwards; it is never a worktree a builder works in. The checkout's own scripts may write inside it, such as a cache or a build output, and must write nothing outside it. The mode cannot stop them: they run as listed commands, unconfined. A second call on the same folder gives the same verdicts.
 
-A check is the checkout's own `package.json` script of the same name: `generate:check`, `typecheck`, `lint`, `format:check`, `deadcode`. The mode runs `npm run <name> --`. To change what a check does, change that script in `package.json`; `npm run check` runs the same scripts, so a person and the mode run the same thing. The mode's list of names is in `scripts/lib/checks.ts`.
+A check is the checkout's own `package.json` script of the same name. The mode brings no compiler, linter or formatter settings to a project: the project keeps its tools and their settings. The agreed scripts are `typecheck`, `lint`, `format:check`, `deadcode` and `test`, which every project needs, and `generate:check`, which only the kit has. The mode runs `npm run <name> --`. To change what a check does, change that script in `package.json`; in the kit `npm run check` runs the same scripts, so a person and the mode run the same thing. The list of agreed scripts, and what to add for each, is in `scripts/lib/checks.ts`.
+
+Before it runs anything, `check` and `test` read the checkout's `package.json` with `cat` and keep only the names of its scripts. `cat` is not the project's code, and the mode returns none of the file. `describe` reads the project's own `package.json` through its granted read. A required script the checkout lacks is not set up: its verdict is inconclusive, with a sentence that names the script and says what to add, and npm is not run for it. A `package.json` that is missing or is not JSON makes every required check inconclusive in the same way. `generate:check` runs only where the checkout has the script, and `describe` lists it only where the project has it.
 
 A verdict is `passed`, `failed` or `inconclusive`:
 
 - `passed`: the check ended with exit code 0. For `test`, the run also ended with exit code 0, reported at least one test, and no test failed or was cancelled.
 - `failed`: the check ended with an exit code its tool uses for a finding (1; for `typecheck` also 2, which `tsc` uses for a type error). For `test`, exit code 1 with at least one failed test.
-- `inconclusive`: anything else. The script is missing, the folder does not exist, the time limit was hit, a signal stopped it, the exit code is one the mode does not know, or the test run printed no summary or reported no tests. An inconclusive verdict is never a pass.
+- `inconclusive`: anything else. The checkout is not set up for the check, the folder does not exist, the time limit was hit, a signal stopped it, the exit code is one the mode does not know, or the test run printed no summary or reported no tests. An inconclusive verdict is never a pass.
 
 ## Commands
 
@@ -26,6 +28,7 @@ The mode lists exactly the commands its scripts run, in `resources.commands`. Ea
 
 | Prefix | Run by |
 |---|---|
+| `cat -- package.json` | `check` and `test`, before anything else |
 | `npm run generate:check --` and the four other checks | `check` |
 | `npm test -- --test-reporter=tap` | `test`, followed by the named test files |
 
@@ -41,6 +44,6 @@ The mode lists exactly the commands its scripts run, in `resources.commands`. Ea
 
 Not enforced here: import cycles and files that only re-export (they need an eslint plugin, so `bay check` will do it), and comment lines in kit code (a `bay check` measure).
 
-## Limits
+## Time limits
 
-The folder given to `check` and `test` must be a checkout of the kit, or of a project that is the kit: its `package.json` must have the five check scripts and `test`. A project beside the kit has none of them, so every check is inconclusive there.
+Left out, a check may take 90 seconds and a test run 420. A call may ask for at most 420 seconds. Today the kernel stops a script step after 8 minutes, so all the checks of one call must end within that.

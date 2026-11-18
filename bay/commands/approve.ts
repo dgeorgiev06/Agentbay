@@ -12,10 +12,12 @@ import type { Command } from "../command-line.ts";
 import type { ListTrust, ModeList, ScriptFiles, TrustGiven } from "../contracts.ts";
 import type { Kernel } from "../kernel.ts";
 import type { ActiveMode } from "../manifests/manifests.ts";
-import type { Problem } from "../outcome.ts";
+import type { Outcome, Problem } from "../outcome.ts";
 import { listOf } from "../policy.ts";
 import { runResult } from "../run-report.ts";
-import { shownPath } from "../layout.ts";
+import { approvalLines } from "../approval-card.ts";
+import type { Run } from "../runs/runs.ts";
+import { shownPath, type Layout } from "../layout.ts";
 import {
   listHashOf,
   readTrustRecord,
@@ -43,8 +45,11 @@ type Decision = {
   readonly runId: string;
   readonly stepKey: string;
   readonly hash: string;
-  readonly verdict: "approve" | "reject";
-};
+} & ({ readonly verdict: "approve" | "reject" } | { readonly choice: string });
+
+type Approval = Extract<Waiting, { readonly reason: "approval" }>;
+
+type Waiting = Extract<Run["state"], { readonly status: "waiting" }>["waiting"];
 
 type TrustChannel =
   { readonly via: "terminal" } | { readonly via: "chat"; readonly quote: string; readonly hash: string };
@@ -108,7 +113,8 @@ const answerReasons: Readonly<Record<AnswerRefusal["reason"], true>> = {
 };
 
 const usage =
-  'approve <run> <stepKey> --hash <hash> [--reject] [--via terminal | --via chat --quote "<the owner\'s words>"]; ' +
+  "approve <run> <stepKey> --hash <hash> [--reject | --choice <name>] " +
+  '[--via terminal | --via chat --quote "<the owner\'s words>"]; ' +
   'approve --trust <mode> [--reject] [--via chat --hash <hash> --quote "<the owner\'s words>"]';
 
 const notConfirmed = "Not confirmed; nothing changed.";
@@ -150,21 +156,50 @@ async function typedYes(terminal: Terminal, question: string): Promise<boolean> 
   return answer.trim().toLowerCase() === "yes";
 }
 
-async function shownText(kernel: Kernel, decision: Decision): Promise<string> {
-  const shown = await kernel.runs.show(decision.runId);
+function approvalAt(shown: Outcome<Run>, stepKey: string): Approval | undefined {
   const state = shown.ok ? shown.value.state : undefined;
   const waiting = state?.status === "waiting" ? state.waiting : undefined;
-  if (waiting?.reason !== "approval" || waiting.stepKey !== decision.stepKey) {
-    return `step ${decision.stepKey} of run ${decision.runId}`;
-  }
-  return `${waiting.question}\n${JSON.stringify(waiting.content, null, 2)}\n(hash ${waiting.hash})`;
+  return waiting?.reason === "approval" && waiting.stepKey === stepKey ? waiting : undefined;
 }
 
-async function terminalRefusal(
-  invocation: Invocation,
-  kernel: Kernel,
-  decision: Decision,
-): Promise<string | undefined> {
+function plainQuestion(decision: Decision & { readonly verdict: string }, approval: Approval | undefined): string {
+  const verb = decision.verdict === "approve" ? "Approve" : "Reject";
+  if (approval === undefined) {
+    return `${verb} step ${decision.stepKey} of run ${decision.runId}\nType yes to confirm: `;
+  }
+  const content = JSON.stringify(approval.content, null, 2);
+  return `${verb} ${approval.question}\n${content}\n(hash ${approval.hash})\nType yes to confirm: `;
+}
+
+function answerWords(decision: Decision): string {
+  if ("choice" in decision) {
+    return `You choose ${shown(decision.choice)}.`;
+  }
+  return decision.verdict === "approve" ? "You approve." : "You reject.";
+}
+
+function confirmQuestion(decision: Decision, approval: Approval | undefined): string {
+  if ("choice" in decision || approval?.card !== undefined || approval?.choices !== undefined) {
+    const lines =
+      approval === undefined ? [`step ${decision.stepKey} of run ${decision.runId}`] : approvalLines(approval);
+    return `${lines.join("\n")}\n${answerWords(decision)} Type yes to confirm: `;
+  }
+  return plainQuestion(decision, approval);
+}
+
+function withCardShown(layout: Layout, shownRun: Outcome<Run>, refused: CommandResult): CommandResult {
+  if (!shownRun.ok) {
+    return refused;
+  }
+  const report = runResult(layout, shownRun);
+  return {
+    exitCode: refused.exitCode,
+    json: { ...refused.json, run: report.json.run ?? null },
+    text: `${report.text}\n\n${refused.text}`,
+  };
+}
+
+async function terminalRefusal(invocation: Invocation, question: string): Promise<string | undefined> {
   const terminal = invocation.context.terminal;
   if (!terminal.isInteractive()) {
     return (
@@ -172,26 +207,54 @@ async function terminalRefusal(
       "run it yourself in a terminal, or, if the project config lists chat under approvals.from, use --via chat --quote."
     );
   }
-  const verb = decision.verdict === "approve" ? "Approve" : "Reject";
-  const confirmed = await typedYes(terminal, `${verb} ${await shownText(kernel, decision)}\nType yes to confirm: `);
+  const confirmed = await typedYes(terminal, question);
   return confirmed ? undefined : notConfirmed;
+}
+
+function answerOf(decision: Decision): { readonly verdict: "approve" | "reject" } | { readonly choice: string } {
+  return "choice" in decision ? { choice: decision.choice } : { verdict: decision.verdict };
 }
 
 async function decide(request: ApprovalRequest): Promise<CommandResult> {
   const { invocation, kernel, channel, decision } = request;
+  const { runId, stepKey, hash } = decision;
+  const shownRun = await kernel.runs.show(runId);
+  const approval = approvalAt(shownRun, stepKey);
+  const beside = (refused: CommandResult): CommandResult =>
+    approval?.card === undefined ? refused : withCardShown(kernel.layout, shownRun, refused);
   const allowed = allowedChannels(kernel);
   if (!allowed.includes(channel.via)) {
-    return refusedResult(
-      `Approvals from ${channel.via} are off: approvals.from in agentbay.config.yaml lists ${allowed.join(", ")}.`,
-      `Approve from ${allowed.join(" or ")}; only the owner changes approvals.from.`,
+    return beside(
+      refusedResult(
+        `Approvals from ${channel.via} are off: approvals.from in agentbay.config.yaml lists ${allowed.join(", ")}.`,
+        `Approve from ${allowed.join(" or ")}; only the owner changes approvals.from.`,
+      ),
     );
   }
-  const refusal = channel.via === "terminal" ? await terminalRefusal(invocation, kernel, decision) : undefined;
-  if (refusal !== undefined) {
+  const refusal =
+    channel.via === "terminal" ? await terminalRefusal(invocation, confirmQuestion(decision, approval)) : undefined;
+  if (refusal === notConfirmed) {
     return refusedResult(refusal);
   }
-  const { runId, stepKey, hash, verdict } = decision;
-  return runResult(kernel.layout, await kernel.runs.approve(runId, { stepKey, hash, verdict, by: byOf(channel) }));
+  if (refusal !== undefined) {
+    return beside(refusedResult(refusal));
+  }
+  const answered = await kernel.runs.approve(runId, { stepKey, hash, by: byOf(channel), ...answerOf(decision) });
+  return answered.ok ? runResult(kernel.layout, answered) : beside(runResult(kernel.layout, answered));
+}
+
+function answerAsked(
+  invocation: Invocation,
+): { readonly verdict: "approve" | "reject" } | { readonly choice: string } | string {
+  const choice = invocation.values.get("choice");
+  const reject = invocation.flags.has("reject");
+  if (choice === undefined) {
+    return { verdict: reject ? "reject" : "approve" };
+  }
+  return reject
+    ? "--choice and --reject do not go together: an approval with choices is answered by naming one, " +
+        "and one without choices by approving or rejecting."
+    : { choice };
 }
 
 function runApproval(invocation: Invocation): Promise<CommandResult> {
@@ -213,7 +276,11 @@ function runApproval(invocation: Invocation): Promise<CommandResult> {
   if (typeof channel === "string") {
     return Promise.resolve(usageResult(channel, usage));
   }
-  const decision: Decision = { runId, stepKey, hash, verdict: invocation.flags.has("reject") ? "reject" : "approve" };
+  const answer = answerAsked(invocation);
+  if (typeof answer === "string") {
+    return Promise.resolve(usageResult(answer, usage));
+  }
+  const decision: Decision = { runId, stepKey, hash, ...answer };
   return withKernel(invocation, (kernel) => decide({ invocation, kernel, channel, decision }));
 }
 
@@ -511,12 +578,13 @@ function runApprove(invocation: Invocation): Promise<CommandResult> {
 export const approveCommand: Command = {
   name: "approve",
   summary:
-    "Approve or reject what a waiting approval shows, naming its hash; or, with --trust, give or withdraw trust in " +
-    "a mode's list. From a terminal, or from chat if allowed.",
+    "Approve or reject what a waiting approval shows, or take one of its choices, naming its hash; or, with " +
+    "--trust, give or withdraw trust in a mode's list. From a terminal, or from chat if allowed.",
   usage,
   options: [
     { name: "hash", takesValue: true },
     { name: "reject", takesValue: false },
+    { name: "choice", takesValue: true },
     { name: "via", takesValue: true },
     { name: "quote", takesValue: true },
     { name: "trust", takesValue: true },

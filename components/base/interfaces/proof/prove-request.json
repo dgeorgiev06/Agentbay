@@ -26,7 +26,7 @@
       "items": {
         "$ref": "#/$defs/bug"
       },
-      "description": "The bugs to inject, written by whoever plans or reviews the slice, never by its builder. An item of the kind bugs-caught is judged on all of them; with none, it is inconclusive."
+      "description": "The bugs to inject, written by whoever plans or reviews the slice, never by its builder. An item of the kind bugs-caught is judged on all of them; with none, or with one whose patch does not apply to the head, it is inconclusive."
     }
   },
   "$defs": {
@@ -220,7 +220,7 @@
           "type": "object",
           "additionalProperties": false,
           "required": ["kind"],
-          "description": "Injected bugs are caught: each bug of the request is applied to its own copy of the head, and only its covering test files are run there. Passed when every run failed. A run that passed is a bug that survived: it fails the item and is named in the detail.",
+          "description": "Injected bugs are caught: each bug of the request is applied to its own copy of the head, and only its covering test files are run there. Passed when every run failed. A run that passed is a bug that survived: it fails the item and is named in the detail. A bug whose patch does not apply touched nothing, so the item is inconclusive and its reason names the bug.",
           "properties": {
             "kind": {
               "const": "bugs-caught",

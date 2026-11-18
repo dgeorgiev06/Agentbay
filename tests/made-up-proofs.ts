@@ -12,7 +12,8 @@ export type ProofVariant =
   | "leaves a copy behind when the toolchain fails"
   | "passes a bug that survives"
   | "puts a declared path into a detail"
-  | "omits the two added items when every item is judgement";
+  | "omits the two added items when every item is judgement"
+  | "counts a bug that could not be applied as caught";
 
 type Replacement = readonly [file: string, line: string, wrong: string];
 
@@ -853,6 +854,13 @@ const replacements: Readonly<Record<ProofVariant, readonly Replacement[]>> = {
       '    parts.push(broken(counted(unchanged, "declared file did", "declared files did") + " not change: " + request.files.filter((file) => !touched.includes(file)).join(", ") + "."));',
     ],
   ],
+  "counts a bug that could not be applied as caught": [
+    [
+      "scripts/lib/code-kinds.ts",
+      '      return unknown("The bug " + bug.name + " could not be applied. " + applied.reason);',
+      "      return held;",
+    ],
+  ],
   "omits the two added items when every item is judgement": [
     [
       "scripts/prove.ts",
@@ -885,6 +893,7 @@ export const wrongProofs: Readonly<Record<string, ProofVariant>> = {
   "assay-passes-survivor": "passes a bug that survives",
   "assay-shows-declared": "puts a declared path into a detail",
   "assay-omits-added": "omits the two added items when every item is judgement",
+  "assay-passes-stale-bug": "counts a bug that could not be applied as caught",
 };
 
 export function proofFiles(name: string, variant: ProofVariant): ModeFiles {

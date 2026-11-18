@@ -25,7 +25,7 @@ function assertFailsOnly(name: string, statement: string): void {
   const tested = ranFor(name);
   assert.equal(tested.status, 1, tested.output);
   assert.deepEqual(failedTests(tested.output), [caseOf(name, statement)]);
-  assert.match(tested.output, /^# pass 32$/m);
+  assert.match(tested.output, /^# pass 34$/m);
 }
 
 before(async () => {
@@ -49,7 +49,7 @@ test("a made-up proof that reaches code only through the toolchain and worktrees
   const tested = ranFor(assay);
   assert.deepEqual(failedTests(tested.output), []);
   assert.equal(tested.status, 0, tested.output);
-  assert.match(tested.output, /^# pass 33$/m);
+  assert.match(tested.output, /^# pass 35$/m);
 });
 
 test("a made-up proof that reads an inconclusive check as passed fails the shared test's case on it", () => {
@@ -88,5 +88,12 @@ test("a made-up proof that leaves out the two added items when every item is jud
   assertFailsOnly(
     "assay-omits-added",
     "the items scope and declared come after the slice's own items in every result, also when every item of the slice is a judgement item",
+  );
+});
+
+test("a made-up proof that counts a bug whose patch did not apply as caught fails the shared test's case on it", () => {
+  assertFailsOnly(
+    "assay-passes-stale-bug",
+    "bugs-caught: a bug whose patch does not apply makes the item inconclusive, with a reason that names the bug and says it could not be applied, never passed or failed",
   );
 });

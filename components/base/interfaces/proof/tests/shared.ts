@@ -18,7 +18,8 @@ type Fields = { readonly [key: string]: Value };
 
 type Files = Readonly<Record<string, string>>;
 
-type Scenario = "tr2" | "failed" | "inconclusive" | "unknown head" | "only judgement" | "no commands";
+type Scenario =
+  "tr2" | "failed" | "inconclusive" | "unknown head" | "only judgement" | "no commands" | "moved and stale";
 
 type Verdict = {
   readonly item: string;
@@ -68,6 +69,7 @@ const scenarios: readonly Scenario[] = [
   "unknown head",
   "only judgement",
   "no commands",
+  "moved and stale",
 ];
 
 const recorder = "recorder";
@@ -252,6 +254,7 @@ const inconclusiveBase: Files = {
   "components/modes/notes/mode.yaml": notesBefore,
   "src/value.txt": "1\n",
   "src/broken.txt": "break\n",
+  "src/notes-old.txt": "a moved note\n",
   "tests/value.test.ts": "src/value.txt 1\n",
 };
 
@@ -262,6 +265,7 @@ const inconclusiveHead: Files = {
   "components/modes/notes/mode.yaml": notesAfter,
   "src/value.txt": "2\n",
   "src/broken.txt": "fixed\n",
+  "src/notes.txt": "a moved note\n",
   "tests/value.test.ts": "src/value.txt 2\n",
   "tests/broken.test.ts": "src/broken.txt fixed\n",
 };
@@ -293,6 +297,8 @@ const inconclusiveFiles = [
   "tests/value.test.ts",
   "tests/broken.test.ts",
   "framework/feature-map-debt.yaml",
+  "src/notes-old.txt",
+  "src/notes.txt",
 ];
 
 const namesAsChanged = { gained: ["notes.search"], lost: ["notes.list"], changed: ["notes.write"] };
@@ -433,6 +439,20 @@ const onlyJudgementRequest: Fields = {
   head: "inconclusive-head",
   declared: { files: inconclusiveFiles, names: namesAsChanged },
   bugs: [],
+};
+
+const staleBug = {
+  name: "the patch is stale",
+  patch: bugPatch("src/value.txt", "7", "8"),
+  tests: ["tests/value.test.ts"],
+};
+
+const movedAndStaleRequest: Fields = {
+  slice: sliceOf("MOVED", inconclusiveScope, [item("bugs-stale", { kind: "bugs-caught" })]),
+  base: "inconclusive-base",
+  head: "inconclusive-head",
+  declared: { files: inconclusiveFiles.filter((path) => path !== "src/notes-old.txt"), names: namesAsChanged },
+  bugs: [staleBug],
 };
 
 const noCommandsRequest: Fields = {
@@ -638,6 +658,16 @@ const cases: readonly Case[] = [
     },
   },
   {
+    name: "as-declared: a move declared by its new path alone fails the item declared, since a move changes its old path too",
+    run: async (proof) => {
+      const verdict = assertVerdict(await proof.proven("moved and stale"), "declared", {
+        kind: "as-declared",
+        verdict: "failed",
+      });
+      assert.match(verdict.said, /\b1\b/);
+    },
+  },
+  {
     name: "bugs-caught: passed when the covering tests fail with each bug applied (TR2, K1)",
     run: async (proof) => {
       assertVerdict(await proof.proven("tr2"), "DOD-TR2-7", { kind: "bugs-caught", verdict: "passed" });
@@ -658,6 +688,17 @@ const cases: readonly Case[] = [
     run: async (proof) => {
       const result = await proof.proven("inconclusive");
       assertVerdict(result, "bugs-unknown", { kind: "bugs-caught", verdict: "inconclusive" });
+    },
+  },
+  {
+    name: "bugs-caught: a bug whose patch does not apply makes the item inconclusive, with a reason that names the bug and says it could not be applied, never passed or failed",
+    run: async (proof) => {
+      const verdict = assertVerdict(await proof.proven("moved and stale"), "bugs-stale", {
+        kind: "bugs-caught",
+        verdict: "inconclusive",
+      });
+      assert.match(verdict.said, /the patch is stale/);
+      assert.match(verdict.said, /could not be applied/);
     },
   },
   {
@@ -829,13 +870,16 @@ const cases: readonly Case[] = [
     run: async (proof) => {
       await proof.provenEverywhere();
       const asked = await proof.asked();
-      const bugs = [tr2Bug, survivingBug, caughtBug, stoppedBug];
+      const bugs = [tr2Bug, survivingBug, caughtBug, stoppedBug, staleBug];
       const runs = asked
         .filter((entry) => entry.action === "apply")
         .map((entry) => {
           const folder = folderOf(entry);
           const bug = bugs.find((known) => known.patch === entry.request.patch);
-          const copied = asked.find((other) => other.action === "copy" && fieldsOf(other.answer).folder === folder);
+          const copied = asked.find(
+            (other) =>
+              other.action === "copy" && other.failed === undefined && fieldsOf(other.answer).folder === folder,
+          );
           const tests = asked.filter((other) => other.action === "test" && folderOf(other) === folder);
           return {
             bug: bug?.name ?? "a patch the test did not give",
@@ -847,6 +891,7 @@ const cases: readonly Case[] = [
         .sort((left, right) => left.bug.localeCompare(right.bug));
       assert.deepEqual(runs, [
         { bug: "the name is lost", commit: "failed-head", patches: 1, files: [survivingBug.tests] },
+        { bug: "the patch is stale", commit: "inconclusive-head", patches: 1, files: [] },
         { bug: "the record is not read again", commit: "c9bb216", patches: 1, files: [tr2Bug.tests] },
         { bug: "the value is not raised", commit: "inconclusive-head", patches: 1, files: [caughtBug.tests] },
         { bug: "the value waits for ever", commit: "inconclusive-head", patches: 1, files: [stoppedBug.tests] },
@@ -1416,6 +1461,7 @@ export function testProof(underTest: ProofUnderTest, testProject: TestProject = 
       inconclusive: inconclusiveRequest,
       "unknown head": unknownHeadRequest,
       "only judgement": onlyJudgementRequest,
+      "moved and stale": movedAndStaleRequest,
       "no commands": noCommandsRequest,
     };
     proof = proofFor(state, mode, requests);

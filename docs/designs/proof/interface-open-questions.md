@@ -9,8 +9,8 @@ Slice I1 wrote `proof@1` from ADR 22 and the designs in this folder. These are t
 3. **The kind `checks` holds the checks and one run of every test**, as in design A. Design C split them in two. The brief lists eight kinds with "the checks pass" as one. Held by the three `checks` cases.
 4. **The declaration is required.** Design B made it optional and the item `declared` inconclusive without it. A reviewer by hand passes what the builder's note declared. Held by the schema.
 5. **Action names are written `name.action`**, such as `notes.write`, for an action of a `mode.yaml` or of an interface's `.yaml` file. An action is changed when any line of its block differs between the base and the head. Held by the two `as-declared` cases on names (the scenario where names are declared wrongly, and the project with no commands, where they are declared right).
-6. **A move counts as two paths.** Its old path and its new path must both be in the scope and both be declared. For the scope this is held by the `in-scope` case that names `docs/old.txt`; for the declaration no case holds it alone.
-7. **Bugs are part of the request, not the slice.** Each has a name, a patch and the test files that cover it, and only those files run with it. With no bugs, an item of the kind `bugs-caught` is inconclusive. Held by the case on a bug's run and the `bugs-caught` cases.
+6. **A move counts as two paths.** Its old path and its new path must both be in the scope and both be declared. For the scope this is held by the `in-scope` case that names `docs/old.txt`; for the declaration by the `as-declared` case on a move declared by its new path alone.
+7. **Bugs are part of the request, not the slice.** Each has a name, a patch and the test files that cover it, and only those files run with it. With no bugs, or with a bug whose patch does not apply, an item of the kind `bugs-caught` is inconclusive: a patch that touched nothing proves nothing. Held by the case on a bug's run and the `bugs-caught` cases.
 
 ## The verdict
 

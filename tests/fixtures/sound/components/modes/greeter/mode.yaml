@@ -1,0 +1,24 @@
+name: greeter
+version: 1.0.0
+description: Gives a greeting for a name.
+implements:
+  - greeting-source@1
+actions:
+  fetch:
+    description: When a mode needs a greeting for a name.
+    effects:
+      - read
+    run:
+      - script: scripts/fetch.ts
+  tally:
+    description: When a test spends tokens before it greets.
+    input: schemas/fetch-input.json
+    output: schemas/fetch-output.json
+    effects:
+      - read
+      - spend
+    budget:
+      tokens: 5
+    run:
+      - script: scripts/spend.ts
+      - script: scripts/fetch.ts

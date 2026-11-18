@@ -28,12 +28,16 @@ function warningsOf(file: string): readonly (readonly unknown[])[] {
 
 const everyEffect = "read, write, network, spend, delete";
 
-function listedAt(line: number, name: string, run: string): readonly unknown[] {
+function listedAt(
+  line: number,
+  name: string,
+  listing: { readonly run: string; readonly effects?: string },
+): readonly unknown[] {
   return [
     "warning",
     line,
-    `Mode typescript lists the command ${name}, which runs ${run} and which the mode says has the effects: ` +
-      `${everyEffect}; a listed command can run code the agent wrote.`,
+    `Mode typescript lists the command ${name}, which runs ${listing.run} and which the mode says has the effects: ` +
+      `${listing.effects ?? everyEffect}; a listed command can run code the agent wrote.`,
   ];
 }
 
@@ -48,13 +52,14 @@ function longStepAt(line: number, action: string): readonly unknown[] {
 
 test("bay check on the kit warns once for each command the typescript mode lists and each long step, and for nothing else", () => {
   assert.deepEqual(warningsOf(manifest), [
-    listedAt(10, "check-generated-types", "npm run generate:check --"),
-    listedAt(13, "check-types", "npm run typecheck --"),
-    listedAt(16, "lint", "npm run lint --"),
-    listedAt(19, "check-format", "npm run format:check --"),
-    listedAt(22, "find-dead-code", "npm run deadcode --"),
-    listedAt(25, "run-tests", "npm test -- --test-reporter=tap"),
-    longStepAt(39, "check"),
-    longStepAt(45, "test"),
+    listedAt(12, "read-package", { run: "cat -- package.json", effects: "read" }),
+    listedAt(15, "check-generated-types", { run: "npm run generate:check --" }),
+    listedAt(18, "check-types", { run: "npm run typecheck --" }),
+    listedAt(21, "lint", { run: "npm run lint --" }),
+    listedAt(24, "check-format", { run: "npm run format:check --" }),
+    listedAt(27, "find-dead-code", { run: "npm run deadcode --" }),
+    listedAt(30, "run-tests", { run: "npm test -- --test-reporter=tap" }),
+    longStepAt(44, "check"),
+    longStepAt(50, "test"),
   ]);
 });

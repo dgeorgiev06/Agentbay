@@ -64,32 +64,31 @@ function columns(text: string): number {
   return Array.from(text).length;
 }
 
-function pieces(token: string, room: number): readonly string[] {
-  const characters = Array.from(token);
-  if (characters.length <= room) {
-    return [token];
-  }
-  const count = Math.ceil(characters.length / room);
-  return Array.from({ length: count }, (_, index) => characters.slice(index * room, (index + 1) * room).join(""));
-}
-
 function fitted(tokens: readonly string[], rooms: Rooms): readonly string[] {
   const lines: string[] = [];
+  const roomNow = (): number => (lines.length === 0 ? rooms.first : rooms.rest);
   let line = "";
-  for (const token of tokens.flatMap((whole) => pieces(whole, Math.min(rooms.first, rooms.rest)))) {
+  for (const token of tokens) {
     const joined = line === "" ? token : `${line} ${token}`;
-    const room = lines.length === 0 ? rooms.first : rooms.rest;
-    if (columns(joined) <= room) {
+    if (columns(joined) <= roomNow()) {
       line = joined;
-    } else {
-      lines.push(line);
-      line = token;
+      continue;
     }
+    if (line !== "") {
+      lines.push(line);
+    }
+    let left = Array.from(token);
+    while (left.length > roomNow()) {
+      const room = roomNow();
+      lines.push(left.slice(0, room).join(""));
+      left = left.slice(room);
+    }
+    line = left.join("");
   }
   return [...lines, line];
 }
 
-function hanging(tokens: readonly string[], indents: Indents): readonly string[] {
+export function hanging(tokens: readonly string[], indents: Indents): readonly string[] {
   const rooms = { first: width - indents.first.length, rest: width - indents.rest.length };
   return fitted(tokens, rooms).map((line, index) => `${index === 0 ? indents.first : indents.rest}${line}`);
 }
@@ -121,7 +120,7 @@ function counted(count: number, noun: string): string | undefined {
   return `${String(count)} ${noun}${count === 1 ? "" : "s"}`;
 }
 
-function hashLine(hash: string): string {
+export function hashLine(hash: string): string {
   return `hash ${hash.slice(0, shortHashLength)}`;
 }
 
@@ -162,15 +161,19 @@ function commandSegments(command: GrantedCommand): readonly Segment[] {
   ];
 }
 
+export function namedRows(rows: readonly (readonly Segment[])[]): readonly string[] {
+  const table = { marked: false, nameWidth: nameWidthOf(rows.map((segments) => segments[0]?.label ?? "")) };
+  return rows.flatMap((segments) => rowLines(table, "", segments));
+}
+
 function commandSection(commands: readonly GrantedCommand[]): readonly string[] {
   if (commands.length === 0) {
     return [];
   }
   const each = commands.length === 1 ? "It runs" : "Each runs";
-  const table = { marked: false, nameWidth: nameWidthOf(commands.map((command) => command.name)) };
   return [
     ...paragraph(`It lists ${counted(commands.length, "command") ?? ""}. ${each} unconfined.`),
-    ...[...commands].sort(byName).flatMap((command) => rowLines(table, "", commandSegments(command))),
+    ...namedRows([...commands].sort(byName).map(commandSegments)),
   ];
 }
 

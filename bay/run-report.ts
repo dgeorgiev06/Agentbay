@@ -1,4 +1,5 @@
 import { agentName } from "./adapter.ts";
+import { approvalLines } from "./approval-card.ts";
 import type { Json, RunEvent } from "./contracts.ts";
 import { byteSize, toJson } from "./json.ts";
 import type { Run, RunSummary, Task } from "./runs/runs.ts";
@@ -73,6 +74,8 @@ function waitingJson(waiting: Waiting): JsonObject {
         hash: waiting.hash,
         content: waiting.content,
         ...(waiting.previousHash === undefined ? {} : { previousHash: waiting.previousHash }),
+        ...(waiting.choices === undefined ? {} : { choices: waiting.choices.map((choice) => ({ ...choice })) }),
+        ...(waiting.card === undefined ? {} : { card: toJson(waiting.card) }),
       };
     case "time":
       return { reason: waiting.reason, stepKey: waiting.stepKey, until: waiting.until };
@@ -87,17 +90,19 @@ function pretty(value: Json): string {
   return JSON.stringify(value, null, 2);
 }
 
+function decideLine(run: Run, waiting: Extract<Waiting, { readonly reason: "approval" }>): string {
+  const decide = `decide with: bay approve ${run.id} ${waiting.stepKey}`;
+  return waiting.choices === undefined
+    ? `${decide} --hash ${waiting.hash} [--reject]`
+    : `${decide} --choice <name> --hash ${waiting.hash}`;
+}
+
 function waitingText(run: Run, waiting: Waiting): string {
   switch (waiting.reason) {
     case "skill":
       return "";
     case "approval":
-      return [
-        `approval: ${waiting.question}`,
-        `shown content (hash ${waiting.hash}):`,
-        pretty(waiting.content),
-        `decide with: bay approve ${run.id} ${waiting.stepKey} --hash ${waiting.hash} [--reject]`,
-      ].join("\n");
+      return [...approvalLines(waiting), decideLine(run, waiting)].join("\n");
     case "time":
       return `wakes at ${waiting.until}; bay resume --due wakes it then`;
     case "budget":

@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {
+    "signature": {
+      "type": "string",
+      "description": "The words that end every note."
+    }
+  }
+}

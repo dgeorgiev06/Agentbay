@@ -1,0 +1,12 @@
+name: twice
+trigger:
+  manual: true
+steps:
+  - id: first
+    action: compose
+    input:
+      name: Ada
+  - id: second
+    action: compose
+    input:
+      name: Ada

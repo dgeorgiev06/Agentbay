@@ -1,11 +1,16 @@
 name: typescript
 version: 1.0.0
-description: Checks and tests TypeScript code in a checkout, running the same scripts of its package.json that npm run check runs.
+description: Checks and tests TypeScript code in a checkout, running the scripts of its own package.json by agreed names.
 
 implements: [toolchain@1]
 
 resources:
+  files:
+    read: [package.json]
   commands:
+    read-package:
+      run: cat -- package.json
+      effects: [read]
     check-generated-types:
       run: npm run generate:check --
       effects: [read, write, network, spend, delete]
@@ -29,8 +34,8 @@ extraFiles: [eslint.config.js, prettier.json, practices.md]
 
 actions:
   describe:
-    description: When a mode or a skill needs to know the language, which files are source and tests, where its practices are, and which checks it has.
-    effects: []
+    description: When a mode or a skill needs to know the language, which files are source and tests, where its practices are, which checks it has, and which of the agreed scripts the project has and lacks.
+    effects: [read]
     run:
       - script: scripts/describe.ts
   check:

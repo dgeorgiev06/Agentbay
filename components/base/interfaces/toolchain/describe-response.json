@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "DescribeResponse",
-  "description": "Which language the toolchain serves, which files are its source and its tests, where its practices are, and which checks it has.",
+  "description": "Which language the toolchain serves, which files are its source and its tests, where its practices are, which checks it has, and which of its checks and its test run the project is set up for.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["language", "sourceFiles", "testFiles", "practices", "checks"],
+  "required": ["language", "sourceFiles", "testFiles", "practices", "checks", "present", "missing"],
   "properties": {
     "language": {
       "type": "string",
@@ -42,7 +42,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 300,
-      "description": "The path, relative to the kit, of the file that lists the language's practices."
+      "description": "The path, relative to the toolchain mode's own folder, of the file that lists the language's practices. It holds in the kit and in a project alike."
     },
     "checks": {
       "type": "array",
@@ -52,7 +52,25 @@
       "minItems": 1,
       "maxItems": 50,
       "uniqueItems": true,
-      "description": "The names of the checks, in the order check runs them."
+      "description": "The names of the checks, in the order check runs them. A check that only some projects have is listed only where the project has it."
+    },
+    "present": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/setUpName"
+      },
+      "maxItems": 51,
+      "uniqueItems": true,
+      "description": "What the project is set up for: the names of the checks whose files it has, in the order check runs them, then test when it has what the test run needs. Read from the project's own files; nothing is run."
+    },
+    "missing": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/notSetUp"
+      },
+      "maxItems": 51,
+      "uniqueItems": true,
+      "description": "What the project is not set up for: each check, and test, that every project must have and this one lacks, in the same order, each with a sentence saying what to add. check and test give it an inconclusive verdict, never a pass."
     }
   },
   "$defs": {
@@ -60,7 +78,33 @@
       "type": "string",
       "pattern": "^[a-z][a-z0-9]*([:-][a-z0-9]+)*$",
       "maxLength": 64,
-      "description": "The name of one check, such as lint."
+      "description": "The name of one check, such as lint; never test, which names the test run.",
+      "not": {
+        "const": "test"
+      }
+    },
+    "setUpName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*([:-][a-z0-9]+)*$",
+      "maxLength": 64,
+      "description": "The name of a check, as checks lists it, or test for the test run."
+    },
+    "notSetUp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "reason"],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/setUpName"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "One sentence that names what the project lacks and says what to add."
+        }
+      },
+      "description": "A check, or the test run, that the project is not set up for."
     }
   }
 }

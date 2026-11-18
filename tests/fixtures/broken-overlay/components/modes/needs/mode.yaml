@@ -1,0 +1,14 @@
+name: needs
+version: 1.0.0
+description: Requires an interface nobody defines and calls what it does not require.
+requires:
+  interfaces:
+    - nothing@1
+actions:
+  go:
+    description: When a test goes.
+    input: schemas/go.json
+    output: schemas/go.json
+    effects: [read]
+    run:
+      - call: greeting-source.fetch

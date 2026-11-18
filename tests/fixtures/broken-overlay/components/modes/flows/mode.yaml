@@ -1,0 +1,14 @@
+name: flows
+version: 1.0.0
+description: Has a broken workflow.
+actions:
+  go:
+    description: When a test goes.
+    input: schemas/go.json
+    output: schemas/go.json
+    effects: [read]
+    run:
+      - script: scripts/go.ts
+workflows:
+  - workflows/twice.yaml
+  - workflows/unreadable.yaml

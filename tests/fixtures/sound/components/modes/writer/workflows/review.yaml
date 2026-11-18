@@ -1,0 +1,9 @@
+name: review
+trigger:
+  manual: true
+steps:
+  - id: fetch
+    action: greeting-source.fetch
+  - id: keep
+    approval: Keep this greeting?
+    show: $steps.fetch.output

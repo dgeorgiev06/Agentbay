@@ -76,7 +76,13 @@
       "description": "One named answer of an approval. Without a rule it is always offered.",
       "type": "object",
       "additionalProperties": false,
+      "required": ["does"],
       "properties": {
+        "does": {
+          "description": "What taking the choice does, in one sentence the owner reads beside its name on the card.",
+          "type": "string",
+          "pattern": "\\S"
+        },
         "when": {
           "description": "The rule: an earlier step's output, $steps.<id>.output with an optional path, that is true or false. When it is false the choice is withheld, and what the step shows gives the reason under withheld.<choice>. A rule that is neither fails the step.",
           "$ref": "#/$defs/reference"

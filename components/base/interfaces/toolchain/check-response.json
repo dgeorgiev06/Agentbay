@@ -17,7 +17,7 @@
   },
   "$defs": {
     "verdict": {
-      "description": "What one check found: passed, failed, or inconclusive when it could not be run to its end or ended in a way the toolchain does not recognise.",
+      "description": "What one check found: passed, failed, or inconclusive when the checkout is not set up for it, it could not be run to its end or ended in a way the toolchain does not recognise.",
       "oneOf": [
         {
           "$ref": "#/$defs/passed"
@@ -80,7 +80,7 @@
     },
     "inconclusive": {
       "type": "object",
-      "description": "The check could not be started, did not finish in time, or ended in a way the toolchain does not recognise, so nothing is known.",
+      "description": "The checkout is not set up for the check, or the check could not be started, did not finish in time, or ended in a way the toolchain does not recognise, so nothing is known.",
       "additionalProperties": false,
       "required": ["name", "verdict", "reason", "seconds", "stdout", "stderr"],
       "properties": {

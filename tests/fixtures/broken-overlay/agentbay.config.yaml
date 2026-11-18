@@ -1,0 +1,13 @@
+bindings:
+  greeting-source: greeter
+adapter: fake
+modes:
+  - nosuchmode
+  - forge
+settings:
+  writer:
+    signature: Yours, the writer
+  ghostmode:
+    x: 1
+  greeter:
+    y: 2

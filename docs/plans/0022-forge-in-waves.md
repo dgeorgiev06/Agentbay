@@ -34,7 +34,7 @@ Kinds: **I** an interface, merged first, with its schemas and a test any impleme
 | C1r | A workflow's approval names choices, each with a rule; the kernel withholds a choice whose rule is false and refuses it; the kernel checks where each line of a card came from by the kind of step | C, runs | `bay/runs/`, the workflow schema, its tests | - | - |
 | C1p | A card is printed as lines, not JSON; `bay approve` takes the choice | C, command line | `bay/run-report.ts`, `bay/commands/approve.ts`, its tests | C1r | what a choice and a card are |
 | C3 | The kernel counts the times a step asks for tests and refuses past the limit | C, runs | `bay/runs/`, `bay/broker/command-operations.ts`, its tests | C1r | both change runs, so one after the other |
-| P1 | Proof: its folder, manifest and table of kinds; the checks pass; a test fails on the base and passes on the slice. Copy, call, remove | M | `components/base/proof/` manifest, table, lib, two kinds and their tests | I1, T1 | the interface; a ceiling the suite fits |
+| P1 | Proof: its folder, manifest and table of kinds; the checks pass; a test fails on the base and passes on the slice. Copy, call, remove | M | `components/base/proof/` manifest, table, lib, two kinds and their tests | I1, T1, KL1 | the interface; a ceiling the suite fits |
 | W1 | Waves from a plan file: order, disjoint scopes, longest chain, builders per wave, the table drawn; a plan where every slice waits is sent back | M | `components/base/forge/` plan scripts and their tests | I1 | the slice's form |
 | P2 | Proof: changes are in scope; files outside are untouched; what changed matches the declaration; size | M | one file per kind and its test | P1 | the folder and table |
 | P3 | Proof: injected bugs are caught, in a throwaway copy, each run naming the test files that cover it, with a time limit | M | one kind file and its test | P1 | it calls tests as P1 does |
@@ -45,6 +45,19 @@ Kinds: **I** an interface, merged first, with its schemas and a test any impleme
 | F3 | Forge: restate, propose interfaces, plan in waves, challenge by another model, the first card | M | forge's files for the stages before the build, named | F1 | the workflow it hands to |
 | F4 | Forge runs a wave: two builders in two worktrees on disjoint scopes, merged in order | M | forge's wave workflow and its test | F2, F3 | one slice end to end, and a plan to take waves from |
 | X1 | The todo mode, asked for in prose, built by forge | forge's job | `components/modes/todo/` and its interface | F4 | forge whole |
+
+## Slices added since the plan was drawn
+
+Each was found by a builder or in review, and none was in the designs.
+
+| # | Slice | Kind | Write scope | After | Because |
+|---|---|---|---|---|---|
+| KL1 | An action may let its script steps run longer than eight minutes, up to 1,800 seconds; commands get what is left; `toolchain@1`'s ceiling rises to 1,000 seconds | C, runs and broker | `bay/runs/`, three broker files, the mode schema, the toolchain's request schemas | T1 | T1 found that a script step is stopped at eight minutes, so the kit's own suite could not be judged through its toolchain. P1 needs it |
+| EK1 | The broker reserves the event kinds the kernel itself reads (`run.asked-by`, `tool.called`, `budget.exceeded`) | C, broker | `bay/broker/other-operations.ts`, its tests | C1r | C1r found that a script can write them; one changes what the owner reads while a run waits for budget |
+| MN1 | The adapter tells the kernel which model each tier is, so a judged line on a card names the model | C, adapter and runs | `adapters/claude-code/`, the config, one field in runs | C1p | The owner chose that the kernel adds the model's name; the kernel does not know it today and shows the skill and tier |
+| KS1 | The kernel compiles each schema once; the cost of starting a script host is measured and cut where it is safe | C, manifests and broker | `bay/manifests/spec.ts`, the script runner | - | SP1 measured it: at least 119 of the suite's 870 processor seconds |
+
+KL1 runs in wave 1 beside T1. EK1 and MN1 run in wave 2 or 3 where a seat is free; F1 needs MN1. KS1 runs when the machine is quiet, since it times the suite.
 
 ## Waves
 

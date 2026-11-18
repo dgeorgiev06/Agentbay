@@ -1,0 +1,31 @@
+name: writer
+version: 1.0.0
+description: Drafts a note from a greeting and keeps it.
+requires:
+  interfaces:
+    - greeting-source@1
+resources:
+  db:
+    migrations: migrations
+  files:
+    write:
+      - out/notes/
+settings: schemas/settings.json
+actions:
+  compose:
+    description: When the owner wants a note drafted from a greeting.
+    input: schemas/compose-input.json
+    output: schemas/compose-output.json
+    effects:
+      - read
+      - write
+    run:
+      - script: scripts/prepare.ts
+      - skill: skills/draft
+        tier: balanced
+        checks:
+          - scripts/long-enough.ts
+      - script: scripts/finish.ts
+workflows:
+  - workflows/review.yaml
+  - workflows/twice.yaml

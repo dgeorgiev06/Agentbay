@@ -1,0 +1,55 @@
+name: skilly
+version: 1.0.0
+description: Holds broken skills and a broken layout.
+actions:
+  go:
+    description: When a test goes.
+    input: schemas/go.json
+    output: schemas/go.json
+    effects: [read]
+    run:
+      - skill: skills/sections
+        tier: fast
+      - skill: skills/bad-front
+        tier: fast
+      - skill: skills/misnamed
+        tier: fast
+      - skill: skills/nodod
+        tier: fast
+      - skill: skills/ghost
+        tier: fast
+  bare:
+    description: When a test has no example.
+    input: schemas/go.json
+    output: schemas/go.json
+    effects: [read]
+    run:
+      - script: scripts/go.ts
+  notjson:
+    description: When a test has an example that is not JSON.
+    input: schemas/go.json
+    output: schemas/go.json
+    effects: [read]
+    run:
+      - script: scripts/go.ts
+  notobject:
+    description: When a test has an example that is not an object.
+    input: schemas/go.json
+    output: schemas/go.json
+    effects: [read]
+    run:
+      - script: scripts/go.ts
+  halfway:
+    description: When a test has an example with no output.
+    input: schemas/go.json
+    output: schemas/go.json
+    effects: [read]
+    run:
+      - script: scripts/go.ts
+  strict:
+    description: When a test has an example that breaks its schema.
+    input: schemas/strict.json
+    output: schemas/go.json
+    effects: [read]
+    run:
+      - script: scripts/go.ts

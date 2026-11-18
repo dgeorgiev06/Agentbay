@@ -29,7 +29,7 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 1000,
-      "description": "How long one check may run before it is stopped and its verdict is inconclusive; left out, the toolchain's own limit applies. A whole suite may need up to 1000 seconds: the kit's own takes about 450 alone and longer beside another run."
+      "description": "How long one check may run before it is stopped and its verdict is inconclusive; left out, 90 seconds. A whole suite may need up to 1000 seconds: the kit's own takes about 450 alone and longer beside another run. A toolchain gives its script step that long by declaring scriptTimeLimitSeconds on the action; without it the kernel stops the step after 480 seconds, whatever limit is asked."
     }
   }
 }

@@ -1,0 +1,57 @@
+{
+  "input": {
+    "slice": {
+      "name": "ONE",
+      "kind": "mode",
+      "scope": ["src/**", "tests/**"],
+      "after": [],
+      "done": [
+        { "id": "DOD-ONE-1", "says": "The checks and the tests pass.", "level": "must", "proof": { "kind": "checks" } },
+        {
+          "id": "DOD-ONE-2",
+          "says": "A test shows the change.",
+          "level": "must",
+          "proof": { "kind": "fails-first", "tests": ["tests/one.test.ts"] }
+        },
+        { "id": "DOD-ONE-3", "says": "The words tell the owner what to do.", "level": "should" }
+      ]
+    },
+    "base": "main",
+    "head": "forge/one",
+    "declared": { "files": ["src/one.txt", "tests/one.test.ts"], "names": { "gained": [], "lost": [], "changed": [] } },
+    "bugs": []
+  },
+  "output": {
+    "verdicts": [
+      {
+        "item": "DOD-ONE-1",
+        "kind": "checks",
+        "verdict": "passed",
+        "detail": "Every check passed (typecheck, lint, format:check, deadcode), and so did the test run: 12 tests."
+      },
+      {
+        "item": "DOD-ONE-2",
+        "kind": "fails-first",
+        "verdict": "passed",
+        "detail": "The named tests failed on the base with them laid over it, and pass on the head."
+      },
+      {
+        "item": "scope",
+        "kind": "in-scope",
+        "verdict": "inconclusive",
+        "reason": "The kind in-scope is not built in this version of the proof mode, so nothing is known."
+      },
+      {
+        "item": "declared",
+        "kind": "as-declared",
+        "verdict": "inconclusive",
+        "reason": "The kind as-declared is not built in this version of the proof mode, so nothing is known."
+      }
+    ],
+    "judgement": [{ "id": "DOD-ONE-3", "says": "The words tell the owner what to do.", "level": "should" }],
+    "size": [
+      { "path": "src/one.txt", "base": 1, "head": 2 },
+      { "path": "tests/one.test.ts", "head": 9 }
+    ]
+  }
+}

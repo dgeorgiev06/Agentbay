@@ -1,0 +1,24 @@
+name: proof
+version: 1.0.0
+description: Gives each item of a slice's definition of done a verdict by script, reaching code only through throwaway copies, a toolchain and a worktrees mode.
+
+implements: [proof@1]
+
+requires:
+  interfaces: [toolchain@1, worktrees@1]
+
+settings: schemas/settings.json
+
+resources:
+  commands:
+    count-lines:
+      run: wc -l --
+      effects: [read]
+
+actions:
+  prove:
+    description: When a slice's items of its definition of done need a verdict each, passed, failed or inconclusive, with the size of each changed file.
+    effects: [read, write, network, spend, delete]
+    scriptTimeLimitSeconds: 1800
+    run:
+      - script: scripts/prove.ts

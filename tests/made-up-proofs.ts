@@ -618,27 +618,25 @@ async function checkParts(context: ScriptContext, copy: Copy): Promise<readonly 
   return [...parts, testPart];
 }
 
-export async function checks(context: ScriptContext, request: Request, id: string): Promise<Verdict> {
-  const parts = await inCopy(context, request.head, (copy) => checkParts(context, copy));
+export async function checks(context: ScriptContext, id: string, head: Copy): Promise<Verdict> {
+  const parts = await checkParts(context, head);
   return decided(id, "checks", parts, "Every check passed, and so did the test run.");
 }
 
 ${baseRunFunction}
-async function headRun(context: ScriptContext, request: Request, tests: readonly string[]): Promise<Part> {
-  return inCopy(context, request.head, async (copy) => {
-    if (!copy.made) {
-      return unknown(copy.reason);
-    }
-    const run = await testRun(context, copy.folder, tests);
-    if (run.verdict === "inconclusive") {
-      return unknown("On the head: " + run.reason);
-    }
-    return run.verdict === "passed" ? held : broken("The named tests fail on the head.");
-  });
+async function headRun(context: ScriptContext, head: Copy, tests: readonly string[]): Promise<Part> {
+  if (!head.made) {
+    return unknown(head.reason);
+  }
+  const run = await testRun(context, head.folder, tests);
+  if (run.verdict === "inconclusive") {
+    return unknown("On the head: " + run.reason);
+  }
+  return run.verdict === "passed" ? held : broken("The named tests fail on the head.");
 }
 
-export async function failsFirst(context: ScriptContext, request: Request, item: { readonly id: string; readonly tests: readonly string[] }): Promise<Verdict> {
-  const parts = [await baseRun(context, request, item.tests), await headRun(context, request, item.tests)];
+export async function failsFirst(context: ScriptContext, request: Request, item: { readonly id: string; readonly tests: readonly string[] }, head: Copy): Promise<Verdict> {
+  const parts = [await baseRun(context, request, item.tests), await headRun(context, head, item.tests)];
   return decided(item.id, "fails-first", parts, "The named tests failed on the base and pass on the head.");
 }
 
@@ -712,9 +710,9 @@ function verdictOf(context: ScriptContext, request: Request, item: ProvenItem, c
   const { id, proof } = item;
   switch (proof.kind) {
     case "checks":
-      return checks(context, request, id);
+      return checks(context, id, copies.head);
     case "fails-first":
-      return failsFirst(context, request, { id, tests: proof.tests });
+      return failsFirst(context, request, { id, tests: proof.tests }, copies.head);
     case "bugs-caught":
       return bugsCaught(context, request, id);
     case "same-output":
@@ -802,13 +800,13 @@ const leavesACopyBaseRun = String.raw`async function baseRun(context: ScriptCont
 }
 `;
 
-const worktreeChecks = String.raw`  const cut = await called(context, "worktrees.cut", { slice: "proof-checks-" + String(context.now().getTime()), base: request.head });
+const worktreeChecks = String.raw`  const cut = await called(context, "worktrees.cut", { slice: "proof-checks-" + String(context.now().getTime()), base: commit });
   if (!cut.ok) {
     return decided(id, "checks", [unknown(cut.reason)], "");
   }
   const folder = textOf(cut.value, "folder");
   const parts = await checkParts(context, { made: true, folder });
-  await called(context, "worktrees.remove", { folder, into: request.head });`;
+  await called(context, "worktrees.remove", { folder, into: commit });`;
 
 const codeKindsImport = 'import { called, inCopy, ranIn, testRun, type Copy } from "./calls.ts";';
 
@@ -827,9 +825,15 @@ const replacements: Readonly<Record<ProofVariant, readonly Replacement[]>> = {
     ["scripts/lib/code-kinds.ts", codeKindsImport, codeKindsImportWithText],
     [
       "scripts/lib/code-kinds.ts",
-      "  const parts = await inCopy(context, request.head, (copy) => checkParts(context, copy));",
-      worktreeChecks,
+      "export async function checks(context: ScriptContext, id: string, head: Copy): Promise<Verdict> {",
+      "export async function checks(context: ScriptContext, id: string, head: Copy, commit: string): Promise<Verdict> {",
     ],
+    [
+      "scripts/prove.ts",
+      "      return checks(context, id, copies.head);",
+      "      return checks(context, id, copies.head, request.head);",
+    ],
+    ["scripts/lib/code-kinds.ts", "  const parts = await checkParts(context, head);", worktreeChecks],
   ],
   "leaves a copy behind when the toolchain fails": [
     ["scripts/lib/code-kinds.ts", codeKindsImport, codeKindsImportWithText],

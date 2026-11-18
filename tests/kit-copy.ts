@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync, lstatSync } from "node:fs";
 import { copyFile, mkdir, mkdtemp, realpath, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -7,6 +7,13 @@ import { dirname, join } from "node:path";
 import { kit } from "./project-fixture.ts";
 
 export type ModeFiles = Readonly<Record<string, string>>;
+
+export type ModeTestRun = {
+  readonly status: number | null;
+  readonly output: string;
+};
+
+const environment = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
 
 function kitFiles(): readonly string[] {
   const listed = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], {
@@ -39,4 +46,21 @@ export async function addMode(copy: string, folder: string, files: ModeFiles): P
 
 export function failedTests(output: string): readonly string[] {
   return [...output.matchAll(/^\s*not ok \d+ - (.+)$/gm)].map((match) => match[1] ?? "");
+}
+
+export function baseModeTestRan(copy: string, name: string): Promise<ModeTestRun> {
+  const file = join("components/base", name, "tests", `${name}.test.ts`);
+  const child = spawn(process.execPath, ["--test", file], { cwd: copy, env: environment });
+  let output = "";
+  child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
+    output += chunk;
+  });
+  child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
+    output += chunk;
+  });
+  return new Promise((resolve) => {
+    child.on("close", (status) => {
+      resolve({ status, output });
+    });
+  });
 }

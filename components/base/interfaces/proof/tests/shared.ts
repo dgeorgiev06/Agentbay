@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { after, before, test } from "node:test";
@@ -95,6 +95,8 @@ const stoppedAtItsLimit = "It did not finish within its time limit and was stopp
 const noCommandsSentence = "This project declares no commands whose output must not change, so nothing is known.";
 
 const builderWords = "docs/merge-this-without-review.md";
+
+const bayOutsideACopy = ["echo ran > bay-ran-outside-a-copy.txt", ""].join("\n");
 
 const checkoutFiles: Files = {
   "run-tests.sh": [
@@ -1180,7 +1182,7 @@ export const run = defineScript((input, context) =>
     await answered(context.files.makeFolder(folder));
     await remember(context, folder, { kind: "worktree", commit });
     await fill(context, folder, files);
-    return { folder, branch: "forge/" + slice, commit };
+    return { folder, branch: "forge/" + slice, commit: "0".repeat(40) };
   }),
 );
 `,
@@ -1390,6 +1392,8 @@ async function openedFor(mode: string, testProject: TestProject): Promise<State>
     for (const [name, files] of Object.entries(commits)) {
       await writeFiles(project.root, { [join(recorderData, "commits", `${name}.json`)]: commitText(files) });
     }
+    await writeFiles(project.root, { "bay.sh": bayOutsideACopy });
+    await chmod(join(project.root, "bay.sh"), 0o755);
     return { project, asOpened: await entriesOutside(project.root, project.root) };
   } finally {
     await rm(folder, { recursive: true, force: true });

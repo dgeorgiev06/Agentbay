@@ -29,6 +29,10 @@ function parsed(text: string): { readonly ok: true; readonly value: unknown } | 
   }
 }
 
+function isRunnable(command: unknown): boolean {
+  return typeof command === "string" && command.trim() !== "";
+}
+
 function scriptNames(manifest: unknown): readonly string[] {
   const scripts: unknown =
     typeof manifest === "object" && manifest !== null ? Reflect.get(manifest, "scripts") : undefined;
@@ -36,7 +40,7 @@ function scriptNames(manifest: unknown): readonly string[] {
     return [];
   }
   return Object.entries(scripts).flatMap(([name, command]: readonly [string, unknown]) =>
-    typeof command === "string" ? [name] : [],
+    isRunnable(command) ? [name] : [],
   );
 }
 

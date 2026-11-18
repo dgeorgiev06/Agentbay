@@ -4,7 +4,15 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import type { ModeProject } from "../../../../tests/test-toolbox.ts";
-import { openToolchainProject, packageWith } from "./checkouts.ts";
+import {
+  commandsRun,
+  listed,
+  openToolchainProject,
+  packageWith,
+  printing,
+  withoutSeconds,
+  writeCheckout,
+} from "./checkouts.ts";
 
 let project: ModeProject;
 
@@ -145,3 +153,85 @@ function notJson(name: string): string {
     `make it JSON, with ${additions[name] ?? ""}.`
   );
 }
+
+const oddScripts = `${JSON.stringify(
+  {
+    name: "checkout",
+    private: true,
+    type: "module",
+    scripts: {
+      typecheck: "   ",
+      lint: null,
+      "format:check": printing("format:check found nothing"),
+      deadcode: printing("deadcode found nothing"),
+      test: { run: "node --test" },
+    },
+  },
+  null,
+  2,
+)}\n`;
+
+function lacksScript(owner: string, name: string, addition: string): string {
+  return `${owner}'s package.json has no script ${name}: add ${addition}.`;
+}
+
+const typecheckAddition =
+  '"typecheck": "tsc --noEmit" to its scripts, or another command that checks the types and exits 1 or 2 on a type error';
+
+const lintAddition =
+  '"lint": "eslint ." to its scripts, or another command that lints the code and exits 1 on a finding';
+
+const testAddition =
+  '"test": "node --test" to its scripts, or another command that runs the tests with node\'s test runner';
+
+test("a script that is blank, null or a mapping is not set up: describe lists it as missing, and check and test run no npm for it", async () => {
+  assert.deepEqual(await describedWith(oddScripts), {
+    ...language,
+    checks: required,
+    present: ["format:check", "deadcode"],
+    missing: [
+      { name: "typecheck", reason: lacksScript("The project", "typecheck", typecheckAddition) },
+      { name: "lint", reason: lacksScript("The project", "lint", lintAddition) },
+      { name: "test", reason: lacksScript("The project", "test", testAddition) },
+    ],
+  });
+  const folder = await writeCheckout(project, "odd-scripts", { "package.json": oddScripts });
+  const checked = await project.run("typescript.check", { folder, checks: ["typecheck", "lint"] });
+  const tested = await project.run("typescript.test", { folder });
+  assert.ok(checked.state.status === "done" && tested.state.status === "done", JSON.stringify([checked, tested]));
+  assert.deepEqual(
+    {
+      commands: [...commandsRun(checked.events), ...commandsRun(tested.events)],
+      verdicts: listed(checked.state.output, "verdicts").map((verdict) => withoutSeconds(verdict)),
+      test: withoutSeconds(tested.state.output),
+    },
+    {
+      commands: [
+        ["cat", "--", "package.json"],
+        ["cat", "--", "package.json"],
+      ],
+      verdicts: [
+        {
+          name: "typecheck",
+          verdict: "inconclusive",
+          reason: lacksScript("The checkout", "typecheck", typecheckAddition),
+          stdout: "",
+          stderr: "",
+        },
+        {
+          name: "lint",
+          verdict: "inconclusive",
+          reason: lacksScript("The checkout", "lint", lintAddition),
+          stdout: "",
+          stderr: "",
+        },
+      ],
+      test: {
+        verdict: "inconclusive",
+        reason: lacksScript("The checkout", "test", testAddition),
+        stdout: "",
+        stderr: "",
+      },
+    },
+  );
+});

@@ -24,13 +24,6 @@ export function unknown(reason: string): Part {
   return { verdict: "inconclusive", reason };
 }
 
-export function notBuiltParts(kind: KindName): Parts {
-  return {
-    parts: [unknown(`The kind ${kind} is not built in this version of the proof mode, so nothing is known.`)],
-    whenPassed: "",
-  };
-}
-
 export function verdictOf(item: string, kind: KindName, found: Parts): Verdict {
   const reasons = found.parts.flatMap((part) => (part.verdict === "inconclusive" ? [part.reason] : []));
   if (reasons.length > 0) {

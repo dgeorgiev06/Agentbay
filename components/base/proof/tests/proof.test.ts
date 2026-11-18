@@ -12,11 +12,6 @@ const caseOfThisMode = "proof@1, proof: ";
 
 const sharedTestMilliseconds = 15 * 60_000;
 
-const notBuilt: readonly string[] = [
-  "count: passed when the head has at most the most, and when a declared count did not rise (TR2, K1)",
-  "count: failed when the head has more than the most",
-];
-
 function casesEnded(output: string, how: "ok" | "not ok"): readonly string[] {
   const ended = [...output.matchAll(/^(not ok|ok) \d+ - (.+)$/gm)].filter((match) => match[1] === how);
   return ended.flatMap((match) => {
@@ -48,9 +43,9 @@ function sharedTestRan(): Promise<Ran> {
 if (process.env[sharedRunVariable] === "yes") {
   testProof({ mode: "proof" });
 } else {
-  test("proof passes every case of proof@1's shared test but those of the kinds not built yet, which are named here and fail", async () => {
+  test("proof passes every case of proof@1's shared test", async () => {
     const ran = await sharedTestRan();
-    assert.deepEqual([...ran.failed].sort(), [...notBuilt].sort(), ran.output);
+    assert.deepEqual(ran.failed, [], ran.output);
     assert.ok(ran.passed.length > 0, ran.output);
   });
 }

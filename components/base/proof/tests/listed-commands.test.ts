@@ -48,7 +48,13 @@ test("bay check on the kit warns once for each command the proof mode lists and 
     ],
     [
       "warning",
-      28,
+      24,
+      "Mode proof lists the command count-matches, which runs grep -r -c -h -F -e and which the mode says has the " +
+        "effects: read; a listed command can run code the agent wrote.",
+    ],
+    [
+      "warning",
+      31,
       "Action prove of mode proof declares scriptTimeLimitSeconds: 1800, so each of its script steps may run " +
         "unattended for 1800 seconds, longer than the kernel's 480.",
     ],

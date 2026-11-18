@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import { secondsToAsk } from "../scripts/lib/step.ts";
-import { broken, held, notBuiltParts, unknown, verdictOf } from "../scripts/lib/verdicts.ts";
+import { broken, held, unknown, verdictOf } from "../scripts/lib/verdicts.ts";
 
 test("an item whose parts all passed is passed, with the sentence for a pass", () => {
   assert.deepEqual(verdictOf("DOD-1", "checks", { parts: [held, held], whenPassed: "Every part held." }), {
@@ -31,15 +31,6 @@ test("an inconclusive part beside a failed one makes the item inconclusive, and 
     kind: "checks",
     verdict: "inconclusive",
     reason: "It did not finish.",
-  });
-});
-
-test("a kind that is not built answers inconclusive with a sentence that says so, never passed", () => {
-  assert.deepEqual(verdictOf("DOD-1", "bugs-caught", notBuiltParts("bugs-caught")), {
-    item: "DOD-1",
-    kind: "bugs-caught",
-    verdict: "inconclusive",
-    reason: "The kind bugs-caught is not built in this version of the proof mode, so nothing is known.",
   });
 });
 

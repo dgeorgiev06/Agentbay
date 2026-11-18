@@ -287,7 +287,7 @@ export async function ranIn(context: ScriptContext, folder: string, command: { r
 }
 `;
 
-const changesLibrary = String.raw`import type { ScriptContext } from "${sdkFromLibrary}";
+const changesLibrary = String.raw`import { pathMatch, type ScriptContext } from "${sdkFromLibrary}";
 import { called, ranIn, type Copy } from "./calls.ts";
 import type { Request } from "./request.ts";
 import { broken, counted, decided, held, unknown, type Part, type Verdict } from "./verdicts.ts";
@@ -329,26 +329,12 @@ function touchedPaths(paths: readonly ChangedPath[]): readonly string[] {
   return paths.flatMap((changed) => (changed.how === "renamed" ? [changed.from, changed.path] : [changed.path]));
 }
 
-function patternOf(pattern: string): RegExp {
-  const parts = pattern.split(/(\*\*\/|\*\*|\*)/).map((part) => {
-    if (part === "**/") {
-      return "(?:[^/]+/)*";
-    }
-    if (part === "**") {
-      return ".*";
-    }
-    return part === "*" ? "[^/]*" : part.replace(/[.+?^$${"{"}}()|[\]\\]/g, "\\$&");
-  });
-  return new RegExp("^" + parts.join("") + "$");
-}
-
 export function inScope(request: Request, changed: Changed): Verdict {
   if (!changed.known) {
     return decided("scope", "in-scope", [unknown(changed.reason)], "");
   }
   const touched = touchedPaths(changed.paths);
-  const patterns = request.scope.map(patternOf);
-  const outside = touched.filter((path) => !patterns.some((pattern) => pattern.test(path)));
+  const outside = touched.filter((path) => !request.scope.some((pattern) => pathMatch(pattern, path).kind === "matched"));
   const parts = outside.length === 0 ? [held] : [broken(counted(outside.length, "changed path is", "changed paths are") + " outside the scope: " + outside.join(", ") + ".")];
   const count = String(touched.length);
   return decided("scope", "in-scope", parts, "Every changed path is in the scope: " + count + " of " + count + ".");

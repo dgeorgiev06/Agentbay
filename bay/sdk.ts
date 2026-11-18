@@ -219,3 +219,122 @@ export function parseIsoTime(text: string): Date | undefined {
 export function isWithinWindow(time: Date, window: TimeWindow): boolean {
   return time.getTime() >= window.start.getTime() && time.getTime() < window.end.getTime();
 }
+
+export type PathMatch =
+  | { readonly kind: "matched" }
+  | { readonly kind: "not matched" }
+  | { readonly kind: "not a pattern"; readonly reason: string }
+  | { readonly kind: "not a path"; readonly reason: string };
+
+const longestPattern = 1000;
+
+const patternCharacters = /^[A-Za-z0-9_.*/-]*$/;
+
+const anyFolders = "**";
+
+const onlyStars = /^\**$/;
+
+function patternFault(pattern: string): string | undefined {
+  if (pattern === "") {
+    return "it is empty";
+  }
+  if (pattern.length > longestPattern) {
+    return `it is longer than ${String(longestPattern)} characters`;
+  }
+  if (!patternCharacters.test(pattern)) {
+    return "it holds a character other than a letter, a digit, _, ., *, / and -";
+  }
+  if (pattern.startsWith("/") || pattern.startsWith("-")) {
+    return `it starts with ${pattern.charAt(0)}`;
+  }
+  if (pattern.endsWith("/")) {
+    return "it ends with /";
+  }
+  if (pattern.includes("//")) {
+    return "it holds two slashes in a row";
+  }
+  if (pattern.includes("..")) {
+    return "it holds two dots in a row";
+  }
+  return undefined;
+}
+
+function pathFault(parts: readonly string[], path: string): string | undefined {
+  if (path.startsWith("/")) {
+    return "it starts with /, and a path is relative to the repository's root";
+  }
+  if (parts.includes("")) {
+    return parts.length === 1 ? "it is empty" : "it holds two slashes in a row";
+  }
+  if (parts.includes("..")) {
+    return "it holds .. as a part";
+  }
+  return parts.length === 0 ? "it names no file" : undefined;
+}
+
+function pathParts(path: string): readonly string[] {
+  const parts = path.split("/");
+  const named = parts.length > 1 && parts.at(-1) === "" ? parts.slice(0, -1) : parts;
+  return named.filter((part) => part !== ".");
+}
+
+function nameMatches(pattern: string, name: string): boolean {
+  let patternAt = 0;
+  let nameAt = 0;
+  let star = -1;
+  let starNameAt = 0;
+  while (nameAt < name.length) {
+    if (pattern.charAt(patternAt) === "*") {
+      star = patternAt;
+      starNameAt = nameAt;
+      patternAt += 1;
+    } else if (patternAt < pattern.length && pattern.charAt(patternAt) === name.charAt(nameAt)) {
+      patternAt += 1;
+      nameAt += 1;
+    } else if (star >= 0) {
+      starNameAt += 1;
+      patternAt = star + 1;
+      nameAt = starNameAt;
+    } else {
+      return false;
+    }
+  }
+  return onlyStars.test(pattern.slice(patternAt));
+}
+
+function afterAnyFolders(reached: readonly boolean[], atLeastOne: boolean): readonly boolean[] {
+  let reachedBefore = false;
+  return reached.map((here) => {
+    const next = reachedBefore || (here && !atLeastOne);
+    reachedBefore ||= here;
+    return next;
+  });
+}
+
+function afterName(reached: readonly boolean[], part: string, names: readonly string[]): readonly boolean[] {
+  return reached.map(
+    (_, index) => index > 0 && reached[index - 1] === true && nameMatches(part, names[index - 1] ?? ""),
+  );
+}
+
+function partsMatch(pattern: readonly string[], names: readonly string[]): boolean {
+  let reached: readonly boolean[] = [true, ...names.map(() => false)];
+  for (const [index, part] of pattern.entries()) {
+    const last = index === pattern.length - 1;
+    reached = part === anyFolders ? afterAnyFolders(reached, last) : afterName(reached, part, names);
+  }
+  return reached.at(-1) === true;
+}
+
+export function pathMatch(pattern: string, path: string): PathMatch {
+  const patternProblem = patternFault(pattern);
+  if (patternProblem !== undefined) {
+    return { kind: "not a pattern", reason: `${JSON.stringify(pattern)} is not a pattern: ${patternProblem}.` };
+  }
+  const names = pathParts(path);
+  const pathProblem = pathFault(names, path);
+  if (pathProblem !== undefined) {
+    return { kind: "not a path", reason: `${JSON.stringify(path)} is not a path: ${pathProblem}.` };
+  }
+  return partsMatch(pathParts(pattern), names) ? { kind: "matched" } : { kind: "not matched" };
+}

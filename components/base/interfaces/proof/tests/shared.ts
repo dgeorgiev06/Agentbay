@@ -275,7 +275,7 @@ const inconclusiveHead: Files = {
 };
 
 const commits: Readonly<Record<string, Files>> = {
-  "33cd559": tr2Base,
+  c7f0d13: tr2Base,
   c9bb216: tr2Head,
   "failed-base": failedBase,
   "failed-head": failedHead,

@@ -1,4 +1,5 @@
 import { proveChecks } from "./kinds/checks.ts";
+import { proveFailsFirst } from "./kinds/fails-first.ts";
 import type { KindName, ProofOf, Request } from "./lib/request.ts";
 import type { ProofStep } from "./lib/step.ts";
 import { notBuiltParts, type Parts } from "./lib/verdicts.ts";
@@ -13,7 +14,7 @@ function notBuilt(_step: ProofStep, _request: Request, proof: { readonly kind: K
 
 export const kinds: Table = {
   checks: proveChecks,
-  "fails-first": notBuilt,
+  "fails-first": proveFailsFirst,
 
   "in-scope": notBuilt,
   "as-declared": notBuilt,

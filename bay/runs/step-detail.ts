@@ -1,6 +1,7 @@
 import { noSpend, spendFromJson } from "./budget.ts";
-import type { Json, Spend, Submission, Tier } from "../contracts.ts";
+import { tiers, type Json, type Spend, type Submission, type Tier } from "../contracts.ts";
 import { fieldOf, numberField, textField, textsField, toJson } from "../json.ts";
+import { storedCardOf, type Card } from "./card.ts";
 import { choiceStatuses, type ApprovalAnswer, type ChoiceStatus } from "./choices.ts";
 
 export const stepKinds = ["script", "check", "skill", "call", "action", "undo", "approval", "wait", "foreach"] as const;
@@ -22,6 +23,7 @@ export type SkillDetail = {
   readonly feedback: readonly string[];
   readonly earlierSpent: Spend;
   readonly calledSpent: Spend;
+  readonly calledRuns?: readonly string[];
   readonly submission?: Submission;
 };
 
@@ -41,6 +43,7 @@ export type ApprovalDetail = {
   readonly previousHash?: string;
   readonly shown?: Json;
   readonly choices?: readonly ChoiceStatus[];
+  readonly card?: Card;
   readonly verdict?: ApprovalVerdict;
 };
 
@@ -60,8 +63,6 @@ export type RefusedDetail = {
   readonly kind: StepKind;
   readonly detail: null;
 };
-
-const tiers: readonly Tier[] = ["fast", "balanced", "deep"];
 
 const decisions: readonly ApprovalVerdict["decision"][] = ["approve", "reject", "choice"];
 
@@ -117,6 +118,7 @@ function tierOf(value: Json): Tier {
 
 function skillDetailOf(value: Json): SkillDetail {
   const submission = submissionOf(value);
+  const calledRuns = textsField(value, "calledRuns");
   return {
     mode: requiredText(value, "mode", "skill"),
     action: requiredText(value, "action", "skill"),
@@ -127,6 +129,7 @@ function skillDetailOf(value: Json): SkillDetail {
     feedback: textsField(value, "feedback"),
     earlierSpent: optionalSpend(value, "earlierSpent") ?? noSpend,
     calledSpent: optionalSpend(value, "calledSpent") ?? noSpend,
+    ...(calledRuns.length === 0 ? {} : { calledRuns }),
     ...(submission === undefined ? {} : { submission }),
   };
 }
@@ -180,12 +183,14 @@ function approvalDetailOf(value: Json): ApprovalDetail {
   const shown = fieldOf(value, "shown");
   const verdict = verdictOf(value);
   const choices = choiceStatusesOf(value);
+  const card = storedCardOf(fieldOf(value, "card"));
   return {
     question: requiredText(value, "question", "approval"),
     hash: requiredText(value, "hash", "approval"),
     ...(previousHash === undefined ? {} : { previousHash }),
     ...(shown === undefined ? {} : { shown }),
     ...(choices === undefined ? {} : { choices }),
+    ...(card === undefined ? {} : { card }),
     ...(verdict === undefined ? {} : { verdict }),
   };
 }

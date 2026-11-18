@@ -57,6 +57,7 @@ function approvalWaiting(context: WaitingContext, run: RunWithSteps, stepKey: st
     content,
     ...(detail.previousHash === undefined ? {} : { previousHash: detail.previousHash }),
     ...(detail.choices === undefined ? {} : { choices: shownChoices(detail.choices, content) }),
+    ...(detail.card === undefined ? {} : { card: detail.card }),
   };
 }
 

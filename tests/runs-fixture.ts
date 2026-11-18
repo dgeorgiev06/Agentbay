@@ -270,7 +270,7 @@ const draftSkill = [
   "",
 ].join("\n");
 
-const scriptNames = ["add-one", "double", "stringify", "log", "fail", "spend", "long-enough", "slow"];
+const scriptNames = ["add-one", "double", "stringify", "log", "fail", "spend", "long-enough", "slow", "probe"];
 
 function fixtureConfig(changes: Changes): Readonly<Record<string, string>> {
   const config: Config = {

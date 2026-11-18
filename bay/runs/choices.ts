@@ -138,7 +138,7 @@ function choiceRefusal(stepKey: string, statuses: readonly ChoiceStatus[], asked
   }
 }
 
-export function answerRefusal(
+export function decisionRefusal(
   stepKey: string,
   statuses: readonly ChoiceStatus[] | undefined,
   given: { readonly answer: ApprovalAnswer; readonly shown: Json },

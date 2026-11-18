@@ -383,6 +383,7 @@ function nextRound(detail: SkillDetail, feedback: readonly string[], submission:
     feedback,
     earlierSpent: addSpend(detail.earlierSpent, submission.spent),
     calledSpent: detail.calledSpent,
+    ...(detail.calledRuns === undefined ? {} : { calledRuns: detail.calledRuns }),
   };
 }
 

@@ -113,7 +113,7 @@ features:
       - safety
       - secrets
   runs:
-    purpose: Advances a run step by step, durably - waiting, resuming, budgets, approvals, undo.
+    purpose: Advances a run step by step, durably - waiting, resuming, budgets, approvals with choices and checked cards, undo.
     entry:
       - bay/runs/runs.ts
     private:
@@ -132,6 +132,8 @@ features:
       - bay/runs/step-key.ts
       - bay/runs/step-detail.ts
       - bay/runs/task-tokens.ts
+      - bay/runs/choices.ts
+      - bay/runs/card.ts
     may_import:
       - vocabulary
       - manifests

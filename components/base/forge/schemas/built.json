@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Built",
+  "description": "How the builder ended: built, or stopped with what is missing as a name. No field holds free text a card could show.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome"],
+      "description": "The builder wrote the slice.",
+      "properties": {
+        "outcome": {
+          "const": "built",
+          "description": "The slice is written in its worktree."
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "missing"],
+      "description": "The builder stopped, since the slice needs a capability that is not there.",
+      "properties": {
+        "outcome": {
+          "const": "stopped",
+          "description": "The builder stopped before the slice was done."
+        },
+        "missing": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["lacks", "name"],
+          "description": "What is missing: where it would live, and its name. No sentence, so nothing a builder writes reaches a card.",
+          "properties": {
+            "lacks": {
+              "enum": ["kernel", "toolbox", "test-toolbox", "interface"],
+              "description": "Where the missing capability would live."
+            },
+            "name": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9._@/-]*$",
+              "maxLength": 80,
+              "description": "The name of the missing function, operation or action, such as worktrees.commit."
+            }
+          }
+        }
+      }
+    }
+  ]
+}

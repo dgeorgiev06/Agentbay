@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DrawRequest",
+  "description": "What the merge card is drawn from: the slice, proof's answer, how the builder ended, the branch the work is set aside on, and the branch a merge goes into.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["slice", "proof", "built", "work", "into"],
+  "properties": {
+    "slice": {
+      "$ref": "proof@1/prove-request.json#/$defs/slice"
+    },
+    "proof": {
+      "$ref": "proof@1/prove-response.json"
+    },
+    "built": {
+      "description": "How the builder ended, as built.json gives it.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["outcome"],
+          "description": "The builder wrote the slice.",
+          "properties": {
+            "outcome": {
+              "const": "built",
+              "description": "The slice is written in its worktree."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["outcome", "missing"],
+          "description": "The builder stopped, since the slice needs a capability that is not there.",
+          "properties": {
+            "outcome": {
+              "const": "stopped",
+              "description": "The builder stopped before the slice was done."
+            },
+            "missing": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["lacks", "name"],
+              "description": "What is missing: where it would live, and its name. No sentence, so nothing a builder writes reaches a card.",
+              "properties": {
+                "lacks": {
+                  "enum": ["kernel", "toolbox", "test-toolbox", "interface"],
+                  "description": "Where the missing capability would live."
+                },
+                "name": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9._@/-]*$",
+                  "maxLength": 80,
+                  "description": "The name of the missing function, operation or action, such as worktrees.commit."
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "work": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The branch set-aside committed the work to, such as forge/wip/TR2/1."
+    },
+    "into": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The branch a merge goes into, from forge's settings."
+    }
+  }
+}

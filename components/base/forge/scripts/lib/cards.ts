@@ -1,3 +1,5 @@
+import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
+
 const proofKinds = [
   "checks",
   "fails-first",
@@ -135,6 +137,88 @@ const watchedPaths: readonly { readonly matches: RegExp; readonly says: string }
 const checksPassed = /^Every check passed \(([^()]+)\), and so did the test run: (\d+) tests?\.$/;
 
 const checkName = /^[A-Za-z0-9:._-]+$/;
+
+const sliceKinds: readonly Slice["kind"][] = ["interface", "capability", "mode"];
+
+const lacking: readonly Missing["lacks"][] = ["kernel", "toolbox", "test-toolbox", "interface"];
+
+function textOf(value: Json | undefined): string {
+  return typeof value === "string" ? value : "";
+}
+
+function isEntries(value: Json | undefined): value is readonly Json[] {
+  return Array.isArray(value);
+}
+
+function entriesOf(value: Json | undefined): readonly Json[] {
+  return isEntries(value) ? value : [];
+}
+
+function oneOf<Name extends string>(names: readonly Name[], value: Json | undefined): Name | undefined {
+  return names.find((name) => name === value);
+}
+
+function itemOf(value: Json): Item {
+  const fields = fieldsOf(value);
+  const level: Level = fields.level === "should" ? "should" : "must";
+  const item = { id: textOf(fields.id), says: textOf(fields.says), level };
+  const kind = oneOf(proofKinds, fieldsOf(fields.proof ?? null).kind);
+  return kind === undefined ? item : { ...item, proof: { kind } };
+}
+
+export function sliceOf(value: Json | undefined): Slice {
+  const fields = fieldsOf(value ?? null);
+  return {
+    name: textOf(fields.name),
+    kind: oneOf(sliceKinds, fields.kind) ?? "mode",
+    scope: entriesOf(fields.scope).map(textOf),
+    after: entriesOf(fields.after).map((after) => ({
+      slice: textOf(fieldsOf(after).slice),
+      because: textOf(fieldsOf(after).because),
+    })),
+    done: entriesOf(fields.done).map(itemOf),
+  };
+}
+
+function verdictOf(value: Json): Verdict {
+  const fields = fieldsOf(value);
+  const item = textOf(fields.item);
+  const kind = oneOf(proofKinds, fields.kind) ?? "checks";
+  const verdict = oneOf(["passed", "failed"], fields.verdict);
+  return verdict === undefined
+    ? { item, kind, verdict: "inconclusive", reason: textOf(fields.reason) }
+    : { item, kind, verdict, detail: textOf(fields.detail) };
+}
+
+function sizedOf(value: Json): Sized {
+  const fields = fieldsOf(value);
+  const lines = (key: "base" | "head"): Partial<Record<"base" | "head", number>> => {
+    const counted = fields[key];
+    return typeof counted === "number" ? { [key]: counted } : {};
+  };
+  return { path: textOf(fields.path), ...lines("base"), ...lines("head") };
+}
+
+export function provedOf(value: Json | undefined): Proved {
+  const fields = fieldsOf(value ?? null);
+  return {
+    verdicts: entriesOf(fields.verdicts).map(verdictOf),
+    judgement: entriesOf(fields.judgement).map(itemOf),
+    size: entriesOf(fields.size).map(sizedOf),
+  };
+}
+
+export function builtOf(value: Json | undefined): Built {
+  const fields = fieldsOf(value ?? null);
+  if (fields.outcome === "built") {
+    return { outcome: "built" };
+  }
+  const missing = fieldsOf(fields.missing ?? null);
+  return {
+    outcome: "stopped",
+    missing: { lacks: oneOf(lacking, missing.lacks) ?? "kernel", name: textOf(missing.name) },
+  };
+}
 
 function counted(count: number, one: string, many: string): string {
   return `${String(count)} ${count === 1 ? one : many}`;

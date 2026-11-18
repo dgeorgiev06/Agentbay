@@ -1,0 +1,38 @@
+{
+  "input": {
+    "slice": {
+      "name": "A1",
+      "kind": "mode",
+      "scope": ["components/base/forge/**"],
+      "after": [],
+      "done": [
+        {
+          "id": "DOD-A1-1",
+          "says": "The draw script says each verdict on the card.",
+          "level": "must",
+          "proof": {
+            "kind": "checks"
+          }
+        },
+        {
+          "id": "DOD-A1-2",
+          "says": "Each sentence on the card reads well on a phone.",
+          "level": "should"
+        }
+      ]
+    },
+    "folder": ".forge/worktrees/A1",
+    "practices": ["framework/practices.md"],
+    "declared": {
+      "files": ["components/base/forge/scripts/draw.ts"],
+      "names": {
+        "gained": [],
+        "lost": [],
+        "changed": []
+      }
+    }
+  },
+  "output": {
+    "outcome": "built"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SliceRequest",
+  "description": "The slice the owner asks forge to build: a planned slice from a plan, the commit to cut it from, and the bugs to inject, written by whoever plans or reviews it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["planned", "base", "bugs"],
+  "properties": {
+    "planned": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "slice"],
+      "description": "One slice of a plan, in the form of a plan's slice: its title and the slice as proof@1 judges it.",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "What the slice delivers, in one sentence the owner reads."
+        },
+        "slice": {
+          "$ref": "proof@1/prove-request.json#/$defs/slice"
+        }
+      }
+    },
+    "base": {
+      "$ref": "proof@1/prove-request.json#/$defs/commit",
+      "description": "The commit the slice is cut from: a full or short hash, or a branch name."
+    },
+    "bugs": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/bug"
+      },
+      "description": "The bugs proof injects, never written by the builder; empty when there are none."
+    }
+  }
+}

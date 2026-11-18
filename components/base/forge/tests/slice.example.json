@@ -1,0 +1,102 @@
+{
+  "input": {
+    "planned": {
+      "title": "Draw the merge card",
+      "slice": {
+        "name": "A1",
+        "kind": "mode",
+        "scope": ["components/base/forge/**"],
+        "after": [],
+        "done": [
+          {
+            "id": "DOD-A1-1",
+            "says": "The draw script says each verdict on the card.",
+            "level": "must",
+            "proof": {
+              "kind": "checks"
+            }
+          },
+          {
+            "id": "DOD-A1-2",
+            "says": "Each sentence on the card reads well on a phone.",
+            "level": "should"
+          }
+        ]
+      }
+    },
+    "base": "c7f0d13",
+    "bugs": []
+  },
+  "output": {
+    "slice": {
+      "name": "A1",
+      "kind": "mode",
+      "scope": ["components/base/forge/**"],
+      "after": [],
+      "done": [
+        {
+          "id": "DOD-A1-1",
+          "says": "The draw script says each verdict on the card.",
+          "level": "must",
+          "proof": {
+            "kind": "checks"
+          }
+        },
+        {
+          "id": "DOD-A1-2",
+          "says": "Each sentence on the card reads well on a phone.",
+          "level": "should"
+        }
+      ]
+    },
+    "base": "c7f0d13",
+    "bugs": [],
+    "card": {
+      "title": "Build slice A1?",
+      "lines": [
+        {
+          "mark": "computed",
+          "words": "Draw the merge card",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "kind mode; base c7f0d13",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "scope: components/base/forge/**",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "after no other slice",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "2 items: 1 names a kind of proof, 1 is judgement",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "judgement, by you: 2",
+          "source": {
+            "step": "slice"
+          }
+        }
+      ]
+    }
+  }
+}

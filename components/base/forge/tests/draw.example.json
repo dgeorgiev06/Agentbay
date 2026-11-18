@@ -1,0 +1,129 @@
+{
+  "input": {
+    "slice": {
+      "name": "A1",
+      "kind": "mode",
+      "scope": ["components/base/forge/**"],
+      "after": [],
+      "done": [
+        {
+          "id": "DOD-A1-1",
+          "says": "The draw script says each verdict on the card.",
+          "level": "must",
+          "proof": {
+            "kind": "checks"
+          }
+        },
+        {
+          "id": "DOD-A1-2",
+          "says": "Each sentence on the card reads well on a phone.",
+          "level": "should"
+        }
+      ]
+    },
+    "proof": {
+      "verdicts": [
+        {
+          "item": "DOD-A1-1",
+          "kind": "checks",
+          "verdict": "passed",
+          "detail": "Every check passed (typecheck, lint), and so did the test run: 12 tests."
+        },
+        {
+          "item": "scope",
+          "kind": "in-scope",
+          "verdict": "passed",
+          "detail": "Every changed path is in the scope: 1 of 1."
+        },
+        {
+          "item": "declared",
+          "kind": "as-declared",
+          "verdict": "passed",
+          "detail": "What changed is as declared: 1 file and 0 action names."
+        }
+      ],
+      "judgement": [
+        {
+          "id": "DOD-A1-2",
+          "says": "Each sentence on the card reads well on a phone.",
+          "level": "should"
+        }
+      ],
+      "size": [
+        {
+          "path": "components/base/forge/scripts/draw.ts",
+          "base": 20,
+          "head": 24
+        }
+      ]
+    },
+    "built": {
+      "outcome": "built"
+    },
+    "work": "forge/wip/A1/1",
+    "into": "integration"
+  },
+  "output": {
+    "card": {
+      "title": "Merge A1 into integration?",
+      "lines": [
+        {
+          "mark": "computed",
+          "words": "1 file changed; the work is set aside on forge/wip/A1/1",
+          "source": {
+            "step": "draw"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "checks passed: typecheck, lint",
+          "source": {
+            "step": "prove"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "tests passed: 12",
+          "source": {
+            "step": "prove"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "scope: every changed path is in the write scope",
+          "source": {
+            "step": "prove"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "declared: what changed is as declared",
+          "source": {
+            "step": "prove"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "not judged, for you: DOD-A1-2 Each sentence on the card reads well on a phone.",
+          "source": {
+            "step": "draw"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "size in lines: components/ +4",
+          "source": {
+            "step": "draw"
+          }
+        }
+      ],
+      "withheld": {
+        "send-back": "rounds come with slice F2.",
+        "discard": "discarding comes with slice WD1."
+      }
+    },
+    "merge": true,
+    "sendBack": false,
+    "discard": false
+  }
+}

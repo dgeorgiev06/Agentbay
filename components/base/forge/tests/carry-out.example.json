@@ -1,0 +1,14 @@
+{
+  "input": {
+    "choice": "keep",
+    "name": "A1",
+    "branch": "forge/A1",
+    "work": "forge/wip/A1/1",
+    "head": "1f0c2a9d8e7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d",
+    "into": "integration"
+  },
+  "output": {
+    "choice": "keep",
+    "kept": ["forge/A1", "forge/wip/A1/1"]
+  }
+}

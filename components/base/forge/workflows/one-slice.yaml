@@ -1,0 +1,64 @@
+name: one-slice
+trigger: { manual: true }
+budget: { minutes: 45 }
+steps:
+  - id: slice
+    action: slice
+  - id: start
+    approval: Build this slice?
+    show: $steps.slice.output.card
+  - id: cut
+    action: worktrees.cut
+    input:
+      slice: $steps.slice.output.slice.name
+      base: $steps.slice.output.base
+  - id: declare
+    action: declare
+    input:
+      slice: $steps.slice.output.slice
+      folder: $steps.cut.output.folder
+      practices: $settings.practices
+  - id: build
+    action: build
+    input:
+      slice: $steps.slice.output.slice
+      folder: $steps.cut.output.folder
+      practices: $settings.practices
+      declared: $steps.declare.output
+  - id: keep-work
+    action: worktrees.set-aside
+    input:
+      folder: $steps.cut.output.folder
+  - id: prove
+    action: proof.prove
+    input:
+      slice: $steps.slice.output.slice
+      base: $steps.cut.output.commit
+      head: $steps.keep-work.output.commit
+      declared: $steps.declare.output
+      bugs: $steps.slice.output.bugs
+  - id: draw
+    action: draw
+    input:
+      slice: $steps.slice.output.slice
+      proof: $steps.prove.output
+      built: $steps.build.output
+      work: $steps.keep-work.output.branch
+      into: $settings.into
+  - id: card
+    approval: Merge this slice?
+    show: $steps.draw.output.card
+    choices:
+      merge: { does: Merge into the integration branch, when: $steps.draw.output.merge }
+      send-back: { does: "Round 2, a fresh builder", when: $steps.draw.output.sendBack }
+      keep: { does: Stop; the branches stay }
+      discard: { does: Stop; the worktree goes, when: $steps.draw.output.discard }
+  - id: carry-out
+    action: carry-out
+    input:
+      choice: $steps.card.output.choice
+      name: $steps.slice.output.slice.name
+      branch: $steps.cut.output.branch
+      work: $steps.keep-work.output.branch
+      head: $steps.keep-work.output.commit
+      into: $settings.into

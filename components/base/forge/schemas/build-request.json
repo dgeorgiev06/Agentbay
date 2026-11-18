@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BuildRequest",
+  "description": "What a builder reads to build the slice: the slice, its worktree, the practices and what it declared.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["slice", "folder", "practices", "declared"],
+  "properties": {
+    "slice": {
+      "$ref": "proof@1/prove-request.json#/$defs/slice"
+    },
+    "folder": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*(/\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+      "maxLength": 1000,
+      "description": "The slice's worktree, relative to the project, as worktrees.cut made it, such as .forge/worktrees/TR2."
+    },
+    "practices": {
+      "type": "array",
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "The practices files a builder reads before it writes, relative to the project, from forge's settings."
+    },
+    "declared": {
+      "$ref": "proof@1/prove-request.json#/$defs/declaration"
+    }
+  }
+}

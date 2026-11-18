@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CarryOutResponse",
+  "description": "What the owner's choice did.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["choice", "merged", "into"],
+      "description": "The commit proof judged was merged.",
+      "properties": {
+        "choice": {
+          "const": "merge"
+        },
+        "merged": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+          "description": "The head of into after the merge."
+        },
+        "into": {
+          "type": "string",
+          "maxLength": 255
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["choice", "kept"],
+      "description": "Nothing was done; the branches stay.",
+      "properties": {
+        "choice": {
+          "const": "keep"
+        },
+        "kept": {
+          "type": "array",
+          "maxItems": 2,
+          "items": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "description": "The branches that stay: the slice's and the work's."
+        }
+      }
+    }
+  ]
+}

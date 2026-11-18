@@ -325,8 +325,31 @@ function compileSchema(schema: ValidSchema): ValidateFunction | string {
   }
 }
 
+const keptValidators = 256;
+
+const validatorsByContent = new Map<string, ValidateFunction | string>();
+
+function keep(content: string, validate: ValidateFunction | string): void {
+  const oldest = validatorsByContent.keys().next();
+  if (validatorsByContent.size >= keptValidators && oldest.done !== true) {
+    validatorsByContent.delete(oldest.value);
+  }
+  validatorsByContent.set(content, validate);
+}
+
+function validatorFor(schema: ValidSchema): ValidateFunction | string {
+  const content = JSON.stringify([schema.schema, schema.parts]);
+  const kept = validatorsByContent.get(content);
+  if (kept !== undefined) {
+    return kept;
+  }
+  const validate = compileSchema(structuredClone(schema));
+  keep(content, validate);
+  return validate;
+}
+
 export function checkValue(schema: ValidSchema, value: unknown, place: ValuePlace): ValueCheck {
-  const validate = compileSchema(schema);
+  const validate = validatorFor(schema);
   if (typeof validate === "string") {
     return { kind: "unusable-schema", reason: validate };
   }

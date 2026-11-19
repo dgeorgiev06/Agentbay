@@ -128,6 +128,19 @@
             },
             "detail": {
               "$ref": "#/$defs/detail"
+            },
+            "cases": {
+              "$ref": "#/$defs/cases"
+            }
+          },
+          "if": {
+            "required": ["cases"]
+          },
+          "then": {
+            "properties": {
+              "kind": {
+                "enum": ["checks", "fails-first"]
+              }
             }
           }
         },
@@ -156,6 +169,66 @@
           }
         }
       ]
+    },
+    "cases": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The failing cases of the item's test run on the head, as the toolchain's failed answer named them. Only a failed verdict of the kind checks or fails-first whose test run on the head failed holds it; no other verdict does. Each field is here when the toolchain's answer gave it and left out when it did not, so an older toolchain that names no cases gives an empty object. Proof copies them and filters nothing; none of it is put into a detail or a reason. Restated from toolchain@1's test answer, since an interface's schema may refer to no other file.",
+      "properties": {
+        "failures": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/failingCase"
+          },
+          "description": "The failing cases, at most 50, in the order the toolchain gave them."
+        },
+        "failuresNotListed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many more failing cases the toolchain counted past those in failures; 0 when every case is listed."
+        },
+        "notLoaded": {
+          "type": "array",
+          "maxItems": 1000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/testFile"
+          },
+          "description": "The test files that failed as a whole, outside any case, such as a file that did not load."
+        }
+      }
+    },
+    "failingCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "file", "message", "charactersCut"],
+      "description": "One failing case as the toolchain named it: its name, its file, and the first line of the test runner's message for it.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "The case's name as the test runner gives it."
+        },
+        "file": {
+          "$ref": "#/$defs/testFile"
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "The first line of the test runner's message for the case that is not blank, at most its first 200 characters; empty when the runner gave none."
+        },
+        "charactersCut": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many characters of that line were cut past the first 200; 0 when the line is whole."
+        }
+      }
+    },
+    "testFile": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "A test file as the test runner locates it; empty when the runner does not locate it."
     }
   }
 }

@@ -19,13 +19,22 @@ type Fields = { readonly [key: string]: Value };
 type Files = Readonly<Record<string, string>>;
 
 type Scenario =
-  "tr2" | "failed" | "inconclusive" | "unknown head" | "only judgement" | "no commands" | "moved and stale";
+  | "tr2"
+  | "failed"
+  | "inconclusive"
+  | "unknown head"
+  | "only judgement"
+  | "no commands"
+  | "moved and stale"
+  | "cases"
+  | "tests not loaded";
 
 type Verdict = {
   readonly item: string;
   readonly kind: string;
   readonly verdict: string;
   readonly said: string;
+  readonly cases: Value | undefined;
 };
 
 type Result = {
@@ -72,6 +81,8 @@ const scenarios: readonly Scenario[] = [
   "only judgement",
   "no commands",
   "moved and stale",
+  "cases",
+  "tests not loaded",
 ];
 
 const recorder = "recorder";
@@ -110,14 +121,17 @@ const checkoutFiles: Files = {
     '  [ -f "$file" ] || continue',
     "  while read -r path expected; do",
     '    [ -n "$path" ] || continue',
-    '    case "$(head -n 1 "$path" 2>/dev/null)" in',
+    '    first="$(head -n 1 "$path" 2>/dev/null)"',
+    '    case "$first" in',
     "      hang) exit 3 ;;",
     "      break) exit 4 ;;",
+    '      unloadable) echo "not loaded $file"; status=1; break ;;',
     "    esac",
     '    if grep -qxF -- "$expected" "$path" 2>/dev/null; then',
     '      echo "ok $file: $path"',
     "    else",
-    '      echo "not ok $file: $path"',
+    '      echo "not ok $file: $path holds $expected"',
+    '      echo "message: $path holds ${first:-nothing}"',
     "      status=1",
     "    fi",
     '  done < "$file"',
@@ -274,6 +288,31 @@ const inconclusiveHead: Files = {
   "tests/broken.test.ts": "src/broken.txt fixed\n",
 };
 
+const longLine = "a line longer than a message may be, ".repeat(6).trim();
+
+const missingFiles = Array.from({ length: 52 }, (_, index) => `src/missing-${String(index + 1)}.txt`);
+
+const casesBase: Files = {
+  ...fixtures,
+  "src/sum.txt": "4\n",
+  "src/name.txt": "Ada\n",
+};
+
+const casesHead: Files = {
+  ...fixtures,
+  "src/sum.txt": "5\n",
+  "src/name.txt": "Ada\n",
+  "src/long.txt": `${longLine}\n`,
+  "src/unloaded.txt": "unloadable\n",
+  "tests/sum.test.ts": "src/sum.txt 6\n",
+  "tests/sum-copy.test.ts": "src/sum.txt 6\n",
+  "tests/sum-five.test.ts": "src/sum.txt 5\n",
+  "tests/name.test.ts": "src/name.txt Ada\n",
+  "tests/unloaded.test.ts": "src/unloaded.txt loaded\n",
+  "tests/unloaded-too.test.ts": "src/unloaded.txt loaded\n",
+  "tests/many.test.ts": ["src/long.txt short", ...missingFiles.map((path) => `${path} there`), ""].join("\n"),
+};
+
 const commits: Readonly<Record<string, Files>> = {
   c7f0d13: tr2Base,
   c9bb216: tr2Head,
@@ -281,6 +320,8 @@ const commits: Readonly<Record<string, Files>> = {
   "failed-head": failedHead,
   "inconclusive-base": inconclusiveBase,
   "inconclusive-head": inconclusiveHead,
+  "cases-base": casesBase,
+  "cases-head": casesHead,
 };
 
 const inconclusiveScope = [
@@ -343,6 +384,18 @@ const stoppedBug = {
   name: "the value waits for ever",
   patch: bugPatch("src/value.txt", "2", "hang"),
   tests: ["tests/value.test.ts"],
+};
+
+const unloadedBug = {
+  name: "the name does not load",
+  patch: bugPatch("src/name.txt", "Ada", "unloadable"),
+  tests: ["tests/name.test.ts"],
+};
+
+const mixedBug = {
+  name: "the sum is raised and the name does not load",
+  patch: [bugPatch("src/name.txt", "Ada", "unloadable"), bugPatch("src/sum.txt", "5", "7")].join(""),
+  tests: ["tests/name.test.ts", "tests/sum-five.test.ts"],
 };
 
 function item(id: string, proof: Fields): Fields {
@@ -467,6 +520,91 @@ const noCommandsRequest: Fields = {
   bugs: [],
 };
 
+const casesScope = ["src/**", "tests/**", "fixtures/**", "framework/**"];
+
+const casesDeclared = {
+  files: [
+    "src/sum.txt",
+    "src/long.txt",
+    "src/unloaded.txt",
+    "tests/sum.test.ts",
+    "tests/sum-copy.test.ts",
+    "tests/sum-five.test.ts",
+    "tests/name.test.ts",
+    "tests/unloaded.test.ts",
+    "tests/unloaded-too.test.ts",
+    "tests/many.test.ts",
+  ],
+  names: nothingNamed(),
+};
+
+const casesRequest: Fields = {
+  slice: sliceOf("CASES", casesScope, [
+    item("fails-first-one", { kind: "fails-first", tests: ["tests/sum.test.ts"] }),
+    item("fails-first-two", { kind: "fails-first", tests: ["tests/sum.test.ts", "tests/sum-copy.test.ts"] }),
+    item("fails-first-unloaded", {
+      kind: "fails-first",
+      tests: ["tests/unloaded.test.ts", "tests/unloaded-too.test.ts"],
+    }),
+    item("checks-cases", { kind: "checks" }),
+    item("bugs-mixed", { kind: "bugs-caught" }),
+  ]),
+  base: "cases-base",
+  head: "cases-head",
+  declared: casesDeclared,
+  bugs: [mixedBug],
+};
+
+const testsNotLoadedRequest: Fields = {
+  slice: sliceOf("UNLOADED", casesScope, [item("bugs-unloaded", { kind: "bugs-caught" })]),
+  base: "cases-base",
+  head: "cases-head",
+  declared: casesDeclared,
+  bugs: [unloadedBug],
+};
+
+const casesWithAFailedRun: Readonly<Record<Scenario, readonly string[]>> = {
+  tr2: [],
+  failed: ["checks-fail"],
+  inconclusive: [],
+  "unknown head": [],
+  "only judgement": [],
+  "no commands": [],
+  "moved and stale": [],
+  cases: ["fails-first-one", "fails-first-two", "fails-first-unloaded", "checks-cases"],
+  "tests not loaded": [],
+};
+
+function sixOnTheHead(file: string): Fields {
+  return { name: "src/sum.txt holds 6", file, message: "src/sum.txt holds 5", charactersCut: 0 };
+}
+
+function missingCase(path: string): Fields {
+  return {
+    name: `${path} holds there`,
+    file: "tests/many.test.ts",
+    message: `${path} holds nothing`,
+    charactersCut: 0,
+  };
+}
+
+const longCase: Fields = {
+  name: "src/long.txt holds short",
+  file: "tests/many.test.ts",
+  message: `src/long.txt holds ${longLine}`.slice(0, 200),
+  charactersCut: `src/long.txt holds ${longLine}`.length - 200,
+};
+
+const textsOfTheCases = [
+  "src/sum.txt holds 5",
+  "src/sum.txt holds 6",
+  "src/main/sum.txt holds",
+  "holds nothing",
+  "tests/unloaded.test.ts",
+  "tests/unloaded-too.test.ts",
+  longLine.slice(0, 40),
+];
+
 function isFields(value: Value | undefined): value is Fields {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -505,7 +643,13 @@ function verdictOf(value: Value): Verdict {
   const fields = fieldsOf(value);
   const said = fields.verdict === "inconclusive" ? fields.reason : fields.detail;
   assert.ok(typeof said === "string" && said.trim() !== "", JSON.stringify(value));
-  return { item: textOf(fields.item), kind: textOf(fields.kind), verdict: textOf(fields.verdict), said };
+  return {
+    item: textOf(fields.item),
+    kind: textOf(fields.kind),
+    verdict: textOf(fields.verdict),
+    said,
+    cases: fields.cases,
+  };
 }
 
 function resultOf(value: Value): Result {
@@ -567,6 +711,10 @@ function assertVerdicts(
   for (const id of ids) {
     assertVerdict(result, id, expected);
   }
+}
+
+function casesOf(result: Result, id: string, kind: string): Value | undefined {
+  return assertVerdict(result, id, { kind, verdict: "failed" }).cases;
 }
 
 function folderOf(asked: Asked): string {
@@ -739,6 +887,84 @@ const cases: readonly Case[] = [
     },
   },
   {
+    name: "bugs-caught: a bug whose covering test files did not load and that failed no case is inconclusive, with a reason that names it and says its tests did not run, never caught",
+    run: async (proof) => {
+      const verdict = assertVerdict(await proof.proven("tests not loaded"), "bugs-unloaded", {
+        kind: "bugs-caught",
+        verdict: "inconclusive",
+      });
+      assert.match(verdict.said, /the name does not load/);
+      assert.match(verdict.said, /did not run/);
+    },
+  },
+  {
+    name: "bugs-caught: a bug that failed a case is caught, also when another of its test files did not load",
+    run: async (proof) => {
+      assertVerdict(await proof.proven("cases"), "bugs-mixed", { kind: "bugs-caught", verdict: "passed" });
+    },
+  },
+  {
+    name: "fails-first: a failed verdict whose named tests failed on the head carries the head's failing cases as the toolchain named them, none of the base's, and each item only its own",
+    run: async (proof) => {
+      const result = await proof.proven("cases");
+      assert.deepEqual(casesOf(result, "fails-first-one", "fails-first"), {
+        failures: [sixOnTheHead("tests/sum.test.ts")],
+        failuresNotListed: 0,
+        notLoaded: [],
+      });
+      assert.deepEqual(casesOf(result, "fails-first-two", "fails-first"), {
+        failures: [sixOnTheHead("tests/sum.test.ts"), sixOnTheHead("tests/sum-copy.test.ts")],
+        failuresNotListed: 0,
+        notLoaded: [],
+      });
+    },
+  },
+  {
+    name: "fails-first: the test files that did not load on the head are in the failed verdict's cases, each once, beside no failing case",
+    run: async (proof) => {
+      assert.deepEqual(casesOf(await proof.proven("cases"), "fails-first-unloaded", "fails-first"), {
+        failures: [],
+        failuresNotListed: 0,
+        notLoaded: ["tests/unloaded.test.ts", "tests/unloaded-too.test.ts"],
+      });
+    },
+  },
+  {
+    name: "checks: a failed test run carries the failing cases the toolchain listed, with the characters it cut, how many it did not list, and the files that did not load",
+    run: async (proof) => {
+      const cases = fieldsOf(casesOf(await proof.proven("cases"), "checks-cases", "checks"));
+      assert.deepEqual(
+        { ...cases, notLoaded: [...listOf(cases.notLoaded)].map(textOf).sort() },
+        {
+          failures: [longCase, ...missingFiles.slice(0, 49).map(missingCase)],
+          failuresNotListed: 5,
+          notLoaded: ["tests/unloaded-too.test.ts", "tests/unloaded.test.ts"],
+        },
+      );
+    },
+  },
+  {
+    name: "only a failed verdict of checks or fails-first whose test run on the head failed carries cases; a passed verdict whose run on the base failed carries none",
+    run: async (proof) => {
+      for (const scenario of scenarios) {
+        const verdicts = (await proof.proven(scenario)).verdicts;
+        const withCases = verdicts.filter((verdict) => verdict.cases !== undefined).map((verdict) => verdict.item);
+        assert.deepEqual(withCases, casesWithAFailedRun[scenario], scenario);
+      }
+    },
+  },
+  {
+    name: "no failing case's name, message or file, and no file that did not load, is put into a detail or a reason",
+    run: async (proof) => {
+      for (const scenario of scenarios) {
+        for (const verdict of (await proof.proven(scenario)).verdicts) {
+          const shownTexts = textsOfTheCases.filter((text) => verdict.said.includes(text));
+          assert.deepEqual(shownTexts, [], `${scenario}, ${verdict.item}: ${verdict.said}`);
+        }
+      }
+    },
+  },
+  {
     name: "same-output: passed when every declared command prints the same at the base and the head, and those the item names differ (TR2, K1)",
     run: async (proof) => {
       assertVerdict(await proof.proven("tr2"), "DOD-TR2-5", { kind: "same-output", verdict: "passed" });
@@ -907,7 +1133,7 @@ const cases: readonly Case[] = [
     run: async (proof) => {
       await proof.provenEverywhere();
       const asked = await proof.asked();
-      const bugs = [tr2Bug, survivingBug, caughtBug, stoppedBug, staleBug];
+      const bugs = [tr2Bug, survivingBug, caughtBug, stoppedBug, staleBug, unloadedBug, mixedBug];
       const runs = asked
         .filter((entry) => entry.action === "apply")
         .map((entry) => {
@@ -927,9 +1153,16 @@ const cases: readonly Case[] = [
         })
         .sort((left, right) => left.bug.localeCompare(right.bug));
       assert.deepEqual(runs, [
+        { bug: "the name does not load", commit: "cases-head", patches: 1, files: [unloadedBug.tests] },
         { bug: "the name is lost", commit: "failed-head", patches: 1, files: [survivingBug.tests] },
         { bug: "the patch is stale", commit: "inconclusive-head", patches: 1, files: [] },
         { bug: "the record is not read again", commit: "c9bb216", patches: 1, files: [tr2Bug.tests] },
+        {
+          bug: "the sum is raised and the name does not load",
+          commit: "cases-head",
+          patches: 1,
+          files: [mixedBug.tests],
+        },
         { bug: "the value is not raised", commit: "inconclusive-head", patches: 1, files: [caughtBug.tests] },
         { bug: "the value waits for ever", commit: "inconclusive-head", patches: 1, files: [stoppedBug.tests] },
       ]);
@@ -1193,6 +1426,25 @@ export const run = defineScript((input, context) =>
 `,
     "scripts/test.ts": String.raw`${header("")}import { ran, recorded, textField, textsField } from "./lib/recorder.ts";
 
+type FailingCase = { readonly name: string; readonly file: string; readonly message: string; readonly charactersCut: number };
+
+const mostFailures = 50;
+
+const longestMessage = 200;
+
+function failingCasesOf(lines: readonly string[]): readonly FailingCase[] {
+  return lines.flatMap((line, index) => {
+    if (!line.startsWith("not ok ")) {
+      return [];
+    }
+    const named = line.slice(7);
+    const colon = named.indexOf(": ");
+    const said = (lines[index + 1] ?? "").replace(/^message: /, "");
+    const message = said.slice(0, longestMessage);
+    return [{ name: named.slice(colon + 2), file: named.slice(0, colon), message, charactersCut: said.length - message.length }];
+  });
+}
+
 export const run = defineScript((input, context) =>
   recorded(context, "test", input, async () => {
     const folder = textField(input, "folder");
@@ -1203,14 +1455,18 @@ export const run = defineScript((input, context) =>
     const shown = { seconds: result.seconds, stdout: result.stdout, stderr: "" };
     const lines = result.stdout.split("\n");
     const passed = lines.filter((line) => line.startsWith("ok ")).length;
-    const failedTests = lines.filter((line) => line.startsWith("not ok ")).map((line) => line.slice(7));
+    const cases = failingCasesOf(lines);
+    const notLoaded = [...new Set(lines.filter((line) => line.startsWith("not loaded ")).map((line) => line.slice(11)))];
+    const failedTests = [...cases.map((failing) => failing.file + ": " + failing.name), ...notLoaded];
     if (!lines.includes("end") || passed + failedTests.length === 0) {
       return { ...shown, verdict: "inconclusive", reason: "The run had no tests or did not report its end." };
     }
     if (failedTests.length === 0) {
       return { ...shown, verdict: "passed", passed, failed: 0, failedTests };
     }
-    return { ...shown, verdict: "failed", passed, failed: failedTests.length, failedTests };
+    const failures = cases.slice(0, mostFailures);
+    const failuresNotListed = cases.length - failures.length;
+    return { ...shown, verdict: "failed", passed, failed: failedTests.length, failedTests, failures, failuresNotListed, notLoaded };
   }),
 );
 `,
@@ -1517,6 +1773,8 @@ export function testProof(underTest: ProofUnderTest, testProject: TestProject = 
       "only judgement": onlyJudgementRequest,
       "moved and stale": movedAndStaleRequest,
       "no commands": noCommandsRequest,
+      cases: casesRequest,
+      "tests not loaded": testsNotLoadedRequest,
     };
     proof = proofFor(state, mode, requests);
   });

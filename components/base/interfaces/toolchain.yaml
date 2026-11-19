@@ -13,3 +13,7 @@ actions:
     input: toolchain/test-request.json
     output: toolchain/test-response.json
     effects: [read, write, network, spend, delete]
+  run:
+    input: toolchain/run-request.json
+    output: toolchain/run-response.json
+    effects: [read, write, network, spend, delete]

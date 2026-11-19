@@ -26,10 +26,21 @@ export type WantedTestFile = readonly WantedTest[] | "does not load";
 
 export type TestRun = "set up" | "not set up";
 
+export type WantedCommand =
+  | {
+      readonly name: string;
+      readonly line: string;
+      readonly times: number;
+      readonly outcome: "ends";
+      readonly exitCode: number;
+    }
+  | { readonly name: string; readonly line: string; readonly outcome: "does not end" };
+
 export type Wanted = {
   readonly checks: readonly WantedCheck[];
   readonly testRun: TestRun;
   readonly testFiles: readonly WantedTestFile[];
+  readonly commands: readonly WantedCommand[];
 };
 
 export type ToolchainUnderTest = {
@@ -56,6 +67,7 @@ type Toolchain = {
   readonly describeRun: () => ReturnType<ModeProject["run"]>;
   readonly check: (input: Fields) => Promise<Value>;
   readonly test: (input: Fields) => Promise<Value>;
+  readonly run: (input: Fields) => Promise<Value>;
   readonly failure: (action: string, input: Fields) => Promise<string>;
   readonly refusal: (action: string, input: Fields) => Promise<string>;
   readonly whyInconclusive: (outputs: readonly Value[]) => string;
@@ -385,7 +397,7 @@ function notSetUp(name: string): Fields {
 }
 
 function allPassing(description: Description, testFiles: readonly WantedTestFile[]): Wanted {
-  return { checks: wantedChecks(description.checks, {}), testRun: "set up", testFiles };
+  return { checks: wantedChecks(description.checks, {}), testRun: "set up", testFiles, commands: [] };
 }
 
 function isInsideTheFolder(path: string): boolean {
@@ -435,6 +447,64 @@ function failingTests(count: number): WantedTestFile {
 function namesOfTheFirst(count: number): readonly string[] {
   return Array.from({ length: count }, (_, index) => `failing case ${String(index + 1)}`);
 }
+
+function endingWith(name: string, exitCode: number): WantedCommand {
+  return { name, line: lineOf(name), times: 1, outcome: "ends", exitCode };
+}
+
+function withCommands(description: Description, commands: readonly WantedCommand[]): Wanted {
+  return { ...allPassing(description, []), commands };
+}
+
+function shownRun(value: Value): Fields {
+  const fields = fieldsOf(value);
+  secondsOf(value);
+  const { ended, exitCode, stdout, stdoutCut } = fields;
+  switch (ended) {
+    case "exited":
+      assert.deepEqual(keysOf(value), ["ended", "exitCode", "seconds", "stdout", "stdoutCut"]);
+      return { ended, exitCode: exitCode ?? null, stdout: textOf(stdout), stdoutCut: stdoutCut ?? null };
+    case "timed-out":
+      assert.deepEqual(keysOf(value), ["ended", "reason", "seconds", "stdout", "stdoutCut"]);
+      return { ended, reason: givenReasonOf(fields) };
+    default:
+      assert.deepEqual(keysOf(value), ["ended", "reason", "seconds"]);
+      return { ended: ended ?? null, reason: givenReasonOf(fields) };
+  }
+}
+
+function whyNotExited(outputs: readonly Value[]): string {
+  const reasons = outputs.flatMap((output) => {
+    const { ended, reason } = fieldsOf(output);
+    return ended !== "exited" && typeof reason === "string" ? [`${String(ended)}: ${reason}`] : [];
+  });
+  return reasons.length === 0 ? "" : ["The toolchain said why a command did not end:", ...reasons].join("\n");
+}
+
+function assertRuns(outputs: readonly Value[], expected: readonly Fields[]): void {
+  assertShown(outputs.map(shownRun), expected, whyNotExited(outputs));
+}
+
+function exited(exitCode: number, stdout: string): Fields {
+  return { ended: "exited", exitCode, stdout, stdoutCut: false };
+}
+
+function printedLines(...printed: readonly string[]): string {
+  return printed.map((line) => `${line}\n`).join("");
+}
+
+const wordsNoShellReads = [
+  "two words",
+  "$(echo read by a shell)",
+  "'quoted' and \"quoted\"",
+  "--flag",
+  "a;b|c&d>e",
+  "*",
+  "$HOME",
+  "back\\slash",
+];
+
+const linesPastTheKeptOutput = 5000;
 
 async function timed<Result>(
   work: () => Promise<Result>,
@@ -491,6 +561,7 @@ const cases: readonly Case[] = [
         checks: wantedChecks(description.checks, { [first]: "not set up" }),
         testRun: "not set up" as const,
         testFiles: [sums],
+        commands: [],
       };
       const removePartly = await toolchain.writeInTheRoot(partly);
       const described = await toolchain.describe();
@@ -518,6 +589,7 @@ const cases: readonly Case[] = [
         checks: wantedChecks(description.checks, { [first]: "not set up" }),
         testRun: "set up" as const,
         testFiles: [sums],
+        commands: [],
       };
       const folder = await toolchain.write("first-not-set-up", wanted);
       assertVerdicts(toolchain, await toolchain.check({ folder }), [
@@ -552,6 +624,7 @@ const cases: readonly Case[] = [
         checks: wantedChecks(description.checks, { [first]: "fails" }),
         testRun: "set up" as const,
         testFiles: [sums],
+        commands: [],
       };
       const folder = await toolchain.write("first-fails", wanted);
       assertVerdicts(toolchain, await toolchain.check({ folder }), [
@@ -573,6 +646,7 @@ const cases: readonly Case[] = [
         checks: wantedChecks(description.checks, outcomes),
         testRun: "set up",
         testFiles: [],
+        commands: [],
       });
       const { result, seconds } = await timed(() =>
         toolchain.check({ folder, checks: asked, timeLimitSeconds: waitedSeconds }),
@@ -594,6 +668,7 @@ const cases: readonly Case[] = [
         checks: wantedChecks(description.checks, outcomes),
         testRun: "set up",
         testFiles: [],
+        commands: [],
       });
       const asked = { folder, checks: [first, unknownCheck], timeLimitSeconds: waitedSeconds };
       const { result, seconds } = await timed(() => toolchain.failure("check", asked));
@@ -610,6 +685,7 @@ const cases: readonly Case[] = [
         checks: wantedChecks(description.checks, { [first]: "does not end" }),
         testRun: "set up" as const,
         testFiles: [],
+        commands: [],
       };
       const folder = await toolchain.write("first-does-not-end", wanted);
       const output = await toolchain.check({ folder, timeLimitSeconds: stopAfterSeconds });
@@ -852,6 +928,7 @@ const cases: readonly Case[] = [
         checks: wantedChecks(description.checks, { [first]: "fails" }),
         testRun: "set up" as const,
         testFiles: [sums, wrongSum],
+        commands: [],
       };
       const folder = await toolchain.write("called-twice", wanted);
       const [, file = ""] = await testFilesIn(toolchain, folder, wanted);
@@ -868,6 +945,110 @@ const cases: readonly Case[] = [
         const shown = { call, verdicts: verdicts.map(shownVerdict), test: shownTestResult(test) };
         assertShown(shown, { call, ...expected }, toolchain.whyInconclusive([...verdicts, test]));
       }
+    },
+  },
+  {
+    name: "run runs the named command in the folder it is given and answers its exit code, all it printed and its time, and each of two commands answers its own",
+    run: async (toolchain) => {
+      const description = await toolchain.describe();
+      const one = await toolchain.write("one-command", withCommands(description, [endingWith("greet", 0)]));
+      const two = await toolchain.write(
+        "two-commands",
+        withCommands(description, [endingWith("greet", 0), endingWith("count", 3)]),
+      );
+      const outputs = [
+        await toolchain.run({ folder: one, name: "greet" }),
+        await toolchain.run({ folder: two, name: "greet" }),
+        await toolchain.run({ folder: two, name: "count" }),
+      ];
+      assertRuns(outputs, [
+        exited(0, printedLines(lineOf("greet"))),
+        exited(0, printedLines(lineOf("greet"))),
+        exited(3, printedLines(lineOf("count"))),
+      ]);
+      assert.deepEqual(await toolchain.projectOutsideTheFolders(), toolchain.projectAsOpened);
+    },
+  },
+  {
+    name: "run gives each word to the command as one argument, exactly as written, and no shell reads it",
+    run: async (toolchain) => {
+      const description = await toolchain.describe();
+      const folder = await toolchain.write("words", withCommands(description, [endingWith("echo", 0)]));
+      const outputs = [
+        await toolchain.run({ folder, name: "echo", arguments: ["only"] }),
+        await toolchain.run({ folder, name: "echo", arguments: wordsNoShellReads }),
+      ];
+      assertRuns(outputs, [
+        exited(0, printedLines(lineOf("echo"), "only")),
+        exited(0, printedLines(lineOf("echo"), ...wordsNoShellReads)),
+      ]);
+      assert.deepEqual(await toolchain.projectOutsideTheFolders(), toolchain.projectAsOpened);
+    },
+  },
+  {
+    name: "a name the checkout does not have is not set up, with a sentence, and no command of the checkout runs in its place",
+    run: async (toolchain) => {
+      const description = await toolchain.describe();
+      const folder = await toolchain.write("absent-command", withCommands(description, [endingWith("greet", 0)]));
+      assertRuns(
+        [await toolchain.run({ folder, name: "absent" })],
+        [{ ended: "not set up", reason: givenReason }],
+      );
+    },
+  },
+  {
+    name: "a command that does not end within its time limit is stopped and answered as stopped, never as ended, and its time is reported",
+    run: async (toolchain) => {
+      const description = await toolchain.describe();
+      const waiting: WantedCommand = { name: "wait", line: lineOf("wait"), outcome: "does not end" };
+      const folder = await toolchain.write("command-does-not-end", withCommands(description, [waiting]));
+      const output = await toolchain.run({ folder, name: "wait", timeLimitSeconds: stopAfterSeconds });
+      const seconds = secondsOf(output);
+      assert.ok(seconds >= stopAfterSeconds && seconds < stopAfterSeconds + waitedSeconds, String(seconds));
+      assertRuns([output], [{ ended: "timed-out", reason: givenReason }]);
+    },
+  },
+  {
+    name: "a command that prints more than the kit keeps is answered with the end of what it printed, and says it was cut",
+    run: async (toolchain) => {
+      const description = await toolchain.describe();
+      const line = lineOf("much");
+      const much: WantedCommand = { name: "much", line, times: linesPastTheKeptOutput, outcome: "ends", exitCode: 0 };
+      const folder = await toolchain.write("prints-much", withCommands(description, [much]));
+      const output = await toolchain.run({ folder, name: "much" });
+      assertRuns([output], [{ ended: "exited", exitCode: 0, stdout: textOf(fieldsOf(output).stdout), stdoutCut: true }]);
+      const stdout = textOf(fieldsOf(output).stdout);
+      assert.ok(stdout.endsWith(`\n${line}\n`), stdout.slice(-200));
+      assert.ok(stdout.length < (line.length + 1) * linesPastTheKeptOutput, String(stdout.length));
+    },
+  },
+  {
+    name: "run in a folder that does not exist could not start, and run accepts a time limit of up to 1000 seconds",
+    run: async (toolchain) => {
+      const outputs = [
+        await toolchain.run({ folder: missingFolder, name: "greet" }),
+        await toolchain.run({ folder: missingFolder, name: "greet", timeLimitSeconds: longestSeconds }),
+      ];
+      assertRuns(outputs, [
+        { ended: "not started", reason: givenReason },
+        { ended: "not started", reason: givenReason },
+      ]);
+    },
+  },
+  {
+    name: "run refuses before anything runs a time limit of 1001 seconds, a name that is a command line, and a word with a new line",
+    run: async (toolchain) => {
+      const asked = { folder: missingFolder, name: "greet" };
+      const refusals = [
+        await toolchain.refusal("run", { ...asked, timeLimitSeconds: longestSeconds + 1 }),
+        await toolchain.refusal("run", { ...asked, name: "greet; touch made-by-a-shell" }),
+        await toolchain.refusal("run", { ...asked, arguments: ["one line\ntwo lines"] }),
+      ];
+      assert.equal(refusals[0], "input.timeLimitSeconds must be at most 1000, but it is 1001.");
+      assert.deepEqual(
+        refusals.map((refusal) => refusal.trim() !== ""),
+        [true, true, true],
+      );
     },
   },
 ];
@@ -945,6 +1126,7 @@ function toolchainFor(project: ModeProject, underTest: ToolchainUnderTest, setti
     describeRun: () => project.run(reference("describe"), {}),
     check: (input) => project.output(reference("check"), { timeLimitSeconds: checkSeconds, ...given(input) }),
     test: (input) => project.output(reference("test"), { timeLimitSeconds: testSeconds, ...given(input) }),
+    run: (input) => project.output(reference("run"), { timeLimitSeconds: testSeconds, ...given(input) }),
     failure: (action, input) => project.failure(reference(action), given(input)),
     refusal: (action, input) => project.refusal(reference(action), given(input)),
     whyInconclusive: (outputs) => {

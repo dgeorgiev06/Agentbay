@@ -8,7 +8,7 @@ function judged(bugs: readonly BugEvidence[]): Verdict {
 }
 
 function caught(name: string): BugEvidence {
-  return { name, run: { how: "ran", run: { ran: "failed", failed: 2 } } };
+  return { name, run: { how: "ran", run: { ran: "failed", failed: 2, cases: {} } } };
 }
 
 function survived(name: string): BugEvidence {

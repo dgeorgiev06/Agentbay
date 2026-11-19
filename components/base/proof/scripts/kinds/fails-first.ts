@@ -2,7 +2,7 @@ import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
 import type { ProofOf, Request } from "../lib/request.ts";
 import { inCopy, type ProofStep } from "../lib/step.ts";
 import { testRun, type TestRun } from "../lib/toolchain.ts";
-import { broken, held, unknown, type Part, type Parts } from "../lib/verdicts.ts";
+import { broken, brokenWithCases, held, unknown, type Part, type Parts } from "../lib/verdicts.ts";
 
 export type BaseRun =
   | { readonly how: "no copy"; readonly reason: string }
@@ -25,7 +25,7 @@ function runPart(run: TestRun, on: "base" | "head"): Part {
     case "passed":
       return on === "base" ? broken("The named tests already pass on the base, so they do not show the change.") : held;
     case "failed":
-      return on === "base" ? held : broken("The named tests fail on the head.");
+      return on === "base" ? held : brokenWithCases("The named tests fail on the head.", run.cases);
     case "inconclusive":
       return unknown(`The run on the ${on} is not known: ${run.reason}`);
     case "not started":

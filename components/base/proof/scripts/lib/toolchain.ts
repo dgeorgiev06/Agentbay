@@ -1,9 +1,22 @@
 import { fieldsOf, type Json, type JsonFields } from "../../../../../bay/sdk.ts";
 import type { ProofStep } from "./step.ts";
 
+export type FailingCase = {
+  readonly name: string;
+  readonly file: string;
+  readonly message: string;
+  readonly charactersCut: number;
+};
+
+export type Cases = {
+  readonly failures?: readonly FailingCase[];
+  readonly failuresNotListed?: number;
+  readonly notLoaded?: readonly string[];
+};
+
 export type TestRun =
   | { readonly ran: "passed"; readonly passed: number }
-  | { readonly ran: "failed"; readonly failed: number }
+  | { readonly ran: "failed"; readonly failed: number; readonly cases: Cases }
   | { readonly ran: "inconclusive"; readonly reason: string }
   | { readonly ran: "not started"; readonly reason: string };
 
@@ -27,13 +40,40 @@ function numberOf(fields: JsonFields, name: string): number {
   return typeof value === "number" ? value : 0;
 }
 
+function isList(value: Json | undefined): value is readonly Json[] {
+  return Array.isArray(value);
+}
+
+function listOf(value: Json | undefined): readonly Json[] {
+  return isList(value) ? value : [];
+}
+
+function failingCaseOf(value: Json): FailingCase {
+  const fields = fieldsOf(value);
+  return {
+    name: textOf(fields, "name"),
+    file: textOf(fields, "file"),
+    message: textOf(fields, "message"),
+    charactersCut: numberOf(fields, "charactersCut"),
+  };
+}
+
+function casesOf(fields: JsonFields): Cases {
+  const { failures, failuresNotListed, notLoaded } = fields;
+  return {
+    ...(isList(failures) ? { failures: failures.map(failingCaseOf) } : {}),
+    ...(typeof failuresNotListed === "number" ? { failuresNotListed } : {}),
+    ...(isList(notLoaded) ? { notLoaded: notLoaded.filter((file) => typeof file === "string") } : {}),
+  };
+}
+
 function testRunOf(value: Json): TestRun {
   const fields = fieldsOf(value);
   if (fields.verdict === "passed") {
     return { ran: "passed", passed: numberOf(fields, "passed") };
   }
   if (fields.verdict === "failed") {
-    return { ran: "failed", failed: numberOf(fields, "failed") };
+    return { ran: "failed", failed: numberOf(fields, "failed"), cases: casesOf(fields) };
   }
   return { ran: "inconclusive", reason: textOf(fields, "reason") };
 }
@@ -46,14 +86,6 @@ function checkVerdictOf(value: Json): CheckVerdict {
     return { name, verdict };
   }
   return { name, verdict: "inconclusive", reason: textOf(fields, "reason") };
-}
-
-function isList(value: Json): value is readonly Json[] {
-  return Array.isArray(value);
-}
-
-function listOf(value: Json): readonly Json[] {
-  return isList(value) ? value : [];
 }
 
 export async function testRun(step: ProofStep, folder: string, files?: readonly string[]): Promise<TestRun> {
@@ -82,7 +114,7 @@ export async function checkRun(step: ProofStep, folder: string, checks: number):
     step.spend(seconds * Math.max(1, checks));
     return { ran: "not started", reason: answer.reason };
   }
-  const verdicts = listOf(fieldsOf(answer.value).verdicts ?? null);
+  const verdicts = listOf(fieldsOf(answer.value).verdicts);
   step.spend(verdicts.reduce((total: number, verdict) => total + numberOf(fieldsOf(verdict), "seconds"), 0));
   return { ran: "ended", verdicts: verdicts.map(checkVerdictOf) };
 }
@@ -92,5 +124,5 @@ export async function checkCount(step: ProofStep): Promise<number | undefined> {
   if (!described.ok) {
     return undefined;
   }
-  return listOf(fieldsOf(described.value).checks ?? null).length;
+  return listOf(fieldsOf(described.value).checks).length;
 }

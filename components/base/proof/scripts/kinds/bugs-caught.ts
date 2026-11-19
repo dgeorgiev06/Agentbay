@@ -1,5 +1,5 @@
-import { broken, held, unknown, type Part, type Parts } from "../lib/verdicts.ts";
-import { testRun, type TestRun } from "../lib/toolchain.ts";
+import { broken, counted, held, unknown, type Part, type Parts } from "../lib/verdicts.ts";
+import { testRun, type Cases, type TestRun } from "../lib/toolchain.ts";
 import { inCopy, type ProofStep } from "../lib/step.ts";
 import type { Bug, Request } from "../lib/request.ts";
 
@@ -10,10 +10,24 @@ export type BugRun =
 
 export type BugEvidence = { readonly name: string; readonly run: BugRun };
 
+function filesThatDidNotLoadAlone(cases: Cases): number {
+  const failing = (cases.failures?.length ?? 0) + (cases.failuresNotListed ?? 0);
+  return failing === 0 ? (cases.notLoaded?.length ?? 0) : 0;
+}
+
+function caughtPart(name: string, cases: Cases): Part {
+  const notLoaded = filesThatDidNotLoadAlone(cases);
+  if (notLoaded === 0) {
+    return held;
+  }
+  const files = counted(notLoaded, "test file", "test files");
+  return unknown(`The tests of the bug ${name} did not run: ${files} did not load, and no case failed.`);
+}
+
 function runPart(name: string, run: TestRun): Part {
   switch (run.ran) {
     case "failed":
-      return held;
+      return caughtPart(name, run.cases);
     case "passed":
       return broken(`A bug survived: ${name}.`);
     case "inconclusive":

@@ -8,7 +8,7 @@ const stopped = "It did not finish within its time limit and was stopped.";
 
 const passedRun: TestRun = { ran: "passed", passed: 4 };
 
-const failedRun: TestRun = { ran: "failed", failed: 2 };
+const failedRun: TestRun = { ran: "failed", failed: 2, cases: {} };
 
 const onBaseAlready = "The named tests already pass on the base, so they do not show the change.";
 
@@ -43,11 +43,17 @@ test("fails-first: failed on the base with the tests laid over it and passed on 
 
 test("fails-first: a run on the base that passed is failed with its own sentence, whatever the head did", () => {
   assert.deepEqual(ran(on(passedRun), on(passedRun)), failedWith(onBaseAlready));
-  assert.deepEqual(ran(on(passedRun), on(failedRun)), failedWith(`${onBaseAlready} The named tests fail on the head.`));
+  assert.deepEqual(ran(on(passedRun), on(failedRun)), {
+    ...failedWith(`${onBaseAlready} The named tests fail on the head.`),
+    cases: {},
+  });
 });
 
 test("fails-first: tests that fail on the head too are failed", () => {
-  assert.deepEqual(ran(on(failedRun), on(failedRun)), failedWith("The named tests fail on the head."));
+  assert.deepEqual(ran(on(failedRun), on(failedRun)), {
+    ...failedWith("The named tests fail on the head."),
+    cases: {},
+  });
 });
 
 test("fails-first: a test file that does not exist at the head is failed with its own sentence, naming the file", () => {

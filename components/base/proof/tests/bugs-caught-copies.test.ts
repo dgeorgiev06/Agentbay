@@ -120,13 +120,13 @@ const survivingBug: Bug = { name: "the name is lost", patch: "survives", tests: 
 test("bugs-caught: one bug gets a copy of the head, its patch and its own test files, with what is left of the step, and the copy is removed", async () => {
   const { asked, step } = stepWith(1000);
   assert.deepEqual(await bugsCaughtEvidence(step, { ...request, bugs: [caughtBug] }), [
-    { name: "the value is not raised", run: { how: "ran", run: { ran: "failed", failed: 2 } } },
+    { name: "the value is not raised", run: { how: "ran", run: { ran: "failed", failed: 2, cases: {} } } },
   ]);
   assert.deepEqual(asked, bugRunAsked(1, caughtBug, 730));
 });
 
 test("bugs-caught: each of two bugs gets its own copy, only its own patch and its own test files, and each copy is removed, also after a survivor", async () => {
-  const caught = { name: "the value is not raised", run: { how: "ran", run: { ran: "failed", failed: 2 } } };
+  const caught = { name: "the value is not raised", run: { how: "ran", run: { ran: "failed", failed: 2, cases: {} } } };
   const survived = { name: "the name is lost", run: { how: "ran", run: { ran: "passed", passed: 3 } } };
   const first = stepWith(1000);
   assert.deepEqual(await bugsCaughtEvidence(first.step, { ...request, bugs: [caughtBug, survivingBug] }), [
@@ -147,7 +147,7 @@ test("bugs-caught: a patch that does not apply runs no test and its copy is remo
   const { asked, step } = stepWith(0);
   assert.deepEqual(await bugsCaughtEvidence(step, { ...request, bugs: [stale, caughtBug] }), [
     { name: "the patch is stale", run: { how: "not applied", reason: "The patch does not apply to the copy." } },
-    { name: "the value is not raised", run: { how: "ran", run: { ran: "failed", failed: 2 } } },
+    { name: "the value is not raised", run: { how: "ran", run: { ran: "failed", failed: 2, cases: {} } } },
   ]);
   assert.deepEqual(asked, [
     ["worktrees.copy", copyOf(1)],
@@ -162,7 +162,7 @@ test("bugs-caught: a test call the toolchain refuses could not start, its asked 
   const { asked, step } = stepWith(0);
   assert.deepEqual(await bugsCaughtEvidence(step, { ...request, bugs: [refusedRun, caughtBug] }), [
     { name: "the value waits", run: { how: "ran", run: { ran: "not started", reason: notHere.message } } },
-    { name: "the value is not raised", run: { how: "ran", run: { ran: "failed", failed: 2 } } },
+    { name: "the value is not raised", run: { how: "ran", run: { ran: "failed", failed: 2, cases: {} } } },
   ]);
   assert.deepEqual(asked, [...bugRunAsked(1, refusedRun, 1000), ...bugRunAsked(2, caughtBug, 710)]);
 });
@@ -333,7 +333,7 @@ test("bugs-caught with the real git-worktrees mode and toolchain: each bug runs 
   assert.equal(await readFile(join(project.root, "src", "value.txt"), "utf8"), "2\n");
 });
 
-test("bugs-caught with the real toolchain: a bug that names a test file missing at the head is not known, and a bug that stops its test file from loading is counted caught today, since the toolchain answers both as one failed test", async () => {
+test("bugs-caught with the real toolchain: a bug that names a test file missing at the head is not known, and neither is a bug that stops its test file from loading, since its tests did not run", async () => {
   const head = await committed({
     "src/loaded.ts": "export const loaded = 1;\n",
     "tests/loads.test.ts": 'import "../src/loaded.ts";\n',
@@ -354,10 +354,15 @@ test("bugs-caught with the real toolchain: a bug that names a test file missing 
     patch: patchOf("src/loaded.ts", "export const loaded = 1;", "export const loaded = ;"),
     tests: ["tests/loads.test.ts"],
   };
-  const harmless = { ...realBugs.survives, tests: ["tests/loads.test.ts"] };
-  const loaded = await project.output("proof.prove", sliceWith(head, head, [syntax, harmless]));
+  const loaded = await project.output("proof.prove", sliceWith(head, head, [syntax]));
   assert.deepEqual(ownVerdict(loaded), [
-    { item: "bugs", kind: "bugs-caught", verdict: "failed", detail: "A bug survived: the name is changed." },
+    {
+      item: "bugs",
+      kind: "bugs-caught",
+      verdict: "inconclusive",
+      reason:
+        "The tests of the bug the module does not load did not run: 1 test file did not load, and no case failed.",
+    },
   ]);
   assert.deepEqual(await readdir(join(project.root, ".forge", "copies")), []);
 });

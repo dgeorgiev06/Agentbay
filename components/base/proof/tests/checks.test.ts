@@ -49,15 +49,18 @@ test("checks: a check that found a fault and a failed test run are failed, namin
       { name: "lint", verdict: "failed" },
     ],
   };
-  assert.deepEqual(
-    checked(lintFails, { ran: "failed", failed: 1 }),
-    failedWith("The check lint found a fault. 1 test failed."),
-  );
+  assert.deepEqual(checked(lintFails, { ran: "failed", failed: 1, cases: {} }), {
+    ...failedWith("The check lint found a fault. 1 test failed."),
+    cases: {},
+  });
   assert.deepEqual(checked(lintFails, ninePassed), failedWith("The check lint found a fault."));
 });
 
 test("checks: every check passed and a failed test run is failed", () => {
-  assert.deepEqual(checked(allPassed, { ran: "failed", failed: 2 }), failedWith("2 tests failed."));
+  assert.deepEqual(checked(allPassed, { ran: "failed", failed: 2, cases: {} }), {
+    ...failedWith("2 tests failed."),
+    cases: {},
+  });
 });
 
 test("checks: a check stopped at its limit beside checks that passed is inconclusive, never passed", () => {
@@ -80,7 +83,7 @@ test("checks: a check stopped at its limit beside a check that found a fault is 
     ],
   };
   assert.deepEqual(
-    checked(mixed, { ran: "failed", failed: 3 }),
+    checked(mixed, { ran: "failed", failed: 3, cases: {} }),
     inconclusiveWith(`The check types is not known: ${stopped}`),
   );
 });

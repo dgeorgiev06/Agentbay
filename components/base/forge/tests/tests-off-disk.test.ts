@@ -21,6 +21,8 @@ const second = "components/modes/d1/tests/second.test.ts";
 
 const schema = "components/modes/d1/schemas/count-request.json";
 
+const folder = ".forge/worktrees/D1";
+
 const practices = ["framework/practices.md", "components/base/typescript/practices.md"];
 
 function written(path: string, number: number): Handed {
@@ -65,7 +67,7 @@ type Seen = {
   readonly input: Json;
 };
 
-test("while the builder's task waits, no file under .forge/worktrees/ holds the tests, and the task holds their paths and none of their text", async () => {
+test("the test writer is asked before any builder works; while the builder's task waits, no file under .forge/worktrees/ holds the tests, and its task holds their paths and none of their text", async () => {
   const root = await project(template);
   const files = ["components/modes/d1/scripts/disk.ts"];
   await provedIn(root, "D1", { verdicts: [], judgement: [], size: [] });
@@ -76,11 +78,17 @@ test("while the builder's task waits, no file under .forge/worktrees/ holds the 
     interface: [schema],
   });
   const seen: Seen[] = [];
+  const asked: Seen[] = [];
   await roundToCard(root, start, {
     name: "D1",
     files,
     tests,
     built: { outcome: "built" },
+    whileWriting: async (runId) => {
+      const given = await task(root, runId);
+      const holding = await filesHolding(root, ".forge/worktrees", [`Written by the builder in ${folder}.`]);
+      asked.push({ holding, step: textAt(given, "stepKey"), input: fieldsOf(given).input ?? null });
+    },
     whileBuilding: async (runId) => {
       const given = await task(root, runId);
       const holding = await filesHolding(
@@ -91,6 +99,11 @@ test("while the builder's task waits, no file under .forge/worktrees/ holds the 
       seen.push({ holding, step: textAt(given, "stepKey"), input: fieldsOf(given).input ?? null });
     },
   });
+  const [writing] = asked;
+  assert.ok(writing !== undefined);
+  assert.equal(writing.step, "round/0.call0/0#1");
+  assert.deepEqual(writing.input, { slice, interface: [schema], folder, practices });
+  assert.deepEqual(writing.holding, []);
   const [building] = seen;
   assert.ok(building !== undefined);
   assert.deepEqual(building.holding, []);
@@ -99,7 +112,7 @@ test("while the builder's task waits, no file under .forge/worktrees/ holds the 
     slice,
     interface: [schema],
     fixed: [named, second],
-    folder: ".forge/worktrees/D1",
+    folder,
     practices,
     declared: { files, names: { gained: [], lost: [], changed: [] } },
   });

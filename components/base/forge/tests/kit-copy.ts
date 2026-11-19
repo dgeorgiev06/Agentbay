@@ -308,6 +308,7 @@ export type RoundPlan = {
   readonly files: readonly string[];
   readonly tests: readonly Handed[];
   readonly built: Json;
+  readonly whileWriting?: (runId: string) => Promise<void>;
   readonly whileBuilding?: (runId: string) => Promise<void>;
 };
 
@@ -317,6 +318,7 @@ export async function roundToCard(root: string, start: Waiting, plan: RoundPlan)
   await decided(root, start, { step: "start", verdict: "approve" });
   const declared = await submitted(root, start.id, { files: [...plan.files], names: noNames });
   assert.equal(textAt(declared, "status"), "waiting", JSON.stringify(declared));
+  await plan.whileWriting?.(start.id);
   const written = await submitted(root, start.id, { tests: [...plan.tests] });
   assert.equal(textAt(written, "status"), "waiting", JSON.stringify(written));
   await builderWrites(root, `.forge/worktrees/${plan.name}`, plan.files);

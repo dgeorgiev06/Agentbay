@@ -266,6 +266,25 @@ test("an adapter with no hook never sees a step, so with the hook its answers ar
   });
 });
 
+test("only the project's own setting counts: a mode's settings or a config file in a mode's folder do not", async () => {
+  await inScene("not set", async ({ project, kernel, waiting }) => {
+    const writer = "components/modes/writer";
+    const settingsSchema = {
+      type: "object",
+      additionalProperties: false,
+      properties: { signature: { type: "string" }, skillSteps: { type: "object" } },
+    };
+    await project.write(`${writer}/schemas/settings.json`, JSON.stringify(settingsSchema));
+    await project.write(`${writer}/agentbay.config.yaml`, stringify({ skillSteps: { run: "without-the-hook" } }));
+    const config: unknown = parse(await project.read("agentbay.config.yaml"));
+    assert.ok(isRecord(config));
+    const settings = { writer: { signature: "Yours", skillSteps: { run: "without-the-hook" } } };
+    await project.write("agentbay.config.yaml", stringify({ ...config, settings }));
+    assert.equal(refusalOf(await submitted(kernel, waiting.token)), refusalSentence(waiting));
+    await assertStillWaits(kernel, waiting);
+  });
+});
+
 function sightingsCount(project: Project): number {
   const database = new DatabaseSync(join(project.root, sightingsFile), { readOnly: true });
   try {

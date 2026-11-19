@@ -14,9 +14,15 @@ type SkillUsed = Extract<CardLine, { readonly mark: "judged" }>["skills"][number
 
 type Choice = NonNullable<Approval["choices"]>[number];
 
+type Withheld = Extract<Choice, { readonly status: "withheld" }>;
+
+type Segment = { readonly label: string; readonly tokens: readonly string[] };
+
 const markColumn = "computed".length + 1;
 
 const continued = "  ";
+
+const unmarked = "  ";
 
 function wordsOf(text: string): readonly string[] {
   return shown(text).split(" ");
@@ -27,43 +33,85 @@ function marked(mark: CardLine["mark"], words: string, indent: string): readonly
   return hanging(wordsOf(words), { first: lead, rest: `${lead}${continued}` });
 }
 
+function unmarkedRows(words: string): readonly string[] {
+  return hanging(wordsOf(words), { first: unmarked, rest: `${unmarked}${continued}` });
+}
+
 function skillWords(skill: SkillUsed): string {
   return `${skill.mode} ${skill.skill}, tier ${skill.tier}`;
 }
 
-function judgedBy(skills: readonly SkillUsed[]): readonly string[] {
-  if (skills.length === 0) {
-    return [];
+function sourceWords(line: CardLine): string | undefined {
+  switch (line.mark) {
+    case "computed":
+      return undefined;
+    case "ran": {
+      const { command, run } = line.source;
+      return run === undefined ? `by the command ${command}` : `by the command ${command} in run ${run}`;
+    }
+    case "judged":
+      return line.skills.length === 0 ? undefined : `by ${line.skills.map(skillWords).join("; ")}`;
   }
-  return marked("judged", `by ${skills.map(skillWords).join("; ")}`, " ");
 }
 
-function endsJudgedStep(line: CardLine, next: CardLine | undefined): boolean {
-  return next?.mark !== "judged" || next.source.step !== line.source.step;
+function sharesSource(line: CardLine, next: CardLine | undefined): boolean {
+  if (next === undefined || next.mark !== line.mark || next.source.step !== line.source.step) {
+    return false;
+  }
+  return (
+    line.mark !== "ran" ||
+    next.mark !== "ran" ||
+    (next.source.command === line.source.command && next.source.run === line.source.run)
+  );
 }
 
 function lineRows(lines: readonly CardLine[]): readonly string[] {
   return lines.flatMap((line, index) => {
+    if (line.mark === "computed") {
+      return unmarkedRows(line.words);
+    }
     const rows = marked(line.mark, line.words, "");
-    if (line.mark !== "judged" || !endsJudgedStep(line, lines[index + 1])) {
+    const source = sourceWords(line);
+    if (source === undefined || sharesSource(line, lines[index + 1])) {
       return rows;
     }
-    return [...rows, ...judgedBy(line.skills)];
+    return [...rows, ...marked(line.mark, source, " ")];
   });
 }
 
-function choiceSegments(choice: Choice): readonly { readonly label: string; readonly tokens: readonly string[] }[] {
-  const named = { label: shown(choice.name), tokens: wordsOf(choice.does) };
-  switch (choice.status) {
-    case "offered":
-      return [named];
-    case "withheld":
-      return [named, { label: "", tokens: ["not", "offered:", ...wordsOf(choice.reason)] }];
+function footRows(lines: readonly CardLine[]): readonly string[] {
+  const computed = lines.filter((line) => line.mark === "computed").length;
+  if (computed === 0) {
+    return [];
   }
+  return [computed === lines.length ? "All lines worked out by script." : "Unmarked lines were worked out by script."];
+}
+
+function namedSegment(choice: Choice): Segment {
+  return { label: shown(choice.name), tokens: wordsOf(choice.does) };
+}
+
+function withheldSegments(choice: Withheld): readonly Segment[] {
+  return [namedSegment(choice), { label: "", tokens: ["why:", ...wordsOf(choice.reason)] }];
+}
+
+function group(heading: string, rows: readonly (readonly Segment[])[]): readonly string[] {
+  return rows.length === 0 ? [] : [heading, ...namedRows(rows)];
 }
 
 function choiceRows(choices: readonly Choice[] | undefined): readonly string[] {
-  return choices === undefined ? [] : ["Choose one:", ...namedRows(choices.map(choiceSegments))];
+  if (choices === undefined) {
+    return [];
+  }
+  const offered = choices.filter((choice) => choice.status === "offered");
+  const withheld = choices.flatMap((choice) => (choice.status === "withheld" ? [choice] : []));
+  return [
+    ...group(
+      "You can:",
+      offered.map((choice) => [namedSegment(choice)]),
+    ),
+    ...group("Not available:", withheld.map(withheldSegments)),
+  ];
 }
 
 function countedLine(counted: Card["counted"]): string {
@@ -72,8 +120,9 @@ function countedLine(counted: Card["counted"]): string {
 
 function cardRows(approval: Approval, card: Card): readonly string[] {
   return [
-    ...hanging(wordsOf(card.title), { first: "", rest: "" }),
+    ...hanging(wordsOf(card.title), { first: "", rest: unmarked }),
     ...lineRows(card.lines),
+    ...footRows(card.lines),
     ...choiceRows(approval.choices),
     countedLine(card.counted),
     hashLine(approval.hash),

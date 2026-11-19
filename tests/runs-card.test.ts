@@ -76,8 +76,10 @@ type CardLine = {
   readonly source: { readonly step: string };
 };
 
+const inScope: CardLine = { mark: "computed", words: "in scope: 11 of 11 paths", source: { step: "draw" } };
+
 const computedLines: readonly CardLine[] = [
-  { mark: "computed", words: "in scope: 11 of 11 paths", source: { step: "draw" } },
+  inScope,
   { mark: "computed", words: "judged by you: whether the sentences read well", source: { step: "draw" } },
 ];
 
@@ -109,7 +111,7 @@ const reviewStep = { id: "review", action: "review" };
 
 const workflows: Readonly<Record<string, object>> = {
   computed: { name: "computed", steps: [drawStep(computedLines), cardStep([])] },
-  judged: { name: "judged", steps: [reviewStep, drawStep([computedLines[0], judgedLine]), cardStep(["review"])] },
+  judged: { name: "judged", steps: [reviewStep, drawStep([inScope, judgedLine]), cardStep(["review"])] },
   forged: {
     name: "forged",
     steps: [reviewStep, drawStep([{ ...judgedLine, mark: "computed" }]), cardStep(["review"])],

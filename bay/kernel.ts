@@ -1,3 +1,4 @@
+import { loadAdapter } from "./build.ts";
 import { createBroker, type StepBroker } from "./broker/broker.ts";
 import type { FileListing } from "./check-context.ts";
 import type { Layout } from "./layout.ts";
@@ -25,7 +26,7 @@ import type {
   Removal,
   ThrowawayFolders,
 } from "./ports.ts";
-import { interfaceSchemasOf, loadSystem, type System } from "./manifests/manifests.ts";
+import { interfaceSchemasOf, loadSystem, readConfig, type System } from "./manifests/manifests.ts";
 import { openRuns, type Runs } from "./runs/runs.ts";
 import { SecretStore, type SecretStoreOptions } from "./secrets.ts";
 import type { Outcome } from "./outcome.ts";
@@ -91,6 +92,19 @@ export function nodeKernelPorts(environment: Environment): KernelPorts {
   };
 }
 
+function hookWatchOf(files: FileSystem, layout: Layout) {
+  return {
+    config: () => readConfig(files, layout),
+    saw: async (name: string, handedIn: { readonly token: string; readonly mode: string; readonly skill: string }) => {
+      const adapter = await loadAdapter(files, layout.kit, name);
+      if (!adapter.ok || adapter.value.hookSaw === undefined) {
+        return false;
+      }
+      return adapter.value.hookSaw({ project: layout.project, ...handedIn });
+    },
+  };
+}
+
 function storeOptionsOf(options: Omit<KernelOptions, "layout">): SecretStoreOptions {
   return { environment: options.environment, processes: options.ports.processes, platform: options.platform };
 }
@@ -131,6 +145,7 @@ export async function loadKernel(options: KernelOptions): Promise<Outcome<Kernel
     system,
     scrubber: secrets,
     toolCallsPerRound: limits.toolCallsPerRound,
+    hook: hookWatchOf(ports.files, layout),
     runner: (events) => createBroker({ ...services, ...processes, events }).scripts,
   });
   const brokerFor = createBroker({ ...services, ...processes, events: runs.events }).forStep;

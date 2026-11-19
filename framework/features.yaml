@@ -139,6 +139,7 @@ features:
       - bay/runs/task-tokens.ts
       - bay/runs/choices.ts
       - bay/runs/card.ts
+      - bay/runs/hook-seen.ts
     may_import:
       - vocabulary
       - manifests

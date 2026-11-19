@@ -6,6 +6,7 @@ import { failedWith, succeededWith, unplacedProblem, type Outcome } from "../out
 import type { Clock, Folders } from "../ports.ts";
 import type { System } from "../manifests/manifests.ts";
 import { Engine, type AdvancedRun } from "./engine.ts";
+import { hookNoteFor, hookNoteKind, type HookWatch } from "./hook-seen.ts";
 import {
   kernelDatabaseFile,
   runStatuses,
@@ -29,6 +30,7 @@ type RunsNeeds = {
   readonly scrubber: Scrubber;
   readonly runner: (events: EventSink) => ScriptRunner;
   readonly toolCallsPerRound: number;
+  readonly hook: HookWatch;
 };
 
 export type Task = SkillTask & {
@@ -272,6 +274,17 @@ async function submitted(opened: Opened, token: string, submission: Submission):
     return place;
   }
   const { runId, stepKey } = place.value;
+  const task = await taskAt(opened, place.value);
+  if (!task.ok) {
+    return task;
+  }
+  const { mode } = task.value.place;
+  const note = await hookNoteFor(opened.needs.hook, { runId, stepKey, token, mode, skill: task.value.skill });
+  if (!note.ok) {
+    return note;
+  }
+  const at = opened.needs.clock.now().toISOString();
+  await opened.events.append({ at, runId, kind: hookNoteKind, detail: note.value });
   const result = await opened.engine.submit(runId, stepKey, submission);
   return resultOf(opened, result, (waitingKey) => sameStep(waitingKey, stepKey));
 }

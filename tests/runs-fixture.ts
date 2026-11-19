@@ -375,6 +375,14 @@ function projectFolder(): { readonly project: string; readonly remove: () => voi
   return { project, remove };
 }
 
+function withoutTheHook(config: Config): Parameters<typeof openRuns>[0]["hook"] {
+  const skillSteps = { run: "without-the-hook" as const };
+  return {
+    config: () => Promise.resolve({ ok: true, value: { ...config, skillSteps } }),
+    saw: () => Promise.resolve(false),
+  };
+}
+
 export async function openedRuns(opening: Opening = {}): Promise<OpenedRuns> {
   const { project, remove } = projectFolder();
   const fixture = await fixtureSystem(opening.changes);
@@ -397,6 +405,7 @@ export async function openedRuns(opening: Opening = {}): Promise<OpenedRuns> {
       system,
       scrubber,
       toolCallsPerRound: opening.toolCallsPerRound ?? 200,
+      hook: withoutTheHook(system.config),
       runner: (events) => {
         createdBeforeRunner.push(...folders.created);
         sinks.push(events);

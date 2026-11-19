@@ -10,6 +10,7 @@ import {
   type Drawn,
   type MergeCardInput,
   type Missing,
+  type Planter,
   type Slice,
   type Verdict,
 } from "../scripts/lib/cards.ts";
@@ -449,6 +450,16 @@ const td1Bugs: Slice = {
   ],
 };
 
+function td1BugsStart(bugsRows: string): string {
+  const items = td1Start.slice(td1Start.indexOf("  DOD-TD1-1"), td1Start.indexOf("  bugs: none will be planted"));
+  return `${td1Start.slice(0, td1Start.indexOf("  DOD-TD1-1"))}${items}  DOD-TD1-4, must: Every planted bug is
+    caught.
+  held by: bugs caught
+  ${bugsRows}
+All lines worked out by script.
+checked: 0 ran, 14 computed, 0 judged`;
+}
+
 const td1BugSurvived = `Merge TD1 into integration?
   Merge is not offered: 1 must item failed.
 ${td1Item1Passed}
@@ -557,8 +568,18 @@ const td1BugsInput: MergeCardInput = {
 const pinned: readonly { readonly name: string; readonly text: () => string; readonly expected: string }[] = [
   {
     name: "start",
-    text: () => printed(startCard({ slice: td1, title: td1Title, base: "875d936", bugs: [] })),
+    text: () => printed(startCard({ slice: td1, title: td1Title, base: "875d936", bugs: [], planter: "runs" })),
     expected: td1Start,
+  },
+  {
+    name: "start, a bugs-caught item and a planter",
+    text: () => printed(startCard({ slice: td1Bugs, title: td1Title, base: "875d936", bugs: [], planter: "runs" })),
+    expected: td1BugsStart("bugs: none named, so the planter writes\n    them after the last round"),
+  },
+  {
+    name: "start, a bugs-caught item and no planter",
+    text: () => printed(startCard({ slice: td1Bugs, title: td1Title, base: "875d936", bugs: [], planter: "none" })),
+    expected: td1BugsStart("bugs: none named, so DOD-TD1-4 will not be\n    known"),
   },
   { name: "merge, all passed", text: () => printedMerge(td1Merge), expected: td1AllPassed },
   { name: "merge, a checks item failed", text: () => printedMerge(td1Failed), expected: td1ChecksFailed },
@@ -603,8 +624,8 @@ function wordsOf(lines: readonly CardLine[]): readonly string[] {
   return lines.map((line) => line.words);
 }
 
-function startWords(slice: Slice, bugs: readonly string[] = []): readonly string[] {
-  return wordsOf(startCard({ slice, title: "Title", base: "main", bugs }).lines);
+function startWords(slice: Slice, bugs: readonly string[] = [], planter: Planter = "runs"): readonly string[] {
+  return wordsOf(startCard({ slice, title: "Title", base: "main", bugs, planter }).lines);
 }
 
 const everyKind: Slice = {
@@ -647,7 +668,7 @@ const everyKind: Slice = {
 
 describe("the start card", () => {
   test("every line cites the step slice and is computed", () => {
-    const card = startCard({ slice: td1, title: td1Title, base: "875d936", bugs: [] });
+    const card = startCard({ slice: td1, title: td1Title, base: "875d936", bugs: [], planter: "runs" });
     assert.equal(card.title, "Build slice TD1?");
     assert.ok(card.lines.every((line) => line.mark === "computed" && line.source.step === "slice"));
   });
@@ -687,7 +708,7 @@ describe("the start card", () => {
     ]);
   });
 
-  test("the bugs line says the planter writes them only when an item asks for bugs caught", () => {
+  test("the bugs line says the planter writes them only when a planter runs and an item asks for bugs caught", () => {
     const asks: Slice = { ...everyKind, done: everyKind.done.filter((item) => item.id === "K1-3") };
     const none: Slice = { ...everyKind, done: everyKind.done.filter((item) => item.id === "K1-1") };
     assert.equal(startWords(asks).at(-1), "bugs: none named, so the planter writes them after the last round");
@@ -698,6 +719,17 @@ describe("the start card", () => {
       "the planter writes more after the last round",
     ]);
     assert.ok(!startWords(asks).some((words) => words.includes("no bugs given")));
+    assert.equal(startWords(asks, [], "none").at(-1), "bugs: none named, so K1-3 will not be known");
+    assert.equal(startWords(asks, ["one"], "none").at(-1), "1 bug to inject: one");
+    assert.equal(startWords(none, [], "none").at(-1), "bugs: none will be planted");
+    const secondAsk = {
+      id: "K1-3b",
+      says: "Each bug is caught.",
+      level: "should" as const,
+      proof: { kind: "bugs-caught" as const },
+    };
+    const twoAsk: Slice = { ...asks, done: [...asks.done, secondAsk] };
+    assert.equal(startWords(twoAsk, [], "none").at(-1), "bugs: none named, so K1-3 and K1-3b will not be known");
   });
 
   test("a slice of two paths after two slices", () => {
@@ -729,7 +761,7 @@ describe("the start card", () => {
       startWords(slice)[4],
       `L1, must: ${"a".repeat(35)}${"b".repeat(5)} ${"b".repeat(30)}c components/ ${"p".repeat(30)}/ ${"q".repeat(20)}.ts`,
     );
-    const rows = rowsOf(printed(startCard({ slice, title: "Long", base: "main", bugs: [] })));
+    const rows = rowsOf(printed(startCard({ slice, title: "Long", base: "main", bugs: [], planter: "runs" })));
     assert.deepEqual(rows.slice(5, 9), [
       "  L1, must:",
       `    ${"a".repeat(35)}${"b".repeat(5)}`,
@@ -741,20 +773,23 @@ describe("the start card", () => {
   test("a newline, a tab or a control character in a sentence is shown as a space", () => {
     const says = "First line.\nSecond\tpart\u0007 ends\r\n‮here.";
     const slice: Slice = { ...everyKind, done: [{ id: "C1", says, level: "must" }] };
-    assert.deepEqual(wordsOf(startCard({ slice, title: "Line\none", base: "main", bugs: ["a\tbug"] }).lines), [
-      "Line one",
-      "kind mode; base main",
-      "scope: components/base/forge/**",
-      "after no other slice",
-      "C1, must: First line. Second part ends here.",
-      "held by: your judgement",
-      "1 bug to inject: a bug",
-    ]);
+    assert.deepEqual(
+      wordsOf(startCard({ slice, title: "Line\none", base: "main", bugs: ["a\tbug"], planter: "runs" }).lines),
+      [
+        "Line one",
+        "kind mode; base main",
+        "scope: components/base/forge/**",
+        "after no other slice",
+        "C1, must: First line. Second part ends here.",
+        "held by: your judgement",
+        "1 bug to inject: a bug",
+      ],
+    );
   });
 
   test("nothing but the plan's and the request's words reach the start card, and never a patch", () => {
     const bugs = ["the list keeps a done todo"];
-    const card = startCard({ slice: td1, title: td1Title, base: "875d936", bugs });
+    const card = startCard({ slice: td1, title: td1Title, base: "875d936", bugs, planter: "runs" });
     const planned = [
       td1Title,
       "875d936",

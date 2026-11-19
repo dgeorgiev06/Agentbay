@@ -636,10 +636,8 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
       "  held by: checks",
       "  1 bug to inject: the record is not read",
       "    again",
-      "  the planter writes more after the last",
-      "    round",
       "All lines worked out by script.",
-      "checked: 0 ran, 32 computed, 0 judged",
+      "checked: 0 ran, 31 computed, 0 judged",
       `hash ${start.hash.slice(0, 12)}`,
     ]);
     assert.ok(startPrinted.every((row) => Array.from(row).length <= 44));

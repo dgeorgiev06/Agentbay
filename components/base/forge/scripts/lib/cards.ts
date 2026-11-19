@@ -96,11 +96,14 @@ export type CardLine =
       readonly source: { readonly step: string };
     };
 
+export type Planter = "runs" | "none";
+
 export type StartCardInput = {
   readonly slice: Slice;
   readonly title: string;
   readonly base: string;
   readonly bugs: readonly string[];
+  readonly planter: Planter;
 };
 
 export type StartCard = {
@@ -541,23 +544,34 @@ function itemWords(item: Item): readonly string[] {
   return [opening, `held by: ${heldSaid[item.proof.kind]}`, ...shownProof(item.proof)];
 }
 
-function asksForBugs(slice: Slice): boolean {
-  return slice.done.some((item) => item.proof?.kind === "bugs-caught");
+function bugsAskedBy(slice: Slice): readonly string[] {
+  return slice.done.filter((item) => item.proof?.kind === "bugs-caught").map((item) => item.id);
 }
 
-function bugsWords(slice: Slice, bugs: readonly string[]): readonly string[] {
-  const named = bugs.length === 0 ? [] : [`${counted(bugs.length, "bug")} to inject: ${bugs.join("; ")}`];
-  if (!asksForBugs(slice)) {
-    return bugs.length === 0 ? ["bugs: none will be planted"] : named;
-  }
-  if (bugs.length === 0) {
+function plantedWords(named: readonly string[]): readonly string[] {
+  if (named.length === 0) {
     return ["bugs: none named, so the planter writes them after the last round"];
   }
   return [...named, "the planter writes more after the last round"];
 }
 
+function bugsWords(input: StartCardInput): readonly string[] {
+  const { bugs, planter } = input;
+  const asking = bugsAskedBy(input.slice);
+  const named = bugs.length === 0 ? [] : [`${counted(bugs.length, "bug")} to inject: ${bugs.join("; ")}`];
+  if (asking.length > 0 && planter === "runs") {
+    return plantedWords(named);
+  }
+  if (named.length > 0) {
+    return named;
+  }
+  return asking.length === 0
+    ? ["bugs: none will be planted"]
+    : [`bugs: none named, so ${joined(asking)} will not be known`];
+}
+
 export function startCard(input: StartCardInput): StartCard {
-  const { slice, title, base, bugs } = input;
+  const { slice, title, base } = input;
   const afters = slice.after.map((after) => `after ${after.slice}: ${after.because}`);
   const words = [
     title,
@@ -565,7 +579,7 @@ export function startCard(input: StartCardInput): StartCard {
     scopeWords(slice.scope),
     ...(afters.length === 0 ? ["after no other slice"] : afters),
     ...slice.done.flatMap(itemWords),
-    ...bugsWords(slice, bugs),
+    ...bugsWords(input),
   ];
   return { title: `Build slice ${slice.name}?`, lines: words.map((said) => computed("slice", said)) };
 }

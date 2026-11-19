@@ -4,6 +4,9 @@ budget: { minutes: 180 }
 steps:
   - id: slice
     action: slice
+    input:
+      request: $trigger
+      planter: true
   - id: start
     approval: Build this slice?
     show: $steps.slice.output.card

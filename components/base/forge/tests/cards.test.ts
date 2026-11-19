@@ -120,7 +120,7 @@ const tr2Merge: MergeCardInput = {
   into: "feat/0022-agentbay5",
 };
 
-const sendBackWithheld = "rounds come with slice F2.";
+const sendBackWithheld = "no round runs after the card.";
 
 const discardWithheld = "discarding comes with slice WD1.";
 

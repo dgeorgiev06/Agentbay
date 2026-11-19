@@ -58,7 +58,7 @@ const gitWords = [
   "commit.gpgsign=false",
 ];
 
-const sendBackWithheld = "rounds come with slice F2.";
+const sendBackWithheld = "no round runs after the card.";
 
 const discardWithheld = "discarding comes with slice WD1.";
 
@@ -678,7 +678,7 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
       "             why: 4 must items, scope and",
       "             declared are not known.",
       "  send-back  Round 2, a fresh builder",
-      "             why: rounds come with slice F2.",
+      "             why: no round runs after the card.",
       "  discard    Stop; the worktree goes",
       "             why: discarding comes with",
       "             slice WD1.",

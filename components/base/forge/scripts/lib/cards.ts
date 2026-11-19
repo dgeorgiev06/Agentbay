@@ -73,11 +73,17 @@ export type Missing = {
 
 export type Built = { readonly outcome: "built" } | { readonly outcome: "stopped"; readonly missing: Missing };
 
-export type CardLine = {
-  readonly mark: "computed";
-  readonly words: string;
-  readonly source: { readonly step: "slice" | "prove" | "draw" };
-};
+export type CardLine =
+  | {
+      readonly mark: "computed";
+      readonly words: string;
+      readonly source: { readonly step: "slice" | "prove" | "draw" };
+    }
+  | {
+      readonly mark: "judged";
+      readonly words: string;
+      readonly source: { readonly step: string };
+    };
 
 export type StartCardInput = {
   readonly slice: Slice;
@@ -93,6 +99,17 @@ export type StartCard = {
 
 export type Kept = "set-aside" | "with-tests";
 
+export type JudgedLines = {
+  readonly step: string;
+  readonly sentences: readonly string[];
+};
+
+export type RoundsOnCard = {
+  readonly count: number;
+  readonly most: number;
+  readonly judged?: JudgedLines;
+};
+
 export type MergeCardInput = {
   readonly slice: Slice;
   readonly proof: Proved;
@@ -100,6 +117,7 @@ export type MergeCardInput = {
   readonly work: string;
   readonly kept: Kept;
   readonly into: string;
+  readonly rounds?: RoundsOnCard;
 };
 
 export type WithheldChoice = "merge" | "send-back" | "discard";
@@ -118,7 +136,7 @@ type Unmet = {
 
 const addedItems = ["scope", "declared"];
 
-const sendBackReason = "rounds come with slice F2.";
+const sendBackReason = "no round runs after the card.";
 
 const discardReason = "discarding comes with slice WD1.";
 
@@ -328,8 +346,12 @@ function joined(names: readonly string[]): string {
   return `${names.slice(0, -1).join(", ")} and ${names.at(-1) ?? ""}`;
 }
 
-function computed(step: CardLine["source"]["step"], words: string): CardLine {
+function computed(step: "slice" | "prove" | "draw", words: string): CardLine {
   return { mark: "computed", words, source: { step } };
+}
+
+function judged(step: string, words: string): CardLine {
+  return { mark: "judged", words, source: { step } };
 }
 
 function itemPrefix(slice: Slice): string {
@@ -556,14 +578,27 @@ function watchedWords(size: readonly Sized[]): readonly string[] {
   });
 }
 
+function roundLines(rounds: RoundsOnCard | undefined): readonly CardLine[] {
+  if (rounds === undefined) {
+    return [];
+  }
+  const count = computed("draw", `rounds: ${String(rounds.count)} of at most ${String(rounds.most)}`);
+  const { judged: lines } = rounds;
+  if (lines === undefined) {
+    return [count];
+  }
+  return [count, ...lines.sentences.flatMap(wrapped).map((words) => judged(lines.step, words))];
+}
+
 function drawnLines(input: MergeCardInput): readonly CardLine[] {
   const { slice, proof, built, work, kept } = input;
-  const judged = proof.judgement.map((item) => `not judged, for you: ${item.id} ${item.says}`);
+  const forYou = proof.judgement.map((item) => `not judged, for you: ${item.id} ${item.says}`);
   return [
     ...builtWords(built).map((said) => computed("draw", said)),
     computed("draw", changedWords(proof.size, work, kept)),
     ...verdictLines(slice, proof.verdicts),
-    ...[...judged, ...sizeWords(proof.size), ...watchedWords(proof.size)].map((said) => computed("draw", said)),
+    ...[...forYou, ...sizeWords(proof.size), ...watchedWords(proof.size)].map((said) => computed("draw", said)),
+    ...roundLines(input.rounds),
   ];
 }
 

@@ -116,6 +116,11 @@ describe("the planter's answer, as the check sees it", () => {
     assert.deepEqual(refused([{ name: "the count is always none", patch, tests: [testPath] }]), []);
   });
 
+  test("a patch's file lines are not what the bug writes: a test that names the file does not refuse the bug", () => {
+    const naming = { ...planting, tests: [{ path: testPath, text: `import { quillCount } from "${codePath}";\n` }] };
+    assert.deepEqual(refusedBugs({ bugs: [bugIn(codePath, "the count is one too many")] }, naming), []);
+  });
+
   test("ten bugs are taken and eleven refused", () => {
     const bugs = Array.from({ length: 11 }, (_, at) => bugIn(codePath, `bug number ${String(at + 1)}`));
     assert.deepEqual(refused(bugs.slice(0, 10)), []);

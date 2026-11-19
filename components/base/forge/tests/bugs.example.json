@@ -114,6 +114,7 @@
         }
       ],
       "remaining": [],
+      "leaks": [],
       "reviewedAt": "review-2"
     }
   },

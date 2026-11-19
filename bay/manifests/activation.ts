@@ -4,7 +4,7 @@ import { problemAt, type Loaded } from "../value-check.ts";
 import type { Problem } from "../outcome.ts";
 import type { ModeFolder } from "./folders.ts";
 import type { LoadedModes, Context } from "./loaded.ts";
-import { candidatesOf, interfaceName } from "./interfaces.ts";
+import { candidatesOf, interfaceName, requirersOf } from "./interfaces.ts";
 import { bindingsFrom } from "./bindings.ts";
 
 type Activation = {
@@ -95,8 +95,10 @@ function broughtNotice(config: Loaded<Config>, { reference, mode }: Brought): Pr
   });
 }
 
-function noToolchainProblems(context: Context, config: Loaded<Config>): readonly Problem[] {
-  if (isBound(config, toolchain)) {
+function noToolchainProblems(context: Context, active: ReadonlySet<string>): readonly Problem[] {
+  const config = context.config;
+  const needed = requirersOf(context, interfaceName(toolchain)).some((name) => active.has(name));
+  if (config === undefined || !needed || isBound(config, toolchain)) {
     return [];
   }
   const problem = problemAt(config, ["bindings"], {
@@ -119,10 +121,11 @@ export function activation(context: Context, homes: ReadonlyMap<string, ModeFold
   }
   const brought = broughtByForge.filter(({ reference, mode }) => homes.has(mode) && !isBound(config, reference));
   const withForge = { ...context, config: withBrought(config, brought) };
+  const withBroughtModes = reached(withForge, homes, [...active, ...brought.map(({ mode }) => mode)]);
   return {
-    active: reached(withForge, homes, [...active, ...brought.map(({ mode }) => mode)]),
+    active: withBroughtModes,
     config: withForge.config,
-    problems: [...seeded.problems, ...noToolchainProblems(withForge, withForge.config)],
+    problems: [...seeded.problems, ...noToolchainProblems(withForge, withBroughtModes)],
     notices: brought.map((each) => broughtNotice(config, each)),
   };
 }

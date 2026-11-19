@@ -27,7 +27,8 @@ type Scenario =
   | "no commands"
   | "moved and stale"
   | "cases"
-  | "tests not loaded";
+  | "tests not loaded"
+  | "project commands";
 
 type Verdict = {
   readonly item: string;
@@ -83,6 +84,7 @@ const scenarios: readonly Scenario[] = [
   "moved and stale",
   "cases",
   "tests not loaded",
+  "project commands",
 ];
 
 const recorder = "recorder";
@@ -160,6 +162,13 @@ const checkoutFiles: Files = {
     "exit 2",
     "",
   ].join("\n"),
+  "run-command.sh": [
+    '[ -f "commands/$1.sh" ] || exit 5',
+    'name="$1"',
+    "shift",
+    'exec sh "commands/$name.sh" "$@"',
+    "",
+  ].join("\n"),
   "checks/format": "passes\n",
   "checks/lint": "passes\n",
   "checks/types": "passes\n",
@@ -176,6 +185,17 @@ const declaredCommands = {
 };
 
 const declaredCounts = { noRise: declaredCommands.noRise };
+
+const shellWords = ["two words", "$(echo read by a shell)"];
+
+const projectCommands = {
+  sameOutput: [
+    { name: "greeting", run: "greet" },
+    { name: "words", run: "echo-words", arguments: shellWords },
+    { name: "sound-check", bay: ["print", "fixtures/sound.txt"] },
+  ],
+  noRise: declaredCommands.noRise,
+};
 
 const linksASettingNames = ["vendor/packages", ".cache"];
 
@@ -313,6 +333,36 @@ const casesHead: Files = {
   "tests/many.test.ts": ["src/long.txt short", ...missingFiles.map((path) => `${path} there`), ""].join("\n"),
 };
 
+const projectCommandFiles: Files = {
+  "commands/greet.sh": "cat src/greeting.txt\n",
+  "commands/echo-words.sh": ['for word in "$@"; do', "  printf '%s\\n' \"$word\"", "done", ""].join("\n"),
+  "commands/fail.sh": ['echo "it failed"', "exit 2", ""].join("\n"),
+  "commands/hang.sh": "exit 3\n",
+  "commands/break.sh": "exit 4\n",
+  "commands/much.sh": [
+    "printed=0",
+    "while [ $printed -lt 5000 ]; do",
+    '  echo "a line of the much command"',
+    "  printed=$((printed + 1))",
+    "done",
+    "",
+  ].join("\n"),
+};
+
+const commandsBase: Files = {
+  ...fixtures,
+  ...projectCommandFiles,
+  "src/greeting.txt": "hello\n",
+};
+
+const commandsHead: Files = {
+  ...fixtures,
+  ...projectCommandFiles,
+  "src/greeting.txt": "hello, louder\n",
+};
+
+const textsTheCommandsPrint = ["hello", "louder", "it failed", "two words", "read by a shell", "much command"];
+
 const commits: Readonly<Record<string, Files>> = {
   c7f0d13: tr2Base,
   c9bb216: tr2Head,
@@ -322,6 +372,8 @@ const commits: Readonly<Record<string, Files>> = {
   "inconclusive-head": inconclusiveHead,
   "cases-base": casesBase,
   "cases-head": casesHead,
+  "commands-base": commandsBase,
+  "commands-head": commandsHead,
 };
 
 const inconclusiveScope = [
@@ -563,6 +615,59 @@ const testsNotLoadedRequest: Fields = {
   bugs: [unloadedBug],
 };
 
+function commandRun(run: string, stdout: string, exitCode: number): Fields {
+  return { run, stdout, exitCode };
+}
+
+const louder = "hello, louder\n";
+
+const projectCommandsRequest: Fields = {
+  slice: sliceOf(
+    "COMMANDS",
+    ["src/**"],
+    [
+      item("same-output-commands-pass", { kind: "same-output", differ: ["greeting"] }),
+      item("same-output-commands-fail", { kind: "same-output", differ: ["words"] }),
+      item("real-thing-run-one", { kind: "real-thing", runs: [commandRun("greet", louder, 0)] }),
+      item("real-thing-run-two", {
+        kind: "real-thing",
+        runs: [
+          commandRun("greet", louder, 0),
+          { run: "echo-words", arguments: shellWords, stdout: "two words\n$(echo read by a shell)\n", exitCode: 0 },
+        ],
+      }),
+      item("real-thing-run-base-text", { kind: "real-thing", runs: [commandRun("greet", "hello\n", 0)] }),
+      item("real-thing-run-second-differs", {
+        kind: "real-thing",
+        runs: [commandRun("greet", louder, 0), commandRun("fail", "it failed\n", 0)],
+      }),
+      item("real-thing-mixed", {
+        kind: "real-thing",
+        runs: [
+          { bay: ["print", "src/greeting.txt"], stdout: louder, exitCode: 0 },
+          {
+            run: "echo-words",
+            arguments: ["print", "src/greeting.txt"],
+            stdout: "print\nsrc/greeting.txt\n",
+            exitCode: 0,
+          },
+        ],
+      }),
+      item("real-thing-run-absent", { kind: "real-thing", runs: [commandRun("absent", "", 0)] }),
+      item("real-thing-run-stopped", {
+        kind: "real-thing",
+        runs: [commandRun("greet", louder, 0), commandRun("hang", "", 0)],
+      }),
+      item("real-thing-run-not-started", { kind: "real-thing", runs: [commandRun("break", "", 0)] }),
+      item("real-thing-run-much", { kind: "real-thing", runs: [commandRun("much", "", 0)] }),
+    ],
+  ),
+  base: "commands-base",
+  head: "commands-head",
+  declared: { files: ["src/greeting.txt"], names: nothingNamed() },
+  bugs: [],
+};
+
 const casesWithAFailedRun: Readonly<Record<Scenario, readonly string[]>> = {
   tr2: [],
   failed: ["checks-fail"],
@@ -573,6 +678,7 @@ const casesWithAFailedRun: Readonly<Record<Scenario, readonly string[]>> = {
   "moved and stale": [],
   cases: ["fails-first-one", "fails-first-two", "fails-first-unloaded", "checks-cases"],
   "tests not loaded": [],
+  "project commands": [],
 };
 
 function sixOnTheHead(file: string): Fields {
@@ -1037,6 +1143,101 @@ const cases: readonly Case[] = [
     },
   },
   {
+    name: "real-thing: a run that names one of the project's commands is made through the toolchain's run in a copy of the head, and passes when it printed the expected text and exit code, with one run and with two",
+    run: async (proof) => {
+      const result = await proof.proven("project commands");
+      assertVerdicts(result, ["real-thing-run-one", "real-thing-run-two"], { kind: "real-thing", verdict: "passed" });
+      assertVerdict(result, "real-thing-run-base-text", { kind: "real-thing", verdict: "failed" });
+    },
+  },
+  {
+    name: "real-thing: of two runs through the toolchain, the one that ended with another exit code fails the item, named by its number",
+    run: async (proof) => {
+      const verdict = assertVerdict(await proof.proven("project commands"), "real-thing-run-second-differs", {
+        kind: "real-thing",
+        verdict: "failed",
+      });
+      assert.match(verdict.said, /\bRun 2\b/);
+      assert.doesNotMatch(verdict.said, /\bRun 1\b/);
+    },
+  },
+  {
+    name: "real-thing: a bay run and a run through the toolchain in one item are each made their own way, in one copy of the head",
+    run: async (proof) => {
+      assertVerdict(await proof.proven("project commands"), "real-thing-mixed", {
+        kind: "real-thing",
+        verdict: "passed",
+      });
+      const runs = (await proof.asked()).filter((asked) => asked.action === "run");
+      const words = runs.map((asked) => asked.request.arguments ?? null);
+      assert.ok(
+        words.some((given) => JSON.stringify(given) === JSON.stringify(["print", "src/greeting.txt"])),
+        JSON.stringify(words),
+      );
+      assert.deepEqual(
+        runs.filter((asked) => asked.request.name === "print"),
+        [],
+      );
+    },
+  },
+  {
+    name: "real-thing: a command the project lacks, one stopped at its limit, one whose call failed and one that printed more than proof reads each make the item inconclusive, never passed",
+    run: async (proof) => {
+      assertVerdicts(
+        await proof.proven("project commands"),
+        ["real-thing-run-absent", "real-thing-run-stopped", "real-thing-run-not-started", "real-thing-run-much"],
+        { kind: "real-thing", verdict: "inconclusive" },
+      );
+    },
+  },
+  {
+    name: "same-output: commands declared with run are run through the toolchain, with their words, in a copy of the base and then of the head, beside those declared with bay, and each is compared with itself",
+    run: async (proof) => {
+      const result = await proof.proven("project commands");
+      assertVerdict(result, "same-output-commands-pass", { kind: "same-output", verdict: "passed" });
+      const failed = assertVerdict(result, "same-output-commands-fail", { kind: "same-output", verdict: "failed" });
+      assert.match(failed.said, /greeting/);
+      assert.match(failed.said, /words/);
+      const asked = await proof.asked();
+      const commitOfCopy = new Map(
+        asked.flatMap((entry) =>
+          entry.action === "copy" && entry.failed === undefined
+            ? [[textOf(fieldsOf(entry.answer).folder), textOf(entry.request.commit)] as const]
+            : [],
+        ),
+      );
+      const runs = asked
+        .filter((entry) => entry.action === "run")
+        .map((entry) => ({
+          commit: commitOfCopy.get(folderOf(entry)) ?? "",
+          call: JSON.stringify([entry.request.name ?? null, entry.request.arguments ?? []]),
+        }))
+        .filter((run) => run.commit === "commands-base" || run.commit === "commands-head");
+      const declared = [JSON.stringify(["greet", []]), JSON.stringify(["echo-words", shellWords])];
+      const atTheBase = runs.filter((run) => run.commit === "commands-base").map((run) => run.call);
+      assert.ok(atTheBase.length > 0, "the declared commands run in a copy of the base");
+      assert.deepEqual(
+        atTheBase,
+        atTheBase.map((_, index) => declared[index % declared.length]),
+      );
+      const atTheHead = new Set(runs.filter((run) => run.commit === "commands-head").map((run) => run.call));
+      assert.deepEqual(
+        declared.filter((call) => !atTheHead.has(call)),
+        [],
+      );
+      assert.equal(runs[0]?.commit, "commands-base", "the first run is at the base");
+    },
+  },
+  {
+    name: "no text a command printed through the toolchain is put into a detail or a reason",
+    run: async (proof) => {
+      for (const verdict of (await proof.proven("project commands")).verdicts) {
+        const shownTexts = textsTheCommandsPrint.filter((text) => verdict.said.includes(text));
+        assert.deepEqual(shownTexts, [], `${verdict.item}: ${verdict.said}`);
+      }
+    },
+  },
+  {
     name: "the items scope and declared come after the slice's own items in every result, also when every item of the slice is a judgement item",
     run: async (proof) => {
       for (const scenario of scenarios) {
@@ -1102,7 +1303,8 @@ const cases: readonly Case[] = [
         if (asked.action === "remove") {
           live.delete(folderOf(asked));
         }
-        if ((asked.action === "check" || asked.action === "test") && !live.has(folderOf(asked))) {
+        const toolchainAction = ["check", "test", "run"].includes(asked.action);
+        if (toolchainAction && !live.has(folderOf(asked))) {
           given.push(`${asked.action} ${folderOf(asked)}`);
         }
       }
@@ -1198,6 +1400,7 @@ function recorderManifest(): string {
         "read-file": { run: "cat --", effects: ["read"] },
         "run-check": { run: "sh check.sh", effects: ["read", "write"] },
         "run-tests": { run: "sh run-tests.sh", effects: ["read", "write"] },
+        "run-command": { run: "sh run-command.sh", effects: ["read", "write"] },
       },
     },
     actions: {
@@ -1206,6 +1409,7 @@ function recorderManifest(): string {
       ]),
       check: action("When proof runs the checks in a copy.", "scripts/check.ts", everyEffect),
       test: action("When proof runs the tests in a copy.", "scripts/test.ts", everyEffect),
+      run: action("When proof runs one of a copy's commands by its name.", "scripts/run.ts", everyEffect),
       cut: action("When a proof cuts a worktree, which it must not give a toolchain.", "scripts/cut.ts", changing),
       status: action("The recorder does not build this action.", "scripts/unbuilt.ts", ["read"]),
       changed: action("When proof needs the paths that differ between two commits.", "scripts/changed.ts", ["read"]),
@@ -1470,6 +1674,35 @@ export const run = defineScript((input, context) =>
   }),
 );
 `,
+    "scripts/run.ts": String.raw`${header("fail")}import { recorded, stoppedAtItsLimit, textField, textsField } from "./lib/recorder.ts";
+
+export const run = defineScript((input, context) =>
+  recorded(context, "run", input, async () => {
+    const folder = textField(input, "folder");
+    const name = textField(input, "name");
+    const words = textsField(input, "arguments") ?? [];
+    const answer = await context.commands.run({ name: "run-command", arguments: [name, ...words], folder, timeLimitSeconds: 60 });
+    if (!answer.ok) {
+      return { ended: "not started", reason: "It could not be started: " + answer.message, seconds: 0 };
+    }
+    const { end, milliseconds, stdout } = answer.value;
+    const shown = { seconds: milliseconds / 1000, stdout: stdout.text, stdoutCut: stdout.cut };
+    if (end.how === "signalled") {
+      return { ended: "signalled", signal: end.signal, reason: "It was stopped by the signal " + end.signal + ".", ...shown };
+    }
+    if (end.how === "timed-out" || end.exitCode === 3) {
+      return { ended: "timed-out", reason: stoppedAtItsLimit, ...shown };
+    }
+    if (end.exitCode === 4) {
+      return fail("The made-up toolchain stopped at an error of its own in " + folder + ".");
+    }
+    if (end.exitCode === 5) {
+      return { ended: "not set up", reason: "The copy has no command " + name + ": add commands/" + name + ".sh.", seconds: 0 };
+    }
+    return { ended: "exited", exitCode: end.exitCode, ...shown };
+  }),
+);
+`,
     "scripts/changed.ts": String.raw`${header("")}import { commitFiles, textField } from "./lib/recorder.ts";
 
 export const run = defineScript(async (input, context) => {
@@ -1692,13 +1925,19 @@ function configWith(mode: string, settings: Fields): Parameters<ModeProject["reo
   };
 }
 
+const settingsOf: Partial<Record<Scenario, Fields>> = {
+  "no commands": declaredCounts,
+  "project commands": projectCommands,
+};
+
 function proofFor(state: State, mode: string, requests: Readonly<Record<Scenario, Fields>>): Proof {
   const results = new Map<Scenario, Promise<Result>>();
   const output = async (scenario: Scenario): Promise<Value> => {
-    if (scenario !== "no commands") {
+    const settings = settingsOf[scenario];
+    if (settings === undefined) {
       return state.project.output(`${mode}.prove`, requests[scenario]);
     }
-    state.project = await state.project.reopen(configWith(mode, declaredCounts));
+    state.project = await state.project.reopen(configWith(mode, settings));
     try {
       return await state.project.output(`${mode}.prove`, requests[scenario]);
     } finally {
@@ -1778,6 +2017,7 @@ export function testProof(underTest: ProofUnderTest, testProject: TestProject = 
       "no commands": noCommandsRequest,
       cases: casesRequest,
       "tests not loaded": testsNotLoadedRequest,
+      "project commands": projectCommandsRequest,
     };
     proof = proofFor(state, mode, requests);
   });

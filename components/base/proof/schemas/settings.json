@@ -21,30 +21,61 @@
       "type": "array",
       "maxItems": 100,
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["name", "bay"],
-        "properties": {
-          "name": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
-            "maxLength": 64,
-            "description": "The command's name, which an item of the kind same-output names in differ."
-          },
-          "bay": {
-            "type": "array",
-            "minItems": 1,
-            "maxItems": 50,
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 1000,
-              "description": "One word given to the command."
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "bay"],
+            "properties": {
+              "name": {
+                "$ref": "#/$defs/declaredName"
+              },
+              "bay": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 50,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000,
+                  "description": "One word given to the command."
+                },
+                "description": "The words given to the copy's own ./bay.sh, run at the copy's root, such as check --project tests/fixtures/sound."
+              }
             },
-            "description": "The words given to the copy's own ./bay.sh, run at the copy's root, such as check --project tests/fixtures/sound."
+            "description": "A run of the copy's own ./bay.sh."
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "run"],
+            "properties": {
+              "name": {
+                "$ref": "#/$defs/declaredName"
+              },
+              "run": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$",
+                "maxLength": 64,
+                "description": "The name of one of the project's own commands, as the toolchain bound to toolchain@1 runs it in a copy with its action run: for TypeScript, a script of package.json, such as demo. Never a command line."
+              },
+              "arguments": {
+                "type": "array",
+                "maxItems": 50,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000,
+                  "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                  "description": "One word given to the command as one argument, exactly as written: no shell splits it or reads what it holds."
+                },
+                "description": "The words given to the command after its name, in this order; left out, none."
+              }
+            },
+            "description": "A run of one of the project's own commands, by its name, through the toolchain."
           }
-        },
-        "description": "One command whose output and exit code must not change unless a slice says so."
+        ],
+        "description": "One command whose output and exit code must not change unless a slice says so: the copy's own ./bay.sh with bay, or one of the project's own commands with run. One written with bay means what it meant before run was added."
       },
       "description": "The commands whose output must not change; left out, the project declares none and an item of the kind same-output is inconclusive."
     },
@@ -85,6 +116,14 @@
         "description": "One count that no slice may raise, such as the entries of a list of known breaks."
       },
       "description": "The counts that may not rise; left out, the project declares none."
+    }
+  },
+  "$defs": {
+    "declaredName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "maxLength": 64,
+      "description": "The command's name, which an item of the kind same-output names in differ."
     }
   }
 }

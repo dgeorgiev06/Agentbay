@@ -292,7 +292,7 @@ An approval is the owner's alone (CLAUDE.md, P-28). A send approval binds to the
 ### Where unit costs come from, in order
 
 1. **Quotes from the owner's own contractors.** Read with the owner's consent (the `quote` workflow) and kept only after he confirms each price. Grade A when under a year old and for this region.
-2. **The owner's own past jobs.** He has done two remodels before. He types their costs in with `price-book.add`, kind `own-job`, with the year. Grade B.
+2. **The owner's own past jobs.** He types their costs in with `price-book.add`, kind `own-job`, with the year. Grade B.
 3. **A public source whose terms allow it, named one by one.** Today only one qualifies:
    - **BLS Occupational Employment and Wage Statistics**, for labor hours times a local wage. BLS says its published data is public domain and may be used without permission, and asks to be cited: https://www.bls.gov/opub/copyright-information.htm . Its Kiryas Joel-Poughkeepsie-Newburgh area covers Dutchess and Orange Counties; the May 2024 figures were released on 29 April 2025: https://www.bls.gov/regions/northeast/news-release/occupationalemploymentandwages_kiryasjoel.htm . A wage is not a contractor's price (no overhead, profit, insurance or materials), so a line priced this way is grade C and says "labor only, from a public wage average".
 

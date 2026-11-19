@@ -1,13 +1,13 @@
 import type { RealRun, Request } from "../lib/request.ts";
 import type { ProofStep } from "../lib/step.ts";
 import { broken, held, unknown, type Part, type Parts } from "../lib/verdicts.ts";
-import { runsInCopy, type BayRun } from "./bay-run.ts";
+import { runsInCopy, type CommandRun } from "./command-run.ts";
 
 export type RealThingEvidence =
   | { readonly found: "not copied"; readonly reason: string }
-  | { readonly found: "ran"; readonly runs: readonly BayRun[] };
+  | { readonly found: "ran"; readonly runs: readonly CommandRun[] };
 
-function runParts(run: BayRun | undefined, expected: RealRun, place: string): readonly Part[] {
+function runParts(run: CommandRun | undefined, expected: RealRun, place: string): readonly Part[] {
   if (run === undefined) {
     return [unknown(`${place} was not run.`)];
   }
@@ -45,7 +45,7 @@ export async function realThingEvidence(
   const ran = await runsInCopy(
     step,
     request.head,
-    runs.map((run) => run.bay),
+    runs.map((run) => run.command),
   );
   return ran.copied ? { found: "ran", runs: ran.runs } : { found: "not copied", reason: ran.reason };
 }

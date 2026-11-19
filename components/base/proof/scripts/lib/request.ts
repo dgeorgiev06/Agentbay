@@ -8,7 +8,11 @@ export type Count =
   | { readonly of: "no rise"; readonly pattern: string; readonly paths: readonly string[] }
   | { readonly of: "declared"; readonly name: string };
 
-export type RealRun = { readonly bay: readonly string[]; readonly stdout: string; readonly exitCode: number };
+export type Command =
+  | { readonly through: "bay"; readonly words: readonly string[] }
+  | { readonly through: "toolchain"; readonly name: string; readonly arguments: readonly string[] };
+
+export type RealRun = { readonly command: Command; readonly stdout: string; readonly exitCode: number };
 
 export type Proof =
   | { readonly kind: "checks" }
@@ -36,7 +40,7 @@ export type Names = {
 
 export type Bug = { readonly name: string; readonly patch: string; readonly tests: readonly string[] };
 
-export type DeclaredCommand = { readonly name: string; readonly bay: readonly string[] };
+export type DeclaredCommand = { readonly name: string; readonly command: Command };
 
 export type DeclaredCount = { readonly name: string; readonly pattern: string; readonly paths: readonly string[] };
 
@@ -84,8 +88,15 @@ function countOf(fields: JsonFields): Count {
     : { of: "most", ...counted, most: number(fields, "most") };
 }
 
+function commandOf(fields: JsonFields): Command {
+  if (fields.run === undefined) {
+    return { through: "bay", words: texts(fields, "bay") };
+  }
+  return { through: "toolchain", name: text(fields, "run"), arguments: texts(fields, "arguments") };
+}
+
 function realRunOf(fields: JsonFields): RealRun {
-  return { bay: texts(fields, "bay"), stdout: text(fields, "stdout"), exitCode: number(fields, "exitCode") };
+  return { command: commandOf(fields), stdout: text(fields, "stdout"), exitCode: number(fields, "exitCode") };
 }
 
 function proofOf(fields: JsonFields): Proof {
@@ -141,7 +152,7 @@ export function requestOf(input: Json, settings: Readonly<Record<string, Json>>)
     })),
     sameOutput: records(settings, "sameOutput").map((command) => ({
       name: text(command, "name"),
-      bay: texts(command, "bay"),
+      command: commandOf(command),
     })),
     noRise: records(settings, "noRise").map((count) => ({
       name: text(count, "name"),

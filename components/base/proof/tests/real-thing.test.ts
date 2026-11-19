@@ -1,21 +1,21 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { BayRun } from "../scripts/kinds/bay-run.ts";
+import type { CommandRun } from "../scripts/kinds/command-run.ts";
 import { realThingParts } from "../scripts/kinds/real-thing.ts";
 import type { RealRun } from "../scripts/lib/request.ts";
 import { verdictOf, type Verdict } from "../scripts/lib/verdicts.ts";
 
 const expected: readonly RealRun[] = [
-  { bay: ["print", "src/main/sum.txt"], stdout: "5\n", exitCode: 0 },
-  { bay: ["check"], stdout: "Nothing found.\n", exitCode: 1 },
+  { command: { through: "bay", words: ["print", "src/main/sum.txt"] }, stdout: "5\n", exitCode: 0 },
+  { command: { through: "bay", words: ["check"] }, stdout: "Nothing found.\n", exitCode: 1 },
 ];
 
-function judged(runs: readonly BayRun[]): Verdict {
+function judged(runs: readonly CommandRun[]): Verdict {
   return verdictOf("real", "real-thing", realThingParts(expected, { found: "ran", runs }));
 }
 
 test("real-thing: passed when every run printed exactly the expected text and ended with the expected exit code", () => {
-  const runs: readonly BayRun[] = [
+  const runs: readonly CommandRun[] = [
     { ran: "ended", exitCode: 0, stdout: "5\n" },
     { ran: "ended", exitCode: 1, stdout: "Nothing found.\n" },
   ];
@@ -28,7 +28,7 @@ test("real-thing: passed when every run printed exactly the expected text and en
 });
 
 test("real-thing: failed when a run printed other text or ended with another exit code, and the detail holds no output", () => {
-  const runs: readonly BayRun[] = [
+  const runs: readonly CommandRun[] = [
     { ran: "ended", exitCode: 0, stdout: "5" },
     { ran: "ended", exitCode: 0, stdout: "Nothing found.\n" },
   ];
@@ -41,7 +41,7 @@ test("real-thing: failed when a run printed other text or ended with another exi
 });
 
 test("real-thing: a run that printed other text and ended otherwise is named for both", () => {
-  const runs: readonly BayRun[] = [
+  const runs: readonly CommandRun[] = [
     { ran: "ended", exitCode: 0, stdout: "5\n" },
     { ran: "ended", exitCode: 2, stdout: "" },
   ];
@@ -54,7 +54,7 @@ test("real-thing: a run that printed other text and ended otherwise is named for
 });
 
 test("real-thing: inconclusive when a run is not known, even beside a run that failed", () => {
-  const runs: readonly BayRun[] = [
+  const runs: readonly CommandRun[] = [
     { ran: "ended", exitCode: 0, stdout: "6\n" },
     { ran: "not known", reason: "It did not finish within 30 seconds." },
   ];

@@ -30,6 +30,89 @@
     }
   },
   "$defs": {
+    "realRun": {
+      "description": "One run and what it must print: the kit's command line, named by bay, or one of the project's own commands through the toolchain, named by run. A run written with bay means what it meant before run was added.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["bay", "stdout", "exitCode"],
+          "properties": {
+            "bay": {
+              "$ref": "#/$defs/bayWords"
+            },
+            "stdout": {
+              "$ref": "#/$defs/expectedStdout"
+            },
+            "exitCode": {
+              "$ref": "#/$defs/expectedExitCode"
+            }
+          },
+          "description": "One run of the copy's own ./bay.sh."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["run", "stdout", "exitCode"],
+          "properties": {
+            "run": {
+              "$ref": "#/$defs/commandName"
+            },
+            "arguments": {
+              "$ref": "#/$defs/commandWords"
+            },
+            "stdout": {
+              "$ref": "#/$defs/expectedStdout"
+            },
+            "exitCode": {
+              "$ref": "#/$defs/expectedExitCode"
+            }
+          },
+          "description": "One run of one of the project's own commands, by its name, through the toolchain's action run."
+        }
+      ]
+    },
+    "bayWords": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1000,
+        "description": "One word given to the command."
+      },
+      "description": "The words given to the copy's own ./bay.sh, run at the copy's root, such as check --project tests/fixtures/sound."
+    },
+    "commandName": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$",
+      "maxLength": 64,
+      "description": "The name of one of the project's own commands, as the toolchain bound to toolchain@1 runs it in the copy with its action run: for TypeScript, a script of package.json, such as demo. Never a command line. A name the copy does not have makes the run inconclusive."
+    },
+    "commandWords": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1000,
+        "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+        "description": "One word given to the command as one argument, exactly as written: no shell splits it or reads what it holds. It holds no control character, such as a new line."
+      },
+      "description": "The words given to the command after its name, in this order; left out, none."
+    },
+    "expectedStdout": {
+      "type": "string",
+      "maxLength": 100000,
+      "description": "The exact text the run must print to its standard output."
+    },
+    "expectedExitCode": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255,
+      "description": "The exit code the run must end with."
+    },
     "commit": {
       "type": "string",
       "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
@@ -319,7 +402,7 @@
           "type": "object",
           "additionalProperties": false,
           "required": ["kind", "runs"],
-          "description": "The real thing: the runs are made one after another in one fresh copy of the head, as the owner would type them. Passed when each printed exactly the expected text and ended with the expected exit code. This is the kind for a new mode, which has no output at the base to compare with.",
+          "description": "The real thing: the runs are made one after another in one fresh copy of the head, as the owner would type them. Each run is the copy's own ./bay.sh or one of the project's own commands through the toolchain. Passed when each printed exactly the expected text and ended with the expected exit code. This is the kind for a new mode, which has no output at the base to compare with.",
           "properties": {
             "kind": {
               "const": "real-thing",
@@ -330,35 +413,7 @@
               "minItems": 1,
               "maxItems": 20,
               "items": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": ["bay", "stdout", "exitCode"],
-                "properties": {
-                  "bay": {
-                    "type": "array",
-                    "minItems": 1,
-                    "maxItems": 50,
-                    "items": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 1000,
-                      "description": "One word given to the command."
-                    },
-                    "description": "The words given to the copy's own ./bay.sh, run at the copy's root, such as check --project tests/fixtures/sound."
-                  },
-                  "stdout": {
-                    "type": "string",
-                    "maxLength": 100000,
-                    "description": "The exact text the run must print to its standard output."
-                  },
-                  "exitCode": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 255,
-                    "description": "The exit code the run must end with."
-                  }
-                },
-                "description": "One run of the kit's command line and what it must print."
+                "$ref": "#/$defs/realRun"
               },
               "description": "The runs, in the order they are made."
             }

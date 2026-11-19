@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunResponse",
+  "description": "How the command ended, what it wrote to its standard output, and how long it took. Its standard error is not given.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/exited"
+    },
+    {
+      "$ref": "#/$defs/timedOut"
+    },
+    {
+      "$ref": "#/$defs/signalled"
+    },
+    {
+      "$ref": "#/$defs/notSetUp"
+    },
+    {
+      "$ref": "#/$defs/notStarted"
+    }
+  ],
+  "$defs": {
+    "exited": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ended", "exitCode", "seconds", "stdout", "stdoutCut"],
+      "description": "The command ended by itself with an exit code.",
+      "properties": {
+        "ended": {
+          "const": "exited"
+        },
+        "exitCode": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "description": "The exit code it ended with."
+        },
+        "seconds": {
+          "$ref": "#/$defs/seconds"
+        },
+        "stdout": {
+          "$ref": "#/$defs/stdout"
+        },
+        "stdoutCut": {
+          "$ref": "#/$defs/stdoutCut"
+        }
+      }
+    },
+    "timedOut": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ended", "reason", "seconds", "stdout", "stdoutCut"],
+      "description": "The command did not end within its time limit and was stopped. How it would have ended is not known.",
+      "properties": {
+        "ended": {
+          "const": "timed-out"
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        },
+        "seconds": {
+          "$ref": "#/$defs/seconds"
+        },
+        "stdout": {
+          "$ref": "#/$defs/stdout"
+        },
+        "stdoutCut": {
+          "$ref": "#/$defs/stdoutCut"
+        }
+      }
+    },
+    "signalled": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ended", "signal", "reason", "seconds", "stdout", "stdoutCut"],
+      "description": "A signal stopped the command before it ended by itself.",
+      "properties": {
+        "ended": {
+          "const": "signalled"
+        },
+        "signal": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "The signal's name, such as SIGKILL."
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        },
+        "seconds": {
+          "$ref": "#/$defs/seconds"
+        },
+        "stdout": {
+          "$ref": "#/$defs/stdout"
+        },
+        "stdoutCut": {
+          "$ref": "#/$defs/stdoutCut"
+        }
+      }
+    },
+    "notSetUp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ended", "reason", "seconds"],
+      "description": "The copy has no command of that name, so nothing ran.",
+      "properties": {
+        "ended": {
+          "const": "not set up"
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        },
+        "seconds": {
+          "$ref": "#/$defs/seconds"
+        }
+      }
+    },
+    "notStarted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ended", "reason", "seconds"],
+      "description": "The command could not be started, such as in a folder that does not exist.",
+      "properties": {
+        "ended": {
+          "const": "not started"
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        },
+        "seconds": {
+          "$ref": "#/$defs/seconds"
+        }
+      }
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000,
+      "description": "One sentence that says why the command has no exit code, and for a name the copy lacks, what to add."
+    },
+    "seconds": {
+      "type": "number",
+      "minimum": 0,
+      "description": "How long it took, in seconds."
+    },
+    "stdout": {
+      "type": "string",
+      "maxLength": 100000,
+      "description": "What the command wrote to its standard output, with known secrets removed. When it wrote more than the kit keeps, this is the end of it."
+    },
+    "stdoutCut": {
+      "type": "boolean",
+      "description": "True when the command wrote more than the kit keeps, so stdout holds only the end of what it wrote."
+    }
+  }
+}

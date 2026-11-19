@@ -1,24 +1,24 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { BayRun } from "../scripts/kinds/bay-run.ts";
+import type { CommandRun } from "../scripts/kinds/command-run.ts";
 import { sameOutputParts, type CommandRuns } from "../scripts/kinds/same-output.ts";
 import { verdictOf, type Verdict } from "../scripts/lib/verdicts.ts";
 
-const printed: BayRun = { ran: "ended", exitCode: 0, stdout: "sound checks\n" };
+const printed: CommandRun = { ran: "ended", exitCode: 0, stdout: "sound checks\n" };
 
-const printedLouder: BayRun = {
+const printedLouder: CommandRun = {
   ran: "ended",
   exitCode: 0,
   stdout: "sound checks, louder\n",
 };
 
-const endedOtherwise: BayRun = {
+const endedOtherwise: CommandRun = {
   ran: "ended",
   exitCode: 1,
   stdout: "sound checks\n",
 };
 
-const stopped: BayRun = {
+const stopped: CommandRun = {
   ran: "not known",
   reason: "It was stopped by the signal SIGKILL.",
 };

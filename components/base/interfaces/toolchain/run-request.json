@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunRequest",
+  "description": "Which of the project's own commands to run, by its name, in which throwaway copy of the code, with which words, and how long it may take. The command is the project's own code: it runs unconfined inside the copy, as the project's tests do.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["folder", "name"],
+  "properties": {
+    "folder": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "description": "A throwaway copy of the code that the caller made for this call and will remove afterwards; never a worktree a builder works in. It is inside the project, and given relative to it or in full. The command runs there, and may write inside it and nowhere else."
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$",
+      "maxLength": 64,
+      "description": "The name of one of the project's own commands, as the toolchain finds them in the copy: for TypeScript, a script of its package.json, such as demo. Never a command line. A name the copy does not have is not set up, and nothing runs."
+    },
+    "arguments": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1000,
+        "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+        "description": "One word given to the command as one argument, exactly as written: no shell splits it or reads what it holds. It holds no control character, such as a new line."
+      },
+      "description": "The words given to the command after its name, in this order; left out, none."
+    },
+    "timeLimitSeconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000,
+      "description": "How long the command may take before it is stopped; left out, 90 seconds."
+    }
+  }
+}

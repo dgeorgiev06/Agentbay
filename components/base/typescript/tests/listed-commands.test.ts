@@ -60,7 +60,9 @@ test("bay check on the kit warns once for each command the typescript mode lists
     listedAt(27, "find-dead-code", { run: "npm run deadcode --" }),
     listedAt(30, "run-tests", { run: "npm test -- --test-reporter=tap" }),
     listedAt(33, "print-folder", { run: "pwd -P", effects: "read" }),
-    longStepAt(47, "check"),
-    longStepAt(53, "test"),
+    listedAt(36, "run-script", { run: "npm run --silent --" }),
+    longStepAt(50, "check"),
+    longStepAt(56, "test"),
+    longStepAt(62, "run"),
   ]);
 });

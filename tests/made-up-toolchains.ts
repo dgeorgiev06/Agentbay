@@ -11,7 +11,8 @@ export type TallyVariant =
   | "builds only into a folder with no build output"
   | "passes a check the checkout is not set up for"
   | "says the project lacks nothing"
-  | "names a file that did not load as a failing case";
+  | "names a file that did not load as a failing case"
+  | "answers a command stopped at its limit as ended";
 
 export const tally = "tally";
 
@@ -31,6 +32,8 @@ export const lacksNothingTally = "tally-lacks-nothing";
 
 export const unloadedAsCaseTally = "tally-unloaded-as-case";
 
+export const stoppedAsEndedTally = "tally-stopped-as-ended";
+
 const sdkFromScripts = "../../../../bay/sdk.ts";
 
 const sdkFromLibrary = "../../../../../bay/sdk.ts";
@@ -47,6 +50,7 @@ const buildCommands: Readonly<Record<TallyVariant, string>> = {
   "passes a check the checkout is not set up for": "sh build.sh build -p",
   "says the project lacks nothing": "sh build.sh build -p",
   "names a file that did not load as a failing case": "sh build.sh build -p",
+  "answers a command stopped at its limit as ended": "sh build.sh build -p",
 };
 
 const effectsOfARun = ["read", "write", "network", "spend", "delete"];
@@ -82,6 +86,7 @@ function manifestOf(name: string, variant: TallyVariant): string {
         "check-line-length": everyEffectOf("sh checks/line-length.sh"),
         "check-build": everyEffectOf(buildCommands[variant]),
         "run-tests": everyEffectOf("sh run-tests.sh"),
+        "run-command": everyEffectOf("sh"),
       },
     },
     extraFiles: ["practices.md"],
@@ -89,6 +94,7 @@ function manifestOf(name: string, variant: TallyVariant): string {
       describe: action("When a test needs Tally's files, practices and checks.", "scripts/describe.ts", ["read"]),
       check: action("When a test needs Tally's checks run in a checkout.", "scripts/check.ts", effectsOfARun),
       test: action("When a test needs Tally's tests run in a checkout.", "scripts/run-tests.ts", effectsOfARun),
+      run: action("When a test needs one of a checkout's commands run.", "scripts/run.ts", effectsOfARun),
     },
   });
 }
@@ -341,11 +347,52 @@ const testScript = lines(
   "});",
 );
 
+const stoppedRunLine =
+  '      return { ended: "timed-out", reason: "It did not finish within " + limit + " seconds and was stopped.", ...shown };';
+
+const endedWhenStoppedRunLine = '      return { ended: "exited", exitCode: 0, ...shown };';
+
+const runScript = lines(
+  `import { defineScript, fieldsOf } from "${sdkFromScripts}";`,
+  'import { requestOf, setUpFor } from "./lib/tally.ts";',
+  "",
+  "export const run = defineScript(async (input, context) => {",
+  '  const request = requestOf(input, { namesField: "arguments", defaultSeconds: 90 });',
+  "  const name = fieldsOf(input).name;",
+  '  const file = "commands/" + (typeof name === "string" ? name : "") + ".sh";',
+  "  const setUp = await setUpFor(context, file, request);",
+  '  if (setUp.kind !== "set up") {',
+  '    return { ended: setUp.kind === "unknown" ? "not started" : "not set up", reason: setUp.reason, seconds: 0 };',
+  "  }",
+  "  const limit = String(request.timeLimitSeconds);",
+  "  const answer = await context.commands.run({",
+  '    name: "run-command",',
+  "    arguments: [file, ...(request.names ?? [])],",
+  "    folder: request.folder,",
+  "    timeLimitSeconds: request.timeLimitSeconds,",
+  "  });",
+  "  if (!answer.ok) {",
+  '    return { ended: "not started", reason: "It could not be started: " + answer.message, seconds: 0 };',
+  "  }",
+  "  const { end, milliseconds, stdout } = answer.value;",
+  "  const shown = { seconds: milliseconds / 1000, stdout: stdout.text, stdoutCut: stdout.cut };",
+  "  switch (end.how) {",
+  '    case "exited":',
+  '      return { ended: "exited", exitCode: end.exitCode, ...shown };',
+  '    case "timed-out":',
+  stoppedRunLine,
+  '    case "signalled":',
+  '      return { ended: "signalled", signal: end.signal, reason: "It was stopped by the signal " + end.signal + ".", ...shown };',
+  "  }",
+  "});",
+);
+
 const checkoutFunction = String.raw`import type {
   Files,
   Outcome,
   Wanted,
   WantedCheck,
+  WantedCommand,
   WantedTest,
   WantedTestFile,
 } from "../../interfaces/toolchain/tests/shared.ts";
@@ -406,7 +453,31 @@ function testFileOf(file: WantedTestFile): string {
   return [...file.map(testLineOf), ""].join("\n");
 }
 
+function quoted(text: string): string {
+  return "'" + text.split("'").join("'\\''") + "'";
+}
+
+function commandScriptOf(command: WantedCommand): string {
+  const print = "printf '%s\\n' " + quoted(command.line);
+  if (command.outcome === "does not end") {
+    return [print, "sleep 600", ""].join("\n");
+  }
+  return [
+    "printed=0",
+    "while [ $printed -lt " + String(command.times) + " ]; do",
+    "  " + print,
+    "  printed=$((printed + 1))",
+    "done",
+    'for word in "$@"; do',
+    "  printf '%s\\n' \"$word\"",
+    "done",
+    "exit " + String(command.exitCode),
+    "",
+  ].join("\n");
+}
+
 export function tallyCheckout(wanted: Wanted): Files {
+  const commands = wanted.commands.map((command) => ["commands/" + command.name + ".sh", commandScriptOf(command)]);
   const checks = wanted.checks.flatMap((check) => {
     const outcome = check.outcome;
     return outcome === "not set up" ? [] : [["checks/" + check.name + ".sh", checkScriptOf(check, outcome)]];
@@ -422,6 +493,7 @@ export function tallyCheckout(wanted: Wanted): Files {
     "src/main.tally": "pass the source\n",
     ...Object.fromEntries(checks),
     ...Object.fromEntries(tests),
+    ...Object.fromEntries(commands),
   };
 }
 `;
@@ -464,6 +536,10 @@ const examples = {
       stderr: "",
     },
   },
+  run: {
+    input: { folder: "work/checkout", name: "demo", arguments: ["loud"] },
+    output: { ended: "exited", exitCode: 0, seconds: 0.1, stdout: "demo\nloud\n", stdoutCut: false },
+  },
 };
 
 type Replacement = { readonly file: string; readonly from: string; readonly to: string };
@@ -485,6 +561,11 @@ export function tallyFiles(name: string, variant: TallyVariant): ModeFiles {
       file: "scripts/lib/tally.ts",
       from: failingLine,
       to: failingWithUnloadedLine,
+    },
+    "answers a command stopped at its limit as ended": {
+      file: "scripts/run.ts",
+      from: stoppedRunLine,
+      to: endedWhenStoppedRunLine,
     },
   };
   const files = filesOfTally(name, variant);
@@ -509,9 +590,11 @@ function filesOfTally(name: string, variant: TallyVariant): ModeFiles {
     "scripts/describe.ts": describeScript,
     "scripts/check.ts": checkScript,
     "scripts/run-tests.ts": testScript,
+    "scripts/run.ts": runScript,
     "tests/describe.example.json": json(examples.describe),
     "tests/check.example.json": json(examples.check),
     "tests/test.example.json": json(examples.test),
+    "tests/run.example.json": json(examples.run),
     "tests/checkout.ts": checkoutFunction,
     [`tests/${name}.test.ts`]: modeTest(name),
   };

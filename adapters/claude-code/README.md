@@ -8,7 +8,7 @@ All paths are in the project. Every effect goes through the file port of the req
 
 | File | How | What |
 |---|---|---|
-| `.claude/agents/<agent>.md` | created | One agent per skill step. Its `tools` are `mcp__agentbay__submit` first, then `Read, Glob, Grep` when the step has read paths, `Write, Edit` when it has write paths, `Bash` only when its mode lists a command whose every effect is declared by every action that uses the skill, and `mcp__agentbay__<tool>` for each other kernel tool. Never `Agent` and never web tools. Its `model` comes from the tier: fast `haiku`, balanced `sonnet`, deep `opus` |
+| `.claude/agents/<agent>.md` | created | One agent per skill step. Its `tools` are `mcp__agentbay__submit` first, then `Read, Glob, Grep` when the step has read paths, `Write, Edit` when it has write paths, `Bash` only when its mode lists a command whose every effect is declared by every action that uses the skill, and `mcp__agentbay__<tool>` for each other kernel tool. Never `Agent` and never web tools. Its `model` and `effort` come from the step's tier, as the next section says |
 | `.agentbay/steps.json` | created | The hook's policy, keyed by agent: tools, read roots, write roots (absolute) and the words of each listed command whose every effect the step's actions declare. The closed names are constants in the hook, not in this file |
 | `.claude/settings.json` | merged | One `PreToolUse` entry, matcher `*`, running `node '<kit>/adapters/claude-code/step-guard.ts' --project '<root>'` with `timeout: 30` and `onFailure: "block"`. No allow or deny rules: settings rules apply to the whole session, the main thread included, so the per-step list lives only in the hook |
 | `.mcp.json` | merged | The server `agentbay`: `node <kit>/bay/mcp.ts --project <root>` |
@@ -16,6 +16,20 @@ All paths are in the project. Every effect goes through the file port of the req
 | `.agentbay/build.json` | record | Each created file with its SHA-256; each merged file with what was added, whether the file existed and its text before the build; and the folders the build created |
 
 `build` writes nothing and reports a problem when a step is granted a read or write root whose path, or whose tree (at most 5,000 entries, 12 levels), holds a closed name: a mode should not be granted a folder that holds secrets. `clean` deletes a created file only if its hash still matches, then the folders the build created if they are left empty. It takes out of each merged file exactly what the build added: when the file is unchanged since the build it gets back its old bytes; otherwise the user's later edits are kept. A file that held only agentbay's additions is deleted. Building twice changes nothing. A hand edit of a created file is overwritten by the next build, which says so. Files that are no longer built are deleted unless they were edited. Note that `build.json` keeps a copy of the earlier `settings.json`, `.mcp.json` and `CLAUDE.md`.
+
+## Tiers
+
+A skill step names a tier: `fast`, `balanced` or `deep`. The config's `tiers` may give each tier a model and an effort:
+
+```yaml
+tiers:
+  balanced: { model: sonnet, effort: medium }
+  deep: { model: opus, effort: medium }
+```
+
+`build` writes them into the agent file as `model` and `effort`. A tier the config leaves out keeps the adapter's model (fast `haiku`, balanced `sonnet`, deep `opus`, held in `tiers.ts`) and gets no `effort` line, so the session's effort applies. A tier with no `effort` gets none either. The config's schema closes the tier names and the efforts (`low`, `medium`, `high`, `xhigh`, `max`). The model is checked here: `build` refuses a name other than `haiku`, `sonnet`, `opus` and `fable`, says which it knows, and writes nothing. Full model ids and `inherit` are not accepted. After the setting changes, run `bay build`: it reports each agent file it updated. `bay check` does not yet see the adapter, so it neither refuses an unknown model nor says the built agents are stale.
+
+Claude Code's own order still applies above the agent file: the environment variable `CLAUDE_CODE_EFFORT_LEVEL` overrides `effort`, and the coordinator may pass an effort when it starts a step agent.
 
 ## What the hook does
 
@@ -47,6 +61,7 @@ All paths are in the project. Every effect goes through the file port of the req
 
 - https://code.claude.com/docs/en/hooks: `agent_id` (present only inside a subagent), `agent_type`, absolute `file_path`, the deny JSON, exit 2, matcher `*`, and that timeouts and other exit codes do not block.
 - https://code.claude.com/docs/en/sub-agents: the front matter fields, `tools` as a comma-separated list, the `Agent` tool (renamed from `Task`), and the model aliases.
+- https://code.claude.com/docs/en/subagents (read 2026-11-18): the `effort` field with `low`, `medium`, `high`, `xhigh` and `max`, whose levels depend on the model; the aliases `sonnet`, `opus`, `haiku` and `fable`; and that `CLAUDE_CODE_EFFORT_LEVEL` and an effort passed when the agent is started override the field.
 - https://code.claude.com/docs/en/model-config: `haiku` for simple tasks, `sonnet` for daily coding, `opus` for complex reasoning.
 - https://code.claude.com/docs/en/tools-reference: tool names, and that Glob and Grep are present for a subagent that lists them without `Bash`.
 - https://code.claude.com/docs/en/permissions: rules are not a security boundary around a program, and deny wins over allow.

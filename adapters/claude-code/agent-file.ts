@@ -1,12 +1,6 @@
 import { isAbsolute, join, relative } from "node:path";
 import { agentCommands, agentWritableFolders, type SkillAgent } from "../../bay/adapter.ts";
-import type { Tier } from "./adapter-types.ts";
-
-const modelForTier: Readonly<Record<Tier, string>> = {
-  fast: "haiku",
-  balanced: "sonnet",
-  deep: "opus",
-};
+import type { TierSetting } from "./adapter-types.ts";
 
 function kernelToolName(tool: string): string {
   return `mcp__agentbay__${tool}`;
@@ -52,7 +46,12 @@ function commandRule(agent: SkillAgent): string {
   return `${rule}: ${commands.join(", ")}.`;
 }
 
-export function agentFileText(agent: SkillAgent, project: string): string {
+function tierLines(tier: TierSetting): readonly string[] {
+  const model = `model: ${tier.model}`;
+  return tier.effort === undefined ? [model] : [model, `effort: ${tier.effort}`];
+}
+
+export function agentFileText(agent: SkillAgent, project: string, tier: TierSetting): string {
   const description =
     `Runs one agentbay skill step, ${agent.mode} ${agent.skill}: ${oneLine(agent.description)} ` +
     "Use only when the coordinator hands over an agentbay task that names this agent.";
@@ -61,7 +60,7 @@ export function agentFileText(agent: SkillAgent, project: string): string {
     `name: ${agent.agent}`,
     `description: ${JSON.stringify(description)}`,
     `tools: ${toolsFor(agent).join(", ")}`,
-    `model: ${modelForTier[agent.tier]}`,
+    ...tierLines(tier),
     "---",
     "",
     `You run one skill step of agentbay: the skill \`${agent.skill}\` of the mode \`${agent.mode}\`.`,

@@ -8,6 +8,9 @@ bindings:
 adapter: claude-code
 approvals:
   from: [terminal, chat]
+tiers:
+  balanced: { model: sonnet, effort: medium }
+  deep: { model: opus, effort: medium }
 settings:
   proof:
     links: [node_modules]

@@ -32,6 +32,16 @@
       "description": "The default limits for a run that sets none of its own.",
       "$ref": "#/$defs/budget"
     },
+    "tiers": {
+      "description": "The model and effort of each tier a skill step names; a tier left out keeps the adapter's own model and sets no effort. Run bay build after a change.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fast": { "$ref": "#/$defs/tierSetting" },
+        "balanced": { "$ref": "#/$defs/tierSetting" },
+        "deep": { "$ref": "#/$defs/tierSetting" }
+      }
+    },
     "approvals": {
       "description": "Where the owner may decide approvals.",
       "type": "object",
@@ -62,6 +72,23 @@
       "description": "Kebab-case, starting with a letter; not constructor, a name every JavaScript object has.",
       "type": "string",
       "pattern": "^(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+    },
+    "tierSetting": {
+      "description": "What the agents of one tier run on.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model"],
+      "properties": {
+        "model": {
+          "description": "A model name the adapter knows, such as sonnet; bay build refuses a name it does not know and says which it knows.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*([.-][a-z0-9]+)*$"
+        },
+        "effort": {
+          "description": "How hard the model thinks; left out, the session's effort applies.",
+          "enum": ["low", "medium", "high", "xhigh", "max"]
+        }
+      }
     },
     "budget": {
       "description": "Limits for a run; every nested call draws from the same budget.",

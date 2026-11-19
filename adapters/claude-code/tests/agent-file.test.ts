@@ -7,10 +7,13 @@ import { decide, type Decision } from "../guard-decide.ts";
 import { readPolicy } from "../guard-input.ts";
 import { guardEntry } from "../settings.ts";
 import { stepsFileText } from "../steps-file.ts";
+import { tierSettings } from "../tiers.ts";
 import { buildAgent, digestAgent, kit, layout, project, scanAgent, skillAgent } from "./build-fixture.ts";
 import { world } from "./guard-world.ts";
 
 const everyEffect = ["read", "write", "network", "spend", "delete"] as const;
+
+const sonnet = { model: "sonnet" } as const;
 
 const neverGiven = ["Agent", "Task", "WebFetch", "WebSearch", "Monitor", "PowerShell", "NotebookEdit", "MultiEdit"];
 
@@ -47,7 +50,10 @@ test("a step whose actions lack write gets no write tools, no write roots and th
   const steps: unknown = JSON.parse(stepsFileText(layout, [readOnly]));
   assert.ok(typeof steps === "object" && steps !== null && "agents" in steps);
   assert.deepEqual(JSON.stringify(steps.agents).includes('"write":[]'), true);
-  assert.match(agentFileText(readOnly, project), /Never create, edit or delete any file: this step writes no files/);
+  assert.match(
+    agentFileText(readOnly, project, sonnet),
+    /Never create, edit or delete any file: this step writes no files/,
+  );
 });
 
 test("a step gets the read tools only when it has a read root, its mode folder counting as one", () => {
@@ -66,7 +72,11 @@ test("a step whose actions do not declare every effect gets no Bash, no commands
   for (const missing of everyEffect) {
     const narrower = { ...buildAgent, effects: everyEffect.filter((effect) => effect !== missing) };
     assert.ok(!toolsFor(narrower).includes("Bash"), missing);
-    assert.match(agentFileText(narrower, project), /Never try to run shell commands: this step has none/, missing);
+    assert.match(
+      agentFileText(narrower, project, sonnet),
+      /Never try to run shell commands: this step has none/,
+      missing,
+    );
     const steps: unknown = JSON.parse(stepsFileText(layout, [narrower]));
     assert.ok(typeof steps === "object" && steps !== null && "agents" in steps);
     assert.ok(JSON.stringify(steps.agents).includes('"commands":[]'), missing);
@@ -94,14 +104,14 @@ test("a step is given the commands whose effects its action declares: read alone
   const readOnly = withListedCommands(["read"]);
   assert.ok(toolsFor(readOnly).includes("Bash"));
   assert.ok(
-    agentFileText(readOnly, project).includes(
+    agentFileText(readOnly, project, sonnet).includes(
       "\n- Run only the commands your mode lists, each as its listed words alone or followed by plain arguments: " +
         "`git status`.\n",
     ),
   );
   assert.deepEqual(stepCommands(readOnly), ["git status"]);
   const everything = withListedCommands(everyEffect);
-  assert.ok(agentFileText(everything, project).includes("plain arguments: `git status`, `git commit`.\n"));
+  assert.ok(agentFileText(everything, project, sonnet).includes("plain arguments: `git status`, `git commit`.\n"));
   assert.deepEqual(stepCommands(everything), ["git status", "git commit"]);
   const nothing = withListedCommands(["write"]);
   assert.ok(!toolsFor(nothing).includes("Bash"));
@@ -129,16 +139,65 @@ test("no combination of paths and commands gives a step an agent-starting, web o
   }
 });
 
-test("the model is chosen by tier from the adapter's table", () => {
-  assert.equal(frontMatter(agentFileText(scanAgent, project))["model"], "haiku");
-  assert.equal(frontMatter(agentFileText(digestAgent, project))["model"], "sonnet");
-  assert.equal(frontMatter(agentFileText(buildAgent, project))["model"], "opus");
+test("the agent file holds the model and the effort of the tier setting it is given", () => {
+  const header = frontMatter(agentFileText(buildAgent, project, { model: "opus", effort: "medium" }));
+  assert.deepEqual(Object.keys(header), ["name", "description", "tools", "model", "effort"]);
+  assert.equal(header["model"], "opus");
+  assert.equal(header["effort"], "medium");
+  const withoutEffort = frontMatter(agentFileText(buildAgent, project, { model: "haiku" }));
+  assert.equal(withoutEffort["model"], "haiku");
+  assert.equal(withoutEffort["effort"], undefined);
+});
+
+test("with no tiers in the config, each tier keeps the adapter's model and no effort", () => {
+  assert.deepEqual(tierSettings({ bindings: {}, adapter: "claude-code" }, "agentbay.config.yaml"), {
+    ok: true,
+    settings: { fast: { model: "haiku" }, balanced: { model: "sonnet" }, deep: { model: "opus" } },
+  });
+});
+
+test("a tier the config sets replaces that tier's model and effort, and no other tier's", () => {
+  const config = {
+    bindings: {},
+    adapter: "claude-code",
+    tiers: { balanced: { model: "opus", effort: "low" } },
+  } as const;
+  assert.deepEqual(tierSettings(config, "agentbay.config.yaml"), {
+    ok: true,
+    settings: { fast: { model: "haiku" }, balanced: { model: "opus", effort: "low" }, deep: { model: "opus" } },
+  });
+});
+
+test("a model the adapter does not know is refused with the tier, the name and the names it knows", () => {
+  const tiers = { fast: { model: "Sonnet" }, deep: { model: "claude-opus-5-5", effort: "max" } } as const;
+  assert.deepEqual(tierSettings({ bindings: {}, adapter: "claude-code", tiers }, "agentbay.config.yaml"), {
+    ok: false,
+    problems: [
+      {
+        file: "agentbay.config.yaml",
+        path: "/tiers/fast/model",
+        message:
+          "The tier fast names the model Sonnet, which the claude-code adapter does not know. " +
+          "It knows haiku, sonnet, opus and fable.",
+        fix: "Name one of those models as tiers.fast.model, then run bay build.",
+      },
+      {
+        file: "agentbay.config.yaml",
+        path: "/tiers/deep/model",
+        message:
+          "The tier deep names the model claude-opus-5-5, which the claude-code adapter does not know. " +
+          "It knows haiku, sonnet, opus and fable.",
+        fix: "Name one of those models as tiers.deep.model, then run bay build.",
+      },
+    ],
+  });
 });
 
 test("the agent file's front matter names the agent, lists its tools and describes it on one line", () => {
-  const text = agentFileText(digestAgent, project);
+  const text = agentFileText(digestAgent, project, sonnet);
   const header = frontMatter(text);
   assert.deepEqual(Object.keys(header), ["name", "description", "tools", "model"]);
+  assert.equal(header["model"], "sonnet");
   assert.equal(header["name"], "agentbay-mail-briefing-digest");
   assert.equal(header["tools"], toolsFor(digestAgent).join(", "));
   const description: unknown = JSON.parse(header["description"] ?? "");
@@ -150,7 +209,7 @@ test("the agent file's front matter names the agent, lists its tools and describ
 });
 
 test("the agent file's body states the protocol in under 40 lines", () => {
-  const text = agentFileText(digestAgent, project);
+  const text = agentFileText(digestAgent, project, sonnet);
   const body = text.slice(text.indexOf("---\n", 4) + 4);
   assert.ok(body.split("\n").length < 40, String(body.split("\n").length));
   for (const phrase of [
@@ -167,8 +226,8 @@ test("the agent file's body states the protocol in under 40 lines", () => {
   ]) {
     assert.ok(body.includes(phrase), phrase);
   }
-  assert.ok(agentFileText(scanAgent, project).includes("this step writes no files"));
-  assert.ok(agentFileText(buildAgent, project).includes("plain arguments: `node --test`, `git status`"));
+  assert.ok(agentFileText(scanAgent, project, sonnet).includes("this step writes no files"));
+  assert.ok(agentFileText(buildAgent, project, sonnet).includes("plain arguments: `node --test`, `git status`"));
 });
 
 test("a write folder outside the project is shown whole in the agent file", () => {
@@ -181,7 +240,9 @@ test("a write folder outside the project is shown whole in the agent file", () =
     write: ["/elsewhere/x"],
     commands: [],
   });
-  assert.ok(agentFileText(outside, project).includes("Never create, edit or delete a file outside `/elsewhere/x`."));
+  assert.ok(
+    agentFileText(outside, project, sonnet).includes("Never create, edit or delete a file outside `/elsewhere/x`."),
+  );
 });
 
 test("the step policy holds each agent's tools, absolute roots and commands", () => {
@@ -239,7 +300,7 @@ function actionsDecision(agent: string): Decision {
 }
 
 test("a step whose skill does not list actions has no actions tool and the guard denies it", () => {
-  assert.equal(frontMatter(agentFileText(quietAgent, project)).tools, "mcp__agentbay__submit");
+  assert.equal(frontMatter(agentFileText(quietAgent, project, sonnet)).tools, "mcp__agentbay__submit");
   assert.deepEqual(actionsDecision("agentbay-todo-sort"), {
     verdict: "deny",
     reason:
@@ -249,7 +310,10 @@ test("a step whose skill does not list actions has no actions tool and the guard
 });
 
 test("a step whose skill lists actions has the actions tool and the guard allows it", () => {
-  assert.equal(frontMatter(agentFileText(askingAgent, project)).tools, "mcp__agentbay__submit, mcp__agentbay__actions");
+  assert.equal(
+    frontMatter(agentFileText(askingAgent, project, sonnet)).tools,
+    "mcp__agentbay__submit, mcp__agentbay__actions",
+  );
   assert.deepEqual(actionsDecision("agentbay-todo-plan"), { verdict: "allow" });
 });
 

@@ -549,6 +549,17 @@ export function interfaceSchemasOf(system: System): (mode: string) => NameableSc
   };
 }
 
+export type SkillStepsRun = NonNullable<NonNullable<Config["skillSteps"]>["run"]>;
+
+export function skillStepsRunOf(config: Config): SkillStepsRun {
+  return config.skillSteps?.run ?? "with-the-hook";
+}
+
+export async function readConfig(files: FileSystem, layout: Layout): Promise<Outcome<Config>> {
+  const config = await loadConfig(files, layout);
+  return config.ok ? succeededWith(config.value.value) : failedWith(shownProblems(layout, config.problems));
+}
+
 export async function loadSystem(files: FileSystem, layout: Layout): Promise<Outcome<System>> {
   const { inspection, build } = await inspect(files, layout);
   return build === undefined ? failedWith(inspection.problems) : succeededWith(await build());

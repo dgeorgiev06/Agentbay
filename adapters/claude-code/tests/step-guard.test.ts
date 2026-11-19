@@ -1,14 +1,18 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { after, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import type { StepsFile } from "../guard-input.ts";
+import { hookSaw } from "../hook/sightings.ts";
 
 const adapterFolder = dirname(dirname(fileURLToPath(import.meta.url)));
 const guard = join(adapterFolder, "step-guard.ts");
+const quietWarnings = "--disable-warning=ExperimentalWarning";
 const scratch = mkdtempSync(join(tmpdir(), "agentbay-step-guard-"));
 const project = join(scratch, "project");
 const outside = join(scratch, "outside");
@@ -64,7 +68,7 @@ writePolicy();
 type Run = { readonly status: number | null; readonly stdout: string; readonly stderr: string };
 
 function runGuard(input: string, argumentsGiven: readonly string[] = ["--project", project]): Run {
-  const result = spawnSync(process.execPath, [guard, ...argumentsGiven], { input, encoding: "utf8" });
+  const result = spawnSync(process.execPath, [quietWarnings, guard, ...argumentsGiven], { input, encoding: "utf8" });
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };
 }
 
@@ -178,18 +182,66 @@ test("the hook process follows a real link into the kit's components/base/ and d
   assertAllowedRun(runGuard(inTheKit, ["--project", kit]));
 });
 
-test("the hook and the guard files it loads import only node:fs, node:path, node:process and each other", () => {
-  const files = ["step-guard.ts", "guard-decide.ts", "guard-input.ts", "guard-paths.ts", "guard-commands.ts"];
-  for (const file of files) {
+test("the hook and the guard files it loads import only node:fs, node:path, node:process and each other, and its sightings file", () => {
+  const guardFiles = ["step-guard.ts", "guard-decide.ts", "guard-input.ts", "guard-paths.ts", "guard-commands.ts"];
+  const allowed = new Map<string, readonly string[]>([
+    ...guardFiles.map((file): [string, readonly string[]] => [file, ["node:fs", "node:path", "node:process"]]),
+    ["hook/sightings.ts", ["node:crypto", "node:fs", "node:path", "node:sqlite", "../../../bay/adapter.ts"]],
+  ]);
+  for (const [file, modules] of allowed) {
     const source = readFileSync(join(adapterFolder, file), "utf8");
-    const specifiers = [...source.matchAll(/^import [^;]*? from "([^"]+)";$/gms)].map((match) => match[1]);
+    const specifiers = [...source.matchAll(/^import [^;]*? from "([^"]+)";$/gms)].map((match) => match[1] ?? "");
     for (const specifier of specifiers) {
       assert.ok(
-        ["node:fs", "node:path", "node:process"].includes(specifier ?? "") ||
-          /^\.\/guard-[a-z]+\.ts$/.test(specifier ?? ""),
-        `${file} imports ${String(specifier)}`,
+        modules.includes(specifier) ||
+          /^(\.|\.\.)\/guard-[a-z]+\.ts$/.test(specifier) ||
+          specifier === "./hook/sightings.ts",
+        `${file} imports ${specifier}`,
       );
     }
     assert.ok(!source.includes("import("), `${file} has a dynamic import`);
   }
+});
+
+function sightingRows(): readonly unknown[] {
+  const database = new DatabaseSync(join(project, ".agentbay", "hook-sightings.db"), { readOnly: true });
+  try {
+    const rows = database.prepare("select token_hash, agent, mode, skill from sightings order by rowid").all();
+    return rows.map((row) => ({ ...row }));
+  } finally {
+    database.close();
+  }
+}
+
+function hashOf(token: string): string {
+  return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+test("the hook records a sighting only when it lets a step agent's submit with a token through, and each is used once", async () => {
+  const submit = (input: Readonly<Record<string, unknown>>, agent = true): string =>
+    payload("mcp__agentbay__submit", input, agent);
+  assertAllowedRun(runGuard(submit({ token: "t-1", output: {} })));
+  assertAllowedRun(runGuard(submit({ token: "t-2", output: {} }, false)));
+  assertAllowedRun(runGuard(submit({ output: {} })));
+  const stranger = JSON.stringify({
+    session_id: "s",
+    cwd: project,
+    tool_name: "mcp__agentbay__submit",
+    tool_input: { token: "t-3", output: {} },
+    agent_id: "agent-9",
+    agent_type: "general-purpose",
+  });
+  assertDeniedRun(runGuard(stranger), "only the agentbay skill-step agents");
+  assertDeniedRun(
+    runGuard(payload("mcp__agentbay__files_write", { token: "t-4", path: "x", text: "" })),
+    "may use only",
+  );
+  assert.deepEqual(sightingRows(), [
+    { token_hash: hashOf("t-1"), agent: "agentbay-mail-digest", mode: "mail", skill: "digest" },
+  ]);
+  assert.equal(await hookSaw({ project, token: "t-1", mode: "mail", skill: "other" }), false);
+  assert.equal(await hookSaw({ project, token: "t-2", mode: "mail", skill: "digest" }), false);
+  assert.equal(await hookSaw({ project, token: "t-1", mode: "mail", skill: "digest" }), true);
+  assert.equal(await hookSaw({ project, token: "t-1", mode: "mail", skill: "digest" }), false);
+  assert.deepEqual(sightingRows(), []);
 });

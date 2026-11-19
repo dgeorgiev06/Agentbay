@@ -62,6 +62,7 @@ One meaning per word. Briefs, plans, code names and reviews use these words and 
 | **Port** | An interface at a seam to the outside world (files, clock, processes, network). Exists only when two adapters exist. | abstraction, wrapper |
 | **Adapter (port)** | A thing that satisfies a port: the real one or the test one. Always say which kind of adapter is meant. | mock, stub, fake (as a type name is fine) |
 | **Slice** | One piece of work for one builder: one interface, one capability of the kernel or one mode. It has a name, a kind, a write scope, the slices it comes after with the reason, the interface it builds against if any, and its definition of done; its form is the slice in `proof@1`'s request. | ticket, task, phase |
+| **Sighting** | What the agentbay hook records when it lets a step agent's `submit` through: the hash of the call's token, and the agent's mode and skill. With `skillSteps.run: with-the-hook`, the default, the kernel takes a skill step's output only against an unused sighting of its token by its step's mode and skill, and uses it up. | hook mark, seen flag |
 | **Task** | What the kernel hands a harness for one skill step. Not a piece of build work. | job |
 | **Brief** | The seven-section instruction a builder receives for a slice. | prompt |
 | **Builder** | An agent that writes a slice. | worker, dev |

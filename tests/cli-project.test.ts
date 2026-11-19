@@ -5,10 +5,10 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fieldOf, textField, toJson } from "../bay/json.ts";
 import { bay, listOf } from "./cli-fixture.ts";
-import { kit, makeProject, skillText, type Project } from "./project-fixture.ts";
+import { kit, makeProject, skillText, type Project, type ProjectOptions } from "./project-fixture.ts";
 
-async function withProject(body: (project: Project) => Promise<void>, ownKernel = false): Promise<void> {
-  const project = await makeProject({ ownKernel });
+async function withProject(body: (project: Project) => Promise<void>, options: ProjectOptions = {}): Promise<void> {
+  const project = await makeProject(options);
   try {
     await body(project);
   } finally {
@@ -17,55 +17,68 @@ async function withProject(body: (project: Project) => Promise<void>, ownKernel 
 }
 
 test("check prints the summary and exits 0 on a clean project, 1 with every error listed", async () => {
-  await withProject(async (project) => {
-    const asKit = { kit: project.root };
-    const clean = await bay(["check", "--project", project.root], asKit);
-    assert.equal(clean.exitCode, 0, clean.output);
-    assert.equal(clean.output, "bay check: 0 errors, 0 warnings.");
-    await project.write("components/modes/writer/skills/draft/SKILL.md", skillText.replace("## Tools", "## Tooling"));
-    const broken = await bay(["check", "--project", project.root, "--json"], asKit);
-    assert.equal(broken.exitCode, 1);
-    const json = toJson(broken.json);
-    assert.equal(fieldOf(json, "ok"), false);
-    assert.ok(JSON.stringify(fieldOf(json, "findings")).includes('has no \\"## Tools\\" section'));
-  }, true);
+  await withProject(
+    async (project) => {
+      const asKit = { kit: project.root };
+      const clean = await bay(["check", "--project", project.root], asKit);
+      assert.equal(clean.exitCode, 0, clean.output);
+      assert.equal(
+        clean.output,
+        "Skill steps run with the hook: the kernel takes a skill step's output only when the agentbay hook saw the " +
+          "step's agent hand it in.\nbay check: 0 errors, 0 warnings.",
+      );
+      await project.write("components/modes/writer/skills/draft/SKILL.md", skillText.replace("## Tools", "## Tooling"));
+      const broken = await bay(["check", "--project", project.root, "--json"], asKit);
+      assert.equal(broken.exitCode, 1);
+      const json = toJson(broken.json);
+      assert.equal(fieldOf(json, "ok"), false);
+      assert.ok(JSON.stringify(fieldOf(json, "findings")).includes('has no \\"## Tools\\" section'));
+    },
+    { ownKernel: true, skillSteps: "not set" },
+  );
 });
 
 test("check counts warnings without failing", async () => {
-  await withProject(async (project) => {
-    await project.write(
-      "framework/limits.yaml",
-      "kernel_lines: 0\nadapter_lines: 0\nconcepts: 0\ncli_commands: 0\n" + "top_level_folders: 0\n",
-    );
-    const ran = await bay(["check", "--project", project.root, "--json"], { kit: project.root });
-    assert.equal(ran.exitCode, 0, JSON.stringify(ran.json));
-    assert.ok(Number(fieldOf(toJson(ran.json), "warnings")) > 0);
-  }, true);
+  await withProject(
+    async (project) => {
+      await project.write(
+        "framework/limits.yaml",
+        "kernel_lines: 0\nadapter_lines: 0\nconcepts: 0\ncli_commands: 0\n" + "top_level_folders: 0\n",
+      );
+      const ran = await bay(["check", "--project", project.root, "--json"], { kit: project.root });
+      assert.equal(ran.exitCode, 0, JSON.stringify(ran.json));
+      assert.ok(Number(fieldOf(toJson(ran.json), "warnings")) > 0);
+    },
+    { ownKernel: true },
+  );
 });
 
 test("new writes from the K2 templates and checks the options each kind needs", async () => {
-  await withProject(async (project) => {
-    const root = ["--project", project.root];
-    const asKit = { kit: project.root };
-    const skill = await bay(["new", "skill", "summarize", "--mode", "writer", ...root], asKit);
-    assert.equal(skill.exitCode, 0, skill.output);
-    assert.equal(skill.output, "+ components/modes/writer/skills/summarize/SKILL.md");
-    assert.match(await project.read("components/modes/writer/skills/summarize/SKILL.md"), /## Rules and constraints/);
-    const mode = await bay(["new", "mode", "keeper", "--tier", "base", ...root, "--json"], asKit);
-    assert.ok(JSON.stringify(mode.json).includes("components/base/keeper/mode.yaml"));
-    const cases: readonly (readonly [readonly string[], RegExp])[] = [
-      [["new", "action", "tidy"], /This kind needs --mode <mode>\./],
-      [["new", "feature", "x"], /There is no kind feature; the kinds are mode, action, skill, workflow, interface\./],
-      [["new", "mode", "x", "--tier", "top"], /--tier is base or modes\./],
-    ];
-    for (const [argv, message] of cases) {
-      const ran = await bay([...argv, ...root], asKit);
-      assert.equal(ran.exitCode, 2, argv.join(" "));
-      assert.match(ran.output, message);
-    }
-    const again = await bay(["new", "mode", "keeper", "--tier", "base", ...root], asKit);
-    assert.equal(again.exitCode, 1);
-  }, true);
+  await withProject(
+    async (project) => {
+      const root = ["--project", project.root];
+      const asKit = { kit: project.root };
+      const skill = await bay(["new", "skill", "summarize", "--mode", "writer", ...root], asKit);
+      assert.equal(skill.exitCode, 0, skill.output);
+      assert.equal(skill.output, "+ components/modes/writer/skills/summarize/SKILL.md");
+      assert.match(await project.read("components/modes/writer/skills/summarize/SKILL.md"), /## Rules and constraints/);
+      const mode = await bay(["new", "mode", "keeper", "--tier", "base", ...root, "--json"], asKit);
+      assert.ok(JSON.stringify(mode.json).includes("components/base/keeper/mode.yaml"));
+      const cases: readonly (readonly [readonly string[], RegExp])[] = [
+        [["new", "action", "tidy"], /This kind needs --mode <mode>\./],
+        [["new", "feature", "x"], /There is no kind feature; the kinds are mode, action, skill, workflow, interface\./],
+        [["new", "mode", "x", "--tier", "top"], /--tier is base or modes\./],
+      ];
+      for (const [argv, message] of cases) {
+        const ran = await bay([...argv, ...root], asKit);
+        assert.equal(ran.exitCode, 2, argv.join(" "));
+        assert.match(ran.output, message);
+      }
+      const again = await bay(["new", "mode", "keeper", "--tier", "base", ...root], asKit);
+      assert.equal(again.exitCode, 1);
+    },
+    { ownKernel: true },
+  );
 });
 
 test("config prints every setting of the config schema and of each mode's settings schema with its value", async () => {
@@ -78,6 +91,9 @@ test("config prints every setting of the config schema and of each mode's settin
         '\n  current: {"greeting-source":"greeter"}',
       'adapter: string (The adapter that runs skill steps.)\n  current: "fake"',
       "budget.usd: number (The most US dollars the run may spend.)\n  current: not set",
+      'skillSteps.run: one of "with-the-hook", "without-the-hook" (with-the-hook, the default: the kernel takes a ' +
+        "skill step's output only when the agentbay hook saw the step's agent hand it in. without-the-hook: the " +
+        'kernel takes it, and the run records for each skill step that no hook saw it.)\n  current: "without-the-hook"',
       'approvals.from: list of one of "terminal", "chat" (The channels approve accepts; without this setting only terminal.)\n  current: not set',
       'settings.writer.signature: string (The words that end every note.)\n  current: "Yours, the writer"',
     ]) {
@@ -102,6 +118,7 @@ test("config prints every setting of the config schema and of each mode's settin
       "tiers.balanced.effort",
       "tiers.deep.model",
       "tiers.deep.effort",
+      "skillSteps.run",
       "approvals.from",
       "settings.writer.signature",
     ]);

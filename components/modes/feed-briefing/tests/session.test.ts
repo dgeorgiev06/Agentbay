@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -72,6 +72,21 @@ function checkedAndBuilt(): void {
   }
 }
 
+function hookSawSubmit(skill: string, token: string, output: Json): void {
+  const settings = JSON.stringify(JSON.parse(readFileSync(join(project, ".claude", "settings.json"), "utf8")));
+  const command = /"command":"(node [^"]+)"/.exec(settings)?.[1];
+  assert.ok(command !== undefined, settings);
+  const payload = {
+    cwd: project,
+    agent_id: "agent-1",
+    agent_type: `agentbay-feed-briefing-${skill}`,
+    tool_name: "mcp__agentbay__submit",
+    tool_input: { token, output },
+  };
+  const ran = spawnSync("sh", ["-c", command], { input: JSON.stringify(payload), encoding: "utf8" });
+  assert.equal(ran.status, 0, ran.stdout);
+}
+
 function synced(): void {
   const run = runOf(succeeded(["call", "feed-briefing.sync", "{}"]));
   assert.equal(fieldsOf(run).status, "done", JSON.stringify(run));
@@ -105,12 +120,9 @@ function digested(): void {
   const ids = idsOf(selection);
   assert.equal(ids.length, 21);
   storeReadThroughTheTool(token, ids[0] ?? "");
-  const submitted = succeeded([
-    "call",
-    "--tool",
-    "submit",
-    JSON.stringify({ token, output: draftFor(selection, ids) }),
-  ]);
+  const output = draftFor(selection, ids);
+  hookSawSubmit("digest", token, output);
+  const submitted = succeeded(["call", "--tool", "submit", JSON.stringify({ token, output })]);
   assert.equal(fieldsOf(fieldsOf(submitted).result ?? null).accepted, true, JSON.stringify(submitted));
   const finished = fieldsOf(runOf(succeeded(["runs", textOf(task.runId) ?? ""])));
   assert.equal(finished.status, "done", JSON.stringify(finished));
@@ -121,7 +133,9 @@ function workflowRunToTheApproval(): void {
   const task = fieldsOf(taskOf(succeeded(["call", "--workflow", "feed-briefing:workflows/daily.yaml"])));
   const selection = task.input ?? null;
   const token = textOf(task.token) ?? "";
-  succeeded(["call", "--tool", "submit", JSON.stringify({ token, output: draftFor(selection, idsOf(selection)) })]);
+  const output = draftFor(selection, idsOf(selection));
+  hookSawSubmit("digest", token, output);
+  succeeded(["call", "--tool", "submit", JSON.stringify({ token, output })]);
   const approval = fieldsOf(runOf(succeeded(["runs", textOf(task.runId) ?? ""])));
   assert.equal(approval.status, "waiting", JSON.stringify(approval));
   const waiting = fieldsOf(approval.waiting ?? null);

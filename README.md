@@ -187,8 +187,9 @@ text for its `goal` and `deliverable`, so the example states them in words.
 
 ## Safety, in one paragraph
 
-The guard hook narrows what subagents can ask to do; it is defense in depth, not isolation, and cannot contain
-code once something runs it. Nothing that runs code is auto-approved except a role's own read-only data shim;
+Where it runs, the guard hook narrows what subagents can ask to do; it is defense in depth, not isolation, and
+cannot contain code once something runs it. A project whose config sets `skillSteps.run: without-the-hook` runs
+skill steps with no hook: the kernel takes their outputs, and each run records that no hook saw them. Nothing that runs code is auto-approved except a role's own read-only data shim;
 the main thread is pre-approved only for `bay show|status|note|catalog`. `bay secret set`
 needs your terminal. Approval gates and backlog approvals follow `approve.from` in agentbay.config.yaml (default
 `[terminal]`; chat is recorded as `user@chat-via-cos`). `approve.plans` makes a listed step show its plan for your

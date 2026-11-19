@@ -34,8 +34,8 @@ export function coordinatorBlock(bay: string): string {
     "When you do not know which action fits what the owner asks, run",
     `\`${bay} actions --json\` for the active modes, then \`${bay} actions <mode> --json\` for that mode's actions.`,
     "",
-    `At the start of a session, run \`${bay} check\`. If it reports that the agentbay hook is not registered,`,
-    "stop and tell the owner: without the hook, nothing confines the skill steps.",
+    `At the start of a session, run \`${bay} check\`. If skill steps run with the hook and it reports that the hook is`,
+    "not registered, stop and tell the owner: the kernel refuses their outputs. Without the hook, nothing confines them.",
     "",
     `1. Run an action: \`${bay} call <mode.action> '<json input>' --json\`. It prints one JSON object: the run.`,
     "2. When the run waits for a skill, the output carries a `task`. Start the subagent named `task.agent` with",
@@ -68,9 +68,9 @@ export function coordinatorBlock(bay: string): string {
     "- edit `.agentbay/`, `.claude/`, `.mcp.json`, or the agentbay kit (`bay/`, `schemas/`, `adapters/`,",
     "  `framework/`);",
     "- do a skill step's work yourself, change a task before you hand it over, or hand it to another agent;",
-    "- start other subagents here: the agentbay hook denies every tool call of a subagent that is not a step.",
+    "- start other subagents here: where the agentbay hook runs, it denies every subagent that is not a step.",
     "",
-    "Change `approvals` in agentbay.config.yaml only when the owner asks for exactly that, in their own words.",
+    "Change `approvals` or `skillSteps` in agentbay.config.yaml only when the owner asks for exactly that, in their own words.",
     blockEnd,
   ].join("\n");
 }

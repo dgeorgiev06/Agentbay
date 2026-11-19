@@ -159,6 +159,8 @@ const calledInterface = "items-store";
 
 const configFile = "agentbay.config.yaml";
 
+const noHookRuns = { run: "without-the-hook" };
+
 const nothingSpent: Spend = { items: 0, usd: 0, tokens: 0, minutes: 0 };
 
 const trustedBy = "a test";
@@ -342,7 +344,7 @@ async function openedIn(root: string, config: Config, options: ProjectOptions): 
 async function kernelIn(root: string, opening: Opening): Promise<Kernel> {
   const { config, projectConfig, clock } = opening;
   const written = projectConfig === undefined ? config : configOver(projectConfig, config);
-  await writeFile(join(root, configFile), stringify(written), "utf8");
+  await writeFile(join(root, configFile), stringify({ skillSteps: noHookRuns, ...written }), "utf8");
   const loaded = await loadKernel({
     layout: layoutOf({ kit, project: root }),
     ports: { ...nodeKernelPorts(testEnvironment), clock },

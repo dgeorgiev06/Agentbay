@@ -109,6 +109,7 @@ test("a folder inside a project opens that project, its config under the one giv
   let project = await openModeProject({ ...given, modes: ["fake-source"] }, { project: inside });
   try {
     assert.deepEqual(await writtenConfig(project), {
+      skillSteps: { run: "without-the-hook" },
       bindings: { "greeting-source": "greeter" },
       adapter: "claude-code",
       settings: {
@@ -120,6 +121,7 @@ test("a folder inside a project opens that project, its config under the one giv
     assert.deepEqual(await project.output("greeter.fetch", { name: "Ada" }), { greeting: "Hello, Ada" });
     project = await project.reopen({ bindings: {}, adapter: "claude-code" });
     assert.deepEqual(await writtenConfig(project), {
+      skillSteps: { run: "without-the-hook" },
       bindings: { "greeting-source": "greeter" },
       adapter: "claude-code",
       settings: { writer: { signature: "Yours, the writer" }, "fake-source": source },

@@ -5,6 +5,7 @@ export type Config = {
   readonly settings?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
   readonly budget?: Budget;
   readonly tiers?: { readonly fast?: TierSetting; readonly balanced?: TierSetting; readonly deep?: TierSetting };
+  readonly skillSteps?: { readonly run?: "with-the-hook" | "without-the-hook" };
   readonly approvals?: { readonly from?: ReadonlyArray<"terminal" | "chat"> };
 };
 

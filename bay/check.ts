@@ -18,7 +18,7 @@ import { defaultScriptTimeLimitSeconds } from "./contracts.ts";
 import { isProjectTheKit, shownPath, type Layout } from "./layout.ts";
 import type { Problem } from "./outcome.ts";
 import type { FileSystem } from "./ports.ts";
-import { inspectSystem } from "./manifests/manifests.ts";
+import { inspectSystem, readConfig, skillStepsRunOf, type SkillStepsRun } from "./manifests/manifests.ts";
 import { readTrustRecord } from "./trust.ts";
 
 export type CheckPorts = {
@@ -30,6 +30,7 @@ export type CheckReport = {
   readonly findings: readonly Finding[];
   readonly errors: number;
   readonly warnings: number;
+  readonly skillSteps: SkillStepsRun;
 };
 
 async function kitFindings(context: CheckContext): Promise<readonly Finding[]> {
@@ -65,6 +66,30 @@ function longStepWarnings(context: CheckContext): readonly Finding[] {
   return warnings(found);
 }
 
+async function skillStepsOf(files: FileSystem, layout: Layout): Promise<SkillStepsRun> {
+  const config = await readConfig(files, layout);
+  return config.ok ? skillStepsRunOf(config.value) : "with-the-hook";
+}
+
+function withoutTheHookWarnings(layout: Layout, skillSteps: SkillStepsRun): readonly Finding[] {
+  if (skillSteps === "with-the-hook") {
+    return [];
+  }
+  const warning = {
+    file: layout.configFile,
+    path: "/skillSteps/run",
+    message:
+      "Skill steps run without the hook (skillSteps.run: without-the-hook). The kernel takes a skill step's output " +
+      "that no hook saw, and the run records that no hook saw it. No hook stops a step's agent from reading or " +
+      "writing outside its lists while it works, and the kernel cannot tell an output of the step's agent from one " +
+      "the main session handed in.",
+    fix:
+      "Only the owner changes this. To run with the hook, set skillSteps.run to with-the-hook, run bay build, and " +
+      "work in a Claude Code session where the agentbay hook is active.",
+  };
+  return warnings([warning]);
+}
+
 function shownFindings(layout: Layout, findings: readonly Finding[]): readonly Finding[] {
   return findings.map((finding) => ({ ...finding, file: shownPath(layout, finding.file) }));
 }
@@ -73,6 +98,7 @@ export async function checkSystem(ports: CheckPorts, layout: Layout): Promise<Ch
   const inspection = await inspectSystem(ports.files, layout);
   const context = await checkContextOf({ ...ports, layout, inspection });
   const record = await readTrustRecord(ports.files, layout);
+  const skillSteps = await skillStepsOf(ports.files, layout);
   const findings = shownFindings(layout, [
     ...errors(inspection.problems),
     ...warnings(inspection.notices),
@@ -82,9 +108,10 @@ export async function checkSystem(ports: CheckPorts, layout: Layout): Promise<Ch
     ...(await checkTrust(context, record)),
     ...longStepWarnings(context),
     ...(await kitFindings(context)),
+    ...withoutTheHookWarnings(layout, skillSteps),
   ]);
   const errorCount = findings.filter((finding) => finding.severity === "error").length;
-  return { findings, errors: errorCount, warnings: findings.length - errorCount };
+  return { findings, errors: errorCount, warnings: findings.length - errorCount, skillSteps };
 }
 
 function severityRank(finding: Finding): number {
@@ -112,8 +139,17 @@ function findingLines(finding: Finding): readonly string[] {
   return finding.fix === undefined ? [heading] : [heading, `  fix: ${finding.fix}`];
 }
 
+const skillStepsLine: Readonly<Record<SkillStepsRun, string>> = {
+  "with-the-hook":
+    "Skill steps run with the hook: the kernel takes a skill step's output only when the agentbay hook saw the " +
+    "step's agent hand it in.",
+  "without-the-hook":
+    "Skill steps run without the hook: the kernel takes a skill step's output that no hook saw, and records that no " +
+    "hook saw it.",
+};
+
 export function summarizeCheck(report: CheckReport): string {
   const sorted = [...report.findings].sort(fileOrder(report.findings));
   const totals = `bay check: ${counted(report.errors, "error")}, ${counted(report.warnings, "warning")}.`;
-  return [...sorted.flatMap(findingLines), totals].join("\n");
+  return [...sorted.flatMap(findingLines), skillStepsLine[report.skillSteps], totals].join("\n");
 }

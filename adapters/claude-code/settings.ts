@@ -28,7 +28,7 @@ export function guardEntry(layout: Layout): JsonObject {
     hooks: [
       {
         type: "command",
-        command: `node ${shellQuoted(guard)} --project ${shellQuoted(layout.project)}`,
+        command: `node --disable-warning=ExperimentalWarning ${shellQuoted(guard)} --project ${shellQuoted(layout.project)}`,
         timeout: 30,
         onFailure: "block",
       },

@@ -247,13 +247,20 @@ export type ProjectOptions = {
   readonly approvalsFrom?: readonly string[];
   readonly adapter?: string;
   readonly ownKernel?: boolean;
+  readonly skillSteps?: "with-the-hook" | "without-the-hook" | "not set";
 };
+
+function skillStepsOf(options: ProjectOptions): { readonly skillSteps?: { readonly run: string } } {
+  const run = options.skillSteps ?? "without-the-hook";
+  return run === "not set" ? {} : { skillSteps: { run } };
+}
 
 function configText(options: ProjectOptions = {}): string {
   const config = {
     bindings: { "greeting-source": "greeter" },
     adapter: options.adapter ?? "fake",
     settings: { writer: { signature: "Yours, the writer" } },
+    ...skillStepsOf(options),
     ...(options.approvalsFrom === undefined ? {} : { approvals: { from: options.approvalsFrom } }),
   };
   return stringify(config);

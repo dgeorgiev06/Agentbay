@@ -99,7 +99,8 @@ async function builtTiers(project: Project): Promise<Readonly<Record<keyof typeo
 }
 
 function digestOf(project: Project, text: string): string {
-  return createHash("sha256").update(text.replaceAll(project.root, "<project>"), "utf8").digest("hex");
+  const placeless = text.replaceAll(project.root, "<project>").replaceAll(kit, "<kit>");
+  return createHash("sha256").update(placeless, "utf8").digest("hex");
 }
 
 test("with no tiers set, bay build writes every step agent and the step policy as it did before tiers", async () => {
@@ -115,7 +116,7 @@ test("with no tiers set, bay build writes every step agent and the step policy a
       "8c50d6f34c16de1f2309b812291f7ae801cbf5679384b80ce0859a7f9da31761",
       "dff6fbbbf863338a33e2701fa0502f008fe48ef4cd46a475d4c0562acb46e745",
       "57c5b3030de7dc0ae025bf25384ef0514f22eba5d73d7cfd8725b335d06d6e3a",
-      "ff779262b0301270f27f03ad49371385fb0a0f9642519a85538b126b8510df5c",
+      "bf53c851e68bd19c0bcf1be2c1c0ea94c3afb472b519484ff158c97e7b35497b",
     ]);
     assert.deepEqual(await builtTiers(project), {
       fast: { model: "haiku", effort: "not written" },

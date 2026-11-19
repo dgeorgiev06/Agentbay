@@ -22,7 +22,7 @@ export const run = defineScript((input) => {
     work: branch("work"),
     kept: fields.kept === "with-tests" ? "with-tests" : "set-aside",
     into: branch("into"),
-    ...(rounds === undefined ? {} : { rounds: roundsOnCard(rounds) }),
+    ...(rounds === undefined ? {} : { rounds: roundsOnCard(rounds), leaks: rounds.leaks }),
     ...bugs,
   });
   return Promise.resolve(merge);

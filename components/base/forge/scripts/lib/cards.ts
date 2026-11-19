@@ -120,6 +120,11 @@ export type BugsOnCard = {
   readonly survived: readonly SurvivedBug[];
 };
 
+export type Leak =
+  | { readonly kind: "shared-text"; readonly path: string; readonly lines: number }
+  | { readonly kind: "mark"; readonly path: string }
+  | { readonly kind: "mark-in-answer" };
+
 export type MergeCardInput = {
   readonly slice: Slice;
   readonly proof: Proved;
@@ -129,6 +134,7 @@ export type MergeCardInput = {
   readonly into: string;
   readonly rounds?: RoundsOnCard;
   readonly bugs?: BugsOnCard;
+  readonly leaks?: readonly Leak[];
 };
 
 export type WithheldChoice = "merge" | "send-back" | "discard";
@@ -609,11 +615,23 @@ function bugWords(bugs: BugsOnCard | undefined): readonly string[] {
   return [...planted, ...bugs.survived.map((bug) => `bug survived: ${bug.name}, in ${joined(bug.files)}`)];
 }
 
+function leakWords(leak: Leak): string {
+  switch (leak.kind) {
+    case "shared-text":
+      return `leak: ${leak.path} shares ${counted(leak.lines, "line")} with the tests`;
+    case "mark":
+      return `leak: ${leak.path} holds the mark planted in the tests`;
+    case "mark-in-answer":
+      return "leak: the builder's answer holds the mark planted in the tests";
+  }
+}
+
 function drawnLines(input: MergeCardInput): readonly CardLine[] {
   const { slice, proof, built, work, kept } = input;
   const forYou = proof.judgement.map((item) => `not judged, for you: ${item.id} ${item.says}`);
   return [
     ...builtWords(built).map((said) => computed("draw", said)),
+    ...(input.leaks ?? []).map((leak) => computed("draw", leakWords(leak))),
     computed("draw", changedWords(proof.size, work, kept)),
     ...verdictLines(slice, proof.verdicts),
     ...[...forYou, ...sizeWords(proof.size), ...watchedWords(proof.size)].map((said) => computed("draw", said)),
@@ -651,6 +669,7 @@ function mergeReason(input: MergeCardInput): string | undefined {
   const unmet = unmetMust(input.slice, input.proof.verdicts);
   const clauses = [
     ...(input.built.outcome === "stopped" ? ["the builder stopped"] : []),
+    ...((input.leaks ?? []).length === 0 ? [] : ["the builder's work holds text from the tests"]),
     ...unmetClause(unmet.failed, { one: "failed", many: "failed" }),
     ...unmetClause(unmet.notKnown, { one: "is not known", many: "are not known" }),
   ];

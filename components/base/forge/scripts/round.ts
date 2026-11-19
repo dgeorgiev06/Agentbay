@@ -1,9 +1,11 @@
 import { defineScript, fail, fieldsOf, type Json, type JsonFields, type ScriptContext } from "../../../../bay/sdk.ts";
 import { answerOf } from "./lib/called.ts";
-import { builtOf, sliceOf, type Built } from "./lib/cards.ts";
+import { builtOf, sliceOf, type Built, type Leak } from "./lib/cards.ts";
 import { failingOf, withoutCases } from "./lib/failing.ts";
 import { handedTestsOf, type HandedTest } from "./lib/handed-tests.ts";
-import { keepTests, keptFindings, keptTests } from "./lib/kept-tests.ts";
+import { keepTests, keptFindings, keptMark, keptTests } from "./lib/kept-tests.ts";
+import { leaksAfterBuild } from "./lib/leak-check.ts";
+import { newMark } from "./lib/mark.ts";
 import { roundPlan, roundsStateOf, type RoundPlan, type RoundsState, type Work } from "./lib/rounds.ts";
 import { listOf, textOf, textsOf } from "./lib/json-values.ts";
 
@@ -124,22 +126,50 @@ async function testsWritten(context: ScriptContext, folder: string, tests: reado
 }
 
 type Made = {
-  readonly builder: Work;
+  readonly building: Building;
   readonly tests: readonly HandedTest[];
 };
 
-async function headOf(context: ScriptContext, round: Round, made: Made): Promise<Committed> {
-  const { builder, tests } = made;
-  const folder = await cutAt(context, `${round.name}-tests-${String(round.number)}`, builder.commit);
+type Head = Committed & {
+  readonly leaks: readonly Leak[];
+};
+
+async function leaksIn(
+  context: ScriptContext,
+  round: Round,
+  made: Made & { readonly folder: string },
+): Promise<readonly Leak[]> {
+  return leaksAfterBuild(context, {
+    slice: sliceOf(round.slice),
+    round: round.number,
+    base: round.cut.commit,
+    commit: made.building.builder.commit,
+    folder: made.folder,
+    fixed: textsOf(round.fixed),
+    interface: textsOf(round.interface),
+    tests: made.tests,
+    mark: await keptMark(context, round.name),
+    answer: made.building.built,
+  });
+}
+
+async function headOf(context: ScriptContext, round: Round, made: Made): Promise<Head> {
+  const { building, tests } = made;
+  const folder = await cutAt(context, `${round.name}-tests-${String(round.number)}`, building.builder.commit);
+  const leaks = await leaksIn(context, round, { ...made, folder: folder.folder });
   await testsWritten(context, folder.folder, tests);
-  return committed(context, folder.folder, `${round.name}: the tests the test writer handed in`);
+  const head = await committed(context, folder.folder, `${round.name}: the tests the test writer handed in`);
+  return { ...head, leaks };
 }
 
 async function proved(
   context: ScriptContext,
   round: Round,
-  head: Committed & { readonly tests: readonly string[] },
+  head: Head & { readonly tests: readonly string[] },
 ): Promise<readonly Json[]> {
+  if (head.leaks.length > 0) {
+    return [];
+  }
   const asked = {
     slice: lessChecks(round.slice),
     base: round.cut.commit,
@@ -148,6 +178,11 @@ async function proved(
     bugs: [],
   };
   return listOf((await answerOf(context, "proof.prove", asked)).verdicts);
+}
+
+async function markOf(context: ScriptContext, round: Round): Promise<string> {
+  const kept = round.number === 1 ? undefined : await keptMark(context, round.name);
+  return kept ?? newMark();
 }
 
 function buildingOf(context: ScriptContext, round: Round, plan: RoundPlan): Promise<Building> {
@@ -163,17 +198,18 @@ function reviewedAtOf(before: RoundsState | undefined): { readonly reviewedAt?: 
 
 async function ranRound(context: ScriptContext, round: Round, plan: RoundPlan): Promise<RoundsState> {
   if (plan.writeTests) {
-    await keepTests(context, round.name, await newTests(context, round));
+    const tests = await newTests(context, round);
+    await keepTests(context, { slice: round.name, tests, mark: await markOf(context, round) });
   }
   const building = await buildingOf(context, round, plan);
   const tests = await keptTests(context, round.name);
   const paths = tests.map((test) => test.path);
-  const head = await headOf(context, round, { builder: building.builder, tests });
+  const head = await headOf(context, round, { building, tests });
   const verdicts = await proved(context, round, { ...head, tests: paths });
   return {
     round: round.number,
     stage: "proved",
-    done: false,
+    done: head.leaks.length > 0,
     base: round.cut.commit,
     ...building,
     head: head.commit,
@@ -187,6 +223,7 @@ async function ranRound(context: ScriptContext, round: Round, plan: RoundPlan): 
     toTests: 0,
     conditions: round.before?.conditions ?? [],
     remaining: [],
+    leaks: head.leaks,
     ...reviewedAtOf(round.before),
   };
 }

@@ -28,6 +28,7 @@ const proved: RoundsState = {
   toTests: 0,
   conditions: [],
   remaining: [],
+  leaks: [],
 };
 
 const failingOne = { ...noFailing, items: ["DOD-P1-1"], cases: [{ name: "a quill is counted" }] };

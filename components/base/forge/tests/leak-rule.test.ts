@@ -287,3 +287,19 @@ describe("a leak in the rounds' state and on the card", () => {
     assert.equal(result.card.lines[0]?.words, `leak: ${codePath} shares 1 line with the tests`);
   });
 });
+
+test("a shared line of exactly 40 characters that are not spaces is a leak, and one of 39 is not", () => {
+  const forty = `assert.equal(tally, ${"7".repeat(19)});`;
+  const thirtyNine = `assert.equal(tally, ${"7".repeat(18)});`;
+  const compare = (line: string): number =>
+    sharedText({
+      code: [{ path: "components/modes/b1/scripts/tally.ts", text: `${line}\n` }],
+      tests: [`${line}\n`],
+      phrases: [],
+      interface: [],
+      base: [],
+    }).length;
+  assert.equal(forty.replace(/\s/g, "").length, 40);
+  assert.equal(compare(forty), 1);
+  assert.equal(compare(thirtyNine), 0);
+});

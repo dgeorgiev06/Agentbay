@@ -239,6 +239,7 @@ async function configForTheTest(): Promise<string> {
     ...config,
     bindings: { ...fieldsOf(config.bindings ?? null), proof: "proof-stand-in" },
     approvals: { from: ["terminal", "chat"] },
+    skillSteps: { run: "without-the-hook" },
     settings: { ...settings, forge: { ...fieldsOf(settings.forge ?? null), into, practices } },
   });
 }

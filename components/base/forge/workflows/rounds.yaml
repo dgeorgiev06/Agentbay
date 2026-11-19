@@ -4,6 +4,9 @@ budget: { minutes: 180 }
 steps:
   - id: slice
     action: slice
+    input:
+      request: $trigger
+      planter: true
   - id: start
     approval: Build this slice?
     show: $steps.slice.output.card
@@ -104,7 +107,7 @@ steps:
   - id: card
     approval: Merge this slice?
     show: $steps.draw.output.card
-    quotes: [review-1, review-2, review-3]
+    quotes: [review-1, review-2, review-3, round-1, round-2, round-3]
     choices:
       merge: { does: Merge into the integration branch, when: $steps.draw.output.merge }
       send-back: { does: "A round after the card", when: $steps.draw.output.sendBack }

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Built",
-  "description": "How the builder ended: built, or stopped with what is missing as a name. No field holds free text a card could show.",
+  "description": "How the builder ended: built, or stopped with what is missing as a name; and at most three short decisions. The card shows what is missing and each decision as the builder's judgement, never as computed.",
   "oneOf": [
     {
       "type": "object",
@@ -12,6 +12,16 @@
         "outcome": {
           "const": "built",
           "description": "The slice is written in its worktree."
+        },
+        "decisions": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "description": "At most three decisions the builder made that the owner should know, each one short sentence. The card shows them as the builder's judgement, cut and stripped of control characters."
         }
       }
     },
@@ -25,11 +35,21 @@
           "const": "stopped",
           "description": "The builder stopped before the slice was done."
         },
+        "decisions": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "description": "At most three decisions the builder made that the owner should know, each one short sentence. The card shows them as the builder's judgement, cut and stripped of control characters."
+        },
         "missing": {
           "type": "object",
           "additionalProperties": false,
           "required": ["lacks", "name"],
-          "description": "What is missing: where it would live, and its name. No sentence, so nothing a builder writes reaches a card.",
+          "description": "What is missing: where it would live, and its name. No sentence: the card shows the name as the builder's judgement.",
           "properties": {
             "lacks": {
               "enum": ["kernel", "toolbox", "test-toolbox", "interface"],

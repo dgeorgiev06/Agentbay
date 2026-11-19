@@ -19,6 +19,7 @@ export const run = defineScript((input) => {
     slice: sliceOf(fields.slice),
     proof,
     built: builtOf(fields.built),
+    builtAt: rounds?.builtAt ?? "build",
     work: branch("work"),
     kept: fields.kept === "with-tests" ? "with-tests" : "set-aside",
     into: branch("into"),

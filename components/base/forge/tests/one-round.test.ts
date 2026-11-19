@@ -36,9 +36,9 @@ import {
 
 const noNames = { gained: [], lost: [], changed: [] };
 
-const sendBackWithheld = "no round runs after the card.";
+const sendBackWithheld = "No round runs after the card.";
 
-const discardWithheld = "discarding comes with slice WD1.";
+const discardWithheld = "Discarding comes with slice WD1.";
 
 let template: string;
 
@@ -149,7 +149,8 @@ describe(
         { name: "keep", status: "offered", does: "Stop; the branches stay" },
         { name: "discard", status: "withheld", does: "Stop; the worktrees go", reason: discardWithheld },
       ]);
-      assert.equal(wordsOf(card)[0], "2 files changed; the work and the tests are on forge/R1-tests-1");
+      assert.equal(wordsOf(card)[0], "Merge is offered: every must item that proof judged passed.");
+      assert.ok(wordsOf(card).includes("2 files changed; the work and the tests are on forge/R1-tests-1"));
       const head = rev(root, "forge/R1-tests-1");
       const whole = slice("R1", [testPath("R1", "quill.test.ts")]);
       const proved = {
@@ -236,12 +237,17 @@ describe(
       const start = await started(root, trigger(root, "R4", [testPath("R4", "quill.test.ts")]));
       const stopped = { outcome: "stopped", missing: { lacks: "kernel", name: "worktrees.commit" } };
       const card = await roundToCard(root, start, { name: "R4", files: [codeOf("R4")], tests, built: stopped });
-      assert.equal(wordsOf(card)[0], "the builder stopped: the kernel lacks worktrees.commit");
+      assert.equal(wordsOf(card)[0], "Merge is not offered: the builder stopped.");
+      assert.ok(wordsOf(card).includes("rounds: 1 of at most 3; the builder stopped"));
+      assert.equal(wordsOf(card).at(-1), "the builder stopped, saying the kernel lacks worktrees.commit");
+      const last = listOf(fieldsOf(card.card).lines).at(-1) ?? null;
+      assert.equal(textAt(last, "mark"), "judged");
+      assert.equal(textAt(fieldsOf(last).source ?? null, "step"), "round-1");
       assert.deepEqual(listOf(card.choices)[0], {
         name: "merge",
         status: "withheld",
         does: "Merge into the integration branch",
-        reason: "the builder stopped.",
+        reason: "The builder stopped.",
       });
       const kept = runOf(await decided(root, card, { step: "card", choice: "keep" }));
       assert.deepEqual(fieldsOf(kept).output, { choice: "keep", kept: ["forge/R4", "forge/R4-tests-1"] });
@@ -311,7 +317,10 @@ describe(
         tests,
         built: { outcome: "built" },
       });
-      assert.ok(wordsOf(card).includes("failed DOD-R7-1: the named tests fail on the head"), wordsOf(card).join("\n"));
+      const words = wordsOf(card);
+      const failedAt = words.indexOf("DOD-R7-1, must, failed: A quill that was added is counted.");
+      assert.ok(failedAt > 0, words.join("\n"));
+      assert.equal(words[failedAt + 1], "why: the named tests fail on the head");
       assert.deepEqual(listOf(card.choices)[0], {
         name: "merge",
         status: "withheld",

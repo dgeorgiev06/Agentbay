@@ -60,6 +60,16 @@
             "outcome": {
               "const": "built",
               "description": "The slice is written in its worktree."
+            },
+            "decisions": {
+              "type": "array",
+              "maxItems": 3,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "description": "At most three decisions the builder made that the owner should know, each one short sentence. The card shows them as the builder's judgement, cut and stripped of control characters."
             }
           }
         },
@@ -76,6 +86,16 @@
               "const": "stopped",
               "description": "The builder stopped before the slice was done."
             },
+            "decisions": {
+              "type": "array",
+              "maxItems": 3,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "description": "At most three decisions the builder made that the owner should know, each one short sentence. The card shows them as the builder's judgement, cut and stripped of control characters."
+            },
             "missing": {
               "type": "object",
               "additionalProperties": false,
@@ -83,7 +103,7 @@
                 "lacks",
                 "name"
               ],
-              "description": "What is missing: where it would live, and its name. No sentence, so nothing a builder writes reaches a card.",
+              "description": "What is missing: where it would live, and its name. No sentence: the card shows the name as the builder's judgement.",
               "properties": {
                 "lacks": {
                   "enum": [
@@ -258,6 +278,11 @@
         "$ref": "#/$defs/leak"
       },
       "description": "What forge's check found of the tests in the builder's work after the round's build: by the builder's file and kind, with counts; never a line of a test and never the mark. Any leak ends the rounds."
+    },
+    "builtAt": {
+      "type": "string",
+      "pattern": "^round-[1-3]$",
+      "description": "The workflow step under which the builder last built; the card's lines of the builder's judgement cite it."
     },
     "reviewedAt": {
       "type": "string",

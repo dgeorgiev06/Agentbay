@@ -54,7 +54,6 @@ const slice = sliceOf({
 
 const passedProof = {
   verdicts: [{ item: "DOD-P1-1", kind: "fails-first" as const, verdict: "passed" as const, detail: "It held." }],
-  judgement: [],
   size: [],
 };
 
@@ -120,6 +119,7 @@ test("the card counts the rounds and gives the reviewer's verdicts and what rema
   assert.deepEqual(roundsOnCard({ ...state, reviewedAt: "review-3" }), {
     count: 3,
     most: 3,
+    ended: "last-round",
     judged: {
       step: "review-3",
       sentences: [
@@ -143,7 +143,11 @@ test("one finding remaining is said in the singular, and none as none; at most t
 });
 
 test("with no review, the card has the rounds count and no judged line", () => {
-  assert.deepEqual(roundsOnCard({ ...proved, stage: "reviewed", round: 2 }), { count: 2, most: 3 });
+  assert.deepEqual(roundsOnCard({ ...proved, stage: "reviewed", round: 2 }), {
+    count: 2,
+    most: 3,
+    ended: "last-round",
+  });
 });
 
 function cardOf(rounds: ReturnType<typeof roundsOnCard>): ReturnType<typeof drawn> {
@@ -151,6 +155,7 @@ function cardOf(rounds: ReturnType<typeof roundsOnCard>): ReturnType<typeof draw
     slice,
     proof: passedProof,
     built: { outcome: "built" },
+    builtAt: "round-1",
     work: "forge/P1-tests-3",
     kept: "with-tests",
     into: "integration",
@@ -170,20 +175,40 @@ test("a reviewer's not held never withholds merge, and its lines are marked judg
   const judged = judgedOf(result.card.lines);
   assert.ok(judged.length >= 4);
   assert.ok(judged.every((line) => line.source.step === "review-3"));
-  const words = result.card.lines.map((line) => line.words);
-  assert.ok(words.includes("rounds: 3 of at most 3"));
-  const rounds = result.card.lines.find((line) => line.words === "rounds: 3 of at most 3");
-  assert.deepEqual(rounds, { mark: "computed", words: "rounds: 3 of at most 3", source: { step: "draw" } });
-  assert.ok(judged.every((line) => Array.from(line.words).length <= 35));
+  const rounds = result.card.lines.find((line) => line.words.startsWith("rounds:"));
+  assert.deepEqual(rounds, {
+    mark: "computed",
+    words: "rounds: 3 of at most 3; no more may run",
+    source: { step: "draw" },
+  });
 });
 
-test("a long reason is wrapped into judged lines of at most 35 columns, none dropped", () => {
+test("a long reason is one judged line, its words whole and in order", () => {
   const long = { item: "DOD-P1-2", held: false as const, why: `${"word ".repeat(30)}end.` };
   const state = reviewedState(proved, { plan: "review", review: { conditions: [long], findings: [] } }, "review-1");
   const judged = judgedOf(cardOf(roundsOnCard(state)).card.lines);
-  assert.ok(judged.every((line) => Array.from(line.words).length <= 35));
-  assert.equal(
-    judged.map((line) => line.words).join(" "),
-    `DOD-P1-2 not held: ${"word ".repeat(30)}end. no finding remains`,
+  assert.deepEqual(
+    judged.map((line) => line.words),
+    [`DOD-P1-2 not held: ${"word ".repeat(30)}end.`, "no finding remains"],
   );
+});
+
+test("the card says why the rounds ended: a leak, a stopped builder, no findings, or the third round", () => {
+  const ended = (state: RoundsState): string => roundsOnCard(state).ended;
+  const leak = { kind: "mark-in-answer" as const };
+  const stoppedBuild = { outcome: "stopped" as const, missing: { lacks: "kernel" as const, name: "x" } };
+  assert.equal(ended(reviewedState({ ...proved, leaks: [leak] }, { plan: "leaked" }, "review-1")), "leak");
+  assert.equal(ended(reviewedState({ ...proved, built: stoppedBuild }, { plan: "stopped" }, "review-1")), "stopped");
+  assert.equal(ended(reviewed(proved, [])), "no-findings");
+  assert.equal(ended(reviewed({ ...proved, round: 3 }, [])), "no-findings");
+  assert.equal(ended(reviewed({ ...proved, round: 3 }, [forTests])), "last-round");
+  const leakAfterReview = { ...reviewed(proved, []), leaks: [leak] };
+  assert.equal(ended(leakAfterReview), "leak");
+  const words = (state: RoundsState): string | undefined =>
+    cardOf(roundsOnCard(state)).card.lines.find((line) => line.words.startsWith("rounds:"))?.words;
+  assert.equal(
+    words(reviewedState({ ...proved, leaks: [leak] }, { plan: "leaked" }, "review-1")),
+    "rounds: 1 of at most 3; a leak ended them",
+  );
+  assert.equal(words(reviewed(proved, [])), "rounds: 1 of at most 3; the reviewer had no findings");
 });

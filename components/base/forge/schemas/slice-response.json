@@ -41,7 +41,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["title", "lines"],
-      "description": "The start card: the slice's title, kind, base, scope and afters, every item of its definition of done, and the names of the bugs to inject.",
+      "description": "The start card: the slice's title, kind, base, scope and afters, every item of its definition of done, and the bugs: those named to inject, whether the planter writes them, or that none will be planted.",
       "properties": {
         "title": {
           "type": "string",
@@ -50,7 +50,7 @@
         },
         "lines": {
           "type": "array",
-          "description": "The lines, each at most 35 columns so it prints in 44 after its mark. A long card has as many lines as it needs and is never cut.",
+          "description": "One line for each thing the card says, wrapped by the kernel to 44 columns. A word longer than 40 characters is broken after a slash, or else where it must. A long card has as many lines as it needs and is never cut.",
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -58,7 +58,7 @@
             "properties": {
               "mark": {
                 "const": "computed",
-                "description": "Every line of forge's cards comes from a step that ran no skill."
+                "description": "Every line of the start card comes from a step that ran no skill."
               },
               "words": {
                 "type": "string",

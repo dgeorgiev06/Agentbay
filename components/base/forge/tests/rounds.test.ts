@@ -269,13 +269,16 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
     assert.equal(git(root, ["show", `forge/A1-2:${codeOf(name)}`]), `${builderLine(".forge/worktrees/A1-2")}\n`);
     assert.deepEqual(await printedCard(root, start.id), [
       "Merge A1 into integration?",
+      "  Merge is offered: every must item that",
+      "    proof judged passed.",
+      "  DOD-A1-1, must, passed: A quill that was",
+      "    added is counted.",
+      "  DOD-A1-2, must, passed: The checks pass.",
       "  1 file changed; the work and the tests are",
       "    on forge/A1-tests-2",
-      "  DOD-A1-2: the checks and the tests pass",
-      "  DOD-A1-1: the named tests failed on the",
-      "    base and pass on the head",
       "  size in lines: components/ +1",
-      "  rounds: 2 of at most 3",
+      "  rounds: 2 of at most 3; the reviewer had",
+      "    no findings",
       "judged   DOD-A1-1 held by 1 case",
       "judged   DOD-A1-2 held by 1 case",
       "judged   no finding remains",
@@ -286,12 +289,12 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "  keep   Stop; the branches stay",
       "Not available:",
       "  send-back  A round after the card",
-      "             why: no round runs after the",
+      "             why: No round runs after the",
       "             card.",
       "  discard    Stop; the worktrees go",
-      "             why: discarding comes with",
+      "             why: Discarding comes with",
       "             slice WD1.",
-      "checked: 0 ran, 5 computed, 3 judged",
+      "checked: 0 ran, 6 computed, 3 judged",
     ]);
     await decided(root, card, { step: "card", choice: "merge" });
     assert.deepEqual(branches(root), [
@@ -358,22 +361,28 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
     });
     assert.deepEqual(await printedCard(root, start.id), [
       "Merge B1 into integration?",
+      "  Merge is not offered: 1 must item failed.",
+      "  DOD-B1-1, must, failed: A quill that was",
+      "    added is counted.",
+      "  why: the named tests fail on the head",
+      "  failing: b1 quill that was added is",
+      "    counted",
+      "  failing: b1 quill that was added is",
+      "    counted twice",
+      "  DOD-B1-2, must, passed: The checks pass.",
       "  1 file changed; the work and the tests are",
       "    on forge/B1-tests-3",
-      "  DOD-B1-2: the checks and the tests pass",
-      "  failed DOD-B1-1: the named tests fail on",
-      "    the head",
       "  size in lines: components/ +1",
-      "  rounds: 3 of at most 3",
+      "  rounds: 3 of at most 3; no more may run",
       "judged   DOD-B1-1 not held: The count is off",
-      "judged   by one for every quill.",
+      "judged     by one for every quill.",
       "judged   DOD-B1-2 held by 1 case",
       "judged   2 findings remain: 1 for the",
-      "judged   builder, 1 for the test writer",
+      "judged     builder, 1 for the test writer",
       "judged   for the builder, condition: b1",
-      "judged   quill that was added is counted",
+      "judged     quill that was added is counted",
       "judged   for the test writer, Q3: b1 quill",
-      "judged   that was added is counted",
+      "judged     that was added is counted",
       "judged    by forge skills/review, tier deep",
       "Unmarked lines were worked out by script.",
       "You can:",
@@ -383,12 +392,12 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "             branch",
       "             why: 1 must item failed.",
       "  send-back  A round after the card",
-      "             why: no round runs after the",
+      "             why: No round runs after the",
       "             card.",
       "  discard    Stop; the worktrees go",
-      "             why: discarding comes with",
+      "             why: Discarding comes with",
       "             slice WD1.",
-      "checked: 0 ran, 5 computed, 9 judged",
+      "checked: 0 ran, 9 computed, 5 judged",
     ]);
     const kept = runOf(await decided(root, card, { step: "card", choice: "keep" }));
     assert.deepEqual(fieldsOf(kept).output, { choice: "keep", kept: ["forge/B1", "forge/B1-tests-3"] });
@@ -445,7 +454,10 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
         const folder = folderOf(given);
         builderLines.push(builderLine(folder));
         await builderWrites(root, folder, [codeOf(name)]);
-        return { outcome: "built" };
+        return {
+          outcome: "built",
+          decisions: [`The count is kept as a whole number, round ${String(builderTasks.length)}.`],
+        };
       },
       reviewer: (given) => {
         const findings = reviews.shift() ?? [];
@@ -485,6 +497,15 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
     assert.equal(rev(root, `${head}^`), rev(root, "forge/C1-2"));
     const card = waitingOf(await shown(root, start.id), "card");
     assert.equal(listOf(card.choices).map((choice) => textAt(choice, "status"))[0], "offered");
+    const printed = await printedCard(root, start.id);
+    const decided = printed.indexOf("judged   the builder decided: The count is");
+    assert.deepEqual(printed.slice(decided, decided + 4), [
+      "judged   the builder decided: The count is",
+      "judged     kept as a whole number, round 2.",
+      "judged    by forge skills/write-tests, tier",
+      "judged      balanced; forge",
+    ]);
+    assert.equal(printed[decided + 4], "judged      skills/build-without-tests, tier");
     assert.ok(!branches(root).some((branch) => branch.includes("writer")));
     assert.deepEqual(worktrees(root), []);
     assert.deepEqual(keptRows(root), []);

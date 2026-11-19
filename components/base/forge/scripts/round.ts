@@ -24,6 +24,7 @@ type Round = {
 type Building = {
   readonly built: Built;
   readonly builder: Work;
+  readonly builtAt?: string;
 };
 
 type Committed = Work & {
@@ -113,7 +114,7 @@ async function builtAgain(context: ScriptContext, round: Round): Promise<Buildin
   const built = builtOf(await answerOf(context, "build-without-tests", builderAsked(round, folder)));
   const work = await committed(context, folder, `${round.name}: the builder's work, round ${String(round.number)}`);
   await removed(context, { folder, branchAfter: "kept" });
-  return { built, builder: { branch: work.branch, commit: work.commit } };
+  return { built, builder: { branch: work.branch, commit: work.commit }, builtAt: `round-${String(round.number)}` };
 }
 
 async function testsWritten(context: ScriptContext, folder: string, tests: readonly HandedTest[]): Promise<void> {
@@ -189,7 +190,8 @@ function buildingOf(context: ScriptContext, round: Round, plan: RoundPlan): Prom
   if (plan.build || round.before === undefined) {
     return builtAgain(context, round);
   }
-  return Promise.resolve({ built: round.before.built, builder: round.before.builder });
+  const { built, builder, builtAt } = round.before;
+  return Promise.resolve(builtAt === undefined ? { built, builder } : { built, builder, builtAt });
 }
 
 function reviewedAtOf(before: RoundsState | undefined): { readonly reviewedAt?: string } {

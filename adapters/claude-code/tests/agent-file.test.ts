@@ -337,6 +337,7 @@ test("the coordinator block states the protocol between its markers in under 50 
     '`./bay.sh approve <runId> <stepKey> --hash <hash> --via chat --quote "<the owner\'s exact words>" --json`',
     "with `<runId>` the run's `id`, and `<stepKey>` and `<hash>` the `stepKey` and `hash` of its `waiting`,\n" +
       "   as bay printed them when the run stopped for the approval.",
+    "Never choose for the owner, and never pass a choice the card shows under Not available.",
     "approve or give trust on your own",
     "edit `.agentbay/`, `.claude/`, `.mcp.json`, or the agentbay kit",
     "do a skill step's work yourself",

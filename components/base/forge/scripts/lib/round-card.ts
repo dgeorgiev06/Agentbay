@@ -1,4 +1,4 @@
-import { counted, type RoundsOnCard } from "./cards.ts";
+import { counted, type RoundsEnded, type RoundsOnCard } from "./cards.ts";
 import type { Condition } from "./review.ts";
 import { lastRound, type Remaining, type RoundsState } from "./rounds.ts";
 
@@ -30,8 +30,18 @@ function remainingSentences(remaining: readonly Remaining[]): readonly string[] 
   return [count, ...named];
 }
 
+function endedOf(state: RoundsState): RoundsEnded {
+  if (state.leaks.length > 0) {
+    return "leak";
+  }
+  if (state.built.outcome === "stopped") {
+    return "stopped";
+  }
+  return state.reviewedAt !== undefined && state.remaining.length === 0 ? "no-findings" : "last-round";
+}
+
 export function roundsOnCard(state: RoundsState): RoundsOnCard {
-  const count = { count: state.round, most: lastRound };
+  const count = { count: state.round, most: lastRound, ended: endedOf(state) };
   if (state.reviewedAt === undefined) {
     return count;
   }

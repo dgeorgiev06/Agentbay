@@ -235,15 +235,14 @@ describe("a leak in the rounds' state and on the card", () => {
         { item: "DOD-Q1-1", kind: "fails-first" as const, verdict: "passed" as const, detail: "It held." },
         { item: "DOD-Q1-2", kind: "checks" as const, verdict: "passed" as const, detail: "It held." },
       ],
-      judgement: [],
       size: [],
     };
-    const input = { slice, proof, built: { outcome: "built" as const }, work: "forge/Q1-tests-1" };
+    const input = { slice, proof, built: { outcome: "built" as const }, builtAt: "round-1", work: "forge/Q1-tests-1" };
     const result = drawn({ ...input, kept: "with-tests", into: "integration", leaks });
-    assert.deepEqual(result.card.lines.slice(0, 3), [
+    assert.deepEqual(result.card.lines.slice(1, 4), [
       {
         mark: "computed",
-        words: `leak: ${codePath} shares 3 lines with the tests`,
+        words: "leak: components/modes/q1/scripts/ quill-count.ts shares 3 lines with the tests",
         source: { step: "draw" },
       },
       {
@@ -258,7 +257,7 @@ describe("a leak in the rounds' state and on the card", () => {
       },
     ]);
     assert.equal(result.merge, false);
-    assert.equal(result.card.withheld.merge, "the builder's work holds text from the tests.");
+    assert.equal(result.card.withheld.merge, "The builder's work holds text from the tests.");
     assert.equal("keep" in result.card.withheld, false);
     const clean = drawn({ ...input, kept: "with-tests", into: "integration", leaks: [] });
     assert.equal(clean.merge, true);
@@ -268,13 +267,13 @@ describe("a leak in the rounds' state and on the card", () => {
   test("a leaking build whose items also failed gives both reasons", () => {
     const proof = {
       verdicts: [{ item: "DOD-Q1-1", kind: "fails-first" as const, verdict: "failed" as const, detail: "No." }],
-      judgement: [],
       size: [],
     };
     const result = drawn({
       slice,
       proof,
       built: { outcome: "built" },
+      builtAt: "round-1",
       work: "forge/Q1-tests-1",
       kept: "with-tests",
       into: "integration",
@@ -282,9 +281,12 @@ describe("a leak in the rounds' state and on the card", () => {
     });
     assert.equal(
       result.card.withheld.merge,
-      "the builder's work holds text from the tests; 1 must item failed; 1 must item is not known.",
+      "The builder's work holds text from the tests; 1 must item failed; 1 must item is not known.",
     );
-    assert.equal(result.card.lines[0]?.words, `leak: ${codePath} shares 1 line with the tests`);
+    assert.equal(
+      result.card.lines[1]?.words,
+      "leak: components/modes/q1/scripts/ quill-count.ts shares 1 line with the tests",
+    );
   });
 });
 

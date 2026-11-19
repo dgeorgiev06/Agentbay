@@ -44,15 +44,22 @@ export type Slice = {
   readonly done: readonly Item[];
 };
 
-export type Verdict =
-  | { readonly item: string; readonly kind: ProofKind; readonly verdict: "passed" | "failed"; readonly detail: string }
-  | { readonly item: string; readonly kind: ProofKind; readonly verdict: "inconclusive"; readonly reason: string };
-
-export type Judged = {
-  readonly id: string;
-  readonly says: string;
-  readonly level: Level;
+export type FailingNames = {
+  readonly names: readonly string[];
+  readonly notListed: number;
+  readonly notLoaded: number;
 };
+
+export type Verdict =
+  | { readonly item: string; readonly kind: ProofKind; readonly verdict: "passed"; readonly detail: string }
+  | {
+      readonly item: string;
+      readonly kind: ProofKind;
+      readonly verdict: "failed";
+      readonly detail: string;
+      readonly cases?: FailingNames;
+    }
+  | { readonly item: string; readonly kind: ProofKind; readonly verdict: "inconclusive"; readonly reason: string };
 
 export type Sized = {
   readonly path: string;
@@ -62,7 +69,6 @@ export type Sized = {
 
 export type Proved = {
   readonly verdicts: readonly Verdict[];
-  readonly judgement: readonly Judged[];
   readonly size: readonly Sized[];
 };
 
@@ -71,7 +77,12 @@ export type Missing = {
   readonly name: string;
 };
 
-export type Built = { readonly outcome: "built" } | { readonly outcome: "stopped"; readonly missing: Missing };
+type Decided = {
+  readonly decisions?: readonly string[];
+};
+
+export type Built = ({ readonly outcome: "built" } | { readonly outcome: "stopped"; readonly missing: Missing }) &
+  Decided;
 
 export type CardLine =
   | {
@@ -85,11 +96,14 @@ export type CardLine =
       readonly source: { readonly step: string };
     };
 
+export type Planter = "runs" | "none";
+
 export type StartCardInput = {
   readonly slice: Slice;
   readonly title: string;
   readonly base: string;
   readonly bugs: readonly string[];
+  readonly planter: Planter;
 };
 
 export type StartCard = {
@@ -104,9 +118,12 @@ export type JudgedLines = {
   readonly sentences: readonly string[];
 };
 
+export type RoundsEnded = "leak" | "stopped" | "no-findings" | "last-round";
+
 export type RoundsOnCard = {
   readonly count: number;
   readonly most: number;
+  readonly ended: RoundsEnded;
   readonly judged?: JudgedLines;
 };
 
@@ -129,6 +146,7 @@ export type MergeCardInput = {
   readonly slice: Slice;
   readonly proof: Proved;
   readonly built: Built;
+  readonly builtAt: string;
   readonly work: string;
   readonly kept: Kept;
   readonly into: string;
@@ -151,22 +169,26 @@ type Unmet = {
   readonly notKnown: readonly string[];
 };
 
-const addedItems = ["scope", "declared"];
-
-const sendBackReason = "no round runs after the card.";
-
-const discardReason = "discarding comes with slice WD1.";
-
-const passedSaid: Readonly<Record<ProofKind, string>> = {
-  checks: "the checks and the tests pass",
-  "fails-first": "the named tests failed on the base and pass on the head",
-  "in-scope": "every changed path is in the write scope",
-  "as-declared": "what changed is as declared",
-  "bugs-caught": "every injected bug was caught",
-  "same-output": "the output is the same",
-  count: "each count holds",
-  "real-thing": "the runs printed what was expected",
+type ShownItem = {
+  readonly id: string;
+  readonly level: Level;
+  readonly says: string;
+  readonly judgement: boolean;
 };
+
+type Known = {
+  readonly matches: RegExp;
+  readonly says: (found: RegExpExecArray) => string;
+};
+
+const addedSays: Readonly<Record<string, string>> = {
+  scope: "Every changed path is in the write scope.",
+  declared: "What changed is as declared.",
+};
+
+const sendBackReason = "No round runs after the card.";
+
+const discardReason = "Discarding comes with slice WD1.";
 
 const failedSaid: Readonly<Record<ProofKind, string>> = {
   checks: "a check or the test run failed",
@@ -179,24 +201,66 @@ const failedSaid: Readonly<Record<ProofKind, string>> = {
   "real-thing": "a run printed other than expected",
 };
 
-const provedSentences: readonly { readonly matches: RegExp; readonly says: (found: RegExpExecArray) => string }[] = [
+const checkNamePattern = "([A-Za-z0-9:._-]+)";
+
+const failedSentences: readonly Known[] = [
   { matches: /^The named tests fail on the head\.$/, says: () => "the named tests fail on the head" },
   {
     matches: /^The named tests already pass on the base, so they do not show the change\.$/,
     says: () => "the named tests already pass on the base",
   },
   {
-    matches: /^The check ([A-Za-z0-9:._-]+) found a fault\.$/,
+    matches: new RegExp(`^The check ${checkNamePattern} found a fault\\.$`),
     says: (found) => `the check ${found[1] ?? ""} found a fault`,
   },
   { matches: /^(\d+) tests? failed\.$/, says: (found) => `${counted(Number(found[1]), "test")} failed` },
 ];
+
+const notKnownStarts: readonly Known[] = [
+  {
+    matches: /^The kind [a-z-]+ is not built in this version of the proof mode/,
+    says: () => "proof does not judge this kind yet",
+  },
+  {
+    matches: new RegExp(`^The check ${checkNamePattern} is not known:`),
+    says: (found) => `the check ${found[1] ?? ""} is not known`,
+  },
+  { matches: /^The checks could not start:/, says: () => "the checks could not start" },
+  { matches: /^The test run is not known:/, says: () => "the test run is not known" },
+  { matches: /^The test run could not start:/, says: () => "the test run could not start" },
+  {
+    matches: /^The run on the (base|head) is not known:/,
+    says: (found) => `the run on the ${found[1] ?? ""} is not known`,
+  },
+  {
+    matches: /^The run on the (base|head) could not start:/,
+    says: (found) => `the run on the ${found[1] ?? ""} could not start`,
+  },
+  {
+    matches: /^The named tests could not be laid over the base:/,
+    says: () => "the named tests could not be laid over the base",
+  },
+  { matches: /^No bugs were given to inject,/, says: () => "no bugs were given to inject" },
+  { matches: /^The toolchain ran no checks,/, says: () => "the toolchain ran no checks" },
+  { matches: /^No copy of [0-9a-f]+ could be made:/, says: () => "no copy of the commit could be made" },
+];
+
+const notKnownSaid = "proof could not tell, so nothing is known";
+
+const noVerdictSaid = "proof gave no verdict";
 
 const lacksSaid: Readonly<Record<Missing["lacks"], string>> = {
   kernel: "the kernel",
   toolbox: "the toolbox",
   "test-toolbox": "the test toolbox",
   interface: "an interface",
+};
+
+const endedSaid: Readonly<Record<RoundsEnded, string>> = {
+  leak: "a leak ended them",
+  stopped: "the builder stopped",
+  "no-findings": "the reviewer had no findings",
+  "last-round": "no more may run",
 };
 
 const watchedPaths: readonly { readonly matches: RegExp; readonly says: string }[] = [
@@ -230,7 +294,15 @@ const plannedKinds: readonly Proof["kind"][] = [
 
 const cardWidth = 44;
 
-const lineRoom = cardWidth - "computed ".length;
+const computedRoom = cardWidth - "    ".length;
+
+const judgedRoom = cardWidth - "judged     ".length;
+
+const casesNamed = 3;
+
+const longestShown = 120;
+
+const mostDecisions = 3;
 
 const unsafe = /[\p{Cc}\p{Cf}]/gu;
 
@@ -256,6 +328,20 @@ function oneOf<Name extends string>(names: readonly Name[], value: Json | undefi
 
 function textsOf(value: Json | undefined): readonly string[] {
   return entriesOf(value).map(textOf);
+}
+
+function numberOf(value: Json | undefined): number {
+  return typeof value === "number" ? value : 0;
+}
+
+function safeText(text: string): string {
+  const words = text
+    .replace(unsafe, " ")
+    .split(" ")
+    .filter((word) => word !== "")
+    .join(" ");
+  const characters = Array.from(words);
+  return characters.length <= longestShown ? words : `${characters.slice(0, longestShown).join("")}...`;
 }
 
 function countOf(fields: JsonFields): Proof {
@@ -308,14 +394,29 @@ export function sliceOf(value: Json | undefined): Slice {
   };
 }
 
+function failingNamesOf(value: Json | undefined): FailingNames {
+  const fields = fieldsOf(value ?? null);
+  const names = entriesOf(fields.failures).map((failure) => safeText(textOf(fieldsOf(failure).name)));
+  return {
+    names: [...new Set(names)].filter((name) => name !== ""),
+    notListed: numberOf(fields.failuresNotListed),
+    notLoaded: entriesOf(fields.notLoaded).length,
+  };
+}
+
 function verdictOf(value: Json): Verdict {
   const fields = fieldsOf(value);
   const item = textOf(fields.item);
   const kind = oneOf(proofKinds, fields.kind) ?? "checks";
   const verdict = oneOf(["passed", "failed"], fields.verdict);
-  return verdict === undefined
-    ? { item, kind, verdict: "inconclusive", reason: textOf(fields.reason) }
-    : { item, kind, verdict, detail: textOf(fields.detail) };
+  if (verdict === undefined) {
+    return { item, kind, verdict: "inconclusive", reason: textOf(fields.reason) };
+  }
+  const detail = textOf(fields.detail);
+  if (verdict === "passed" || fields.cases === undefined) {
+    return { item, kind, verdict, detail };
+  }
+  return { item, kind, verdict, detail, cases: failingNamesOf(fields.cases) };
 }
 
 function sizedOf(value: Json): Sized {
@@ -331,20 +432,29 @@ export function provedOf(value: Json | undefined): Proved {
   const fields = fieldsOf(value ?? null);
   return {
     verdicts: entriesOf(fields.verdicts).map(verdictOf),
-    judgement: entriesOf(fields.judgement).map(itemOf),
     size: entriesOf(fields.size).map(sizedOf),
   };
 }
 
+function decidedOf(value: Json | undefined): Decided {
+  const decisions = textsOf(value)
+    .map(safeText)
+    .filter((decision) => decision !== "")
+    .slice(0, mostDecisions);
+  return decisions.length === 0 ? {} : { decisions };
+}
+
 export function builtOf(value: Json | undefined): Built {
   const fields = fieldsOf(value ?? null);
+  const decided = decidedOf(fields.decisions);
   if (fields.outcome === "built") {
-    return { outcome: "built" };
+    return { outcome: "built", ...decided };
   }
   const missing = fieldsOf(fields.missing ?? null);
   return {
     outcome: "stopped",
     missing: { lacks: oneOf(lacking, missing.lacks) ?? "kernel", name: textOf(missing.name) },
+    ...decided,
   };
 }
 
@@ -363,61 +473,38 @@ function joined(names: readonly string[]): string {
   return `${names.slice(0, -1).join(", ")} and ${names.at(-1) ?? ""}`;
 }
 
-function computed(step: "slice" | "prove" | "draw", words: string): CardLine {
-  return { mark: "computed", words, source: { step } };
-}
-
-function judged(step: string, words: string): CardLine {
-  return { mark: "judged", words, source: { step } };
-}
-
-function itemPrefix(slice: Slice): string {
-  return `DOD-${slice.name}-`;
-}
-
-function shortIds(slice: Slice, ids: readonly string[]): string {
-  const prefix = itemPrefix(slice);
-  const firstWithPrefix = ids.findIndex((id) => id.startsWith(prefix));
-  return ids
-    .map((id, at) =>
-      at > firstWithPrefix && firstWithPrefix >= 0 && id.startsWith(prefix) ? id.slice(prefix.length) : id,
-    )
-    .join(", ");
-}
-
-function scopeWords(scope: readonly string[]): string {
-  const [first = "", ...rest] = scope;
-  return rest.length === 0 ? `scope: ${first}` : `scope: ${first} and ${counted(rest.length, "more path")}`;
-}
-
-function piecesOf(word: string): readonly string[] {
+function piecesOf(word: string, room: number): readonly string[] {
   const pieces: string[] = [];
   let left = Array.from(word);
-  while (left.length > lineRoom) {
-    const slash = left.lastIndexOf("/", lineRoom - 1);
-    const cut = slash > 0 ? slash + 1 : lineRoom;
+  while (left.length > room) {
+    const slash = left.lastIndexOf("/", room - 1);
+    const cut = slash > 0 ? slash + 1 : room;
     pieces.push(left.slice(0, cut).join(""));
     left = left.slice(cut);
   }
   return [...pieces, left.join("")];
 }
 
-function wrapped(text: string): readonly string[] {
-  const words = text
+function fitted(text: string, room: number): string {
+  return text
     .replace(unsafe, " ")
     .split(" ")
-    .filter((word) => word !== "");
-  const lines: string[] = [];
-  for (const piece of words.flatMap(piecesOf)) {
-    const last = lines.at(-1);
-    const longer = `${last ?? ""} ${piece}`;
-    if (last !== undefined && Array.from(longer).length <= lineRoom) {
-      lines[lines.length - 1] = longer;
-    } else {
-      lines.push(piece);
-    }
-  }
-  return lines;
+    .filter((word) => word !== "")
+    .flatMap((word) => piecesOf(word, room))
+    .join(" ");
+}
+
+function computed(step: "slice" | "prove" | "draw", words: string): CardLine {
+  return { mark: "computed", words: fitted(words, computedRoom), source: { step } };
+}
+
+function judged(step: string, words: string): CardLine {
+  return { mark: "judged", words: fitted(words, judgedRoom), source: { step } };
+}
+
+function scopeWords(scope: readonly string[]): string {
+  const [first = "", ...rest] = scope;
+  return rest.length === 0 ? `scope: ${first}` : `scope: ${first} and ${counted(rest.length, "more path")}`;
 }
 
 function countWords(proof: Extract<Proof, { readonly kind: "count" }>): string {
@@ -433,14 +520,13 @@ function differWords(differ: readonly string[]): string {
   return differ.length === 0 ? compared : `${compared}; ${differ.join(", ")} must differ`;
 }
 
-function shownProof(proof: Proof, bugs: readonly string[]): readonly string[] {
+function shownProof(proof: Proof): readonly string[] {
   switch (proof.kind) {
     case "checks":
+    case "bugs-caught":
       return [];
     case "fails-first":
       return [`tests: ${proof.tests.join(", ")}`];
-    case "bugs-caught":
-      return [bugs.length === 0 ? "no bugs given to inject" : "injects the bugs named at the end"];
     case "same-output":
       return [differWords(proof.differ)];
     case "count":
@@ -450,114 +536,140 @@ function shownProof(proof: Proof, bugs: readonly string[]): readonly string[] {
   }
 }
 
-function itemWords(item: Item, bugs: readonly string[]): readonly string[] {
+function itemWords(item: Item): readonly string[] {
   const opening = `${item.id}, ${item.level}: ${item.says}`;
   if (item.proof === undefined) {
     return [opening, "held by: your judgement"];
   }
-  return [opening, `held by: ${heldSaid[item.proof.kind]}`, ...shownProof(item.proof, bugs)];
+  return [opening, `held by: ${heldSaid[item.proof.kind]}`, ...shownProof(item.proof)];
 }
 
-function bugsWords(bugs: readonly string[]): readonly string[] {
-  return bugs.length === 0 ? [] : [`${counted(bugs.length, "bug")} to inject: ${bugs.join("; ")}`];
+function bugsAskedBy(slice: Slice): readonly string[] {
+  return slice.done.filter((item) => item.proof?.kind === "bugs-caught").map((item) => item.id);
+}
+
+function plantedWords(named: readonly string[]): readonly string[] {
+  if (named.length === 0) {
+    return ["bugs: none named, so the planter writes them after the last round"];
+  }
+  return [...named, "the planter writes more after the last round"];
+}
+
+function bugsWords(input: StartCardInput): readonly string[] {
+  const { bugs, planter } = input;
+  const asking = bugsAskedBy(input.slice);
+  const named = bugs.length === 0 ? [] : [`${counted(bugs.length, "bug")} to inject: ${bugs.join("; ")}`];
+  if (asking.length > 0 && planter === "runs") {
+    return plantedWords(named);
+  }
+  if (named.length > 0) {
+    return named;
+  }
+  return asking.length === 0
+    ? ["bugs: none will be planted"]
+    : [`bugs: none named, so ${joined(asking)} will not be known`];
 }
 
 export function startCard(input: StartCardInput): StartCard {
-  const { slice, title, base, bugs } = input;
+  const { slice, title, base } = input;
   const afters = slice.after.map((after) => `after ${after.slice}: ${after.because}`);
   const words = [
     title,
     `kind ${slice.kind}; base ${base}`,
     scopeWords(slice.scope),
     ...(afters.length === 0 ? ["after no other slice"] : afters),
-    ...slice.done.flatMap((item) => itemWords(item, bugs)),
-    ...bugsWords(bugs),
+    ...slice.done.flatMap(itemWords),
+    ...bugsWords(input),
   ];
-  return { title: `Build slice ${slice.name}?`, lines: words.flatMap(wrapped).map((line) => computed("slice", line)) };
+  return { title: `Build slice ${slice.name}?`, lines: words.map((said) => computed("slice", said)) };
 }
 
-function isNotBuilt(verdict: Verdict): boolean {
-  return (
-    verdict.verdict === "inconclusive" &&
-    verdict.reason === `The kind ${verdict.kind} is not built in this version of the proof mode, so nothing is known.`
-  );
-}
-
-function checksWords(verdict: Verdict): readonly string[] | undefined {
-  const found = verdict.verdict === "passed" ? checksPassed.exec(verdict.detail) : null;
-  const names = found?.[1]?.split(", ") ?? [];
-  const tests = found?.[2];
-  if (tests === undefined || !names.every((name) => checkName.test(name))) {
-    return undefined;
-  }
-  return [`checks passed: ${names.join(", ")}`, `tests passed: ${grouped(Number(tests))}`];
-}
-
-function passedWords(slice: Slice, verdicts: readonly Verdict[]): readonly string[] {
-  const passed = verdicts.filter((verdict) => verdict.verdict === "passed");
-  return proofKinds.flatMap((kind) => {
-    const ofKind = passed.filter((verdict) => verdict.kind === kind);
-    const told = kind === "checks" ? ofKind.map(checksWords) : [];
-    const said = told.flatMap((words) => words ?? []);
-    const plain = ofKind.filter((_, at) => told[at] === undefined).map((verdict) => verdict.item);
-    return plain.length === 0 ? said : [...said, `${shortIds(slice, plain)}: ${passedSaid[kind]}`];
-  });
-}
-
-function provedSaid(sentence: string): string | undefined {
-  for (const known of provedSentences) {
-    const found = known.matches.exec(sentence);
+function knownSaid(known: readonly Known[], sentence: string): string | undefined {
+  for (const each of known) {
+    const found = each.matches.exec(sentence);
     if (found !== null) {
-      return known.says(found);
+      return each.says(found);
     }
   }
   return undefined;
 }
 
 function failedReason(kind: ProofKind, detail: string): string {
-  const sentences = detail.split(/(?<=\.) /);
-  const said = sentences.map(provedSaid);
+  const said = detail.split(/(?<=\.) /).map((sentence) => knownSaid(failedSentences, sentence));
   const known = said.filter((words) => words !== undefined);
   return known.length === said.length && known.length > 0 ? known.join("; ") : failedSaid[kind];
 }
 
-function failedWords(verdicts: readonly Verdict[]): readonly string[] {
-  return verdicts.flatMap((verdict) =>
-    verdict.verdict === "failed" ? [`failed ${verdict.item}: ${failedReason(verdict.kind, verdict.detail)}`] : [],
-  );
+function checksWords(verdict: Verdict): readonly string[] {
+  const found = verdict.verdict === "passed" ? checksPassed.exec(verdict.detail) : null;
+  const names = found?.[1]?.split(", ") ?? [];
+  const tests = found?.[2];
+  if (tests === undefined || !names.every((name) => checkName.test(name))) {
+    return [];
+  }
+  return [`checks passed: ${names.join(", ")}`, `tests passed: ${grouped(Number(tests))}`];
 }
 
-function withoutVerdict(slice: Slice, verdicts: readonly Verdict[]): readonly string[] {
-  return slice.done
-    .filter((item) => item.proof !== undefined && !verdicts.some((verdict) => verdict.item === item.id))
-    .map((item) => item.id);
+function caseWords(cases: FailingNames | undefined): readonly string[] {
+  if (cases === undefined) {
+    return [];
+  }
+  const named = cases.names.slice(0, casesNamed).map((name) => `failing: ${name}`);
+  const more = cases.names.length - named.length + cases.notListed;
+  const rest = more === 0 ? [] : [`and ${counted(more, "more failing case")}`];
+  const notLoaded = cases.notLoaded === 0 ? [] : [`${counted(cases.notLoaded, "test file")} did not load`];
+  return [...named, ...rest, ...notLoaded];
 }
 
-function notKnownWords(slice: Slice, verdicts: readonly Verdict[]): readonly string[] {
-  const inconclusive = verdicts.filter((verdict) => verdict.verdict === "inconclusive");
-  const groups = [
-    { said: "not known, kind not built", ids: inconclusive.filter(isNotBuilt).map((verdict) => verdict.item) },
-    {
-      said: "not known",
-      ids: inconclusive.filter((verdict) => !isNotBuilt(verdict)).map((verdict) => verdict.item),
-    },
-    { said: "not known, no verdict", ids: withoutVerdict(slice, verdicts) },
-  ];
-  return groups.flatMap((group) => (group.ids.length === 0 ? [] : [`${group.said}: ${shortIds(slice, group.ids)}`]));
+function verdictWords(verdict: Verdict): readonly string[] {
+  switch (verdict.verdict) {
+    case "passed":
+      return checksWords(verdict);
+    case "failed":
+      return [`why: ${failedReason(verdict.kind, verdict.detail)}`, ...caseWords(verdict.cases)];
+    case "inconclusive":
+      return [`why: ${knownSaid(notKnownStarts, verdict.reason) ?? notKnownSaid}`];
+  }
+}
+
+const verdictSaid: Readonly<Record<Verdict["verdict"], string>> = {
+  passed: "passed",
+  failed: "failed",
+  inconclusive: "not known",
+};
+
+function shownItems(slice: Slice, verdicts: readonly Verdict[]): readonly ShownItem[] {
+  const planned = slice.done.map((item) => ({ ...item, judgement: item.proof === undefined }));
+  const added = verdicts
+    .filter((verdict) => !slice.done.some((item) => item.id === verdict.item))
+    .map((verdict) => ({
+      id: verdict.item,
+      level: "must" as const,
+      says: addedSays[verdict.item] ?? "",
+      judgement: false,
+    }));
+  return [...planned, ...added];
+}
+
+function openingWords(item: ShownItem, said: string): string {
+  const opening = `${item.id}, ${item.level}, ${said}`;
+  return item.says === "" ? opening : `${opening}: ${item.says}`;
+}
+
+function itemLines(item: ShownItem, verdicts: readonly Verdict[]): readonly CardLine[] {
+  const verdict = verdicts.find((each) => each.item === item.id);
+  if (verdict === undefined && item.judgement) {
+    return [computed("draw", openingWords(item, "for you to judge"))];
+  }
+  if (verdict === undefined) {
+    return [computed("prove", openingWords(item, "not known")), computed("prove", `why: ${noVerdictSaid}`)];
+  }
+  const said = [openingWords(item, verdictSaid[verdict.verdict]), ...verdictWords(verdict)];
+  return said.map((words) => computed("prove", words));
 }
 
 function verdictLines(slice: Slice, verdicts: readonly Verdict[]): readonly CardLine[] {
-  const words = [...passedWords(slice, verdicts), ...failedWords(verdicts), ...notKnownWords(slice, verdicts)];
-  return words.map((said) => computed("prove", said));
-}
-
-function builtWords(built: Built): readonly string[] {
-  switch (built.outcome) {
-    case "built":
-      return [];
-    case "stopped":
-      return [`the builder stopped: ${lacksSaid[built.missing.lacks]} lacks ${built.missing.name}`];
-  }
+  return shownItems(slice, verdicts).flatMap((item) => itemLines(item, verdicts));
 }
 
 function changedWords(size: readonly Sized[], work: string, kept: Kept): string {
@@ -599,12 +711,19 @@ function roundLines(rounds: RoundsOnCard | undefined): readonly CardLine[] {
   if (rounds === undefined) {
     return [];
   }
-  const count = computed("draw", `rounds: ${String(rounds.count)} of at most ${String(rounds.most)}`);
+  const ran = `rounds: ${String(rounds.count)} of at most ${String(rounds.most)}; ${endedSaid[rounds.ended]}`;
   const { judged: lines } = rounds;
-  if (lines === undefined) {
-    return [count];
-  }
-  return [count, ...lines.sentences.flatMap(wrapped).map((words) => judged(lines.step, words))];
+  const sentences = lines === undefined ? [] : lines.sentences.map((words) => judged(lines.step, words));
+  return [computed("draw", ran), ...sentences];
+}
+
+function builderLines(built: Built, step: string): readonly CardLine[] {
+  const stopped =
+    built.outcome === "stopped"
+      ? [`the builder stopped, saying ${lacksSaid[built.missing.lacks]} lacks ${built.missing.name}`]
+      : [];
+  const decided = (built.decisions ?? []).map((decision) => `the builder decided: ${decision}`);
+  return [...stopped, ...decided].map((words) => judged(step, words));
 }
 
 function bugWords(bugs: BugsOnCard | undefined): readonly string[] {
@@ -626,22 +745,33 @@ function leakWords(leak: Leak): string {
   }
 }
 
-function drawnLines(input: MergeCardInput): readonly CardLine[] {
-  const { slice, proof, built, work, kept } = input;
-  const forYou = proof.judgement.map((item) => `not judged, for you: ${item.id} ${item.says}`);
+function answerWords(reason: string | undefined): string {
+  return reason === undefined
+    ? "Merge is offered: every must item that proof judged passed."
+    : `Merge is not offered: ${reason}`;
+}
+
+function drawnLines(input: MergeCardInput, reason: string | undefined): readonly CardLine[] {
+  const { slice, proof, work, kept } = input;
+  const drawnWords = [changedWords(proof.size, work, kept), ...sizeWords(proof.size), ...watchedWords(proof.size)];
   return [
-    ...builtWords(built).map((said) => computed("draw", said)),
+    computed("draw", answerWords(reason)),
     ...(input.leaks ?? []).map((leak) => computed("draw", leakWords(leak))),
-    computed("draw", changedWords(proof.size, work, kept)),
     ...verdictLines(slice, proof.verdicts),
-    ...[...forYou, ...sizeWords(proof.size), ...watchedWords(proof.size)].map((said) => computed("draw", said)),
-    ...bugWords(input.bugs).map((said) => computed("draw", said)),
+    ...[...drawnWords, ...bugWords(input.bugs)].map((said) => computed("draw", said)),
     ...roundLines(input.rounds),
+    ...builderLines(input.built, input.builtAt),
   ];
 }
 
 function levelOf(slice: Slice, id: string): Level {
   return slice.done.find((item) => item.id === id)?.level ?? "must";
+}
+
+function withoutVerdict(slice: Slice, verdicts: readonly Verdict[]): readonly string[] {
+  return slice.done
+    .filter((item) => item.proof !== undefined && !verdicts.some((verdict) => verdict.item === item.id))
+    .map((item) => item.id);
 }
 
 function unmetMust(slice: Slice, verdicts: readonly Verdict[]): Unmet {
@@ -656,8 +786,9 @@ function unmetMust(slice: Slice, verdicts: readonly Verdict[]): Unmet {
 }
 
 function unmetClause(ids: readonly string[], verb: { readonly one: string; readonly many: string }): string[] {
-  const items = ids.filter((id) => !addedItems.includes(id)).length;
-  const named = ids.filter((id) => addedItems.includes(id));
+  const added = Object.keys(addedSays);
+  const items = ids.filter((id) => !added.includes(id)).length;
+  const named = ids.filter((id) => added.includes(id));
   const parts = [...(items === 0 ? [] : [counted(items, "must item")]), ...named];
   if (parts.length === 0) {
     return [];
@@ -676,14 +807,18 @@ function mergeReason(input: MergeCardInput): string | undefined {
   return clauses.length === 0 ? undefined : `${clauses.join("; ")}.`;
 }
 
+function sentenceOf(clause: string): string {
+  return `${clause.charAt(0).toUpperCase()}${clause.slice(1)}`;
+}
+
 export function drawn(input: MergeCardInput): Drawn {
   const reason = mergeReason(input);
   const withheld = { "send-back": sendBackReason, discard: discardReason };
   return {
     card: {
       title: `Merge ${input.slice.name} into ${input.into}?`,
-      lines: drawnLines(input),
-      withheld: reason === undefined ? withheld : { merge: reason, ...withheld },
+      lines: drawnLines(input, reason),
+      withheld: reason === undefined ? withheld : { merge: sentenceOf(reason), ...withheld },
     },
     merge: reason === undefined,
     sendBack: false,

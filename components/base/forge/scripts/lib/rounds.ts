@@ -33,6 +33,7 @@ export type RoundsState = {
   readonly conditions: readonly Condition[];
   readonly remaining: readonly Remaining[];
   readonly leaks: readonly Leak[];
+  readonly builtAt?: string;
   readonly reviewedAt?: string;
 };
 
@@ -86,7 +87,10 @@ function remainingOf(value: Json): Remaining {
   return { to: finding?.to ?? "builder", case: finding?.case ?? "", question: finding?.question ?? "" };
 }
 
-function optionalText(fields: JsonFields, key: "folder" | "reviewedAt"): Partial<Record<typeof key, string>> {
+function optionalText(
+  fields: JsonFields,
+  key: "folder" | "builtAt" | "reviewedAt",
+): Partial<Record<typeof key, string>> {
   const value = fields[key];
   return typeof value === "string" ? { [key]: value } : {};
 }
@@ -115,6 +119,7 @@ export function roundsStateOf(value: Json | undefined): RoundsState | undefined 
     conditions: reviewOf({ conditions: fields.conditions ?? [] }).conditions,
     remaining: listOf(fields.remaining).map(remainingOf),
     leaks: leaksOf(fields.leaks),
+    ...optionalText(fields, "builtAt"),
     ...optionalText(fields, "reviewedAt"),
   };
 }

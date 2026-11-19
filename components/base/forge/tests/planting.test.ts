@@ -211,8 +211,9 @@ describe("the merge card's lines for the bugs", () => {
   function cardOf(bugs: readonly Bug[], planted: number, said: readonly Verdict[] = verdicts): MergeCardInput {
     return {
       slice,
-      proof: { verdicts: said, judgement: [], size: [] },
+      proof: { verdicts: said, size: [] },
       built: { outcome: "built" },
+      builtAt: "round-1",
       work: "forge/P1-tests-3",
       kept: "with-tests",
       into: "integration",

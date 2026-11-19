@@ -493,7 +493,7 @@ async function inspect(files: FileSystem, layout: Layout): Promise<Pass> {
     unloadedModes: new Set(modes.unloaded.map((mode) => mode.name)),
   };
   const activated = activation({ ...loaded, active: new Set() }, homesOf(modes));
-  const context: Context = { ...loaded, active: activated.active };
+  const context: Context = { ...loaded, config: activated.config, active: activated.active };
   const unloaded = loadProblems(context, modes);
   const workflows = await loadWorkflows(context);
   const problems = [
@@ -510,10 +510,10 @@ async function inspect(files: FileSystem, layout: Layout): Promise<Pass> {
     ...workflowProblems(context, workflows.values),
   ];
   const found = {
-    notices: shownProblems(
-      layout,
-      unloaded.values.map((mode) => inactiveNotice(layout, mode)),
-    ),
+    notices: shownProblems(layout, [
+      ...unloaded.values.map((mode) => inactiveNotice(layout, mode)),
+      ...activated.notices,
+    ]),
     folders: modes.read.map((read) => inspectedFolder(context, read)),
     interfaces: interfaceDefinitions(context),
     kitLayout: kitLayoutOf(layout),
@@ -525,7 +525,11 @@ async function inspect(files: FileSystem, layout: Layout): Promise<Pass> {
   if (!granted.ok) {
     return { inspection: { ...found, problems: shownProblems(layout, granted.problems) }, build: undefined };
   }
-  const parts = { config: config.value.value, workflows: workflows.values, granted: granted.value };
+  const parts = {
+    config: (activated.config ?? config.value).value,
+    workflows: workflows.values,
+    granted: granted.value,
+  };
   return { inspection: { ...found, problems: [] }, build: () => buildSystem(context, parts) };
 }
 

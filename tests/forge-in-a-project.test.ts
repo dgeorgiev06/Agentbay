@@ -4,7 +4,9 @@ import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, test } from "node:test";
-import { parse, stringify } from "yaml";
+import { stringify } from "yaml";
+import { fieldOf, numberField, parseJson, textField, toJson } from "../bay/json.ts";
+import { fieldsOf, readYaml, type Json } from "../bay/sdk.ts";
 import { kit } from "./project-fixture.ts";
 
 type Finding = {
@@ -19,11 +21,6 @@ type Checked = {
 };
 
 type Files = Readonly<Record<string, string>>;
-
-type BindingUse = {
-  readonly interfaceName: string;
-  readonly servedBy: string;
-};
 
 const cli = join(kit, "bay", "cli.ts");
 
@@ -50,17 +47,26 @@ function bay(folder: string, words: readonly string[]): string {
   return ran.stdout;
 }
 
+function listField(value: Json | undefined, name: string): readonly Json[] {
+  const field = value === undefined ? undefined : fieldOf(value, name);
+  return Array.isArray(field) ? field.map(toJson) : [];
+}
+
 function checked(folder: string): Checked {
-  const parsed: unknown = JSON.parse(bay(folder, ["check"]));
-  const report = parsed as Checked;
-  return { errors: report.errors, warnings: report.warnings, findings: report.findings };
+  const report = parseJson(bay(folder, ["check"]));
+  const findings = listField(report, "findings").map((finding) => ({
+    severity: textField(finding, "severity") ?? "",
+    message: textField(finding, "message") ?? "",
+  }));
+  return { errors: numberField(report, "errors") ?? -1, warnings: numberField(report, "warnings") ?? -1, findings };
 }
 
 function activeModes(folder: string): readonly string[] {
-  const parsed: unknown = JSON.parse(bay(folder, ["actions"]));
-  const listed = parsed as { readonly modes?: readonly { readonly name: string }[] };
-  assert.ok(listed.modes !== undefined, JSON.stringify(parsed));
-  return listed.modes.map((mode) => mode.name).sort();
+  const listed = parseJson(bay(folder, ["actions"]));
+  assert.equal(fieldOf(listed, "ok"), true, JSON.stringify(listed));
+  return listField(listed, "modes")
+    .map((mode) => textField(mode, "name") ?? "")
+    .sort();
 }
 
 function messages(report: Checked): readonly string[] {
@@ -83,11 +89,11 @@ async function projectWith(config: object, files: Files = {}): Promise<string> {
   return folder;
 }
 
-type InterfaceActions = Readonly<Record<string, { readonly effects: readonly string[] }>>;
-
 async function shelfFiles(): Promise<Files> {
   const definition = await readFile(join(kit, "components", "base", "interfaces", "worktrees.yaml"), "utf8");
-  const actions = (parse(definition) as { readonly actions: InterfaceActions }).actions;
+  const read = readYaml(definition);
+  assert.ok(read.ok, definition);
+  const actions = fieldsOf(fieldOf(read.value, "actions") ?? null);
   const manifest = {
     name: "shelf",
     version: "1.0.0",
@@ -99,7 +105,7 @@ async function shelfFiles(): Promise<Files> {
         name,
         {
           description: `When a caller asks the shelf to ${name}.`,
-          effects: [...action.effects],
+          effects: fieldOf(action, "effects"),
           run: [{ script: "scripts/refuse.ts" }],
         },
       ]),
@@ -140,12 +146,12 @@ test("a project that lists only forge and binds a toolchain checks with no error
   const folder = await projectWith({ modes: ["forge"], bindings: { toolchain: "typescript" } }, plan);
   const report = checked(folder);
   assert.equal(report.errors, 0, errorsOf(report).join("\n"));
-  const ran: unknown = JSON.parse(bay(folder, ["call", "forge.waves", JSON.stringify({ plan: "docs/plans/one.yaml" })]));
-  const run = (ran as { readonly run: { readonly status: string; readonly output: Readonly<Record<string, unknown>> } })
-    .run;
-  assert.equal(run.status, "done", JSON.stringify(ran));
-  assert.equal(run.output.answer, "worked out");
-  assert.deepEqual(run.output.waves, [{ wave: 1, slices: ["A"], builders: 1 }]);
+  const ran = parseJson(bay(folder, ["call", "forge.waves", JSON.stringify({ plan: "docs/plans/one.yaml" })]));
+  const run = fieldOf(ran, "run") ?? null;
+  assert.equal(textField(run, "status"), "done", JSON.stringify(ran));
+  const output = fieldOf(run, "output") ?? null;
+  assert.equal(textField(output, "answer"), "worked out");
+  assert.deepEqual(fieldOf(output, "waves"), [{ wave: 1, slices: ["A"], builders: 1 }]);
 });
 
 test("forge brings proof and git-worktrees, active and bound, though the config names neither, and says so", async () => {
@@ -153,9 +159,10 @@ test("forge brings proof and git-worktrees, active and bound, though the config 
   assert.deepEqual(activeModes(folder), ["forge", "git-worktrees", "proof", "typescript"]);
   const brought = messages(checked(folder)).filter((message) => message.startsWith("Forge brings"));
   assert.deepEqual(brought, [broughtProof, broughtWorktrees]);
-  const config: unknown = JSON.parse(bay(folder, ["config"]));
-  const uses = (config as { readonly bindings: readonly BindingUse[] }).bindings;
-  const bound = uses.map((use) => `${use.interfaceName} ${use.servedBy}`).sort();
+  const uses = listField(parseJson(bay(folder, ["config"])), "bindings");
+  const bound = uses
+    .map((use) => `${textField(use, "interfaceName") ?? ""} ${textField(use, "servedBy") ?? ""}`)
+    .sort();
   assert.deepEqual(bound, ["proof proof", "toolchain typescript", "worktrees git-worktrees"]);
 });
 
@@ -168,10 +175,10 @@ test("a config that binds another mode to worktrees@1 wins, and git-worktrees is
 });
 
 test("with no mode bound to toolchain@1, bay check says plainly that forge does not bring one", async () => {
-  const folder = await projectWith({ modes: ["forge"] });
+  const folder = await projectWith({ modes: ["forge"], bindings: {} });
   const report = checked(folder);
   assert.ok(errorsOf(report).includes(noToolchain), errorsOf(report).join("\n"));
-  assert.ok(!messages(report).some((message) => message.includes("mode typescript")));
+  assert.ok(!messages(report).some((message) => message.startsWith("Mode typescript lists")));
 });
 
 test("a project that does not list forge gets none of forge, proof and git-worktrees", async () => {

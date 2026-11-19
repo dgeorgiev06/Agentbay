@@ -282,7 +282,7 @@ test("a project's source that repeats the item at the cursor fails the shared te
 test("a project's toolchain and worktrees modes, trusted in their tests, pass every case of their shared tests but the actions the worktrees mode does not build, run from the project", () => {
   assert.deepEqual(failedTests(trustedToolchainRan.output), []);
   assert.equal(trustedToolchainRan.status, 0, trustedToolchainRan.output);
-  assert.deepEqual(passedPerMode(trustedToolchainRan.output), { [tally]: 20 });
+  assert.deepEqual(passedPerMode(trustedToolchainRan.output), { [tally]: 26 });
   assert.equal(trustedWorktreesRan.status, 1, trustedWorktreesRan.output);
   assert.deepEqual(
     failedTests(trustedWorktreesRan.output),

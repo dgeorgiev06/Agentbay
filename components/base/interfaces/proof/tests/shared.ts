@@ -981,6 +981,7 @@ function recorderManifest(): string {
       remove: action("When proof is done with a copy or a worktree.", "scripts/remove.ts", changing),
       merge: action("The recorder does not build this action.", "scripts/unbuilt.ts", changing),
       "set-aside": action("The recorder does not build this action.", "scripts/unbuilt.ts", changing),
+      commit: action("The recorder does not build this action.", "scripts/unbuilt.ts", changing),
       apply: action("When proof injects a bug into a copy.", "scripts/apply.ts", changing),
     },
   });

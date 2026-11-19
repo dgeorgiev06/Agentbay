@@ -1,34 +1,12 @@
 title: 'Forge, whole: what remains after the first eleven slices; rounds, the planter, the leak check and the cards, then requirements, design, planning and waves'
 slices:
-- title: A planter that never saw the tests writes the bugs to plant from the builder's code and the conditions, and proof's bugs-caught item uses them
-  slice:
-    name: PT1
-    kind: mode
-    scope:
-    - components/base/forge/**
-    after: []
-    done:
-    - id: DOD-PT1-1
-      says: The planter's task holds the code and the conditions and no line of the tests; its bugs are handed to proof, and a bug that survives is named on the card.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/base/forge/tests/planter.test.ts
-    - id: DOD-PT1-2
-      says: The kit's checks and its whole test run pass.
-      level: must
-      proof: &id001
-        kind: checks
 - title: 'After a build, forge checks for a leak: the builder''s code shares no long run of text with the tests, and a mark planted in the tests is not in the code'
   slice:
     name: LK1
     kind: mode
     scope:
     - components/base/forge/**
-    after:
-    - slice: PT1
-      because: Both change forge's round, so one after the other.
+    after: []
     done:
     - id: DOD-LK1-1
       says: A build that copies a line of a test, or that holds the planted mark, fails the slice with a computed line that names the file and no line of the test; a build that shares only short common words passes.
@@ -40,7 +18,8 @@ slices:
     - id: DOD-LK1-2
       says: The kit's checks and its whole test run pass.
       level: must
-      proof: *id001
+      proof: &id001
+        kind: checks
 - title: 'Forge''s cards in the clearer form: a failed item with proof''s reason and the failing cases, a builder''s own flagged decision as a judgement line, and whether the run had the hook'
   slice:
     name: FC2

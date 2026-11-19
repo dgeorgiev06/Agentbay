@@ -84,3 +84,12 @@ Found while building it, each still open:
 - **A wrong test is not caught until round three.** When a round's tests fail and it is not the last round, the reviewer is skipped and only the builder goes again. If the test is what is wrong, the builder fails three times and the reviewer first sees it at the end. The owner decides: the reviewer reviews a failing round too (one more deep call per failing round), or stays as is.
 - **Kept tests stay until the rounds end.** A run that fails midway leaves the rows in forge's partition.
 - For PT1: cut the planter a worktree at the builder's last commit, never `<S>-tests-n`. For LK1: reuse `quotesAny`; run before `review-round` forgets the kept tests.
+
+## After PT1 (19 November, about 08:15 owner's time)
+
+PT1 is merged: the planter. Open from it:
+
+- Each run with a planter leaves a branch `forge/<S>-planter` at the builder's commit (no tests in it). `worktrees.remove` deletes a branch only when it is merged. Needs a worktrees change: delete an unmerged branch on request, or read a file at a commit without a worktree (which would also let the kept tests be forgotten earlier).
+- The start card says "no bugs given to inject" when the owner names none, though the planter will write some. For FC2.
+- Not verified: that a planted patch applies under real proof (tests use a stand-in).
+- The filter in `scripts/lib/code.ts` keeps a test file the builder wrote against its instructions out of the code handed to the reviewer and the planter.

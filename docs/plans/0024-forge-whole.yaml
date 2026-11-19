@@ -1,25 +1,5 @@
 title: 'Forge, whole: what remains after the first eleven slices; rounds, the planter, the leak check and the cards, then requirements, design, planning and waves'
 slices:
-- title: 'Forge''s cards in the clearer form: a failed item with proof''s reason and the failing cases, a builder''s own flagged decision as a judgement line, and whether the run had the hook'
-  slice:
-    name: FC2
-    kind: mode
-    scope:
-    - components/base/forge/**
-    after: []
-    done:
-    - id: DOD-FC2-1
-      says: The start and merge cards for the todo mode's first slice are pinned line by line in the new form, each row at most 44 columns, with a failed checks item giving its reason.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/base/forge/tests/cards.test.ts
-    - id: DOD-FC2-2
-      says: The kit's checks and its whole test run pass.
-      level: must
-      proof: &id001
-        kind: checks
 - title: The todo mode is built through forge, slice TD1 then TD2 of plan 0023, with the owner stopped at each card
   slice:
     name: TDX
@@ -44,9 +24,7 @@ slices:
     scope:
     - components/base/forge/**
     - docs/requirements/**
-    after:
-    - slice: FC2
-      because: Both change forge, and the cards come first so that the todo mode's rebuild is read on them.
+    after: []
     done:
     - id: DOD-RQ1-1
       says: forge.requirements accepts docs/requirements/todo.yaml and refuses a file with a condition with no then, two conditions with one id, or an outcome with no condition, each with its line.
@@ -128,8 +106,6 @@ slices:
     after:
     - slice: PL1
       because: A wave comes from a plan that planning made.
-    - slice: FC2
-      because: Both change forge's workflow and cards.
     done:
     - id: DOD-WV1-1
       says: A wave of two slices is proved slice by slice without the whole suite, then once with it; when that fails, each slice is proved alone to name the cause; the merge card lists both slices.
@@ -141,7 +117,8 @@ slices:
     - id: DOD-WV1-2
       says: The kit's checks and its whole test run pass.
       level: must
-      proof: *id001
+      proof:
+        kind: checks
 - title: 'The todo mode''s next outcome through the whole forge: requirements, design, plan and slices, the owner stopped at each card'
   slice:
     name: TDW

@@ -102,3 +102,13 @@ LK1 is merged: the leak check. Open from it:
 - Known misses of the shared-text rule: a copied line that was cut or joined; a line under 40 characters once the given words are out; files past the 200 handed on; a builder that read a test and wrote its own code from it. Known false alarm: a long line both sides wrote on their own in a new file.
 - A forge script is run again from its start when a run resumes: anything random or timed in one must be stored or safe to repeat (the mark is reused from the kept rows).
 - For FC2: a leaking run's card says "rounds: 1 of at most 3" and has no judged lines; no line is printed when no leak was found (and none may claim there was none).
+
+## After FC2 (19 November, about 10:50 owner's time)
+
+FC2 is merged: forge's cards in the clearer form. Seventeen slices of this plan are merged; the full check passed 2,146 of 2,146. Open from it:
+
+- No hook line on the card: a script has no way to read its own run's events of one kind (kernel piece missing).
+- Failing cases on the merge card are names only: the kept tests are forgotten before the card is drawn, so a message cannot be checked against them.
+- `scripts/lib/cards.ts` is about 700 lines and should be split.
+- The pinned cards in `cards.test.ts` come from the test's own copy of the kernel's print layout; the end-to-end tests go through the real print.
+- What is left needs the owner: RQ1 waits for the PM mode's first question; TDX, EX1 and TDW are live runs.

@@ -103,7 +103,53 @@ While the run waits, `runs.show(id).state.waiting` is:
   `counted` are the kernel's and are not hashed.
 - `skills` is what the kernel recorded for the skill steps inside the cited step: mode, skill and tier. The kernel
   does not know which model a harness ran for a tier; C1p prints the tier and must not name a model.
-- C1p prints `card`, never `content`, as the card's lines: only `card` was checked.
+- C1p prints `card`, never `content`, as the card's lines: only `card` was checked. How it prints them is below.
+
+## What the owner reads
+
+`bay runs <id>` and `bay approve` print `card` in this form (ADR 26 item 7, amending ADR 22). The JSON form does
+not change: every line there keeps its mark and source. The tests that hold it are `tests/runs-card.test.ts` and
+`tests/run-report.test.ts`.
+
+| Row | Printed as | Continued as |
+|---|---|---|
+| title | at column 0 | 2 spaces |
+| computed line | 2 spaces, then the words; no mark | 4 spaces |
+| ran or judged line | the mark padded to 9 columns, then the words | the mark padded to 11 columns |
+| source of a ran line | `ran`, padded to 10, `by the command <name>`, and ` in run <id>` when it has one | the mark padded to 12 columns |
+| source of a judged line | `judged`, padded to 10, `by <mode> <skill>, tier <tier>`, `; ` between skills | the mark padded to 12 columns |
+| foot | `All lines worked out by script.` when every line is computed; `Unmarked lines were worked out by script.` when some are; nothing when none is | none |
+| choices offered | `You can:`, then each name and its `does` | under the `does` |
+| choices withheld | `Not available:`, then each name and its `does`, then `why: <reason>` | under the `does` |
+| counts | `checked: <n> ran, <n> computed, <n> judged`, as the kernel gave them | none |
+| hash | `hash` and the first 12 characters | none |
+
+- The source row follows the last of a run of lines with one mark and one source, so it is printed once for them.
+  A judged line whose skills are none has no source row.
+- Every row is at most 44 columns. A word longer than its row is split with no space inside it.
+- Only the kernel writes at column 0 below the title's first row: a mark, the foot, a heading, the counts, the
+  hash. Every word a script wrote below that row starts at column 2 or later, so a computed line whose words begin
+  "judged by you" prints as `  judged by you` and never reads as a mark.
+- Control and format characters in any text are shown as `\uXXXX`, as before.
+- The trust card does not change.
+
+A card with one computed line, one judged line and a withheld choice (the hash is an example):
+
+```
+Merge TR2?
+  in scope: 11 of 11 paths
+judged   the tests assert what each item
+judged     says
+judged    by carder skills/review, tier deep
+Unmarked lines were worked out by script.
+You can:
+  keep  Stop; the slice stays as it is
+Not available:
+  merge  Merge the slice
+         why: No test ran.
+checked: 0 ran, 1 computed, 1 judged
+hash 3b0e5a91c7d2
+```
 
 ## Deciding
 

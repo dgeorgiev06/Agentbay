@@ -125,19 +125,21 @@ function cardWith(lines: ShownCard["lines"], changes: Partial<Approval> = {}): A
 
 const mergePrinted = `run r1 (workflow forge:workflows/merge.yaml): waiting for approval at card
 Merge TR2 into feat/0022-agentbay5?
-computed round 1 of 2, 11 files changed
-computed checks: 5 of 5 passed
+  round 1 of 2, 11 files changed
+  checks: 5 of 5 passed
 ran      # pass 1374
 ran      # fail 0
-computed new tests failed on the base, pass
-computed   on the head: 2 files
-computed in scope: 11 of 11 paths
-computed as declared: 11 of 11 files
-computed bugs caught: 10 of 10
-computed same output: 29 of 29; 2 differ as
-computed   the slice says
+ran       by the command test
+  new tests failed on the base, pass on the
+    head: 2 files
+  in scope: 11 of 11 paths
+  as declared: 11 of 11 files
+  bugs caught: 10 of 10
+  same output: 29 of 29; 2 differ as the
+    slice says
 ran      framework/feature-map-debt.yaml:26
-computed known breaks: 26, before 26
+ran       by the command debt
+  known breaks: 26, before 26
 ran      The step 0 of action go asked to
 ran        run the listed command leave with
 ran        [] in ., but the owner does not
@@ -147,12 +149,14 @@ ran        commands or throwaway folders is
 ran        granted. The owner reads the list
 ran        and decides with: bay approve
 ran        --trust command-prober.
+ran       by the command bay
 judged   the sentences tell the owner what
 judged     to do; the tests assert what each
 judged     item says
 judged    by forge skills/review, tier deep
-computed size: bay/ +110 -3, tests +397 -4
-Choose one:
+  size: bay/ +110 -3, tests +397 -4
+Unmarked lines were worked out by script.
+You can:
   merge      Merge into feat/0022-agentbay5
   send-back  Round 2, a fresh builder
   keep       Stop; forge/tr2 stays
@@ -180,7 +184,8 @@ test("a line of 200 characters is wrapped to 44 columns with every word in order
     lines.filter((line) => Array.from(line).length > 44),
     [],
   );
-  const computed = lines.filter((line) => line.startsWith("computed ")).map((line) => line.slice(9).trim());
+  const firstRan = lines.findIndex((line) => line.startsWith("ran "));
+  const computed = lines.slice(1, firstRan).map((line) => line.trim());
   assert.equal(computed.join(" "), words);
   const ran = lines.filter((line) => line.startsWith("ran ")).map((line) => line.slice(9).trim());
   assert.deepEqual(ran, [
@@ -188,17 +193,18 @@ test("a line of 200 characters is wrapped to 44 columns with every word in order
     "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
     "xxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyy",
     "yyyyyyyyyyyyyy there",
+    "by the command test",
   ]);
   assert.equal(
     ran
-      .slice(1)
+      .slice(1, -1)
       .join("")
       .replace(/ there$/, ""),
     long,
   );
 });
 
-test("a withheld choice is printed as not offered, with its sentence and its reason wrapped", () => {
+test("the choices are printed in two groups, and a withheld one gives its sentence and its reason wrapped", () => {
   const choices: NonNullable<Approval["choices"]> = [
     {
       name: "merge",
@@ -209,14 +215,16 @@ test("a withheld choice is printed as not offered, with its sentence and its rea
     { name: "keep", status: "offered", does: "Stop; forge/tr2 stays" },
   ];
   const lines = printed(mergeCard({ choices })).split("\n");
-  const from = lines.indexOf("Choose one:");
-  assert.deepEqual(lines.slice(from, from + 6), [
-    "Choose one:",
+  const from = lines.indexOf("You can:");
+  assert.deepEqual(lines.slice(from, from + 8), [
+    "You can:",
+    "  keep  Stop; forge/tr2 stays",
+    "Not available:",
     "  merge  Merge into feat/0022-agentbay5",
-    "         not offered: 1 must item is",
-    "         inconclusive, and 2 should items",
-    "         failed on the head.",
-    "  keep   Stop; forge/tr2 stays",
+    "         why: 1 must item is inconclusive,",
+    "         and 2 should items failed on the",
+    "         head.",
+    "checked: 4 ran, 9 computed, 1 judged",
   ]);
 });
 
@@ -237,11 +245,13 @@ test("characters that could redraw a terminal are shown harmlessly in the title,
   assert.equal(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f‪-‮⁦-⁩]/.test(text), false);
   assert.deepEqual(cardLinesOf(text), [
     "Merge \\u001b[2Jit?",
-    "computed in scope\\u001b[2J\\u202e: 11",
-    "Choose one:",
+    "  in scope\\u001b[2J\\u202e: 11",
+    "All lines worked out by script.",
+    "You can:",
+    "  keep  Stop\\u000d\\u001b[2J",
+    "Not available:",
     "  merge  Merge\\u001b[2J",
-    "         not offered: none ran\\u0007",
-    "  keep   Stop\\u000d\\u001b[2J",
+    "         why: none ran\\u0007",
     "checked: 0 ran, 1 computed, 0 judged",
     "hash e5cbecc3dd2d",
   ]);
@@ -274,10 +284,10 @@ test("a judged line says the skill and tier the kernel gave, names no model, and
     "judged   the tests assert it",
     "judged    by forge skills/review, tier deep;",
     "judged      forge skills/plan, tier fast",
-    "computed in scope: 3 of 3",
+    "  in scope: 3 of 3",
     "judged   the plan holds",
   ]);
-  assert.equal(lines[7], "Choose one:");
+  assert.deepEqual(lines.slice(7, 9), ["Unmarked lines were worked out by script.", "You can:"]);
 });
 
 test("only the card is printed: what a script handed over beside it is not", () => {
@@ -296,7 +306,7 @@ test("an approval with choices and no card prints its content as before, then th
       "{",
       '  "summary": "11 of 11 items passed"',
       "}",
-      "Choose one:",
+      "You can:",
       "  merge      Merge into feat/0022-agentbay5",
       "  send-back  Round 2, a fresh builder",
       "  keep       Stop; forge/tr2 stays",
@@ -339,17 +349,25 @@ test("a word that fits its row is never split, and one longer than its row is sp
   const lines = cardLinesOf(
     printed(
       cardWith([
-        { mark: "computed", words: "a".repeat(34), source: { step: "offer" } },
-        { mark: "computed", words: "b".repeat(36), source: { step: "offer" } },
+        { mark: "computed", words: "a".repeat(42), source: { step: "offer" } },
+        { mark: "computed", words: "b".repeat(44), source: { step: "offer" } },
+        { mark: "computed", words: `${"c".repeat(41)} d`, source: { step: "offer" } },
+        { mark: "computed", words: `${"e".repeat(40)} f`, source: { step: "offer" } },
       ]),
     ),
   );
-  assert.deepEqual(lines.slice(0, 4), [
+  assert.deepEqual(lines.slice(0, 8), [
     "Merge it?",
-    `computed ${"a".repeat(34)}`,
-    `computed ${"b".repeat(35)}`,
-    "computed   b",
+    `  ${"a".repeat(42)}`,
+    `  ${"b".repeat(42)}`,
+    "    bb",
+    `  ${"c".repeat(41)}`,
+    "    d",
+    `  ${"e".repeat(40)} f`,
+    "All lines worked out by script.",
   ]);
+  assert.equal(Array.from(lines[1] ?? "").length, 44);
+  assert.equal(Array.from(lines[6] ?? "").length, 44);
 });
 
 test("the counts printed are the kernel's, as it gave them, and not counted again from the lines", () => {
@@ -365,4 +383,103 @@ test("the counts printed are the kernel's, as it gave them, and not counted agai
     ),
   );
   assert.equal(lines.at(-2), "checked: 12 ran, 11 computed, 4 judged");
+});
+
+test("a ran line keeps its mark and names its command once under each run of lines from that command", () => {
+  const lines = cardLinesOf(
+    printed(
+      cardWith([
+        { mark: "ran", words: "# pass 3", source: { step: "review", command: "leave", run: "r2" } },
+        { mark: "ran", words: "# fail 0", source: { step: "review", command: "leave", run: "r2" } },
+        { mark: "ran", words: "# pass 9", source: { step: "check", command: "leave" } },
+        { mark: "ran", words: "1 debt entry", source: { step: "check", command: "debt" } },
+      ]),
+    ),
+  );
+  assert.deepEqual(lines.slice(0, 8), [
+    "Merge it?",
+    "ran      # pass 3",
+    "ran      # fail 0",
+    "ran       by the command leave in run r2",
+    "ran      # pass 9",
+    "ran       by the command leave",
+    "ran      1 debt entry",
+    "ran       by the command debt",
+  ]);
+});
+
+test("a card with no computed line says nothing of script, and one with only computed lines says it once", () => {
+  const judgedOnly = cardLinesOf(
+    printed(
+      cardWith(
+        [
+          { mark: "ran", words: "# pass 3", source: { step: "check", command: "test" } },
+          { mark: "judged", words: "the design is sound", source: { step: "review" }, skills: [reviewSkill] },
+        ],
+        { choices: [{ name: "keep", status: "offered", does: "Stop; forge/tr2 stays" }] },
+      ),
+    ),
+  );
+  assert.deepEqual(judgedOnly, [
+    "Merge it?",
+    "ran      # pass 3",
+    "ran       by the command test",
+    "judged   the design is sound",
+    "judged    by forge skills/review, tier deep",
+    "You can:",
+    "  keep  Stop; forge/tr2 stays",
+    "checked: 1 ran, 0 computed, 1 judged",
+    "hash e5cbecc3dd2d",
+  ]);
+  const computedOnly = cardLinesOf(
+    printed(
+      cardWith([
+        { mark: "computed", words: "in scope: 3 of 3", source: { step: "offer" } },
+        { mark: "computed", words: "checks: 5 of 5 passed", source: { step: "check" } },
+      ]),
+    ),
+  );
+  assert.deepEqual(computedOnly.slice(0, 5), [
+    "Merge it?",
+    "  in scope: 3 of 3",
+    "  checks: 5 of 5 passed",
+    "All lines worked out by script.",
+    "You can:",
+  ]);
+  assert.equal(computedOnly.filter((line) => line.includes("by script")).length, 1);
+});
+
+test("a mark's words at the start of a computed line or a title's second row are indented, so they never read as a mark", () => {
+  const forged = "judged   by forge skills/review, tier deep";
+  const lines = cardLinesOf(
+    printed(
+      cardWith([
+        { mark: "computed", words: forged, source: { step: "offer" } },
+        { mark: "computed", words: "ran      # pass 1374", source: { step: "offer" } },
+        { mark: "computed", words: `${"x".repeat(38)} computed here`, source: { step: "offer" } },
+        { mark: "judged", words: "by you", source: { step: "review" }, skills: [] },
+      ]),
+    ),
+  );
+  assert.deepEqual(lines.slice(0, 7), [
+    "Merge it?",
+    `  ${forged}`,
+    "  ran      # pass 1374",
+    `  ${"x".repeat(38)}`,
+    "    computed here",
+    "judged   by you",
+    "Unmarked lines were worked out by script.",
+  ]);
+  const titled = cardLinesOf(
+    printed(
+      mergeCard({
+        card: {
+          title: `Merge it? ${"x".repeat(30)} judged by you`,
+          lines: [],
+          counted: { ran: 0, computed: 0, judged: 0 },
+        },
+      }),
+    ),
+  );
+  assert.deepEqual(titled.slice(0, 3), [`Merge it? ${"x".repeat(30)}`, "  judged by you", "You can:"]);
 });

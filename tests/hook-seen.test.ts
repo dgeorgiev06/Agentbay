@@ -317,6 +317,47 @@ test("a submit the hook denies, or one without a subagent id, records no sightin
   });
 });
 
+function unreadableConfigSentence(waiting: StartedTask): string {
+  return (
+    "The kernel did not take this output. agentbay.config.yaml cannot be read or is not valid, so the kernel " +
+    "cannot tell whether skill steps run with the hook; bay check says what is wrong. " +
+    `Run ${waiting.runId} still waits for step ${waiting.stepKey}. Two ways on: hand the task to that agent in a ` +
+    "Claude Code session where the agentbay hook is active, or the owner sets skillSteps.run to " +
+    "without-the-hook in agentbay.config.yaml."
+  );
+}
+
+test("a config that is not valid YAML after the step started refuses the answer; once repaired, the answer is taken", async () => {
+  for (const setting of ["with-the-hook", "without-the-hook"] as const) {
+    await inScene(setting, async ({ project, kernel, waiting }) => {
+      const repaired = await project.read("agentbay.config.yaml");
+      await project.write("agentbay.config.yaml", "bindings: [\n");
+      draftSubmitSeen(project, waiting.token);
+      assert.equal(refusalOf(await submitted(kernel, waiting.token)), unreadableConfigSentence(waiting));
+      await assertStillWaits(kernel, waiting);
+      await project.write("agentbay.config.yaml", repaired);
+      acceptedValue(await submitted(kernel, waiting.token));
+      assert.deepEqual(await hookNotes(kernel, waiting.runId), [
+        { stepKey: waiting.stepKey, hookSaw: true, skillSteps: setting },
+      ]);
+    });
+  }
+});
+
+test("a skillSteps.run outside the closed set is refused at the answer and is an error in bay check", async () => {
+  await inScene("without-the-hook", async ({ project, kernel, waiting }) => {
+    const config: unknown = parse(await project.read("agentbay.config.yaml"));
+    assert.ok(isRecord(config));
+    await project.write("agentbay.config.yaml", stringify({ ...config, skillSteps: { run: "sometimes" } }));
+    assert.equal(refusalOf(await submitted(kernel, waiting.token)), unreadableConfigSentence(waiting));
+    await assertStillWaits(kernel, waiting);
+    const checked = await bay(["check", "--project", project.root, "--json"]);
+    assert.equal(checked.exitCode, 1, checked.output);
+    const findings = JSON.stringify(fieldOf(toJson(checked.json), "findings"));
+    assert.ok(findings.includes("/skillSteps/run"), findings);
+  });
+});
+
 function sightingsCount(project: Project): number {
   const database = new DatabaseSync(join(project.root, sightingsFile), { readOnly: true });
   try {

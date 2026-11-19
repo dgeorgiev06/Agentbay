@@ -1,7 +1,7 @@
 import { basename, normalize } from "node:path/posix";
 import type { Config } from "../generated/config.ts";
 import { skillStepsRunOf, type SkillStepsRun } from "../manifests/manifests.ts";
-import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
+import { failedWith, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
 
 export type HandedInStep = {
   readonly token: string;
@@ -45,8 +45,8 @@ export async function hookNoteFor(watch: HookWatch, answer: Answer): Promise<Out
   const config = await watch.config();
   if (!config.ok) {
     const why =
-      "agentbay.config.yaml cannot be read, so the kernel cannot tell whether skill steps run with the hook: " +
-      problemText(config.problems);
+      "agentbay.config.yaml cannot be read or is not valid, so the kernel cannot tell whether skill steps run with " +
+      "the hook; bay check says what is wrong.";
     return notTaken(why, answer);
   }
   const skillSteps = skillStepsRunOf(config.value);

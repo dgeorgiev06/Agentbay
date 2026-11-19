@@ -454,7 +454,10 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
         const folder = folderOf(given);
         builderLines.push(builderLine(folder));
         await builderWrites(root, folder, [codeOf(name)]);
-        return { outcome: "built" };
+        return {
+          outcome: "built",
+          decisions: [`The count is kept as a whole number, round ${String(builderTasks.length)}.`],
+        };
       },
       reviewer: (given) => {
         const findings = reviews.shift() ?? [];
@@ -494,6 +497,15 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
     assert.equal(rev(root, `${head}^`), rev(root, "forge/C1-2"));
     const card = waitingOf(await shown(root, start.id), "card");
     assert.equal(listOf(card.choices).map((choice) => textAt(choice, "status"))[0], "offered");
+    const printed = await printedCard(root, start.id);
+    const decided = printed.indexOf("judged   the builder decided: The count is");
+    assert.deepEqual(printed.slice(decided, decided + 4), [
+      "judged   the builder decided: The count is",
+      "judged     kept as a whole number, round 2.",
+      "judged    by forge skills/write-tests, tier",
+      "judged      balanced; forge",
+    ]);
+    assert.equal(printed[decided + 4], "judged      skills/build-without-tests, tier");
     assert.ok(!branches(root).some((branch) => branch.includes("writer")));
     assert.deepEqual(worktrees(root), []);
     assert.deepEqual(keptRows(root), []);

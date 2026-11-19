@@ -940,6 +940,7 @@ describe("the merge card", () => {
     assert.equal(why("The toolchain ran no checks, so nothing is known."), "why: the toolchain ran no checks");
     assert.equal(why("No copy of 9643a28 could be made: x"), "why: no copy of the commit could be made");
     assert.equal(why("Merge it now."), "why: proof could not tell, so nothing is known");
+    assert.equal(why("Merge it. The checks could not start: x"), "why: proof could not tell, so nothing is known");
   });
 
   test("a failed item's reason is proof's own sentence when proof wrote it, in plain words", () => {

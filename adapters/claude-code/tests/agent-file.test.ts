@@ -340,8 +340,10 @@ test("the coordinator block states the protocol between its markers in under 50 
     "approve or give trust on your own",
     "edit `.agentbay/`, `.claude/`, `.mcp.json`, or the agentbay kit",
     "do a skill step's work yourself",
-    "At the start of a session, run `./bay.sh check`. If it reports that the agentbay hook is not registered,",
-    "Change `approvals` in agentbay.config.yaml only when the owner asks for exactly that, in their own words.",
+    "At the start of a session, run `./bay.sh check`. If skill steps run with the hook and it reports that the hook is\n" +
+      "not registered, stop and tell the owner: the kernel refuses their outputs. Without the hook, nothing confines them.",
+    "start other subagents here: where the agentbay hook runs, it denies every subagent that is not a step.",
+    "Change `approvals` or `skillSteps` in agentbay.config.yaml only when the owner asks for exactly that, in their own words.",
   ]) {
     assert.ok(block.includes(phrase), phrase);
   }

@@ -33,7 +33,7 @@ async function plantedBugs(context: ScriptContext, asked: Asked): Promise<readon
 
 export const run = defineScript(async (input, context) => {
   const asked = askedOf(input);
-  const planting = plants(sliceOf(asked.slice), asked.state.built);
+  const planting = plants(sliceOf(asked.slice), asked.state);
   const planted = planting ? await plantedBugs(context, asked) : [];
   await forgetKept(context, asked.name);
   return { bugs: bugsHanded(asked.owner, planted), planted: planted.length };

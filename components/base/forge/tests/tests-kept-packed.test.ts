@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
+import type { Json } from "../../../../bay/sdk.ts";
 import { packed, unpacked } from "../scripts/lib/kept-tests.ts";
+import { marked, markOf } from "../scripts/lib/mark.ts";
 import {
   filesHolding,
   keptRows,
@@ -11,6 +13,7 @@ import {
   roundToCard,
   shortHead,
   started,
+  textAt,
   type Handed,
 } from "./kit-copy.ts";
 
@@ -82,7 +85,7 @@ test("while the builder's step is open, the partition holds the tests packed and
     },
   };
   const start = await started(root, { planned, base: shortHead(root), bugs: [] });
-  const seen: { holding: readonly string[]; rows: readonly unknown[] }[] = [];
+  const seen: { holding: readonly string[]; rows: readonly Json[] }[] = [];
   await roundToCard(root, start, {
     name: "K1",
     files,
@@ -94,9 +97,11 @@ test("while the builder's step is open, the partition holds the tests packed and
   });
   const [building] = seen;
   assert.ok(building !== undefined);
+  const mark = markOf(unpacked(textAt(building.rows[0] ?? null, "packed"))) ?? "";
+  assert.match(mark, /^[0-9a-f]{32}$/);
   assert.deepEqual(building.rows, [
-    { slice: "K1", path: testFile, packed: packed(kept.text) },
-    { slice: "K1", path: otherFile, packed: packed(other.text) },
+    { slice: "K1", path: testFile, packed: packed(marked(kept.text, mark)) },
+    { slice: "K1", path: otherFile, packed: packed(marked(other.text, mark)) },
   ]);
   assert.deepEqual(building.holding, []);
   assert.deepEqual(keptRows(root), []);

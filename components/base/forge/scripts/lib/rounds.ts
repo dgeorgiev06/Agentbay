@@ -1,6 +1,7 @@
 import { fail, fieldsOf, type Json, type JsonFields } from "../../../../../bay/sdk.ts";
-import { builtOf, sliceOf, type Built } from "./cards.ts";
+import { builtOf, sliceOf, type Built, type Leak } from "./cards.ts";
 import type { Failing, FailingCase } from "./failing.ts";
+import { leaksOf } from "./leaks.ts";
 import { reviewOf, type Condition, type Finding, type Review } from "./review.ts";
 import { listOf, textOf, textsOf } from "./json-values.ts";
 
@@ -31,6 +32,7 @@ export type RoundsState = {
   readonly toTests: number;
   readonly conditions: readonly Condition[];
   readonly remaining: readonly Remaining[];
+  readonly leaks: readonly Leak[];
   readonly reviewedAt?: string;
 };
 
@@ -46,9 +48,10 @@ export type RoundPlan = {
   readonly build: boolean;
 };
 
-export type ReviewPlan = "pass-on" | "stopped" | "failing" | "review";
+export type ReviewPlan = "pass-on" | "leaked" | "stopped" | "failing" | "review";
 
-export type Reviewed = { readonly plan: "stopped" | "failing" } | { readonly plan: "review"; readonly review: Review };
+export type Reviewed =
+  { readonly plan: "leaked" | "stopped" | "failing" } | { readonly plan: "review"; readonly review: Review };
 
 function countOf(value: Json | undefined): number {
   return typeof value === "number" ? value : 0;
@@ -111,6 +114,7 @@ export function roundsStateOf(value: Json | undefined): RoundsState | undefined 
     toTests: countOf(fields.toTests),
     conditions: reviewOf({ conditions: fields.conditions ?? [] }).conditions,
     remaining: listOf(fields.remaining).map(remainingOf),
+    leaks: leaksOf(fields.leaks),
     ...optionalText(fields, "reviewedAt"),
   };
 }
@@ -132,6 +136,9 @@ export function roundPlan(before: RoundsState | undefined): RoundPlan | undefine
 export function reviewPlan(state: RoundsState): ReviewPlan {
   if (state.stage === "reviewed") {
     return "pass-on";
+  }
+  if (state.leaks.length > 0) {
+    return "leaked";
   }
   if (state.built.outcome === "stopped") {
     return "stopped";
@@ -166,6 +173,7 @@ function afterReview(state: RoundsState, review: Review, at: string): RoundsStat
 export function reviewedState(state: RoundsState, reviewed: Reviewed, at: string): RoundsState {
   const cleared = { ...withoutFolder(state), stage: "reviewed" as const, toBuilder: [], toTests: 0, remaining: [] };
   switch (reviewed.plan) {
+    case "leaked":
     case "stopped":
       return { ...cleared, done: true };
     case "failing":

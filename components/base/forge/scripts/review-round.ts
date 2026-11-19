@@ -4,7 +4,14 @@ import { codeAt, readIn } from "./lib/code.ts";
 import { keepFindings, keptTests } from "./lib/kept-tests.ts";
 import { reviewersPractices, type Practice } from "./lib/practices.ts";
 import { reviewOf } from "./lib/review.ts";
-import { afterRoundOf, reviewPlan, reviewedState, type AfterRound, type Reviewed } from "./lib/rounds.ts";
+import {
+  afterRoundOf,
+  reviewPlan,
+  reviewedState,
+  type AfterRound,
+  type Reviewed,
+  type ReviewPlan,
+} from "./lib/rounds.ts";
 import { textsOf } from "./lib/json-values.ts";
 
 type Asked = AfterRound & {
@@ -42,20 +49,24 @@ async function reviewed(context: ScriptContext, asked: Asked, folder: string): P
   return { plan: "review", review };
 }
 
-async function reviewedOrNot(context: ScriptContext, asked: Asked): Promise<Reviewed> {
-  const plan = reviewPlan(asked.state);
+async function reviewedOrNot(
+  context: ScriptContext,
+  asked: Asked,
+  plan: Exclude<ReviewPlan, "pass-on">,
+): Promise<Reviewed> {
   const folder = asked.state.folder ?? "";
   if (plan === "review") {
     return reviewed(context, asked, folder);
   }
   await answerOf(context, "worktrees.remove", { folder, branchAfter: "kept" });
-  return { plan: plan === "stopped" ? "stopped" : "failing" };
+  return { plan };
 }
 
 export const run = defineScript(async (input, context) => {
   const asked = askedOf(input);
-  if (reviewPlan(asked.state) === "pass-on") {
+  const plan = reviewPlan(asked.state);
+  if (plan === "pass-on") {
     return asked.state;
   }
-  return reviewedState(asked.state, await reviewedOrNot(context, asked), `review-${String(asked.state.round)}`);
+  return reviewedState(asked.state, await reviewedOrNot(context, asked, plan), `review-${String(asked.state.round)}`);
 });

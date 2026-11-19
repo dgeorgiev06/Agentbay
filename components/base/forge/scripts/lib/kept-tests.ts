@@ -8,12 +8,19 @@ import {
   type ScriptContext,
 } from "../../../../../bay/sdk.ts";
 import type { HandedTest } from "./handed-tests.ts";
+import { marked, markOf, withoutMark } from "./mark.ts";
 import { reviewOf, type Finding } from "./review.ts";
 import { textOf } from "./json-values.ts";
 
 type PackedTest = {
   readonly path: string;
   readonly packed: string;
+};
+
+type Keeping = {
+  readonly slice: string;
+  readonly tests: readonly HandedTest[];
+  readonly mark: string;
 };
 
 type Statement = {
@@ -33,12 +40,12 @@ export function unpacked(packedText: string): string {
   return gunzipSync(Buffer.from(packedText, "base64")).toString("utf8");
 }
 
-function packedTests(tests: readonly HandedTest[]): readonly PackedTest[] {
-  return tests.map((test) => ({ path: test.path, packed: packed(test.text) }));
+function packedTests(tests: readonly HandedTest[], mark: string): readonly PackedTest[] {
+  return tests.map((test) => ({ path: test.path, packed: packed(marked(test.text, mark)) }));
 }
 
 function unpackedTests(kept: readonly PackedTest[]): readonly HandedTest[] {
-  return kept.map((test) => ({ path: test.path, text: unpacked(test.packed) }));
+  return kept.map((test) => ({ path: test.path, text: withoutMark(unpacked(test.packed)) }));
 }
 
 function insertStatement(slice: string, kept: readonly PackedTest[]): Statement {
@@ -71,13 +78,28 @@ export async function forgetKept(context: ScriptContext, slice: string): Promise
   await executed(partition, { sql: "delete from kept_findings where slice = ?", parameters: [slice] });
 }
 
-export async function keepTests(context: ScriptContext, slice: string, tests: readonly HandedTest[]): Promise<void> {
+function byPath(tests: readonly HandedTest[]): readonly HandedTest[] {
+  return [...tests].sort((first, second) => (first.path < second.path ? -1 : 1));
+}
+
+function sameTests(kept: readonly HandedTest[], tests: readonly HandedTest[]): boolean {
+  const sorted = byPath(tests);
+  const same = (test: HandedTest, at: number): boolean =>
+    test.path === sorted[at]?.path && test.text === sorted[at].text;
+  return kept.length === sorted.length && kept.every(same);
+}
+
+export async function keepTests(context: ScriptContext, keeping: Keeping): Promise<void> {
+  const { slice, tests, mark } = keeping;
+  if (sameTests(await keptTests(context, slice), tests)) {
+    return;
+  }
   const partition = await opened(context);
   await executed(partition, { sql: "delete from kept_tests where slice = ?", parameters: [slice] });
   if (tests.length === 0) {
     return;
   }
-  await executed(partition, insertStatement(slice, packedTests(tests)));
+  await executed(partition, insertStatement(slice, packedTests(tests, mark)));
 }
 
 export async function keepFindings(context: ScriptContext, slice: string, findings: readonly Finding[]): Promise<void> {
@@ -104,4 +126,10 @@ export async function keptTests(context: ScriptContext, slice: string): Promise<
   const sql = `select path, packed from kept_tests where slice = ? order by path limit ${String(mostTests)}`;
   const rows = await rowsOf(await opened(context), { sql, parameters: [slice] });
   return unpackedTests(rows.map((row) => ({ path: textOf(row.path), packed: textOf(row.packed) })));
+}
+
+export async function keptMark(context: ScriptContext, slice: string): Promise<string | undefined> {
+  const sql = "select packed from kept_tests where slice = ? order by path limit 1";
+  const [row] = await rowsOf(await opened(context), { sql, parameters: [slice] });
+  return row === undefined ? undefined : markOf(unpacked(textOf(row.packed)));
 }

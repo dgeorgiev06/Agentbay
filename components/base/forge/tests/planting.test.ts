@@ -190,11 +190,13 @@ describe("the bugs handed to proof", () => {
 });
 
 describe("when the planter runs", () => {
-  test("only for a slice with a bugs-caught item whose builder built it", () => {
+  test("only for a slice with a bugs-caught item whose builder built it and leaked nothing", () => {
     const missing = { lacks: "kernel" as const, name: "worktrees.cut" };
-    assert.equal(plants(slice, { outcome: "built" }), true);
-    assert.equal(plants(slice, { outcome: "stopped", missing }), false);
-    assert.equal(plants({ ...slice, done: slice.done.slice(0, 1) }, { outcome: "built" }), false);
+    const built = { outcome: "built" as const };
+    assert.equal(plants(slice, { built, leaks: [] }), true);
+    assert.equal(plants(slice, { built: { outcome: "stopped", missing }, leaks: [] }), false);
+    assert.equal(plants({ ...slice, done: slice.done.slice(0, 1) }, { built, leaks: [] }), false);
+    assert.equal(plants(slice, { built, leaks: [{ kind: "mark-in-answer" }] }), false);
   });
 });
 

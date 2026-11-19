@@ -125,6 +125,7 @@
         }
       ],
       "remaining": [],
+      "leaks": [],
       "reviewedAt": "review-1"
     }
   },
@@ -191,6 +192,7 @@
       }
     ],
     "remaining": [],
+    "leaks": [],
     "reviewedAt": "review-1",
     "folder": ".forge/worktrees/TD1-tests-2"
   }

@@ -1,5 +1,5 @@
 import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
-import type { Built, Slice } from "./cards.ts";
+import type { Built, Leak, Slice } from "./cards.ts";
 import type { HandedTest } from "./handed-tests.ts";
 import { quotesAny } from "./quoting.ts";
 import { listOf, textOf, textsOf } from "./json-values.ts";
@@ -152,6 +152,12 @@ export function bugsHanded(owner: readonly Bug[], planted: readonly Bug[]): read
   });
 }
 
-export function plants(slice: Slice, built: Built): boolean {
-  return built.outcome === "built" && slice.done.some((item) => item.proof?.kind === "bugs-caught");
+export type Ended = {
+  readonly built: Built;
+  readonly leaks: readonly Leak[];
+};
+
+export function plants(slice: Slice, ended: Ended): boolean {
+  const asked = slice.done.some((item) => item.proof?.kind === "bugs-caught");
+  return asked && ended.built.outcome === "built" && ended.leaks.length === 0;
 }

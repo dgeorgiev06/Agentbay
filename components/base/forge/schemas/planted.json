@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Planted",
+  "description": "The bugs the planter wrote, in the shape proof takes them: each a name, a patch against the builder's code, and the named test files that must catch it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["bugs"],
+  "properties": {
+    "bugs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/bug"
+      },
+      "description": "At most ten bugs, each in a file the builder changed; scripts/bugs-in-the-code.ts checks them."
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BugsRequest",
+  "description": "What the step before the last proof works from: the slice, its interface files, the test files the builder may not change, the bugs the owner named, and where the rounds stand after the last review.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["slice", "interface", "fixed", "bugs", "state"],
+  "properties": {
+    "slice": {
+      "$ref": "proof@1/prove-request.json#/$defs/slice"
+    },
+    "interface": {
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "The interface files the slice builds against, relative to the project."
+    },
+    "fixed": {
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "The test files the slice's fails-first items name."
+    },
+    "bugs": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/bug"
+      },
+      "description": "The bugs the owner named in the slice request; empty when there are none."
+    },
+    "state": {
+      "type": "object",
+      "description": "Where the rounds stand after the last review, as rounds.json gives it."
+    }
+  }
+}

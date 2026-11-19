@@ -312,6 +312,7 @@ export type Players = {
   readonly tests: Played;
   readonly builder: Played;
   readonly reviewer?: Played;
+  readonly planter?: Played;
 };
 
 export type Asked = {
@@ -332,6 +333,8 @@ function playerOf(players: Players, action: string): Played | undefined {
       return players.builder;
     case "review":
       return players.reviewer;
+    case "plant":
+      return players.planter;
     default:
       throw new Error(`No player answers the action ${action}.`);
   }

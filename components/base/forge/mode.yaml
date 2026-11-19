@@ -1,6 +1,6 @@
 name: forge
 version: 1.0.0
-description: Builds a piece of work in slices that run side by side. It reads a plan file and works out its waves, and it carries one slice through a builder in a worktree, proof and the merge card, or through up to three rounds of a test writer, a builder who never has the tests, proof and a reviewer.
+description: Builds a piece of work in slices that run side by side. It reads a plan file and works out its waves, and it carries one slice through a builder in a worktree, proof and the merge card, or through up to three rounds of a test writer, a builder who never has the tests, proof and a reviewer, and then a planter who never saw the tests.
 
 requires:
   interfaces: [proof@1, worktrees@1]
@@ -87,6 +87,22 @@ actions:
     effects: [read, write, delete]
     run:
       - script: scripts/review-round.ts
+  plant:
+    description: When a slice's rounds are done and bugs are to be written from the builder's code and the slice's conditions by a planter who never saw the tests, for proof to plant.
+    input: schemas/plant-request.json
+    output: schemas/planted.json
+    effects: [read]
+    run:
+      - skill: skills/plant
+        tier: balanced
+        checks: [scripts/bugs-in-the-code.ts]
+  bugs:
+    description: When a slice's rounds are done and proof is to be given the bugs to plant, the owner's and then the planter's, and the kept tests are forgotten.
+    input: schemas/bugs-request.json
+    output: schemas/bugs.json
+    effects: [read, write, delete]
+    run:
+      - script: scripts/bugs.ts
   draw:
     description: When proof has judged a slice and the owner needs the merge card, with the rule and reason for each choice.
     input: schemas/draw-request.json

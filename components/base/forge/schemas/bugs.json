@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Bugs",
+  "description": "The bugs handed to proof, the owner's first and then the planter's, each name used once; and how many the planter wrote, none when it did not run.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["bugs", "planted"],
+  "properties": {
+    "bugs": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/bug"
+      }
+    },
+    "planted": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 50,
+      "description": "How many bugs the planter wrote: none when the slice has no bugs-caught item or the builder stopped."
+    }
+  }
+}

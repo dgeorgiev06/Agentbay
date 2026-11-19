@@ -86,7 +86,12 @@ const exampleTexts: Readonly<Record<string, string>> = {
 `,
   remove: String.raw`{
   "input": { "folder": ".shelved/worktrees/mail-source", "into": "main" },
-  "output": { "folder": ".shelved/worktrees/mail-source", "kind": "worktree", "branch": "forge/mail-source" }
+  "output": {
+    "folder": ".shelved/worktrees/mail-source",
+    "kind": "worktree",
+    "branch": "forge/mail-source",
+    "branchAfter": "deleted"
+  }
 }
 `,
   merge: String.raw`{
@@ -499,24 +504,31 @@ export const run = defineScript(async (input, context) => {
     await forget(context, folder);
     return { folder, kind: "copy" };
   }
-  const into = fieldsOf(input).into;
-  if (typeof into !== "string") {
+  const { into, branchAfter } = fieldsOf(input);
+  const branchKept = branchAfter === "kept";
+  if (branchKept && into !== undefined) {
+    return fail("With the branch kept, into is not given, so the shelf keeps the worktree " + folder + ".");
+  }
+  if (!branchKept && typeof into !== "string") {
     return fail("Name the branch the worktree " + folder + " must be merged into.");
   }
   const state = await worktreeState(context, folder);
   if (state.changed.length + state.untracked.length > 0) {
     fail("The worktree " + folder + " has changed or untracked files, so the shelf keeps it.");
   }
-  if (!(await ancestors(context, await commitOf(context, into))).has(state.head)) {
+  if (typeof into === "string" && !(await ancestors(context, await commitOf(context, into))).has(state.head)) {
     fail("The worktree " + folder + " is not merged into " + into + ", so the shelf keeps it.");
   }
   const branch = await branchOf(context, folder);
   await answered(context.files.remove(folder));
   await forget(context, folder);
+  if (branchKept) {
+    return { folder, kind: "worktree", branch, branchAfter: "kept", commit: state.head };
+  }
   const all = { ...(await branches(context)) };
   delete all[branch];
   await writeBranches(context, all);
-  return { folder, kind: "worktree", branch };
+  return { folder, kind: "worktree", branch, branchAfter: "deleted" };
 });
 `;
 

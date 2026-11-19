@@ -288,7 +288,7 @@ test("a project's toolchain and worktrees modes, trusted in their tests, pass ev
     failedTests(trustedWorktreesRan.output),
     casesThatNeedMergeSetAsideOrApply.map((name) => `worktrees@1, ${shelf}: ${name}`),
   );
-  assert.deepEqual(passedPerMode(trustedWorktreesRan.output), { [shelf]: 28 });
+  assert.deepEqual(passedPerMode(trustedWorktreesRan.output), { [shelf]: 30 });
 });
 
 test("without trusted in their tests, a project's toolchain and worktrees modes load from the project, and a case that needs a listed command is refused with the broker's sentence and a sentence for the test's author", () => {

@@ -17,6 +17,7 @@ One meaning per word. Briefs, plans, code names and reviews use these words and 
 | **Run** | One execution of an action or workflow, recorded in the kernel database. It can wait, resume and be undone. | job, session |
 | **Interface** | A set of action signatures with no code, named `name@major`. A mode implements it; another mode requires it. | API, contract (see below) |
 | **Binding** | The project's choice of which mode serves an interface for a requiring mode. | wiring, injection |
+| **Brought mode** | A base mode active in a project because forge is: proof, bound to `proof@1`, and git-worktrees, bound to `worktrees@1`, each only while the config binds no mode to that interface. The kernel brings them; forge brings no toolchain, and `bay check` names each mode it brought. | default mode, implicit dependency, auto-install |
 | **Effect** | What an action may do to the world: `read`, `write`, `network`, `spend`, `delete`. Declared per action. | permission (see Grant) |
 | **Grant** | What a mode may reach: its database, paths, secrets, hosts, commands. Declared in `resources:`. | permission, capability |
 | **Throwaway folder** | A folder named under a mode's `resources.files.throwaway`. The kernel makes folders and links in it and removes files and folders from it for that mode; the mode's scripts never read or write its files, and its commands fill it. | scratch, temp folder |

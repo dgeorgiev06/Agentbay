@@ -171,27 +171,16 @@ test("a listed mode that does not exist is reported in the config", async () => 
   );
 });
 
-test("forge outside the kit can be neither listed nor reached through a binding", async () => {
-  const forgeMode: Mode = { name: "forge", version: "1.0.0", description: "Changes the kit.", actions: {} };
+test("forge outside the kit may be listed or reached through a binding, as in the kit", async () => {
+  const forgeMode: Mode = { name: "forge", version: "1.0.0", description: "Builds work in slices.", actions: {} };
   const forgeFiles = { "/kit/components/base/forge/mode.yaml": yamlText({ ...forgeMode, implements: ["notes@1"] }) };
   const listedReport = await reportOf({ ...kitFiles(), ...forgeFiles, ...projectFiles({ modes: ["forge"] }) });
-  assert.ok(!listedReport.active.has("forge"));
-  const listed = problemsIn(listedReport);
-  assert.ok(
-    listed.some(
-      (problem) =>
-        problem.message === "modes lists forge, which can be active only when the project is the kit itself.",
-    ),
-    messages(listed),
-  );
+  assert.ok(listedReport.active.has("forge"));
+  assert.ok(!problemsIn(listedReport).some((problem) => problem.message.startsWith("modes lists forge")));
   const bindings = { ...projectConfig.bindings, notes: "forge" };
   const bound = await reportOf({ ...kitFiles(), ...forgeFiles, ...projectFiles({ bindings }) });
-  assert.ok(!bound.active.has("forge"));
-  const problems = problemsIn(bound);
-  assert.ok(
-    problems.some((problem) => problem.message.startsWith("bindings binds notes to forge, which can be active only")),
-    messages(problems),
-  );
+  assert.ok(bound.active.has("forge"));
+  assert.ok(!problemsIn(bound).some((problem) => problem.message.startsWith("bindings binds notes to forge")));
   const inKit = layoutOf({ kit: "/kit", project: "/kit" });
   const kitConfig = { "/kit/agentbay.config.yaml": yamlText({ ...config, modes: ["forge"] }) };
   const kitReport = await systemReport(fakeFileSystem({ ...kitFiles(), ...forgeFiles, ...kitConfig }), inKit);

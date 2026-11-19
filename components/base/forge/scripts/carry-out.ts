@@ -1,4 +1,5 @@
 import { defineScript, fail, fieldsOf, type Json, type ScriptContext } from "../../../../bay/sdk.ts";
+import { answerOf } from "./lib/called.ts";
 
 type Request = {
   readonly choice: "merge" | "send-back" | "keep" | "discard";
@@ -31,14 +32,9 @@ function requestOf(input: Json): Request {
   };
 }
 
-async function called(context: ScriptContext, reference: string, input: Json): Promise<Json> {
-  const answer = await context.call(reference, input);
-  return answer.ok ? answer.value : fail(answer.message);
-}
-
 async function merged(context: ScriptContext, request: Request): Promise<Json> {
-  const cut = fieldsOf(await called(context, "worktrees.cut", { slice: `${request.name}-merge`, base: request.head }));
-  const merge = fieldsOf(await called(context, "worktrees.merge", { folder: cut.folder ?? null, into: request.into }));
+  const cut = await answerOf(context, "worktrees.cut", { slice: `${request.name}-merge`, base: request.head });
+  const merge = await answerOf(context, "worktrees.merge", { folder: cut.folder ?? null, into: request.into });
   return { choice: "merge", merged: merge.commit ?? null, into: request.into };
 }
 

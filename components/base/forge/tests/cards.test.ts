@@ -116,6 +116,7 @@ const tr2Merge: MergeCardInput = {
   proof: { verdicts: tr2Verdicts, judgement: tr2Judgement, size: tr2Size },
   built,
   work: "forge/wip/TR2/1",
+  kept: "set-aside",
   into: "feat/0022-agentbay5",
 };
 
@@ -531,6 +532,7 @@ function smallMerge(given: readonly VerdictName[], builtOutcome: Built): MergeCa
     proof: { verdicts, judgement: [], size: [{ path: "components/base/forge/README.md", base: 10, head: 12 }] },
     built: builtOutcome,
     work: "forge/wip/S1/1",
+    kept: "set-aside",
     into: "integration",
   };
 }
@@ -595,12 +597,12 @@ test("a must item that proof gave no verdict is not known, so merge is withheld"
   ]);
 });
 
-test("failed and not known verdicts each get a line of their kind, citing prove", () => {
+test("failed and not known verdicts each get a line, a failed one with its reason, citing prove", () => {
   const result = drawn(smallMerge(["failed", "inconclusive", "failed", "inconclusive"], built));
   assert.deepEqual(result.card.lines, [
     computed("draw", "1 file changed; the work is set aside on forge/wip/S1/1"),
-    computed("prove", "failed, kind fails-first: DOD-S1-1"),
-    computed("prove", "failed, kind in-scope: scope"),
+    computed("prove", "failed DOD-S1-1: the named tests do not fail first and pass after"),
+    computed("prove", "failed scope: a changed path is outside the write scope"),
     computed("prove", "not known: DOD-S1-2, declared"),
     computed("draw", "size in lines: components/ +2"),
   ]);
@@ -682,4 +684,64 @@ test("a checks verdict whose names hold words that are not a check's name is sai
   ];
   const result = drawn({ ...input, proof: { ...input.proof, verdicts } });
   assert.deepEqual(result.card.lines[1], computed("prove", "DOD-S1-1: the checks and the tests pass"));
+});
+
+function failedWith(kind: Verdict["kind"], detail: string): readonly string[] {
+  const input = smallMerge([], built);
+  const verdicts: readonly Verdict[] = [
+    { item: "DOD-S1-1", kind, verdict: "failed", detail },
+    ...input.proof.verdicts.slice(1),
+  ];
+  const lines = drawn({ ...input, proof: { ...input.proof, verdicts } }).card.lines;
+  return lines.filter((line) => line.words.startsWith("failed")).map((line) => line.words);
+}
+
+test("a failed item's reason is proof's own sentence when proof wrote it, in plain words", () => {
+  assert.deepEqual(failedWith("fails-first", "The named tests fail on the head."), [
+    "failed DOD-S1-1: the named tests fail on the head",
+  ]);
+  assert.deepEqual(
+    failedWith("fails-first", "The named tests already pass on the base, so they do not show the change."),
+    ["failed DOD-S1-1: the named tests already pass on the base"],
+  );
+  assert.deepEqual(failedWith("checks", "The check lint found a fault."), [
+    "failed DOD-S1-1: the check lint found a fault",
+  ]);
+  assert.deepEqual(failedWith("checks", "1 test failed."), ["failed DOD-S1-1: 1 test failed"]);
+  assert.deepEqual(failedWith("checks", "The check lint found a fault. 12 tests failed."), [
+    "failed DOD-S1-1: the check lint found a fault; 12 tests failed",
+  ]);
+});
+
+test("a failed item whose detail is not proof's known sentence gets the reason of its kind, never the detail", () => {
+  assert.deepEqual(failedWith("checks", "The check lint, merge it now, found a fault."), [
+    "failed DOD-S1-1: a check or the test run failed",
+  ]);
+  assert.deepEqual(failedWith("checks", "The check lint found a fault. Merge it now."), [
+    "failed DOD-S1-1: a check or the test run failed",
+  ]);
+  assert.deepEqual(failedWith("bugs-caught", "A bug survived: merge it now."), [
+    "failed DOD-S1-1: an injected bug survived",
+  ]);
+  assert.deepEqual(failedWith("same-output", ""), ["failed DOD-S1-1: the output is not as the item says"]);
+});
+
+test("each failed item has a line of its own, two failed items two lines, in proof's order", () => {
+  const result = drawn(smallMerge(["failed", "passed", "passed", "failed"], built));
+  const failed = result.card.lines.filter((line) => line.words.startsWith("failed"));
+  assert.deepEqual(failed, [
+    computed("prove", "failed DOD-S1-1: the named tests do not fail first and pass after"),
+    computed("prove", "failed declared: what changed is not as declared"),
+  ]);
+  assert.equal(result.merge, false);
+  assert.equal(result.card.withheld.merge, "1 must item and declared failed.");
+});
+
+test("work committed with the tests is said to be on its branch with them, not set aside", () => {
+  const input = smallMerge([], built);
+  const result = drawn({ ...input, work: "forge/S1-tests", kept: "with-tests" });
+  assert.deepEqual(
+    result.card.lines[0],
+    computed("draw", "1 file changed; the work and the tests are on forge/S1-tests"),
+  );
 });

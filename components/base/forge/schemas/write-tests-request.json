@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WriteTestsRequest",
+  "description": "What the test writer reads to write the slice's tests: the slice's conditions, the interface files' paths, the slice's worktree at its base, before any builder has worked in it, and the practices.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["slice", "interface", "folder", "practices"],
+  "properties": {
+    "slice": {
+      "$ref": "proof@1/prove-request.json#/$defs/slice"
+    },
+    "interface": {
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "The interface files the slice builds against, relative to the slice's worktree."
+    },
+    "folder": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*(/\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+      "maxLength": 1000,
+      "description": "The slice's worktree at its base commit, relative to the project, such as .forge/worktrees/TR2. No builder has worked in it yet."
+    },
+    "practices": {
+      "type": "array",
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "The practices files to read before writing, relative to the project, from forge's settings."
+    }
+  }
+}

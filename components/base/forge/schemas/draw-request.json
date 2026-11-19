@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "DrawRequest",
-  "description": "What the merge card is drawn from: the slice, proof's answer, how the builder ended, the branch the work is set aside on, and the branch a merge goes into.",
+  "description": "What the merge card is drawn from: the slice, proof's answer, how the builder ended, the branch the work is on and how it got there, and the branch a merge goes into.",
   "type": "object",
   "additionalProperties": false,
   "required": ["slice", "proof", "built", "work", "into"],
@@ -63,13 +63,17 @@
       "type": "string",
       "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
       "maxLength": 255,
-      "description": "The branch set-aside committed the work to, such as forge/wip/TR2/1."
+      "description": "The branch the work is on: one set-aside committed it to, such as forge/wip/TR2/1, or one a round committed the tests to over the builder's work, such as forge/TR2-tests."
     },
     "into": {
       "type": "string",
       "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
       "maxLength": 255,
       "description": "The branch a merge goes into, from forge's settings."
+    },
+    "kept": {
+      "enum": ["set-aside", "with-tests"],
+      "description": "How the work came to be on its branch: set aside by itself, or committed with the tests a test writer handed in. Left out, set aside."
     }
   }
 }

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "SliceRequest",
-  "description": "The slice the owner asks forge to build: a planned slice from a plan, the commit to cut it from, and the bugs to inject, written by whoever plans or reviews it.",
+  "description": "The slice the owner asks forge to build: a planned slice from a plan, the commit to cut it from, the bugs to inject, written by whoever plans or reviews it, and the interface files it builds against.",
   "type": "object",
   "additionalProperties": false,
   "required": ["planned", "base", "bugs"],
@@ -34,6 +34,15 @@
         "$ref": "proof@1/prove-request.json#/$defs/bug"
       },
       "description": "The bugs proof injects, never written by the builder; empty when there are none."
+    },
+    "interface": {
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "The interface files the slice builds against, relative to the project, such as schema files and interface .yaml files fixed before the build. Empty when the slice names none."
     }
   }
 }

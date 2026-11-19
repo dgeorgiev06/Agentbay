@@ -12,6 +12,7 @@ export const run = defineScript((input) => {
     proof: provedOf(fields.proof),
     built: builtOf(fields.built),
     work: branch("work"),
+    kept: fields.kept === "with-tests" ? "with-tests" : "set-aside",
     into: branch("into"),
   });
   return Promise.resolve(merge);

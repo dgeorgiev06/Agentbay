@@ -4,6 +4,7 @@ import process from "node:process";
 import { decide, type Decision } from "./guard-decide.ts";
 import { readPolicy } from "./guard-input.ts";
 import type { FolderEntry, PathFacts, PathState } from "./guard-paths.ts";
+import { recordSighting, sightingOf } from "./hook/sightings.ts";
 
 const maximumPayloadBytes = 32 * 1024 * 1024;
 
@@ -86,7 +87,12 @@ async function decision(): Promise<Decision> {
   }
   const kit = resolve(dirname(script), "..", "..");
   const policy = readPolicy(readOptionalText(join(project, ".agentbay", "steps.json")), project);
-  return decide({ project, kit, policy }, input.payload, nodeFacts);
+  const decided = decide({ project, kit, policy }, input.payload, nodeFacts);
+  const sighting = decided.verdict === "allow" ? sightingOf(policy, input.payload) : undefined;
+  if (sighting !== undefined) {
+    recordSighting(project, sighting, new Date());
+  }
+  return decided;
 }
 
 function report(outcome: Decision): void {

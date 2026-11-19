@@ -33,10 +33,18 @@ export type CleanRequest = {
   readonly removal: Removal;
 };
 
+export type HandedIn = {
+  readonly project: string;
+  readonly token: string;
+  readonly mode: string;
+  readonly skill: string;
+};
+
 export type Adapter = {
   readonly name: string;
   readonly build: (request: BuildRequest) => Promise<Outcome<readonly string[]>>;
   readonly clean: (request: CleanRequest) => Promise<Outcome<readonly string[]>>;
+  readonly hookSaw?: (handedIn: HandedIn) => Promise<boolean>;
 };
 
 export function agentName(mode: string, skill: string): string {

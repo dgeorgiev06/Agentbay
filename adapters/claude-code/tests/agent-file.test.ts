@@ -370,7 +370,8 @@ test("the hook entry runs the guard for every tool, quoted, and blocks when the 
     hooks: [
       {
         type: "command",
-        command: "node '/kit dir/adapters/claude-code/step-guard.ts' --project '/my project'",
+        command:
+          "node --disable-warning=ExperimentalWarning '/kit dir/adapters/claude-code/step-guard.ts' --project '/my project'",
         timeout: 30,
         onFailure: "block",
       },

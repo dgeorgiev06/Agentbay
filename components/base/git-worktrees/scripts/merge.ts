@@ -1,7 +1,18 @@
 import { fail, type ScriptContext } from "../../../../bay/sdk.ts";
 import { changesIn, isClean } from "./lib/changes.ts";
+import { blockedPaths, folderChangedSentences, movedSentence } from "./lib/checkout.ts";
 import { folderExists, madeWorktree, targetFolder } from "./lib/folders.ts";
-import { branchExists, commitOf, firstLine, git, gitSucceeded, isMerged, safeCommitOf } from "./lib/git.ts";
+import {
+  branchExists,
+  commitOf,
+  firstLine,
+  git,
+  gitFed,
+  gitSucceeded,
+  isMerged,
+  safeCommitOf,
+  succeededOutput,
+} from "./lib/git.ts";
 import { defineRequestScript } from "./lib/request.ts";
 
 type Merging = {
@@ -31,6 +42,11 @@ async function refuseUnmergeable(context: ScriptContext, folder: string, merging
   }
 }
 
+async function checkedOutInProject(context: ScriptContext): Promise<string | undefined> {
+  const ended = await git(context, ".", ["checked-out-branch", "HEAD"]);
+  return ended.exitCode === 0 ? ended.stdout.trim() : undefined;
+}
+
 async function checkOutTarget(context: ScriptContext, merging: Merging): Promise<void> {
   const { branch, into, target } = merging;
   const added = await git(context, ".", ["add-worktree", target, into]);
@@ -39,8 +55,8 @@ async function checkOutTarget(context: ScriptContext, merging: Merging): Promise
   }
   if (added.stderr.includes("already used by worktree") || added.stderr.includes("already checked out")) {
     fail(
-      `The branch ${into} is checked out in the project or in another worktree, and the mode merges only into a ` +
-        `branch it can check out in a worktree of its own, so ${branch} is not merged.`,
+      `The branch ${into} is checked out in another worktree than the project's own folder, so ${branch} is not ` +
+        "merged into it. Switch that worktree to another branch, then merge again.",
     );
   }
   fail(`git worktree failed: ${firstLine(added.stderr)}`);
@@ -64,12 +80,68 @@ async function undone(context: ScriptContext, merging: Merging, stderr: string):
   };
 }
 
-async function mergedInTarget(context: ScriptContext, merging: Merging): Promise<Merged> {
+async function mergedOnBranch(context: ScriptContext, merging: Merging): Promise<Merged> {
   const ended = await git(context, merging.target, ["merge-branch", merging.branch]);
   if (ended.exitCode !== 0) {
     return undone(context, merging, ended.stderr);
   }
   return { how: "merged", commit: await commitOf(context, merging.target, "HEAD") };
+}
+
+async function mergedAtCommit(context: ScriptContext, merging: Merging): Promise<Merged> {
+  const { branch, into, target } = merging;
+  const begun = await git(context, target, ["merge-uncommitted", branch]);
+  if (begun.exitCode !== 0) {
+    return undone(context, merging, begun.stderr);
+  }
+  const message = `Merge branch '${branch}' into ${into}\n`;
+  succeededOutput(await gitFed(context, target, { call: ["commit-staged"], input: message }), "commit-staged");
+  return { how: "merged", commit: await commitOf(context, target, "HEAD") };
+}
+
+async function mergedBeside(context: ScriptContext, merging: Merging, start: string): Promise<Merged> {
+  await gitSucceeded(context, ".", ["add-detached-worktree", merging.target, start]);
+  const merged = await mergedAtCommit(context, merging);
+  await gitSucceeded(context, ".", ["remove-worktree", merging.target]);
+  return merged;
+}
+
+type Commits = { readonly start: string; readonly merge: string };
+
+async function refuseUnlessLandable(context: ScriptContext, into: string, commits: Commits): Promise<void> {
+  const moved = movedSentence({
+    into,
+    start: commits.start,
+    checkedOut: await checkedOutInProject(context),
+    head: await commitOf(context, ".", `refs/heads/${into}`),
+  });
+  const changed = (await changesIn(context, ".")).changed;
+  const blocked = await blockedPaths(context, { from: commits.start, to: commits.merge });
+  const sentences = [...moved, ...folderChangedSentences({ into, changed, blocked })];
+  if (sentences.length > 0) {
+    fail(sentences.join(" "));
+  }
+}
+
+async function fastForwarded(context: ScriptContext, merging: Merging): Promise<string> {
+  const start = await commitOf(context, ".", `refs/heads/${merging.into}`);
+  const merged = await mergedBeside(context, merging, start);
+  if (merged.how === "undone") {
+    return fail(merged.reason);
+  }
+  await refuseUnlessLandable(context, merging.into, { start, merge: merged.commit });
+  await gitSucceeded(context, ".", ["fast-forward", merged.commit]);
+  return merged.commit;
+}
+
+async function mergedIntoBranch(context: ScriptContext, merging: Merging): Promise<string> {
+  await checkOutTarget(context, merging);
+  const merged = await mergedOnBranch(context, merging);
+  await gitSucceeded(context, ".", ["remove-worktree", merging.target]);
+  if (merged.how === "undone") {
+    return fail(merged.reason);
+  }
+  return merged.commit;
 }
 
 export const run = defineRequestScript(async (request, context) => {
@@ -81,11 +153,10 @@ export const run = defineRequestScript(async (request, context) => {
   if (await isMerged(context, branch, into)) {
     return { how: "already-merged", branch, into, commit: await commitOf(context, ".", into) };
   }
-  await checkOutTarget(context, merging);
-  const merged = await mergedInTarget(context, merging);
-  await gitSucceeded(context, ".", ["remove-worktree", merging.target]);
-  if (merged.how === "undone") {
-    return fail(merged.reason);
+  if ((await checkedOutInProject(context)) === `refs/heads/${into}`) {
+    const commit = await fastForwarded(context, merging);
+    return { how: "merged", branch, into, commit, landed: "checked-out-branch-fast-forwarded" };
   }
-  return { how: "merged", branch, into, commit: merged.commit };
+  const commit = await mergedIntoBranch(context, merging);
+  return { how: "merged", branch, into, commit, landed: "branch-not-checked-out" };
 });

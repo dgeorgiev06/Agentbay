@@ -59,6 +59,7 @@ const changingCommands: readonly { readonly named: string; readonly call: GitCal
   { named: "init", call: ["make-repository"] },
   { named: "rm", call: ["forget-paths", "."] },
   { named: "add", call: ["stage-paths", "."] },
+  { named: "merge", call: ["merge-uncommitted", "forge/slice"] },
 ];
 
 for (const { named, call } of changingCommands) {
@@ -88,5 +89,20 @@ test("a command that changes files is refused in any folder outside .forge/, and
   assert.deepEqual(
     ran.map((request) => [request.name, ...request.arguments]),
     [["switch-branch", "forge/slice"], ["changes"]],
+  );
+});
+
+test("a fast-forward runs only in the project's own folder, and is refused in any other before it runs", async () => {
+  const ran: CommandRequest[] = [];
+  const context = recordingContext(ran);
+  for (const folder of [".forge/targets/main", "src"]) {
+    await assert.rejects(git(context, folder, ["fast-forward", "0123456789abcdef0123456789abcdef01234567"]), {
+      message: `The mode runs git merge --ff-only only in the project's own folder, not in ${folder}.`,
+    });
+  }
+  await git(context, ".", ["fast-forward", "0123456789abcdef0123456789abcdef01234567"]);
+  assert.deepEqual(
+    ran.map((request) => [request.folder, request.name, ...request.arguments]),
+    [[".", "fast-forward", "0123456789abcdef0123456789abcdef01234567"]],
   );
 });

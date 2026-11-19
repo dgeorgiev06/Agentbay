@@ -183,6 +183,28 @@ test("bay check on the kit warns once for each command the git-worktrees mode li
       effects: "read, write, delete",
       run: `${git} --work-tree=. add --all --force --`,
     }),
+    listedAt({
+      line: 92,
+      name: "checked-out-branch",
+      effects: "read",
+      run: `${git} symbolic-ref --quiet --end-of-options`,
+    }),
+    listedAt({
+      line: 95,
+      name: "merge-uncommitted",
+      effects: "read, write, delete",
+      run:
+        `${committing} merge --no-ff --no-commit --no-squash --no-stat --no-verify --no-gpg-sign ` +
+        "--no-verify-signatures --no-autostash --no-rerere-autoupdate --end-of-options",
+    }),
+    listedAt({
+      line: 98,
+      name: "fast-forward",
+      effects: "read, write, delete",
+      run:
+        `${committing} merge --ff-only --no-stat --no-verify --no-gpg-sign --no-verify-signatures --no-autostash ` +
+        "--no-rerere-autoupdate --end-of-options",
+    }),
   ]);
 });
 
@@ -265,6 +287,9 @@ const everyCommand = [
   "repository-top",
   "forget-paths",
   "stage-paths",
+  "checked-out-branch",
+  "merge-uncommitted",
+  "fast-forward",
 ];
 
 const ranWords =

@@ -146,7 +146,7 @@ test("remove's refusals say what keeps a worktree, and its forgetting says what 
   });
 });
 
-test("merge's refusals name a missing target, a changed worktree, a checked-out target, a conflict and a lost worktree", async () => {
+test("merge's refusals name a missing target, a changed worktree, a target checked out in another worktree, a conflict and a lost worktree", async () => {
   await withProject(async (project) => {
     const folder = ".forge/worktrees/feature";
     await project.output("git-worktrees.cut", { slice: "feature", base: "main" });
@@ -155,10 +155,11 @@ test("merge's refusals name a missing target, a changed worktree, a checked-out 
       await project.failure("git-worktrees.merge", { folder, into: "integration" }),
       "There is no branch integration, so the mode has nothing to merge forge/feature into.",
     );
+    await project.output("git-worktrees.cut", { slice: "elsewhere", base: "main" });
     assert.equal(
-      await project.failure("git-worktrees.merge", { folder, into: "main" }),
-      "The branch main is checked out in the project or in another worktree, and the mode merges only into a " +
-        "branch it can check out in a worktree of its own, so forge/feature is not merged.",
+      await project.failure("git-worktrees.merge", { folder, into: "forge/elsewhere" }),
+      "The branch forge/elsewhere is checked out in another worktree than the project's own folder, so " +
+        "forge/feature is not merged into it. Switch that worktree to another branch, then merge again.",
     );
     git(project, ".", ["switch", "--quiet", "--create", "integration"]);
     await commitFiles(project, { files: { "README.md": "The target's line.\n" }, message: "Change integration" });

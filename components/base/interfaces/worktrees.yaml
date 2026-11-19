@@ -33,6 +33,10 @@ actions:
     input: worktrees/set-aside-request.json
     output: worktrees/set-aside-response.json
     effects: [read, write, delete]
+  commit:
+    input: worktrees/commit-request.json
+    output: worktrees/commit-response.json
+    effects: [read, write, delete]
   apply:
     input: worktrees/apply-request.json
     output: worktrees/apply-response.json

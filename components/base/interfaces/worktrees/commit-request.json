@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CommitRequest",
+  "description": "Which slice's worktree to commit the changed and untracked files of, and the commit's message.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["folder", "message"],
+  "properties": {
+    "folder": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*(/\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+      "maxLength": 1000,
+      "description": "A worktree this mode made, relative to the project, such as .forge/worktrees/my-slice."
+    },
+    "message": {
+      "type": "string",
+      "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u0008\\u000b-\\u001f\\u007f]*$",
+      "maxLength": 5000,
+      "description": "The commit's message: its first line is the subject. It has a character that is not a space, and no control character but tab and newline."
+    }
+  }
+}

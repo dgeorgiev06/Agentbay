@@ -424,12 +424,6 @@ async function testFilesIn(toolchain: Toolchain, folder: string, wanted: Wanted)
   return files;
 }
 
-async function testFileAt(toolchain: Toolchain, folder: string, wanted: Wanted, index: number): Promise<string> {
-  const file = (await testFilesIn(toolchain, folder, wanted))[index];
-  assert.ok(file !== undefined, String(index));
-  return file;
-}
-
 function failingTests(count: number): WantedTestFile {
   return Array.from({ length: count }, (_, index) => ({
     name: `failing case ${String(index + 1)}`,
@@ -650,7 +644,7 @@ const cases: readonly Case[] = [
       const description = await toolchain.describe();
       const wanted = allPassing(description, [sums, wrongSum]);
       const folder = await toolchain.write("one-test-fails", wanted);
-      const file = await testFileAt(toolchain, folder, wanted, 1);
+      const [, file = ""] = await testFilesIn(toolchain, folder, wanted);
       assertTestResult(toolchain, await toolchain.test({ folder }), failedOnWrongSum(2, file));
     },
   },
@@ -733,7 +727,7 @@ const cases: readonly Case[] = [
       }));
       const wanted = allPassing(description, [tests]);
       const folder = await toolchain.write("long-messages", wanted);
-      const file = await testFileAt(toolchain, folder, wanted, 0);
+      const [file = ""] = await testFilesIn(toolchain, folder, wanted);
       assertCases(toolchain, await toolchain.test({ folder }), {
         failures: lengths.map((length) => ({
           name: `a message of ${String(length)} characters`,
@@ -860,7 +854,7 @@ const cases: readonly Case[] = [
         testFiles: [sums, wrongSum],
       };
       const folder = await toolchain.write("called-twice", wanted);
-      const file = await testFileAt(toolchain, folder, wanted, 1);
+      const [, file = ""] = await testFilesIn(toolchain, folder, wanted);
       const expected = {
         verdicts: [
           { name: first, verdict: "failed", lastLine: lineOf(first) },

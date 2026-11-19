@@ -191,6 +191,16 @@ test("lines a test prints that look like the summary do not change the counts", 
     passed: 1,
     failed: 1,
     failedTests: ["a sum that is wrong"],
+    failures: [
+      {
+        name: "a sum that is wrong",
+        file: "tests/prints.test.ts",
+        message: "Expected values to be strictly equal:",
+        charactersCut: 0,
+      },
+    ],
+    failuresNotListed: 0,
+    notLoaded: [],
   });
 });
 
@@ -209,6 +219,16 @@ test("a failing test marked to do is not named among the failed, and a # in a na
     passed: 1,
     failed: 1,
     failedTests: ["sum # 3 is wrong"],
+    failures: [
+      {
+        name: "sum # 3 is wrong",
+        file: "tests/marked.test.ts",
+        message: "Expected values to be strictly equal:",
+        charactersCut: 0,
+      },
+    ],
+    failuresNotListed: 0,
+    notLoaded: [],
   });
 });
 

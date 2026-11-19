@@ -8,7 +8,7 @@ The mode `typescript` implements `toolchain@1`. It checks and tests TypeScript c
 |---|---|
 | `describe` | Names the language, the patterns of its source and test files, its practices file and its checks, and which agreed scripts the project's `package.json` has and lacks. It reads that file and runs nothing. |
 | `check` | Runs each check, or the named ones, in the folder it is given, one after another, and gives each a verdict. |
-| `test` | Runs `npm test` in the folder it is given with the TAP reporter, on every test or on named files, and gives one verdict with the counts. |
+| `test` | Runs `npm test` in the folder it is given with the TAP reporter, on every test or on named files, and gives one verdict with the counts; a failed run also names its failing cases and the test files that did not load. |
 
 The folder given to `check` and `test` is a throwaway copy of the code. The caller makes it for the call and removes it afterwards; it is never a worktree a builder works in. The checkout's own scripts may write inside it, such as a cache or a build output, and must write nothing outside it. The mode cannot stop them: they run as listed commands, unconfined. A second call on the same folder gives the same verdicts.
 
@@ -22,6 +22,19 @@ A verdict is `passed`, `failed` or `inconclusive`:
 - `failed`: the check ended with an exit code its tool uses for a finding (1; for `typecheck` also 2, which `tsc` uses for a type error). For `test`, exit code 1 with at least one failed test.
 - `inconclusive`: anything else. The checkout is not set up for the check, the folder does not exist, the time limit was hit, a signal stopped it, the exit code is one the mode does not know, or the test run printed no summary or reported no tests. An inconclusive verdict is never a pass.
 
+## Failing cases
+
+A failed test run names what failed, read from node's TAP output:
+
+- `failures`: each failing case, in the order of the output, at most 50. A case is a `not ok` entry: a test, a hook's or a group's own failure, or a test cancelled with it. Not a case: a group or a test that failed only because a case under it did (node's `subtestsFailed`), a test marked to do, or a whole test file.
+- A case is its `name`, its `file` and its `message`. The file is where node locates the case, relative to the folder given: the file that declares the test, which for a shared test is the shared file. It is empty when node gives no location.
+- The message is the first line of node's error for the case that is not blank, with the spaces around it removed. For node's own assertions that line holds no value, such as "Expected values to be strictly equal:". The later lines hold the expected and actual values, or the source of an `assert.ok`; they, the stack, and the line and column are never given.
+- A message longer than 200 characters keeps its first 200, and `charactersCut` says how many were cut, counting those node itself left out of a very long line.
+- `failuresNotListed` counts the cases past the first 50.
+- `notLoaded`: each test file node reports as failed as a whole, with an exit code: it did not parse, an import was missing, or it threw outside its cases. Such a file is never a case. Node reports a file this way only when no case of it failed.
+
+To make the paths relative, the mode runs `pwd -P` in the folder after a failed run. If that gives no answer, a path is given in full, as node gives it.
+
 ## Commands
 
 The mode lists exactly the commands its scripts run, in `resources.commands`. Each runs code from the checkout it is given; that is its purpose.
@@ -31,6 +44,7 @@ The mode lists exactly the commands its scripts run, in `resources.commands`. Ea
 | `cat -- package.json` | `check` and `test`, before anything else |
 | `npm run generate:check --` and the four other checks | `check` |
 | `npm test -- --test-reporter=tap` | `test`, followed by the named test files |
+| `pwd -P` | `test`, after a run that failed, to name each file relative to the folder |
 
 ## Configuration
 
@@ -40,7 +54,7 @@ The mode lists exactly the commands its scripts run, in `resources.commands`. Ea
 |---|---|---|
 | `eslint.config.js` | `npm run lint` | typescript-eslint `strictTypeChecked`; no `any`; no non-null `!`; private members never reassigned are `readonly`; no type assertion except `as const`; every `switch` over a union is exhaustive; exported functions state their parameter and return types; at most three parameters; complexity at most 10; no nested ternary; no reassigned parameter; no default export; no `enum`; no class `extends`; no `@ts-ignore`, `@ts-expect-error` or `@ts-nocheck`; inline `eslint-disable` comments have no effect and are reported, and `--max-warnings 0` fails on them; files under `components/` import from `bay/` only `bay/sdk.ts`, import no file of another mode folder (`components/<tier>/<mode>/`, checked to six folder levels inside a mode) except an interface's shared test (`interfaces/<name>/tests/shared.ts`) and use no dynamic `import()`; files under `adapters/` import from `bay/` only `bay/sdk.ts` and `bay/adapter.ts`; files under `bay/` other than `cli.ts` and `mcp.ts` import neither `cli.ts`, `mcp.ts` nor anything under `adapters/` |
 | `prettier.json` | `npm run format:check` | Prettier with a line width of 120 |
-| `practices.md` | builders and reviewers; `describe` names it | The TypeScript practices TS-01 to TS-17 |
+| `practices.md` | builders and reviewers; `describe` names it | The TypeScript practices TS-01 to TS-22 |
 
 Not enforced here: import cycles and files that only re-export (they need an eslint plugin, so `bay check` will do it), and comment lines in kit code (a `bay check` measure).
 

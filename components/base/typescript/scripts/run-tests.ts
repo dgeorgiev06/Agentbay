@@ -1,6 +1,7 @@
 import { defineScript } from "../../../../bay/sdk.ts";
 import { testScript } from "./lib/checks.ts";
-import { notStartedReason, runTimed } from "./lib/commands.ts";
+import { casesOf } from "./lib/cases.ts";
+import { notStartedReason, realFolder, runTimed } from "./lib/commands.ts";
 import { checkoutScripts, readinessOf } from "./lib/package-scripts.ts";
 import { checkoutRequestOf } from "./lib/request.ts";
 import { testResult, testRunSubject, type TestResult } from "./lib/results.ts";
@@ -19,7 +20,11 @@ export const run = defineScript(async (input, context) => {
       return unrun(readiness.reason);
     case "set up": {
       const finished = await runTimed(context, { ...request, name: "run-tests", arguments: request.names ?? [] });
-      return testResult(finished, request.timeLimitSeconds);
+      const result = testResult(finished, request.timeLimitSeconds);
+      if (result.verdict !== "failed") {
+        return result;
+      }
+      return { ...result, ...casesOf(finished.stdout, await realFolder(context, request.folder)) };
     }
   }
 });

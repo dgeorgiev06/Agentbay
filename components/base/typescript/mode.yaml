@@ -29,6 +29,9 @@ resources:
     run-tests:
       run: npm test -- --test-reporter=tap
       effects: [read, write, network, spend, delete]
+    print-folder:
+      run: pwd -P
+      effects: [read]
 
 extraFiles: [eslint.config.js, prettier.json, practices.md]
 

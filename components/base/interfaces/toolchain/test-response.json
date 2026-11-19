@@ -79,6 +79,28 @@
           "maxItems": 1000,
           "description": "The names of the tests that failed, as far as the end of the output shows them; when the output was cut, some may be missing."
         },
+        "failures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/failingCase"
+          },
+          "maxItems": 50,
+          "description": "The failing cases, at most 50, in the order the output shows them. A case is a test, or a group whose own code failed, never a group that failed only because a case in it did. A test file that failed as a whole is in notLoaded, not here. As far as the end of the output shows them; when the output was cut, some may be missing. Left out only by a toolchain that does not name cases; toolchain@1's shared test requires it."
+        },
+        "failuresNotListed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many more failing cases the output shows past the 50 in failures; 0 when every case is listed."
+        },
+        "notLoaded": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/testFile"
+          },
+          "maxItems": 1000,
+          "uniqueItems": true,
+          "description": "The test files that failed as a whole, outside any case: they did not load, such as for a syntax error or a missing import, or they stopped outside their cases. A case of such a file that ran before it stopped is counted and, when it failed, listed in failures; the file itself is not a case. Left out only by a toolchain that does not say; toolchain@1's shared test requires it."
+        },
         "seconds": {
           "$ref": "#/$defs/seconds"
         },
@@ -131,6 +153,38 @@
       "type": "string",
       "maxLength": 100000,
       "description": "The end of what the run wrote to its standard error, with known secrets removed."
+    },
+    "failingCase": {
+      "type": "object",
+      "description": "One failing case: its name, the file it is in, and the first line of the test runner's message for it. No other line of the test file, no stack, no location within the file, and no expected or actual value beyond what that first line holds.",
+      "additionalProperties": false,
+      "required": ["name", "file", "message", "charactersCut"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "The case's name as the test runner gives it."
+        },
+        "file": {
+          "$ref": "#/$defs/testFile"
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "The first line of the test runner's message for the case that is not blank, without the spaces around it, and at most its first 200 characters; empty when the runner gave none."
+        },
+        "charactersCut": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many characters of that line were cut past the first 200; 0 when the line is whole."
+        }
+      }
+    },
+    "testFile": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "description": "A test file, as the test runner locates it, relative to the folder given when it is inside it."
     }
   }
 }

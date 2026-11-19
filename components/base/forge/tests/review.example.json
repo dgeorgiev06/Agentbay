@@ -1,0 +1,94 @@
+{
+  "input": {
+    "round": 1,
+    "slice": {
+      "name": "TD1",
+      "kind": "mode",
+      "scope": [
+        "components/modes/todo/**"
+      ],
+      "after": [],
+      "done": [
+        {
+          "id": "DOD-TD1-1",
+          "says": "A todo that was added is listed.",
+          "level": "must",
+          "proof": {
+            "kind": "fails-first",
+            "tests": [
+              "components/modes/todo/tests/todo.test.ts"
+            ]
+          }
+        },
+        {
+          "id": "DOD-TD1-2",
+          "says": "The actions are add and list and nothing else.",
+          "level": "should"
+        }
+      ]
+    },
+    "tests": [
+      {
+        "path": "components/modes/todo/tests/todo.test.ts",
+        "text": "import assert from \"node:assert/strict\";\nimport { test } from \"node:test\";\n\ntest(\"a todo that was added is listed\", async () => {\n  assert.deepEqual(await listed(), [{ id: 1, text: \"buy milk\", status: \"open\" }]);\n});\n"
+      }
+    ],
+    "code": [
+      {
+        "path": "components/modes/todo/scripts/add.ts",
+        "text": "export const run = defineScript(async () => ({ id: 1 }));\n"
+      }
+    ],
+    "verdicts": [
+      {
+        "item": "DOD-TD1-1",
+        "kind": "fails-first",
+        "verdict": "passed",
+        "detail": "The named tests failed on the base and pass on the head."
+      }
+    ],
+    "failing": {
+      "items": [],
+      "cases": [],
+      "withheld": 0,
+      "notListed": 0,
+      "notLoaded": []
+    },
+    "practices": [
+      {
+        "id": "P-05",
+        "says": "Model the domain in types: a closed set is a union with one shape per case, so a state that cannot happen cannot be written."
+      }
+    ]
+  },
+  "output": {
+    "conditions": [
+      {
+        "item": "DOD-TD1-1",
+        "held": true,
+        "cases": [
+          "a todo that was added is listed"
+        ]
+      },
+      {
+        "item": "DOD-TD1-2",
+        "held": false,
+        "why": "The mode also has a remove action."
+      }
+    ],
+    "findings": [
+      {
+        "to": "builder",
+        "case": "a todo that was added is listed",
+        "question": "P-05",
+        "fix": "Keep a todo's status a union of open and done."
+      },
+      {
+        "to": "test-writer",
+        "case": "a todo that was added is listed",
+        "question": "Q5",
+        "fix": "Add a case that lists before anything was added."
+      }
+    ]
+  }
+}

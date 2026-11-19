@@ -65,12 +65,14 @@ const standInScript = [
   'import { defineScript, fail, fieldsOf } from "../../../../bay/sdk.ts";',
   "",
   "export const run = defineScript(async (input, context) => {",
-  "  const name = fieldsOf(fieldsOf(input).slice ?? null).name;",
-  "  const asked = await context.files.write(`.stand-in/${String(name)}-asked.json`, JSON.stringify(input));",
-  "  if (!asked.ok) {",
-  "    fail(asked.message);",
+  "  const name = String(fieldsOf(fieldsOf(input).slice ?? null).name);",
+  "  const before = await context.files.read(`.stand-in/${name}-asked.json`);",
+  "  const asked = before.ok ? JSON.parse(before.value) : [];",
+  "  const written = await context.files.write(`.stand-in/${name}-asked.json`, JSON.stringify([...asked, input]));",
+  "  if (!written.ok) {",
+  "    fail(written.message);",
   "  }",
-  "  const read = await context.files.read(`.stand-in/${String(name)}.json`);",
+  "  const read = await context.files.read(`.stand-in/${name}.json`);",
   "  return read.ok ? JSON.parse(read.value) : fail(read.message);",
   "});",
   "",
@@ -115,7 +117,7 @@ async function madeFolder(prefix: string): Promise<string> {
 }
 
 export async function kitTemplate(): Promise<string> {
-  const folder = await madeFolder("agentbay-one-round-");
+  const folder = await madeFolder("agentbay-rounds-");
   const files = kitFiles();
   for (const path of files) {
     await mkdir(dirname(join(folder, path)), { recursive: true });
@@ -140,7 +142,7 @@ export async function removeAll(): Promise<void> {
 }
 
 export async function project(template: string): Promise<string> {
-  const root = await madeFolder("agentbay-one-round-case-");
+  const root = await madeFolder("agentbay-rounds-case-");
   git(root, ["clone", "-q", template, "."]);
   git(root, ["branch", into]);
   await symlink(await realpath(join(kit, "node_modules")), join(root, "node_modules"));
@@ -192,7 +194,7 @@ export function shortHead(root: string): string {
 }
 
 export async function started(root: string, trigger: Json): Promise<Waiting> {
-  const answer = await bay(root, ["call", "--workflow", "forge:workflows/one-round.yaml", JSON.stringify(trigger)]);
+  const answer = await bay(root, ["call", "--workflow", "forge:workflows/rounds.yaml", JSON.stringify(trigger)]);
   return waitingOf(runOf(answer), "start");
 }
 
@@ -234,8 +236,8 @@ export async function provedIn(root: string, name: string, proved: Proved): Prom
   await writeFile(join(root, ".stand-in", `${name}.json`), JSON.stringify(proved), "utf8");
 }
 
-export async function askedOf(root: string, name: string): Promise<Json> {
-  return jsonOf(await readFile(join(root, ".stand-in", `${name}-asked.json`), "utf8"));
+export async function askedOf(root: string, name: string): Promise<readonly Json[]> {
+  return listOf(jsonOf(await readFile(join(root, ".stand-in", `${name}-asked.json`), "utf8")));
 }
 
 export async function builderWrites(root: string, folder: string, files: readonly string[]): Promise<void> {
@@ -304,6 +306,74 @@ export type Handed = {
   readonly text: string;
 };
 
+export type Played = (task: Json) => Promise<Json>;
+
+export type Players = {
+  readonly tests: Played;
+  readonly builder: Played;
+  readonly reviewer?: Played;
+};
+
+export type Asked = {
+  readonly action: string;
+  readonly step: string;
+  readonly task: Json;
+};
+
+export function actionOf(task: Json): string {
+  return textAt(task, "agent").replace(/^agentbay-forge-/, "");
+}
+
+function playerOf(players: Players, action: string): Played | undefined {
+  switch (action) {
+    case "write-tests":
+      return players.tests;
+    case "build-without-tests":
+      return players.builder;
+    case "review":
+      return players.reviewer;
+    default:
+      throw new Error(`No player answers the action ${action}.`);
+  }
+}
+
+export async function playedTo(root: string, runId: string, players: Players): Promise<readonly Asked[]> {
+  const asked: Asked[] = [];
+  for (;;) {
+    const run = await shown(root, runId);
+    const waiting = fieldsOf(run).waiting ?? null;
+    if (textAt(run, "status") !== "waiting" || textAt(waiting, "reason") !== "skill") {
+      return asked;
+    }
+    const given = await task(root, runId);
+    const action = actionOf(given);
+    const player = playerOf(players, action);
+    if (player === undefined) {
+      return asked;
+    }
+    asked.push({ action, step: textAt(given, "stepKey"), task: given });
+    const output = await player(given);
+    const token = textAt(await task(root, runId), "token");
+    const answer = await bay(root, ["submit", JSON.stringify(output), "--token", token]);
+    if (fieldsOf(answer).ok !== true && textAt(runOf(answer), "status") !== "undone") {
+      throw new Error(`The kernel did not take the output of ${action}: ${JSON.stringify(answer)}`);
+    }
+  }
+}
+
+export function caseNamesIn(task: Json): readonly string[] {
+  const tests = listOf(fieldsOf(fieldsOf(task).input ?? null).tests);
+  const names = tests.flatMap((entry) => [...textAt(entry, "text").matchAll(/test\("([^"]+)"/g)]);
+  return names.map((found) => found[1] ?? "");
+}
+
+export function allHeld(task: Json): Json {
+  const slice = fieldsOf(fieldsOf(task).input ?? null).slice ?? null;
+  const [first = ""] = caseNamesIn(task);
+  const items = listOf(fieldsOf(slice).done).map((item) => textAt(item, "id"));
+  return { conditions: items.map((item) => ({ item, held: true, cases: [first] })), findings: [] };
+}
+
 export type RoundPlan = {
   readonly name: string;
   readonly files: readonly string[];
@@ -315,16 +385,27 @@ export type RoundPlan = {
 
 const noNames = { gained: [], lost: [], changed: [] };
 
-export async function roundToCard(root: string, start: Waiting, plan: RoundPlan): Promise<Waiting> {
+export async function declared(root: string, start: Waiting, files: readonly string[]): Promise<void> {
   await decided(root, start, { step: "start", verdict: "approve" });
-  const declared = await submitted(root, start.id, { files: [...plan.files], names: noNames });
-  assert.equal(textAt(declared, "status"), "waiting", JSON.stringify(declared));
-  await plan.whileWriting?.(start.id);
-  const written = await submitted(root, start.id, { tests: [...plan.tests] });
-  assert.equal(textAt(written, "status"), "waiting", JSON.stringify(written));
-  await builderWrites(root, `.forge/worktrees/${plan.name}`, plan.files);
-  await plan.whileBuilding?.(start.id);
-  return waitingOf(await submitted(root, start.id, plan.built), "card");
+  const answered = await submitted(root, start.id, { files: [...files], names: noNames });
+  assert.equal(textAt(answered, "status"), "waiting", JSON.stringify(answered));
+}
+
+export async function roundToCard(root: string, start: Waiting, plan: RoundPlan): Promise<Waiting> {
+  await declared(root, start, plan.files);
+  await playedTo(root, start.id, {
+    tests: async () => {
+      await plan.whileWriting?.(start.id);
+      return { tests: [...plan.tests] };
+    },
+    builder: async (given) => {
+      await builderWrites(root, textAt(fieldsOf(given).input ?? null, "folder"), plan.files);
+      await plan.whileBuilding?.(start.id);
+      return plan.built;
+    },
+    reviewer: (given) => Promise.resolve(allHeld(given)),
+  });
+  return waitingOf(await shown(root, start.id), "card");
 }
 
 export function keptRows(root: string): readonly Json[] {

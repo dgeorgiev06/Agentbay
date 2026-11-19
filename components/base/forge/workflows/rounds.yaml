@@ -1,0 +1,111 @@
+name: rounds
+trigger: { manual: true }
+budget: { minutes: 180 }
+steps:
+  - id: slice
+    action: slice
+  - id: start
+    approval: Build this slice?
+    show: $steps.slice.output.card
+  - id: cut
+    action: worktrees.cut
+    input:
+      slice: $steps.slice.output.slice.name
+      base: $steps.slice.output.base
+  - id: declare
+    action: declare
+    input:
+      slice: $steps.slice.output.slice
+      folder: $steps.cut.output.folder
+      practices: $settings.practices
+      fixed: $steps.slice.output.fixed
+  - id: round-1
+    action: round
+    input:
+      round: 1
+      slice: $steps.slice.output.slice
+      interface: $steps.slice.output.interface
+      fixed: $steps.slice.output.fixed
+      cut: $steps.cut.output
+      declared: $steps.declare.output
+      practices: $settings.practices
+      before: null
+  - id: review-1
+    action: review-round
+    input:
+      slice: $steps.slice.output.slice
+      fixed: $steps.slice.output.fixed
+      practices: $settings.practices
+      state: $steps.round-1.output
+  - id: round-2
+    action: round
+    input:
+      round: 2
+      slice: $steps.slice.output.slice
+      interface: $steps.slice.output.interface
+      fixed: $steps.slice.output.fixed
+      cut: $steps.cut.output
+      declared: $steps.declare.output
+      practices: $settings.practices
+      before: $steps.review-1.output
+  - id: review-2
+    action: review-round
+    input:
+      slice: $steps.slice.output.slice
+      fixed: $steps.slice.output.fixed
+      practices: $settings.practices
+      state: $steps.round-2.output
+  - id: round-3
+    action: round
+    input:
+      round: 3
+      slice: $steps.slice.output.slice
+      interface: $steps.slice.output.interface
+      fixed: $steps.slice.output.fixed
+      cut: $steps.cut.output
+      declared: $steps.declare.output
+      practices: $settings.practices
+      before: $steps.review-2.output
+  - id: review-3
+    action: review-round
+    input:
+      slice: $steps.slice.output.slice
+      fixed: $steps.slice.output.fixed
+      practices: $settings.practices
+      state: $steps.round-3.output
+  - id: prove
+    action: proof.prove
+    input:
+      slice: $steps.slice.output.slice
+      base: $steps.cut.output.commit
+      head: $steps.review-3.output.head
+      declared: $steps.review-3.output.declared
+      bugs: $steps.slice.output.bugs
+  - id: draw
+    action: draw
+    input:
+      slice: $steps.slice.output.slice
+      proof: $steps.prove.output
+      built: $steps.review-3.output.built
+      work: $steps.review-3.output.branch
+      kept: with-tests
+      into: $settings.into
+      rounds: $steps.review-3.output
+  - id: card
+    approval: Merge this slice?
+    show: $steps.draw.output.card
+    quotes: [review-1, review-2, review-3]
+    choices:
+      merge: { does: Merge into the integration branch, when: $steps.draw.output.merge }
+      send-back: { does: "A round after the card", when: $steps.draw.output.sendBack }
+      keep: { does: Stop; the branches stay }
+      discard: { does: Stop; the worktrees go, when: $steps.draw.output.discard }
+  - id: carry-out
+    action: carry-out
+    input:
+      choice: $steps.card.output.choice
+      name: $steps.slice.output.slice.name
+      branch: $steps.cut.output.branch
+      work: $steps.review-3.output.branch
+      head: $steps.review-3.output.head
+      into: $settings.into

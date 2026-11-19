@@ -1,0 +1,435 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Rounds",
+  "description": "Where a slice's rounds stand after a round or its review: the head proof judged, the builder's last commit, the verdicts, what the builder may be told of the failing cases, the findings for its next round, and the reviewer's verdicts. No field holds a line of the tests, and none holds a finding for the test writer, which forge keeps packed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "round",
+    "stage",
+    "done",
+    "base",
+    "built",
+    "builder",
+    "head",
+    "branch",
+    "declared",
+    "tests",
+    "verdicts",
+    "failing",
+    "toBuilder",
+    "toTests",
+    "conditions",
+    "remaining"
+  ],
+  "properties": {
+    "round": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3,
+      "description": "The last round that ran."
+    },
+    "stage": {
+      "enum": [
+        "proved",
+        "reviewed"
+      ],
+      "description": "proved: the round's head is proved and its tests worktree is on disk for the review. reviewed: the review is done and nothing of the round is on disk."
+    },
+    "done": {
+      "type": "boolean",
+      "description": "No round follows: the reviewer found nothing, the builder stopped, or round 3 was reviewed."
+    },
+    "base": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+      "description": "The commit the slice was cut from, in full."
+    },
+    "built": {
+      "description": "How the builder ended, as built.json gives it.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "outcome"
+          ],
+          "description": "The builder wrote the slice.",
+          "properties": {
+            "outcome": {
+              "const": "built",
+              "description": "The slice is written in its worktree."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "outcome",
+            "missing"
+          ],
+          "description": "The builder stopped, since the slice needs a capability that is not there.",
+          "properties": {
+            "outcome": {
+              "const": "stopped",
+              "description": "The builder stopped before the slice was done."
+            },
+            "missing": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "lacks",
+                "name"
+              ],
+              "description": "What is missing: where it would live, and its name. No sentence, so nothing a builder writes reaches a card.",
+              "properties": {
+                "lacks": {
+                  "enum": [
+                    "kernel",
+                    "toolbox",
+                    "test-toolbox",
+                    "interface"
+                  ],
+                  "description": "Where the missing capability would live."
+                },
+                "name": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z][A-Za-z0-9._@/-]*$",
+                  "maxLength": 80,
+                  "description": "The name of the missing function, operation or action, such as worktrees.commit."
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "builder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "branch",
+        "commit"
+      ],
+      "description": "The builder's last commit and its branch.",
+      "properties": {
+        "branch": {
+          "type": "string",
+          "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+          "maxLength": 255,
+          "description": "The builder's branch."
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+          "description": "The builder's last commit, in full."
+        }
+      }
+    },
+    "head": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+      "description": "The commit proof judged: the tests over the builder's last commit."
+    },
+    "branch": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The head's branch, forge/<slice>-tests-<round>."
+    },
+    "folder": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*(/\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+      "maxLength": 1000,
+      "description": "The tests worktree, on disk only between a round and its review."
+    },
+    "declared": {
+      "$ref": "proof@1/prove-request.json#/$defs/declaration"
+    },
+    "tests": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "The paths of the tests the head holds; never their text."
+    },
+    "verdicts": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "required": [
+          "item",
+          "kind",
+          "verdict"
+        ],
+        "description": "A verdict of proof, without its failing cases.",
+        "properties": {
+          "item": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "passed",
+              "failed",
+              "inconclusive"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "The round's verdicts, without the checks items and without failing cases."
+    },
+    "failing": {
+      "$ref": "#/$defs/failing"
+    },
+    "toBuilder": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "$ref": "#/$defs/finding"
+      },
+      "description": "The reviewer's findings for the builder's next round."
+    },
+    "toTests": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "How many findings for the test writer forge keeps packed for its next round."
+    },
+    "conditions": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/condition"
+      },
+      "description": "The reviewer's last verdicts on the conditions."
+    },
+    "remaining": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "to",
+          "case",
+          "question"
+        ],
+        "description": "A finding left after the last round, without its fix.",
+        "properties": {
+          "to": {
+            "enum": [
+              "test-writer",
+              "builder"
+            ],
+            "description": "Who the finding is for: the test writer corrects the tests, the builder the code."
+          },
+          "case": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S",
+            "description": "A case's name, as the tests name it."
+          },
+          "question": {
+            "type": "string",
+            "pattern": "^(Q([1-9]|10)|negative-paths|condition|[A-Z]{1,4}-[0-9]{1,3})$",
+            "description": "The question the case fails: Q1 to Q10 of reviewing-tests.md, negative-paths, condition, or the id of a practice given."
+          }
+        }
+      },
+      "description": "The findings left after the last round, for the owner."
+    },
+    "reviewedAt": {
+      "type": "string",
+      "pattern": "^review-[1-3]$",
+      "description": "The workflow step under which the reviewer last ran."
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "to",
+        "case",
+        "question",
+        "fix"
+      ],
+      "description": "One finding of the reviewer, for the test writer or for the builder.",
+      "properties": {
+        "to": {
+          "enum": [
+            "test-writer",
+            "builder"
+          ],
+          "description": "Who the finding is for: the test writer corrects the tests, the builder the code."
+        },
+        "case": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "\\S",
+          "description": "A case's name, as the tests name it."
+        },
+        "question": {
+          "type": "string",
+          "pattern": "^(Q([1-9]|10)|negative-paths|condition|[A-Z]{1,4}-[0-9]{1,3})$",
+          "description": "The question the case fails: Q1 to Q10 of reviewing-tests.md, negative-paths, condition, or the id of a practice given."
+        },
+        "fix": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "\\S",
+          "description": "One sentence on what would fix it. For the builder it shares no run of 20 characters with the tests."
+        }
+      }
+    },
+    "condition": {
+      "description": "The reviewer's verdict on one condition: held by which cases, or not held and why.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "item",
+            "held",
+            "cases"
+          ],
+          "properties": {
+            "item": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "The item's id."
+            },
+            "held": {
+              "const": true,
+              "description": "The condition is held."
+            },
+            "cases": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 50,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S",
+                "description": "A case's name, as the tests name it."
+              },
+              "description": "The cases that hold it."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "item",
+            "held",
+            "why"
+          ],
+          "properties": {
+            "item": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "The item's id."
+            },
+            "held": {
+              "const": false,
+              "description": "The condition is not held."
+            },
+            "why": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "\\S",
+              "description": "One sentence on why; it shares no run of 20 characters with the tests."
+            }
+          }
+        }
+      ]
+    },
+    "failing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "cases",
+        "withheld",
+        "notListed",
+        "notLoaded"
+      ],
+      "description": "What of a failed test run the builder may be told: the failed must items, each failing case's name, its file when the slice names it, and its message only when it quotes no test; the count of messages withheld; the test files that did not load, by path only.",
+      "properties": {
+        "items": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": "The must items that failed."
+        },
+        "cases": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name"
+            ],
+            "description": "A failing case as the builder may be told it.",
+            "properties": {
+              "name": {
+                "type": "string",
+                "maxLength": 200,
+                "description": "The case's name, cut at 200 characters, with no control character."
+              },
+              "file": {
+                "$ref": "proof@1/prove-request.json#/$defs/path",
+                "description": "The test file, only when it is one the slice names; its path is already in the builder's task."
+              },
+              "message": {
+                "type": "string",
+                "maxLength": 200,
+                "description": "The first line of the runner's message, only when it shares no run of 20 characters with any test of the slice."
+              }
+            }
+          },
+          "description": "The failing cases."
+        },
+        "withheld": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many messages were left out because they share a run of 20 characters with a test."
+        },
+        "notListed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many more failing cases the runner counted."
+        },
+        "notLoaded": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "proof@1/prove-request.json#/$defs/path"
+          },
+          "description": "The slice's test files that did not load, by path only."
+        }
+      }
+    }
+  }
+}

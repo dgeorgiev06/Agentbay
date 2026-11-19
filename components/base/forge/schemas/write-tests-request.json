@@ -1,10 +1,15 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "WriteTestsRequest",
-  "description": "What the test writer reads to write the slice's tests: the slice's conditions, the interface files' paths, the slice's worktree at its base, before any builder has worked in it, and the practices.",
+  "description": "What the test writer reads to write the slice's tests: the slice's conditions, the interface files' paths, a worktree at the slice's base that holds no builder's work, and the practices; from round 2 on, its own earlier tests and the reviewer's findings for it.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["slice", "interface", "folder", "practices"],
+  "required": [
+    "slice",
+    "interface",
+    "folder",
+    "practices"
+  ],
   "properties": {
     "slice": {
       "$ref": "proof@1/prove-request.json#/$defs/slice"
@@ -22,7 +27,7 @@
       "type": "string",
       "pattern": "^(?!.*\\.\\.)\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*(/\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
       "maxLength": 1000,
-      "description": "The slice's worktree at its base commit, relative to the project, such as .forge/worktrees/TR2. No builder has worked in it yet."
+      "description": "A worktree at the slice's base commit, relative to the project. It holds no builder's work."
     },
     "practices": {
       "type": "array",
@@ -32,6 +37,78 @@
         "$ref": "proof@1/prove-request.json#/$defs/path"
       },
       "description": "The practices files to read before writing, relative to the project, from forge's settings."
+    },
+    "earlier": {
+      "type": "array",
+      "maxItems": 50,
+      "description": "From round 2 on: the tests it handed in before.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "text"
+        ],
+        "properties": {
+          "path": {
+            "$ref": "proof@1/prove-request.json#/$defs/path"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 200000,
+            "description": "The file's whole text."
+          }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "$ref": "#/$defs/finding"
+      },
+      "description": "From round 2 on: the reviewer's findings for the test writer."
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "to",
+        "case",
+        "question",
+        "fix"
+      ],
+      "description": "One finding of the reviewer, for the test writer or for the builder.",
+      "properties": {
+        "to": {
+          "enum": [
+            "test-writer",
+            "builder"
+          ],
+          "description": "Who the finding is for: the test writer corrects the tests, the builder the code."
+        },
+        "case": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "\\S",
+          "description": "A case's name, as the tests name it."
+        },
+        "question": {
+          "type": "string",
+          "pattern": "^(Q([1-9]|10)|negative-paths|condition|[A-Z]{1,4}-[0-9]{1,3})$",
+          "description": "The question the case fails: Q1 to Q10 of reviewing-tests.md, negative-paths, condition, or the id of a practice given."
+        },
+        "fix": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "\\S",
+          "description": "One sentence on what would fix it. For the builder it shares no run of 20 characters with the tests."
+        }
+      }
     }
   }
 }

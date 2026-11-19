@@ -4,12 +4,21 @@
   "description": "The merge card and the three rules: merge, send back and discard, each true or false, with a reason on the card for each that is false.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["card", "merge", "sendBack", "discard"],
+  "required": [
+    "card",
+    "merge",
+    "sendBack",
+    "discard"
+  ],
   "properties": {
     "card": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["title", "lines", "withheld"],
+      "required": [
+        "title",
+        "lines",
+        "withheld"
+      ],
       "properties": {
         "title": {
           "type": "string",
@@ -20,32 +29,85 @@
           "type": "array",
           "maxItems": 2000,
           "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["mark", "words", "source"],
-            "properties": {
-              "mark": {
-                "const": "computed",
-                "description": "Every line of forge's cards comes from a step that ran no skill."
-              },
-              "words": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 2000,
-                "description": "What the owner reads, worked out by script from the slice and proof's answer, never a builder's words."
-              },
-              "source": {
+            "oneOf": [
+              {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["step"],
+                "required": [
+                  "mark",
+                  "words",
+                  "source"
+                ],
                 "properties": {
-                  "step": {
-                    "enum": ["prove", "draw"],
-                    "description": "The step the line cites."
+                  "mark": {
+                    "const": "computed",
+                    "description": "The line was worked out by script from a step that ran no skill."
+                  },
+                  "words": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "description": "What the owner reads, worked out by script from the slice and proof's answer, never a builder's words."
+                  },
+                  "source": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "step"
+                    ],
+                    "properties": {
+                      "step": {
+                        "enum": [
+                          "prove",
+                          "draw"
+                        ],
+                        "description": "The step the line cites."
+                      }
+                    }
+                  }
+                },
+                "description": "A line worked out by script, citing prove or draw."
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "mark",
+                  "words",
+                  "source"
+                ],
+                "description": "A line of the reviewer's judgement, citing the review step under which the reviewer last ran; the kernel adds its skill and tier.",
+                "properties": {
+                  "mark": {
+                    "const": "judged",
+                    "description": "The line is the reviewer's judgement, never a check."
+                  },
+                  "words": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "description": "The reviewer's verdict on a condition, or a finding that remains, in the reviewer's words and the case's name."
+                  },
+                  "source": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "step"
+                    ],
+                    "properties": {
+                      "step": {
+                        "enum": [
+                          "review-1",
+                          "review-2",
+                          "review-3"
+                        ],
+                        "description": "The review step the line cites."
+                      }
+                    }
                   }
                 }
               }
-            }
+            ]
           }
         },
         "withheld": {

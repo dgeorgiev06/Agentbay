@@ -1,11 +1,8 @@
-import { defineScript, fieldsOf, type Json } from "../../../../bay/sdk.ts";
+import { defineScript, fieldsOf } from "../../../../bay/sdk.ts";
 import { sliceOf } from "./lib/cards.ts";
 import { checkAnswer } from "./lib/check-answer.ts";
 import { refusedDeclaration } from "./lib/declared.ts";
-
-function textsOf(value: Json | undefined): readonly string[] {
-  return Array.isArray(value) ? value.filter((text) => typeof text === "string") : [];
-}
+import { textsOf } from "./lib/json-values.ts";
 
 export const run = defineScript((input, context) => {
   const asked = fieldsOf(context.skillInput ?? null);

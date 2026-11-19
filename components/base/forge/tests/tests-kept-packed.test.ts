@@ -100,6 +100,5 @@ test("while the builder's step is open, the partition holds the tests packed and
   ]);
   assert.deepEqual(building.holding, []);
   assert.deepEqual(keptRows(root), []);
-  const afterwards = await filesHolding(root, "", [kept.text, other.text]);
-  assert.deepEqual(afterwards, [`.forge/worktrees/K1-tests/${testFile}`, `.forge/worktrees/K1-tests/${otherFile}`]);
+  assert.deepEqual(await filesHolding(root, "", [kept.text, other.text]), []);
 });

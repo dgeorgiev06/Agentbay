@@ -459,24 +459,24 @@ function withCommands(description: Description, commands: readonly WantedCommand
 function shownRun(value: Value): Fields {
   const fields = fieldsOf(value);
   secondsOf(value);
-  const { ended, exitCode, stdout, stdoutCut } = fields;
-  switch (ended) {
-    case "exited":
-      assert.deepEqual(keysOf(value), ["ended", "exitCode", "seconds", "stdout", "stdoutCut"]);
-      return { ended, exitCode: exitCode ?? null, stdout: textOf(stdout), stdoutCut: stdoutCut ?? null };
-    case "timed-out":
-      assert.deepEqual(keysOf(value), ["ended", "reason", "seconds", "stdout", "stdoutCut"]);
-      return { ended, reason: givenReasonOf(fields) };
-    default:
-      assert.deepEqual(keysOf(value), ["ended", "reason", "seconds"]);
-      return { ended: ended ?? null, reason: givenReasonOf(fields) };
+  const { exitCode, stdout, stdoutCut } = fields;
+  const ended = textOf(fields.ended);
+  if (ended === "exited") {
+    assert.deepEqual(keysOf(value), ["ended", "exitCode", "seconds", "stdout", "stdoutCut"]);
+    return { ended, exitCode: exitCode ?? null, stdout: textOf(stdout), stdoutCut: stdoutCut ?? null };
   }
+  if (ended === "timed-out") {
+    assert.deepEqual(keysOf(value), ["ended", "reason", "seconds", "stdout", "stdoutCut"]);
+    return { ended, reason: givenReasonOf(fields) };
+  }
+  assert.deepEqual(keysOf(value), ["ended", "reason", "seconds"]);
+  return { ended, reason: givenReasonOf(fields) };
 }
 
 function whyNotExited(outputs: readonly Value[]): string {
   const reasons = outputs.flatMap((output) => {
     const { ended, reason } = fieldsOf(output);
-    return ended !== "exited" && typeof reason === "string" ? [`${String(ended)}: ${reason}`] : [];
+    return typeof ended === "string" && ended !== "exited" && typeof reason === "string" ? [`${ended}: ${reason}`] : [];
   });
   return reasons.length === 0 ? "" : ["The toolchain said why a command did not end:", ...reasons].join("\n");
 }
@@ -990,10 +990,7 @@ const cases: readonly Case[] = [
     run: async (toolchain) => {
       const description = await toolchain.describe();
       const folder = await toolchain.write("absent-command", withCommands(description, [endingWith("greet", 0)]));
-      assertRuns(
-        [await toolchain.run({ folder, name: "absent" })],
-        [{ ended: "not set up", reason: givenReason }],
-      );
+      assertRuns([await toolchain.run({ folder, name: "absent" })], [{ ended: "not set up", reason: givenReason }]);
     },
   },
   {
@@ -1016,7 +1013,10 @@ const cases: readonly Case[] = [
       const much: WantedCommand = { name: "much", line, times: linesPastTheKeptOutput, outcome: "ends", exitCode: 0 };
       const folder = await toolchain.write("prints-much", withCommands(description, [much]));
       const output = await toolchain.run({ folder, name: "much" });
-      assertRuns([output], [{ ended: "exited", exitCode: 0, stdout: textOf(fieldsOf(output).stdout), stdoutCut: true }]);
+      assertRuns(
+        [output],
+        [{ ended: "exited", exitCode: 0, stdout: textOf(fieldsOf(output).stdout), stdoutCut: true }],
+      );
       const stdout = textOf(fieldsOf(output).stdout);
       assert.ok(stdout.endsWith(`\n${line}\n`), stdout.slice(-200));
       assert.ok(stdout.length < (line.length + 1) * linesPastTheKeptOutput, String(stdout.length));

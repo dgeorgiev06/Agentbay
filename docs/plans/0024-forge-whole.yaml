@@ -1,41 +1,12 @@
 title: 'Forge, whole: what remains after the first eleven slices; rounds, the planter, the leak check and the cards, then requirements, design, planning and waves'
 slices:
-- title: 'Forge rounds two and three: a failing case reaches the builder as its name, and its message only when it shares no long run of text with the tests; findings go to the test writer or the builder, the test writer never reads the builder''s code; then the owner'
-  slice:
-    name: FA2
-    kind: mode
-    scope:
-    - components/base/forge/**
-    after: []
-    done:
-    - id: DOD-FA2-1
-      says: A slice whose tests fail in round 1 goes back to the builder with each failing case's name and message and nothing else of the test, and a slice still failing after round 3 reaches the merge card.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/base/forge/tests/rounds.test.ts
-    - id: DOD-FA2-2
-      says: A finding meant for the builder that holds a line of a test file is sent back to the reviewer, not passed on.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/base/forge/tests/review-check.test.ts
-    - id: DOD-FA2-3
-      says: The kit's checks and its whole test run pass.
-      level: must
-      proof:
-        kind: checks
 - title: A planter that never saw the tests writes the bugs to plant from the builder's code and the conditions, and proof's bugs-caught item uses them
   slice:
     name: PT1
     kind: mode
     scope:
     - components/base/forge/**
-    after:
-    - slice: FA2
-      because: The planter is a step of the round that FA2 builds.
+    after: []
     done:
     - id: DOD-PT1-1
       says: The planter's task holds the code and the conditions and no line of the tests; its bugs are handed to proof, and a bug that survives is named on the card.
@@ -98,9 +69,7 @@ slices:
     scope:
     - components/modes/todo/**
     - docs/plans/0023-todo-mode.yaml
-    after:
-    - slice: FA2
-      because: It is the test of forge with rounds.
+    after: []
     done:
     - id: DOD-TDX-1
       says: TD1 and TD2 are each merged from their merge card, every must item passed, with no file of the todo mode written by hand.

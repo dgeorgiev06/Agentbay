@@ -71,3 +71,16 @@ What the owner has not yet seen and must: the sentences HK1 changed (the coordin
 Open with the owner, one at a time: the todo rebuild here without the hook first; the PM mode's five questions; the home mode's six, first which counties; the research's ten changes to the practices; WM1's choice that a merge which does not land is refused with a sentence.
 - 05:00: KP1 merged and pushed (2,025 pass). FA2 started; RT1 in flight. A kept output's check feedback is shown as written: forge's checks must never quote a test (FA2 holds it with a test).
 - 06:05: RT1 merged and pushed. Thirteen slices merged; eleven remain (FA2 in flight).
+
+## After FA2 (19 November, about 06:45 owner's time)
+
+FA2 is merged: rounds two and three, and the reviewer. Twenty of the builder's bugs and four of the reviewer's own were caught.
+
+Found while building it, each still open:
+
+- **A called action's answer is text in the kernel's database.** Forge calls proof inside the round's script, and only a skill's output can be kept packed. Proof's raw messages, which may quote a test, sit in `.agentbay/kernel.db` while later builders work. With the hook a builder cannot read that file; without it nothing stops the read. Needs a kernel slice (KP2): an action may say the answers of the actions it calls are kept packed. Must land before a no-hook run is called leak-free.
+- **The card has no line for whether the hook saw each step.** A mode's script cannot read a run's events. Needs a kernel change (a script reads its own run's events of one kind), then FC2 adds the line.
+- **A round keeps the kernel's 480 seconds.** Proof runs inside the round's script. A longer limit adds a `bay check` warning that kit tests pin. A slice whose named tests run longer fails the run. To decide: raise the limit and change the pinned warning, or have proof run as its own workflow step.
+- **A wrong test is not caught until round three.** When a round's tests fail and it is not the last round, the reviewer is skipped and only the builder goes again. If the test is what is wrong, the builder fails three times and the reviewer first sees it at the end. The owner decides: the reviewer reviews a failing round too (one more deep call per failing round), or stays as is.
+- **Kept tests stay until the rounds end.** A run that fails midway leaves the rows in forge's partition.
+- For PT1: cut the planter a worktree at the builder's last commit, never `<S>-tests-n`. For LK1: reuse `quotesAny`; run before `review-round` forgets the kept tests.

@@ -53,10 +53,10 @@ test("bay check accepts a made-up worktrees mode that keeps commits as files and
   assert.match(checked.output, /^bay check: 0 errors, /m);
 });
 
-test("a made-up worktrees mode passes every case of the shared test that its six built actions answer", () => {
+test("a made-up worktrees mode passes every case of the shared test that its seven built actions answer", () => {
   assert.equal(shelfTested.status, 1, shelfTested.output);
   assert.deepEqual(failedTests(shelfTested.output), casesOf(shelf, casesThatNeedMergeSetAsideOrApply));
-  assert.match(shelfTested.output, /^# pass 25$/m);
+  assert.match(shelfTested.output, /^# pass 28$/m);
 });
 
 test("a made-up worktrees mode whose remove deletes a worktree with a changed file fails the shared test's case on it", () => {

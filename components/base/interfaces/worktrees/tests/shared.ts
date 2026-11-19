@@ -740,7 +740,6 @@ const cases: readonly Case[] = [
       "commit-request and commit-response (committed: the commit's parent is the branch's head before, its message the one given; the files stay)",
     run: async (world) => {
       const folder = await cut(world, "feature");
-      const owner = await ownersCheckout(world);
       await written(world, folder, {
         "README.md": "Changed in the slice.\n",
         "notes/new.txt": "new\n",
@@ -766,7 +765,7 @@ const cases: readonly Case[] = [
         untracked: [],
       });
       assert.deepEqual(await filesIn(world, folder), { ...expected, "run.log": "ignored\n" });
-      assert.deepEqual(await ownersCheckout(world), owner);
+      assert.deepEqual([await world.checkedOut(), await world.headOf(ownersBranch)], [ownersBranch, world.base]);
     },
   },
   {

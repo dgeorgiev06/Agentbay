@@ -207,3 +207,132 @@ When a function passes ten branches, name a part and move it. Do not split a fun
 Held by: the feature map; review. Source: ours.
 
 Files, the clock, processes and the network are ports from `bay/ports.ts`, passed in. Logic does not import `node:fs` or call `Date.now()`. A port exists only when two adapters exist (P-10).
+
+## TS-18 A loop says what it makes
+
+Held by: review; linter where a rule exists (`prefer-for-of`). Source: ours.
+
+Making a list from a list is `map`; choosing from one is `filter` or `find`; doing something for each item is `for…of`. An index appears only when the index is the point.
+
+```ts
+// good
+const open = todos.filter((todo) => todo.status === "open");
+const texts = open.map((todo) => todo.text);
+
+// bad
+const texts = [];
+for (let i = 0; i < todos.length; i++) {
+  if (todos[i].status === "open") {
+    texts.push(todos[i].text);
+  }
+}
+```
+
+## TS-19 One loop, one job
+
+Held by: review. Source: ours.
+
+A loop that chooses, changes and totals at once is three named steps. Each can be read, and tested, alone.
+
+```ts
+// good
+const open = todos.filter(isOpen);
+const overdue = open.filter((todo) => isOverdue(todo, today));
+const count = overdue.length;
+
+// bad
+let count = 0;
+const overdue = [];
+for (const todo of todos) {
+  if (todo.status === "open" && todo.due !== undefined && todo.due < today) {
+    overdue.push({ ...todo, late: true });
+    count += 1;
+  }
+}
+```
+
+## TS-20 Leave early
+
+Held by: review; linter (`no-else-return`, `complexity` 10). Source: ours.
+
+What is refused or empty is answered at the top, and the function returns. The main path is then not nested.
+
+```ts
+// good
+function markDone(todos: readonly Todo[], id: number): Outcome<readonly Todo[]> {
+  const found = todos.find((todo) => todo.id === id);
+  if (found === undefined) {
+    return refused(`No todo has the id ${String(id)}.`);
+  }
+  if (found.status === "done") {
+    return ok(todos);
+  }
+  return ok(todos.map((todo) => (todo.id === id ? { ...todo, status: "done" } : todo)));
+}
+
+// bad
+function markDone(todos: readonly Todo[], id: number): Outcome<readonly Todo[]> {
+  const found = todos.find((todo) => todo.id === id);
+  if (found !== undefined) {
+    if (found.status !== "done") {
+      return ok(todos.map((todo) => (todo.id === id ? { ...todo, status: "done" } : todo)));
+    } else {
+      return ok(todos);
+    }
+  } else {
+    return refused(`No todo has the id ${String(id)}.`);
+  }
+}
+```
+
+## TS-21 A function that decides is apart from one that acts
+
+Held by: review. Source: ours.
+
+Working out what to do is a pure function from values to a value, tested with plain values. Doing it, a write or a call to the outside, is a thin function around it (TS-17).
+
+```ts
+// good
+function nextId(todos: readonly Todo[]): number {
+  return todos.reduce((highest, todo) => Math.max(highest, todo.id), 0) + 1;
+}
+
+async function add(store: TodoStore, text: string): Promise<Todo> {
+  const todo = { id: nextId(await store.all()), text, status: "open" } as const;
+  await store.insert(todo);
+  return todo;
+}
+
+// bad
+async function add(store: TodoStore, text: string): Promise<Todo> {
+  const rows = await store.all();
+  let highest = 0;
+  for (const row of rows) {
+    if (row.id > highest) {
+      highest = row.id;
+    }
+  }
+  const todo = { id: highest + 1, text, status: "open" } as const;
+  await store.insert(todo);
+  return todo;
+}
+```
+
+## TS-22 A function returns one kind of thing
+
+Held by: the compiler for most (TS-08); review. Source: ours.
+
+Not a list at one time and nothing at another: no todos is an empty list. Not a value at one time and a thrown error at another for a problem the caller can act on (TS-05).
+
+```ts
+// good
+function openTodos(todos: readonly Todo[]): readonly Todo[] {
+  return todos.filter((todo) => todo.status === "open");
+}
+
+// bad
+function openTodos(todos: readonly Todo[]): readonly Todo[] | undefined {
+  const open = todos.filter((todo) => todo.status === "open");
+  return open.length === 0 ? undefined : open;
+}
+```

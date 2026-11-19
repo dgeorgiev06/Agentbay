@@ -9,7 +9,7 @@ Held by: **check** (fails `npm run check`), **review** (the reviewer verifies it
 | Id | Practice | Held by |
 |---|---|---|
 | P-01 | No comments in code. Comments go stale. A name says what; a decision record says why; `bay/README.md` says how the parts fit. | check: lint rule `agentbay/no-comments` |
-| P-02 | The language's own practices, with a good and a bad example each, are in the toolchain's file: for TypeScript, `components/base/typescript/practices.md` (TS-01 to TS-17). A brief's Input names that file. | check: compiler and lint for most; review for the rest |
+| P-02 | The language's own practices, with a good and a bad example each, are in the toolchain's file: for TypeScript, `components/base/typescript/practices.md` (TS-01 to TS-22). A brief's Input names that file. | check: compiler and lint for most; review for the rest |
 | P-03 | Problems are returned as values (`Outcome<T>`), not thrown, except where the process cannot go on. | review |
 | P-04 | Readable before short. No line is packed to save lines. | check: format; review |
 | P-05 | Model the domain in types: a closed set is a union with one shape per case, so a state that cannot happen cannot be written. | review |
@@ -27,6 +27,27 @@ Held by: **check** (fails `npm run check`), **review** (the reviewer verifies it
 | P-12 | The same code or rule lives in one place (ADR 11). | planned check: copy-paste detector with a threshold |
 | P-13 | Before adding, remove what is in the way. Size is reported before and after every slice and a rise is explained, but size is never a target: quality and readability decide. | review: line counts in every report |
 | P-14 | A wide or new interface is designed at least three ways, under different constraints, and compared before it is built (ADR 10 is the example). | review |
+| P-36 | A module is named for what it does: trust, runs, proof. Never utils, helpers, common or manager. | check planned: names of folders and files; review |
+| P-37 | A small surface over much work. A module exports few things and each does something whole; many thin exports that pass things along is a shallow module. | review |
+| P-38 | A module owns its data. One module reads and writes a table or a file; the others ask it. | review; the feature map where a design gives one |
+| P-39 | Dependencies point one way. No cycle, and the core never imports the edges: commands, adapters, whatever talks to the outside. | check: feature map test |
+| P-40 | What changes together lives together. A change that must touch five folders says the boundaries are wrong. | review: the paths a slice changed |
+| P-41 | A module's tests sit with it and use only its entry file. | check: feature map test (the list of tests that reach in only shrinks) |
+
+## Data
+
+| Id | Practice | Held by |
+|---|---|---|
+| P-42 | One module owns a table; another module asks that module and never queries the table. | review; the feature map |
+| P-43 | A change to a schema is a numbered migration file. Files are added, never edited once merged. | check planned: a merged migration file does not change; review |
+| P-44 | A value goes into a query as a parameter, never built into the query's text. | check planned: lint on SQL built from a template with a value; review |
+| P-45 | Writes that belong together share one transaction, so a failure keeps all of them or none. | review; a test that fails half way |
+| P-46 | A write can be repeated and leaves the same state (P-07): a retry makes no second row. | review; a test that writes twice |
+| P-47 | The schema holds the rules it can: required, unique, a reference to another row. Code is not the only guard. | review |
+| P-48 | A query names its columns and carries a limit. | review |
+| P-49 | No query inside a loop: ask once for all the rows. | review |
+| P-50 | Tests run on the real database engine, never on a stand-in that always answers saved (ADR 10). | review |
+| P-51 | An action that reads writes nothing, and its effects say read only. A table is made by a migration, not on first read. | check: an action's declared effects; review |
 
 ## Tests
 

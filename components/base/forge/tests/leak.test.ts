@@ -179,7 +179,9 @@ type Building = {
 async function ranWith(root: string, building: Building): Promise<Ran> {
   const { name, code } = building;
   const tests = testsOf(name);
-  const files = code("").map((file) => file.path);
+  const files = code("")
+    .map((file) => file.path)
+    .filter((path) => path !== testPath(name));
   const start = await started(root, {
     planned: { title: name, slice: sliceOf(name) },
     base: shortHead(root),
@@ -333,6 +335,7 @@ describe(
           return Promise.resolve({ ...fieldsOf(allHeld(given)), findings: reviews === 1 ? findings : [] });
         },
         code: () => [
+          { path: testPath(name), text: [second, ""].join("\n") },
           {
             path: codeOf(name),
             text: [

@@ -123,6 +123,15 @@ describe("the shared-text rule", () => {
     assert.deepEqual(sharedText(compared([code, other], [before])), [{ path: otherPath, lines: 1 }]);
   });
 
+  test("one sentence of a condition with two is not caught on its own", () => {
+    const [first] = slice.done;
+    assert.ok(first !== undefined);
+    const two = { ...slice, done: [{ ...first, says: `The quill is weighed first. ${condition}` }] };
+    const code = file(codePath, [sentenceLine]);
+    const phrases = phrasesOf(two, [codePath, testPath, interfacePath]);
+    assert.deepEqual(sharedText({ ...compared([code]), phrases }), []);
+  });
+
   test("the phrases are the conditions' sentences and the paths, lower case, none shorter than ten characters", () => {
     assert.deepEqual(phrasesOf(slice, [codePath, "a/b.ts"]), [
       "a quill is counted once, even when the ink is dry and the moon is full",

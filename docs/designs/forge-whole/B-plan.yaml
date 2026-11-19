@@ -1,0 +1,622 @@
+title: 'Forge, whole: design B, from requirements to merge, built smallest first'
+slices:
+- title: A workflow step may run only when an earlier output is true, and a block of steps may repeat while one
+    is true, at most a set number of times that the kernel counts
+  slice:
+    name: KR1
+    kind: capability
+    scope:
+    - schemas/workflow.schema.json
+    - bay/generated/workflow.ts
+    - bay/runs/workflow-steps.ts
+    - bay/runs/step-key.ts
+    - bay/manifests/workflow-problems.ts
+    - bay/manifests/references.ts
+    - tests/runs-when-repeat.test.ts
+    after: []
+    done:
+    - id: DOD-KR1-1
+      says: The checks and the whole test run pass.
+      level: must
+      proof:
+        kind: checks
+    - id: DOD-KR1-2
+      says: A step whose when is false is recorded as skipped with no output and runs nothing; a when that names
+        a step not yet run is false; a repeat stops when its until is true or after its most rounds, and after it
+        each step id names its last round, so an approval can quote it.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - tests/runs-when-repeat.test.ts
+    - id: DOD-KR1-3
+      says: A workflow whose repeat asks for more than five rounds, or whose when names a later step, is refused
+        when it loads, with a sentence that says what to change.
+      level: should
+- title: The worktrees interface commits a worktree's work to its own branch, cuts a worktree in the tests room,
+    combines two commits into one branch without a worktree, and discards a slice by renaming its branches
+  slice:
+    name: WK1
+    kind: mode
+    scope:
+    - components/base/interfaces/worktrees.yaml
+    - components/base/interfaces/worktrees/**
+    - components/base/git-worktrees/**
+    - tests/made-up-worktrees*
+    after: []
+    done:
+    - id: DOD-WK1-1
+      says: The checks and the whole test run pass.
+      level: must
+      proof:
+        kind: checks
+    - id: DOD-WK1-2
+      says: commit leaves the worktree clean and its branch one commit ahead; cut with room tests makes .forge/tests/<slice>;
+        combine makes forge/<name> whose tree holds both commits' files, and refuses when both changed one path.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/interfaces/worktrees/tests/shared.ts
+        - components/base/git-worktrees/tests/combine.test.ts
+    - id: DOD-WK1-3
+      says: Every new command keeps the words every command of the mode starts with, so no hook or filter of the
+        repository runs.
+      level: must
+- title: A toolchain's failed test run names each failing case with its message, cut to one line
+  slice:
+    name: TM1
+    kind: mode
+    scope:
+    - components/base/interfaces/toolchain.yaml
+    - components/base/interfaces/toolchain/**
+    - components/base/typescript/**
+    - tests/made-up-toolchains*
+    after: []
+    done:
+    - id: DOD-TM1-1
+      says: The checks and the whole test run pass.
+      level: must
+      proof:
+        kind: checks
+    - id: DOD-TM1-2
+      says: A failed run answers failures, each a case's name and the first line of its error, at most 300 characters;
+        a passed run answers none.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/typescript/tests/failures.test.ts
+- title: 'slice-tests@1, the tests room: write a slice''s tests, run them on a builder''s commit with only names
+    and filtered messages coming back, and review a slice'
+  slice:
+    name: ST1
+    kind: interface
+    scope:
+    - components/base/interfaces/slice-tests.yaml
+    - components/base/interfaces/slice-tests/**
+    - tests/made-up-slice-tests*
+    after: []
+    done:
+    - id: DOD-ST1-1
+      says: The checks and the whole test run pass.
+      level: must
+      proof:
+        kind: checks
+    - id: DOD-ST1-2
+      says: 'The shared test passes for a made-up tests room, and each wrong made-up room fails one case: one that
+        returns a line of the test text in a message, and one that runs no test.'
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/interfaces/slice-tests/tests/shared.ts
+        - tests/made-up-slice-tests.test.ts
+- title: The kit's practices are one YAML file that says, for each, whether a tool, proof or the reviewer holds
+    it
+  slice:
+    name: PX1
+    kind: mode
+    scope:
+    - framework/practices.yaml
+    - framework/practices.md
+    - tests/practices-file.test.ts
+    after: []
+    done:
+    - id: DOD-PX1-1
+      says: The checks and the whole test run pass.
+      level: must
+      proof:
+        kind: checks
+    - id: DOD-PX1-2
+      says: Every practice of practices.md is in practices.yaml once, with held by tool, proof or review, and a
+        tool or proof practice names what holds it.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - tests/practices-file.test.ts
+    - id: DOD-PX1-3
+      says: The markdown file is gone and every link to it points at the new file.
+      level: should
+- title: A tier names a model and an effort in the project's config, the adapter starts the agent with both, and
+    a skill step records them
+  slice:
+    name: KT1
+    kind: capability
+    scope:
+    - schemas/config.schema.json
+    - bay/generated/config.ts
+    - adapters/claude-code/agent-file.ts
+    - adapters/claude-code/adapter-types.ts
+    - adapters/claude-code/tests/agent-file.test.ts
+    - bay/runs/skill-steps.ts
+    - bay/runs/step-detail.ts
+    - tests/config-tiers.test.ts
+    after:
+    - slice: KR1
+      because: Both change files of the kernel feature runs, and slices in one kernel feature go one after another.
+    done:
+    - id: DOD-KT1-1
+      says: The checks and the whole test run pass.
+      level: must
+      proof:
+        kind: checks
+    - id: DOD-KT1-2
+      says: With tiers set in the config, an agent file names the tier's model and effort, and a skill step's record
+        holds both; without them the old models stand.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - tests/config-tiers.test.ts
+        - adapters/claude-code/tests/agent-file.test.ts
+- title: 'The forge-tests mode: a test writer that cannot see the builder''s room, a run that sends back only failing
+    names and messages that share no text with the tests, and a reviewer'
+  slice:
+    name: FT1
+    kind: mode
+    scope:
+    - components/base/forge-tests/**
+    after:
+    - slice: ST1
+      because: It implements slice-tests@1.
+    - slice: WK1
+      because: Its scripts commit the tests room and cut worktrees there.
+    - slice: TM1
+      because: Its run passes on the failing cases' messages.
+    done:
+    - id: DOD-FT1-1
+      says: The checks and the whole test run pass.
+      level: must
+      proof:
+        kind: checks
+    - id: DOD-FT1-2
+      says: The mode passes slice-tests@1's shared test; a message that shares twenty characters with a test file
+        is dropped and its name kept.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge-tests/tests/forge-tests.test.ts
+    - id: DOD-FT1-3
+      says: No agent of forge has a read or write root on .forge/tests/, and the agents of forge-tests write only
+        there.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge-tests/tests/rooms.test.ts
+- title: A card prints a line's mark once above the lines that share it and their step, and a judged line's model
+    and effort, so the words get the whole width
+  slice:
+    name: KC1
+    kind: capability
+    scope:
+    - bay/approval-card.ts
+    - tests/approval-card-kit.test.ts
+    - tests/run-report.test.ts
+    - components/base/forge/tests/one-slice.test.ts
+    after:
+    - slice: KT1
+      because: It prints the model and effort that KT1 records.
+    done:
+    - id: DOD-KC1-1
+      says: The checks and the whole test run pass.
+      level: must
+      proof:
+        kind: checks
+    - id: DOD-KC1-2
+      says: Each line is still checked by its own mark and source; the printed card shows a heading per run of one
+        mark and step, every row at most 44 columns.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - tests/approval-card-kit.test.ts
+- title: The kernel takes a skill's output only when the adapter's hook saw its agent since the task was issued,
+    and every card says which skill steps the hook saw
+  slice:
+    name: KH1
+    kind: capability
+    scope:
+    - adapters/claude-code/step-guard.ts
+    - adapters/claude-code/hook-seen.ts
+    - adapters/claude-code/tests/hook-seen.test.ts
+    - bay/adapter.ts
+    - bay/tools.ts
+    - bay/runs/card.ts
+    - tests/submit-needs-hook.test.ts
+    after:
+    - slice: KT1
+      because: Both change the adapter's code and how a skill step is recorded.
+    done:
+    - id: DOD-KH1-1
+      says: The checks and the whole test run pass.
+      level: must
+      proof:
+        kind: checks
+    - id: DOD-KH1-2
+      says: A submission from an agent the hook never saw is refused with a sentence that says the step was not
+        confined; a seen one is taken; a card of a run with skill steps ends with the kernel's line on what the
+        hook saw.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - tests/submit-needs-hook.test.ts
+        - adapters/claude-code/tests/hook-seen.test.ts
+- title: 'Forge carries one slice under ADR 24: tests written first in the tests room, a builder who never sees
+    them with failing names as feedback, planted bugs, proof on the joined commit, reviewer rounds, and the slice
+    card only when a must item did not pass'
+  slice:
+    name: FS1
+    kind: mode
+    scope:
+    - components/base/forge/**
+    - CONTEXT.md
+    - tests/affected.ts
+    after:
+    - slice: KR1
+      because: The workflow uses when and repeat.
+    - slice: KC1
+      because: Both change components/base/forge/tests/one-slice.test.ts.
+    - slice: FT1
+      because: The workflow calls slice-tests@1, which forge-tests implements.
+    - slice: WK1
+      because: It commits, cuts in the tests room and combines.
+    - slice: PX1
+      because: The reviewer's list of practices is read from practices.yaml.
+    - slice: KH1
+      because: Its cards rely on the kernel's line on what the hook saw.
+    done:
+    - id: DOD-FS1-1
+      says: The checks and the whole test run pass.
+      level: must
+      proof:
+        kind: checks
+    - id: DOD-FS1-2
+      says: A slice runs through stand-in agents from its plan to the wave branch; a builder's round sees only failing
+        names and filtered messages; a must item that fails shows the slice card with merge withheld and its reason.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge/tests/slice.test.ts
+    - id: DOD-FS1-3
+      says: Every line of every card is at most 44 columns and names where it came from; no line holds a builder's
+        words.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge/tests/cards.test.ts
+    - id: DOD-FS1-4
+      says: Bugs planted by the plant skill are caught.
+      level: must
+      proof:
+        kind: bugs-caught
+- title: 'Forge proves a wave once: the whole suite and every check on the wave''s joined commit, then the merge
+    card, then the merge into the integration branch'
+  slice:
+    name: FW1
+    kind: mode
+    scope:
+    - components/base/forge/workflows/wave.yaml
+    - components/base/forge/scripts/wave*.ts
+    - components/base/forge/scripts/lib/wave*.ts
+    - components/base/forge/schemas/wave*.json
+    - components/base/forge/tests/wave-run.test.ts
+    after:
+    - slice: FS1
+      because: It gathers the slices FS1's carry-out puts on the wave branch.
+    done:
+    - id: DOD-FW1-1
+      says: The checks and the whole test run pass.
+      level: must
+      proof:
+        kind: checks
+    - id: DOD-FW1-2
+      says: A wave of two stand-in slices is proved once; a failing test withholds merge with the failing names
+        on the card; a passing wave merges.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge/tests/wave-run.test.ts
+- title: The todo mode adds a todo and lists the open ones, built through forge with a test writer, a builder and
+    a reviewer
+  slice:
+    name: TD1
+    kind: mode
+    scope:
+    - components/modes/todo/**
+    after:
+    - slice: FW1
+      because: 'It is built and merged by forge''s slice and wave workflows: this slice is the test of the smallest
+        forge.'
+    done:
+    - id: DOD-TD1-1
+      says: The checks and the whole test run pass with the todo mode in it.
+      level: must
+      proof:
+        kind: checks
+    - id: DOD-TD1-2
+      says: The test writer's test fails without the mode's code and passes with it.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/modes/todo/tests/todo.test.ts
+    - id: DOD-TD1-3
+      says: bay call todo.add then todo.list shows the todo, open, as the owner would type it; the design fixes
+        the literal text, so this becomes a real-thing item once FD1 exists.
+      level: should
+    - id: DOD-TD1-4
+      says: 'The builder never read the tests: the hook was active, and the card says so.'
+      level: must
+- title: Forge reads a requirements file that a script checks, and shows the start card of a job
+  slice:
+    name: FR1
+    kind: mode
+    scope:
+    - components/base/forge/schemas/requirements.json
+    - components/base/forge/scripts/requirements.ts
+    - components/base/forge/scripts/lib/requirements*.ts
+    - components/base/forge/tests/requirements.test.ts
+    - docs/requirements/todo.yaml
+    after:
+    - slice: FS1
+      because: FS1's scope holds the whole forge folder, and FR1 adds files to it.
+    done:
+    - id: DOD-FR1-1
+      says: The checks and the whole test run pass.
+      level: must
+      proof:
+        kind: checks
+    - id: DOD-FR1-2
+      says: A requirements file with a condition that has no then, or two outcomes with one id, is refused with
+        every reason and its line; the todo file is accepted and its start card printed.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge/tests/requirements.test.ts
+- title: Forge and forge-tests may be active in a project that is not the kit, and activating forge brings proof,
+    worktrees and forge-tests
+  slice:
+    name: KA1
+    kind: capability
+    scope:
+    - bay/manifests/activation.ts
+    - tests/forge-beside-the-kit.test.ts
+    after:
+    - slice: KR1
+      because: Both change files of the kernel feature manifests.
+    done:
+    - id: DOD-KA1-1
+      says: The checks and the whole test run pass.
+      level: must
+      proof:
+        kind: checks
+    - id: DOD-KA1-2
+      says: 'In a project beside the kit, modes: [forge] makes forge, forge-tests, proof and git-worktrees active,
+        and bay check says which toolchain is bound or that none is.'
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - tests/forge-beside-the-kit.test.ts
+- title: A toolchain runs a project's own command by an agreed name in a throwaway copy, so proof can show the real
+    thing outside the kit
+  slice:
+    name: TR1
+    kind: mode
+    scope:
+    - components/base/interfaces/toolchain.yaml
+    - components/base/interfaces/toolchain/**
+    - components/base/typescript/**
+    - tests/made-up-toolchains*
+    after:
+    - slice: TM1
+      because: The same interface and mode folder.
+    done:
+    - id: DOD-TR1-1
+      says: The checks and the whole test run pass.
+      level: must
+      proof:
+        kind: checks
+    - id: DOD-TR1-2
+      says: run with the name demo runs the project's demo script in the copy and answers what it printed and its
+        exit code; a project without it is not set up, with a sentence.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/typescript/tests/run.test.ts
+- title: 'Forge''s first phase: one or two designs written apart as skill output, compared, laid out as files, with
+    interfaces as schema files, and the design card'
+  slice:
+    name: FD1
+    kind: mode
+    scope:
+    - components/base/forge/workflows/design*.yaml
+    - components/base/forge/skills/design/**
+    - components/base/forge/skills/compare/**
+    - components/base/forge/scripts/design*.ts
+    - components/base/forge/scripts/lib/design*.ts
+    - components/base/forge/schemas/design*.json
+    - components/base/forge/tests/design.test.ts
+    after:
+    - slice: FR1
+      because: A design is written from the requirements file FR1 checks.
+    done:
+    - id: DOD-FD1-1
+      says: The checks and the whole test run pass.
+      level: must
+      proof:
+        kind: checks
+    - id: DOD-FD1-2
+      says: 'Two stand-in designs are compared and the one chosen is laid out: a schema file per interface, the
+        data model, a record per decision, what is left out; a design whose schema file is not JSON Schema is refused.'
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge/tests/design.test.ts
+- title: Proof's real-thing and same-output may name a toolchain's run in place of the kit's bay, so they work in
+    any project
+  slice:
+    name: PR1
+    kind: mode
+    scope:
+    - components/base/proof/**
+    - components/base/interfaces/proof.yaml
+    - components/base/interfaces/proof/**
+    - tests/made-up-proofs*
+    after:
+    - slice: TR1
+      because: It calls the toolchain's run.
+    done:
+    - id: DOD-PR1-1
+      says: The checks and the whole test run pass.
+      level: must
+      proof:
+        kind: checks
+    - id: DOD-PR1-2
+      says: 'A real-thing run that names run: demo is made through the toolchain and judged as a bay run is; the
+        request without it is unchanged.'
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/proof/tests/real-thing.test.ts
+- title: 'Forge plans from the design: slices along its modules, the tests'' paths and the conditions each covers
+    in the plan, a challenge by a second model, and the plan card'
+  slice:
+    name: FP1
+    kind: mode
+    scope:
+    - components/base/forge/workflows/plan.yaml
+    - components/base/forge/skills/plan/**
+    - components/base/forge/skills/challenge/**
+    - components/base/forge/schemas/plan.json
+    - components/base/forge/scripts/lib/plan*.ts
+    - components/base/forge/scripts/lib/problems.ts
+    - components/base/forge/tests/plan-waves.test.ts
+    - components/base/forge/tests/plan-run.test.ts
+    after:
+    - slice: FD1
+      because: A plan is cut from the design FD1 lays out.
+    done:
+    - id: DOD-FP1-1
+      says: The checks and the whole test run pass.
+      level: must
+      proof:
+        kind: checks
+    - id: DOD-FP1-2
+      says: waves refuses a plan with a condition no slice covers, a tests path inside a code scope, or a slice
+        outside its module, each with its sentence.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge/tests/plan-waves.test.ts
+    - id: DOD-FP1-3
+      says: The challenge's findings are on the plan card as judged lines, and offer or withhold nothing.
+      level: must
+- title: 'The todo mode marks a todo done and removes one, built through the whole of forge: requirements, design,
+    plan, slice and wave'
+  slice:
+    name: TD2
+    kind: mode
+    scope:
+    - components/modes/todo/**
+    after:
+    - slice: TD1
+      because: It adds two actions to the mode TD1 makes.
+    - slice: FP1
+      because: It is the test of the whole forge, from requirements to merge.
+    done:
+    - id: DOD-TD2-1
+      says: The checks and the whole test run pass.
+      level: must
+      proof:
+        kind: checks
+    - id: DOD-TD2-2
+      says: The test writer's test of done and remove fails without their code and passes with it.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/modes/todo/tests/done-remove.test.ts
+- title: A skill step's write and read roots are the one worktree of its run, so two builders in one wave cannot
+    reach each other's room
+  slice:
+    name: WR1
+    kind: capability
+    scope:
+    - adapters/claude-code/guard-decide.ts
+    - adapters/claude-code/steps-file.ts
+    - adapters/claude-code/tests/guard-decide.test.ts
+    - bay/runs/task-tokens.ts
+    - tests/run-roots.test.ts
+    after:
+    - slice: KH1
+      because: Both change the adapter and the kernel feature runs.
+    - slice: FS1
+      because: Its first user is a wave of two slices built by FS1's workflow.
+    done:
+    - id: DOD-WR1-1
+      says: The checks and the whole test run pass.
+      level: must
+      proof:
+        kind: checks
+    - id: DOD-WR1-2
+      says: A builder of slice A is refused a read and a write in slice B's worktree while both runs wait for skills.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - tests/run-roots.test.ts
+- title: Forge builds a small change in a Python project beside the kit, with that project's own toolchain mode,
+    trusted by the owner
+  slice:
+    name: XP1
+    kind: mode
+    scope:
+    - tests/fixtures/beside-the-kit-python/**
+    - docs/trials/forge-beside-the-kit.md
+    after:
+    - slice: KA1
+      because: Forge must be active outside the kit.
+    - slice: PR1
+      because: The real thing is shown through the project's own command.
+    - slice: TD2
+      because: The whole forge is proven on the kit first.
+    done:
+    - id: DOD-XP1-1
+      says: The trial's record says what forge ran, what the owner read on each card and what failed, with the cards
+        as printed.
+      level: must
+

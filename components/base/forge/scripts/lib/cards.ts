@@ -628,8 +628,13 @@ function shownItems(slice: Slice, verdicts: readonly Verdict[]): readonly ShownI
   const planned = slice.done.map((item) => ({ ...item, judgement: item.proof === undefined }));
   const added = verdicts
     .filter((verdict) => !slice.done.some((item) => item.id === verdict.item))
-    .map((verdict) => ({ id: verdict.item, level: "must" as const, says: addedSays[verdict.item] ?? "" }));
-  return [...planned, ...added.map((item) => ({ ...item, judgement: false }))];
+    .map((verdict) => ({
+      id: verdict.item,
+      level: "must" as const,
+      says: addedSays[verdict.item] ?? "",
+      judgement: false,
+    }));
+  return [...planned, ...added];
 }
 
 function openingWords(item: ShownItem, said: string): string {

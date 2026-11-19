@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { stringify } from "yaml";
 import type { Json, RunEvent } from "../bay/contracts.ts";
-import { fieldOf, isRecord, textField, toJson } from "../bay/json.ts";
-import { bay } from "./cli-fixture.ts";
+import { isRecord, toJson } from "../bay/json.ts";
 import { makeProject, type Project } from "./project-fixture.ts";
 import { openModeProject, type ModeProject, type Run } from "./test-toolbox.ts";
 
@@ -203,13 +202,6 @@ function givenToken(run: Run): string {
   return token;
 }
 
-async function newToken(project: ModeProject, runId: string): Promise<string> {
-  const shown = await bay(["runs", runId, "--new-token", "--project", project.root, "--json"]);
-  const token = textField(fieldOf(fieldOf(toJson(shown.json), "run") ?? null, "task") ?? null, "token");
-  assert.ok(token !== undefined, JSON.stringify(shown.json));
-  return token;
-}
-
 type Expected = {
   readonly runId: string;
   readonly call: number;
@@ -325,7 +317,8 @@ test("two skill calls in one script wait and are answered one after the other, e
     assert.deepEqual(skillWaitingOf(between), waitingFor({ runId: started.id, call: 3, topic: "snow" }));
     assert.equal(tokenOf(between), undefined);
     assert.deepEqual(await countedLabels(project), ["a", "c"]);
-    const done = await project.answer(await newToken(project, started.id), { text: snow });
+    const given = await project.newToken(started.id);
+    const done = await project.answer(givenToken(given), { text: snow });
     const output = { outputs: [{ counted: "a" }, { text: rain }, { counted: "c" }, { text: snow }, { counted: "e" }] };
     assert.deepEqual(done.state, { status: "done", output });
     assert.deepEqual(await countedLabels(project), ["a", "c", "e"]);

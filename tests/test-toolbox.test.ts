@@ -72,6 +72,8 @@ test("a project opened with the modes of a project beside the kit offers these o
       "endKernel",
       "extend",
       "failure",
+      "newToken",
+      "newTokenRefusal",
       "output",
       "partition",
       "refusal",

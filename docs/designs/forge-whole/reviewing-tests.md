@@ -6,7 +6,7 @@ For the reviewer of a slice (ADR 24). This becomes a resource of forge's review 
 
 1. Read the slice's conditions. For each, write down in one line what a person would see if it held.
 2. Read the tests. For each condition, find the case that would fail if the condition did not hold. A condition with no such case is a finding.
-3. Go through the ten questions below for every case.
+3. Go through the ten questions below for every case, then the list of negative paths for every action.
 4. Only then read the code, to ask the planter's question: what small break here would no case notice?
 5. Each finding names the case, the question it fails, and what would fix it. A finding for the test writer may quote the test. A finding for the builder never does.
 
@@ -145,6 +145,60 @@ A case reads top to bottom: what is set up, what is done, what is expected. Shar
 Weak: a loop over a table of twenty unnamed rows, where a failure says "row 13".
 
 Good: a table is fine when each row has a name and the failure prints it.
+
+## Negative paths
+
+Most tests show that the right input gives the right answer. A reviewer asks just as hard what happens when things go wrong, since that is where a builder's code is thinnest and where a person is hurt most. For every action in the slice, go down this list. Each row that applies needs a case; a row that does not apply is said so in one line.
+
+| What goes wrong | A case for the todo mode |
+|---|---|
+| Input missing or of the wrong kind | `add` with no text; with a number for the text |
+| Input at and past a limit | the longest text allowed is kept whole; one character more is refused |
+| Input that is empty or only spaces | `add` with `""` and with `"   "` |
+| It names something that is not there | `done` with an id no todo has |
+| It was already done | `done` twice on one todo; `remove` twice |
+| The caller may not | one caller lists or removes another caller's todos |
+| Hostile input | a text that is SQL, a path with `..`, a control character, a very long line: it is stored and listed as text, or refused, never acted on |
+| What it depends on fails | the database cannot be opened or written; a call to another action is refused; a time limit is reached |
+| It fails half way | adding three todos where the second is refused: the first is kept or none is, as the condition says, and never half a row |
+| Two at once | two adds at the same moment get two ids |
+
+A negative case is whole only when it asserts four things:
+
+1. **It is refused, not ignored.** The call fails; it does not answer as if it had worked.
+2. **The sentence says what was wrong and what to do**, and it is pinned, at least the part a person acts on.
+3. **Nothing changed.** The state after is the state before, read back through the interface.
+4. **It still works afterwards.** The next right call succeeds; the failure left nothing stuck.
+
+Weak: it only sees that something was thrown.
+
+```ts
+test("done with a bad id fails", async () => {
+  await assert.rejects(project.output("todo.done", { id: 99 }));
+});
+```
+
+Any failure passes that, including a crash for an unrelated reason.
+
+Good: all four.
+
+```ts
+test("marking done an id that names no todo is refused, changes nothing, and the next call works", async () => {
+  await project.output("todo.add", { text: "buy milk" });
+
+  const refused = await project.failure("todo.done", { id: 99 });
+  assert.equal(refused, "No todo has the id 99. List the todos to see their ids.");
+
+  assert.deepEqual((await project.output("todo.list", {})).todos, [{ id: 1, text: "buy milk", status: "open" }]);
+
+  await project.output("todo.done", { id: 1 });
+  assert.deepEqual((await project.output("todo.list", {})).todos, []);
+});
+```
+
+A failure of something the code depends on is made to happen in the test: a database file that cannot be written, a made-up action that refuses, the toolbox's clock moved past a limit. If the test toolbox cannot make it happen, that is a finding for the owner, not a reason to leave the case out.
+
+A reviewer counts: for each action, how many cases show it working and how many show it refusing. An action with five of the first and none of the second is a finding whatever the conditions say.
 
 ## What is not a finding
 

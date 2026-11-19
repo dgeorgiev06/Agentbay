@@ -285,6 +285,38 @@ test("only the project's own setting counts: a mode's settings or a config file 
   });
 });
 
+test("a submit the hook denies, or one without a subagent id, records no sighting", async () => {
+  await inScene("with-the-hook", async ({ project, kernel, waiting }) => {
+    const policy = stepsPolicy(project);
+    const withoutSubmit = policy.replaceAll('"mcp__agentbay__submit",', "");
+    await project.write(".agentbay/steps.json", withoutSubmit);
+    const denied = hookSees(project, {
+      tool: "mcp__agentbay__submit",
+      input: { token: waiting.token, output: goodOutput },
+      agent: draftAgent,
+    });
+    assert.equal(denied.status, 2, denied.stdout);
+    await project.write(".agentbay/steps.json", policy);
+    const payload = {
+      session_id: "s",
+      cwd: project.root,
+      tool_name: "mcp__agentbay__submit",
+      tool_input: { token: waiting.token, output: goodOutput },
+      agent_type: draftAgent,
+    };
+    const ran = spawnSync(
+      process.execPath,
+      ["--disable-warning=ExperimentalWarning", guard, "--project", project.root],
+      {
+        input: JSON.stringify(payload),
+        encoding: "utf8",
+      },
+    );
+    assert.equal(ran.status, 0, ran.stdout);
+    assert.equal(refusalOf(await submitted(kernel, waiting.token)), refusalSentence(waiting));
+  });
+});
+
 function sightingsCount(project: Project): number {
   const database = new DatabaseSync(join(project.root, sightingsFile), { readOnly: true });
   try {

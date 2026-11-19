@@ -50,6 +50,11 @@ function skillWaitingOf(run: Run): SkillWaiting {
   return { stepKey, token: task.token, round: task.round, input: task.input };
 }
 
+function withTokenKind(run: Run): Json {
+  const waiting = skillWaitingOf(run);
+  return { ...waiting, token: typeof waiting.token };
+}
+
 function tokenOf(run: Run): string {
   const token = skillWaitingOf(run).token;
   assert.ok(token !== undefined, `the task carries no token: ${JSON.stringify(run.state)}`);
@@ -63,16 +68,10 @@ test("a new token for the second skill step of a workflow is accepted, and the w
     assert.equal(skillWaitingOf(second).token, undefined);
     const given = await project.newToken(started.id);
     assert.equal(given.id, started.id);
-    const waiting = skillWaitingOf(given);
-    assert.deepEqual({ ...waiting, token: typeof waiting.token }, {
-      stepKey: "second/1#1",
-      token: "string",
-      round: 1,
-      input: draftInput,
-    });
+    assert.deepEqual(withTokenKind(given), { stepKey: "second/1#1", token: "string", round: 1, input: draftInput });
     const done = await project.answer(tokenOf(given), { text: note });
     assert.equal(done.id, started.id);
-    assert.equal(done.state.status, "done");
+    assert.deepEqual(done.state, { status: "done", output: composed });
   });
 });
 
@@ -168,12 +167,7 @@ test("a token given after the kernel opens again answers, and the one given befo
     const old = tokenOf(started);
     project = await project.endKernel().openAgain();
     const given = await project.newToken(started.id);
-    assert.deepEqual({ ...skillWaitingOf(given), token: undefined }, {
-      stepKey: "1#1",
-      token: undefined,
-      round: 1,
-      input: draftInput,
-    });
+    assert.deepEqual(withTokenKind(given), { stepKey: "1#1", token: "string", round: 1, input: draftInput });
     assert.equal(await project.answerRefusal(old, { text: note }), replacedToken);
     const done = await project.answer(tokenOf(given), { text: note });
     assert.deepEqual([done.id, done.state], [started.id, { status: "done", output: composed }]);

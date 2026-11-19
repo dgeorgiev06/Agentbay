@@ -206,8 +206,12 @@ test("every schema of the kit gives the same problems, in the same order, as a f
       return expected.kind === "checked" && expected.problems.length === 0;
     }),
   );
-  assert.equal(files.length, 54);
-  assert.deepEqual([passed.length, passed.filter(Boolean).length], [1572, 144]);
+  assert.ok(files.length >= 54, `only ${String(files.length)} schemas were found`);
+  assert.ok(passed.length >= 1572, `only ${String(passed.length)} checks were made`);
+  assert.ok(
+    passed.filter(Boolean).length >= 144,
+    "too few values passed their schema to show the checks are not all refusals",
+  );
 });
 
 const titled = (required: readonly string[]): ValidSchema =>

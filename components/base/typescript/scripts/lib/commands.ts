@@ -10,6 +10,7 @@ export type Finished = {
   readonly ending: Ending;
   readonly seconds: number;
   readonly stdout: string;
+  readonly stdoutCut: boolean;
   readonly stderr: string;
 };
 
@@ -30,10 +31,17 @@ export async function runTimed(context: ScriptContext, timed: Timed): Promise<Fi
   const { name, folder, timeLimitSeconds } = timed;
   const answer = await context.commands.run({ name, arguments: timed.arguments, folder, timeLimitSeconds });
   if (!answer.ok) {
-    return { ending: { how: "not-started", reason: answer.message }, seconds: 0, stdout: "", stderr: "" };
+    const ending = { how: "not-started", reason: answer.message } as const;
+    return { ending, seconds: 0, stdout: "", stdoutCut: false, stderr: "" };
   }
   const { end, milliseconds, stdout, stderr } = answer.value;
-  return { ending: end, seconds: secondsOf(milliseconds), stdout: stdout.text, stderr: stderr.text };
+  return {
+    ending: end,
+    seconds: secondsOf(milliseconds),
+    stdout: stdout.text,
+    stdoutCut: stdout.cut,
+    stderr: stderr.text,
+  };
 }
 
 export type Ended =

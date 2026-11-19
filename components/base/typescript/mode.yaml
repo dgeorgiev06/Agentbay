@@ -1,6 +1,6 @@
 name: typescript
 version: 1.0.0
-description: Checks and tests TypeScript code in a checkout, running the scripts of its own package.json by agreed names.
+description: Checks and tests TypeScript code in a checkout, and runs its scripts, by the names in its own package.json.
 
 implements: [toolchain@1]
 
@@ -32,6 +32,9 @@ resources:
     print-folder:
       run: pwd -P
       effects: [read]
+    run-script:
+      run: npm run --silent --
+      effects: [read, write, network, spend, delete]
 
 extraFiles: [eslint.config.js, prettier.json, practices.md]
 
@@ -53,3 +56,9 @@ actions:
     scriptTimeLimitSeconds: *suite
     run:
       - script: scripts/run-tests.ts
+  run:
+    description: When a mode or a skill needs one of the project's own package.json scripts run by its name in a throwaway copy, with how it ended and what it printed.
+    effects: [read, write, network, spend, delete]
+    scriptTimeLimitSeconds: *suite
+    run:
+      - script: scripts/run.ts

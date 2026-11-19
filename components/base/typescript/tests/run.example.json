@@ -1,0 +1,4 @@
+{
+  "input": { "folder": "work/checkout", "name": "demo", "arguments": ["--greeting", "hello"] },
+  "output": { "ended": "exited", "exitCode": 0, "seconds": 0.4, "stdout": "hello\n", "stdoutCut": false }
+}

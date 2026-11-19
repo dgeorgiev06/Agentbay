@@ -28,3 +28,23 @@ export function checkoutRequestOf(input: Json, action: CheckoutAction): Checkout
     timeLimitSeconds: typeof seconds === "number" ? seconds : defaultSeconds,
   };
 }
+
+export type RunRequest = {
+  readonly folder: string;
+  readonly name: string;
+  readonly arguments: readonly string[];
+  readonly timeLimitSeconds: number;
+};
+
+const runDefaultSeconds = 90;
+
+export function runRequestOf(input: Json): RunRequest {
+  const fields = fieldsOf(input);
+  const { folder, name, timeLimitSeconds } = fields;
+  return {
+    folder: typeof folder === "string" ? folder : "",
+    name: typeof name === "string" ? name : "",
+    arguments: textsOf(fields.arguments) ?? [],
+    timeLimitSeconds: typeof timeLimitSeconds === "number" ? timeLimitSeconds : runDefaultSeconds,
+  };
+}

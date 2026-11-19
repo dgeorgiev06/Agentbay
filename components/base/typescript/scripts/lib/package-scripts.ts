@@ -74,7 +74,7 @@ export async function checkoutScripts(
   }
 }
 
-export function hasScript(found: CheckoutScripts, script: AgreedScript): boolean {
+export function hasScript(found: CheckoutScripts, script: { readonly name: string }): boolean {
   return found.kind === "listed" && found.names.has(script.name);
 }
 
@@ -120,6 +120,11 @@ export function notSetUpReason(place: Place, script: AgreedScript, found: Packag
   }
   const entry = `"${script.name}": "${need.example}"`;
   return `${lacks}: ${whatToAdd(found, entry)}, or another command that ${need.does}.`;
+}
+
+export function namedScriptReason(found: PackageScripts, name: string): string {
+  const lacks = lacking("checkout", found, name);
+  return found.kind === "listed" ? `${lacks}: add it to its scripts, or name a script it has.` : `${lacks}.`;
 }
 
 export function readinessOf(script: AgreedScript, found: CheckoutScripts): Readiness {

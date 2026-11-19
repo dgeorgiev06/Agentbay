@@ -17,6 +17,10 @@ metadata:
 - `folder`: the slice's worktree, relative to the project, such as `.forge/worktrees/TR2`.
 - `practices`: the practices files to read, relative to the project.
 - `declared`: the files and action names you declared in the step before.
+- `findings`: from round 2 on, the reviewer's findings for you: the case, the question it fails, the fix.
+- `failing`: from round 2 on, what you are told of the tests that failed on your work: the must items that
+  failed, each failing case's name, its file, and its message only when the message quotes no test; how
+  many messages were left out; and the test files that did not load.
 
 ## Output
 
@@ -40,7 +44,9 @@ name of the missing function, operation or action. Nothing else you write reache
    agent from the same items and interface; make the interface behave as each item says.
 4. When an item needs a function, operation or action that the toolbox, the test toolbox, an interface or the
    kernel lacks, stop. Do not build around it. Submit `stopped` with what is missing.
-5. When every item is written, submit `built`. Proof then runs the tests on your work by script; you do not.
+5. From round 2 on, your folder holds your last round's work. Correct what each finding and each failing
+   case names, through the interface, not by guessing a test's text.
+6. When every item is written, submit `built`. Proof then runs the tests on your work by script; you do not.
 
 ## Tools
 

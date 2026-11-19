@@ -1,6 +1,6 @@
 name: forge
 version: 1.0.0
-description: Builds a piece of work in slices that run side by side. It reads a plan file and works out its waves, and it carries one slice through a builder in a worktree, proof and the merge card, or through a test writer and a builder who never has the tests.
+description: Builds a piece of work in slices that run side by side. It reads a plan file and works out its waves, and it carries one slice through a builder in a worktree, proof and the merge card, or through up to three rounds of a test writer, a builder who never has the tests, proof and a reviewer.
 
 requires:
   interfaces: [proof@1, worktrees@1]
@@ -64,12 +64,30 @@ actions:
       - skill: skills/build-without-tests
         tier: balanced
   round:
-    description: When one round of a slice is to run, test writer first and builder after, ending with one commit that holds the builder's work and the tests.
+    description: When one of a slice's three rounds is to run, the test writer and the builder each when the round before gave them something to correct, ending with proof's verdicts on one commit that holds the builder's work and the tests.
     input: schemas/round-request.json
-    output: schemas/round-response.json
-    effects: [read, write, delete]
+    output: schemas/rounds.json
+    effects: [read, write, network, spend, delete]
+    scriptTimeLimitSeconds: 1800
     run:
       - script: scripts/round.ts
+  review:
+    description: When a round's tests and code are to be judged against the slice's conditions and the practices no tool holds, with findings for the test writer or the builder.
+    input: schemas/review-request.json
+    output: schemas/review.json
+    effects: [read]
+    skillOutput: kept-packed
+    run:
+      - skill: skills/review
+        tier: deep
+        checks: [scripts/no-test-text.ts]
+  review-round:
+    description: When a round has been proved and is to be reviewed, or its failing cases sent to the builder, and the rounds' next step decided.
+    input: schemas/review-round-request.json
+    output: schemas/rounds.json
+    effects: [read, write, delete]
+    run:
+      - script: scripts/review-round.ts
   draw:
     description: When proof has judged a slice and the owner needs the merge card, with the rule and reason for each choice.
     input: schemas/draw-request.json
@@ -87,4 +105,4 @@ actions:
 
 workflows:
   - workflows/one-slice.yaml
-  - workflows/one-round.yaml
+  - workflows/rounds.yaml

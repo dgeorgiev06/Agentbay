@@ -1,0 +1,206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReviewRequest",
+  "description": "What the reviewer reads: the slice, the tests' text and the builder's code as text, never as files, proof's verdicts of the round, what the builder may be told of the failing cases, and the practices no tool holds.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "round",
+    "slice",
+    "tests",
+    "code",
+    "verdicts",
+    "failing",
+    "practices"
+  ],
+  "properties": {
+    "round": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3,
+      "description": "The round under review."
+    },
+    "slice": {
+      "$ref": "proof@1/prove-request.json#/$defs/slice"
+    },
+    "tests": {
+      "type": "array",
+      "maxItems": 50,
+      "description": "The tests the test writer handed in, from forge's kept store.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "text"
+        ],
+        "properties": {
+          "path": {
+            "$ref": "proof@1/prove-request.json#/$defs/path"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 200000,
+            "description": "The file's whole text."
+          }
+        }
+      }
+    },
+    "code": {
+      "type": "array",
+      "maxItems": 200,
+      "description": "The files the builder changed from the base, as they are on its last commit.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "text"
+        ],
+        "properties": {
+          "path": {
+            "$ref": "proof@1/prove-request.json#/$defs/path"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 200000,
+            "description": "The file's whole text."
+          }
+        }
+      }
+    },
+    "verdicts": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "required": [
+          "item",
+          "kind",
+          "verdict"
+        ],
+        "description": "A verdict of proof, without its failing cases.",
+        "properties": {
+          "item": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "passed",
+              "failed",
+              "inconclusive"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Proof's verdicts on the round's head, without the checks items."
+    },
+    "failing": {
+      "$ref": "#/$defs/failing"
+    },
+    "practices": {
+      "type": "array",
+      "maxItems": 300,
+      "description": "The practices held by review, from the practices files' Held by column.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "says"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Z]{1,4}-[0-9]{1,3}$"
+          },
+          "says": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "failing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "cases",
+        "withheld",
+        "notListed",
+        "notLoaded"
+      ],
+      "description": "What of a failed test run the builder may be told: the failed must items, each failing case's name, its file when the slice names it, and its message only when it quotes no test; the count of messages withheld; the test files that did not load, by path only.",
+      "properties": {
+        "items": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": "The must items that failed."
+        },
+        "cases": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name"
+            ],
+            "description": "A failing case as the builder may be told it.",
+            "properties": {
+              "name": {
+                "type": "string",
+                "maxLength": 200,
+                "description": "The case's name, cut at 200 characters, with no control character."
+              },
+              "file": {
+                "$ref": "proof@1/prove-request.json#/$defs/path",
+                "description": "The test file, only when it is one the slice names; its path is already in the builder's task."
+              },
+              "message": {
+                "type": "string",
+                "maxLength": 200,
+                "description": "The first line of the runner's message, only when it shares no run of 20 characters with any test of the slice."
+              }
+            }
+          },
+          "description": "The failing cases."
+        },
+        "withheld": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many messages were left out because they share a run of 20 characters with a test."
+        },
+        "notListed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many more failing cases the runner counted."
+        },
+        "notLoaded": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "proof@1/prove-request.json#/$defs/path"
+          },
+          "description": "The slice's test files that did not load, by path only."
+        }
+      }
+    }
+  }
+}

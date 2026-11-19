@@ -67,7 +67,7 @@ type Seen = {
   readonly input: Json;
 };
 
-test("the test writer is asked before any builder works; while the builder's task waits, no file under .forge/worktrees/ holds the tests, and its task holds their paths and none of their text", async () => {
+test("the test writer is asked before any builder works; while the builder's task waits, no file under .forge/worktrees/ holds the tests, and its task holds their paths and none of their text; after the review none is on disk", async () => {
   const root = await project(template);
   const files = ["components/modes/d1/scripts/disk.ts"];
   await provedIn(root, "D1", { verdicts: [], judgement: [], size: [] });
@@ -101,13 +101,13 @@ test("the test writer is asked before any builder works; while the builder's tas
   });
   const [writing] = asked;
   assert.ok(writing !== undefined);
-  assert.equal(writing.step, "round/0.call0/0#1");
+  assert.equal(writing.step, "round-1/0.call0/0#1");
   assert.deepEqual(writing.input, { slice, interface: [schema], folder, practices });
   assert.deepEqual(writing.holding, []);
   const [building] = seen;
   assert.ok(building !== undefined);
   assert.deepEqual(building.holding, []);
-  assert.equal(building.step, "round/0.call1/0#1");
+  assert.equal(building.step, "round-1/0.call1/0#1");
   assert.deepEqual(building.input, {
     slice,
     interface: [schema],
@@ -121,5 +121,5 @@ test("the test writer is asked before any builder works; while the builder's tas
     ".forge/worktrees",
     tests.map((each) => each.text),
   );
-  assert.deepEqual(afterwards, [`.forge/worktrees/D1-tests/${named}`, `.forge/worktrees/D1-tests/${second}`]);
+  assert.deepEqual(afterwards, []);
 });

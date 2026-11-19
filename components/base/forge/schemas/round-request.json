@@ -1,11 +1,26 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "RoundRequest",
-  "description": "What one round of a slice works from: the slice, its interface files, the test files the builder may not change, its worktree, the builder's declaration and the practices.",
+  "description": "What one round of a slice works from: its number, the slice, its interface files, the test files the builder may not change, its worktree, the builder's declaration, the practices, and where the rounds stood before it.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["slice", "interface", "fixed", "cut", "declared", "practices"],
+  "required": [
+    "round",
+    "slice",
+    "interface",
+    "fixed",
+    "cut",
+    "declared",
+    "practices",
+    "before"
+  ],
   "properties": {
+    "round": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3,
+      "description": "The round's number."
+    },
     "slice": {
       "$ref": "proof@1/prove-request.json#/$defs/slice"
     },
@@ -30,7 +45,11 @@
     "cut": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["folder", "branch", "commit"],
+      "required": [
+        "folder",
+        "branch",
+        "commit"
+      ],
       "description": "The slice's worktree as worktrees.cut made it.",
       "properties": {
         "folder": {
@@ -63,6 +82,13 @@
         "$ref": "proof@1/prove-request.json#/$defs/path"
       },
       "description": "The practices files to read before writing, relative to the project, from forge's settings."
+    },
+    "before": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Where the rounds stood after the review before, as rounds.json gives it; null for round 1."
     }
   }
 }

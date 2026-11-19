@@ -1,8 +1,25 @@
 import assert from "node:assert/strict";
-import { describe, test } from "node:test";
+import { after, describe, test } from "node:test";
 import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
 import { sliceOf } from "../scripts/lib/cards.ts";
 import { caseNamesOf, isOneSentence, refusedReview, type Reviewing } from "../scripts/lib/review.ts";
+import {
+  builderWrites,
+  declared,
+  filesHolding,
+  kitTemplate,
+  playedTo,
+  project,
+  provedIn,
+  removeAll,
+  shortHead,
+  shown,
+  started,
+  submitted,
+  task,
+  textAt,
+  waitingOf,
+} from "./kit-copy.ts";
 
 const testPath = "components/modes/v1/tests/quill.test.ts";
 
@@ -164,4 +181,67 @@ describe("the review's check, as a pure function", () => {
     assert.equal(isOneSentence("One.\nTwo."), false);
     assert.equal(isOneSentence("x".repeat(201)), false);
   });
+});
+
+after(async () => {
+  await removeAll();
+});
+
+test("in a run, a finding for the builder that quotes a test goes back to the reviewer with feedback that quotes nothing", async () => {
+  const root = await project(await kitTemplate());
+  const slice = {
+    name: "V2",
+    kind: "mode",
+    scope: ["components/modes/v2/**"],
+    after: [],
+    done: [
+      {
+        id: "DOD-V2-1",
+        says: "A quill is counted.",
+        level: "must",
+        proof: { kind: "fails-first", tests: [testPath.replace("v1", "v2")] },
+      },
+    ],
+  };
+  const quote = `first quill of the evening ${String(4111 * 3)}`;
+  const text = testText.replace("first quill of the morning", quote).replace("quillCount", `quill${String(4111 * 5)}`);
+  const tests = [{ path: testPath.replace("v1", "v2"), text }];
+  await provedIn(root, "V2", {
+    verdicts: [{ item: "DOD-V2-1", kind: "fails-first", verdict: "passed", detail: "It held." }],
+    judgement: [],
+    size: [],
+  });
+  const start = await started(root, { planned: { title: "V2", slice }, base: shortHead(root), bugs: [] });
+  await declared(root, start, ["components/modes/v2/scripts/quill.ts"]);
+  const played = await playedTo(root, start.id, {
+    tests: () => Promise.resolve({ tests }),
+    builder: async (given) => {
+      await builderWrites(root, textAt(fieldsOf(given).input ?? null, "folder"), [
+        "components/modes/v2/scripts/quill.ts",
+      ]);
+      return { outcome: "built" };
+    },
+  });
+  assert.deepEqual(
+    played.map((each) => each.action),
+    ["write-tests", "build-without-tests"],
+  );
+  const conditions = [{ item: "DOD-V2-1", held: true, cases: ["a quill that was added is counted"] }];
+  const quoting = forBuilder(`Count "${quote}" once.`);
+  const sentBack = await submitted(root, start.id, { conditions, findings: [quoting] });
+  const waiting = fieldsOf(sentBack).waiting ?? null;
+  assert.equal(textAt(waiting, "stepKey"), "review-1/0.call1/0#2", JSON.stringify(sentBack));
+  const feedback = fieldsOf(fieldsOf(sentBack).task ?? null).feedback;
+  assert.deepEqual(feedback, [
+    "Finding 1, for the builder, shares a run of 20 or more characters with the tests: " +
+      "say it in your own words; the builder never reads a line of a test.",
+  ]);
+  assert.deepEqual(await filesHolding(root, ".agentbay", [quote]), []);
+  const own = forBuilder("Count each quill once, through the count action.");
+  const taken = await submitted(root, start.id, { conditions, findings: [own] });
+  assert.equal(textAt(fieldsOf(taken).waiting ?? null, "stepKey"), "round-2/0.call1/0#1");
+  const builderTask = JSON.stringify(await task(root, start.id));
+  assert.ok(builderTask.includes("Count each quill once, through the count action."));
+  assert.ok(!builderTask.includes(quote));
+  assert.equal(waitingOf(await shown(root, start.id), "round-2/0.call1/0#1").id, start.id);
 });

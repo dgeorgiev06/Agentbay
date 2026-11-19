@@ -1,10 +1,17 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "BuildWithoutTestsRequest",
-  "description": "What a builder reads to build a slice whose tests another wrote: the slice's conditions, the interface files' paths, the test files' paths it may not change, its worktree, the practices and what it declared. It holds no line of the tests.",
+  "description": "What a builder reads to build a slice whose tests another wrote: the slice's conditions, the interface files' paths, the test files' paths it may not change, its worktree, the practices and what it declared; from round 2 on, the reviewer's findings for it and what it may be told of the failing cases. It holds no line of the tests.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["slice", "interface", "fixed", "folder", "practices", "declared"],
+  "required": [
+    "slice",
+    "interface",
+    "fixed",
+    "folder",
+    "practices",
+    "declared"
+  ],
   "properties": {
     "slice": {
       "$ref": "proof@1/prove-request.json#/$defs/slice"
@@ -44,6 +51,128 @@
     },
     "declared": {
       "$ref": "proof@1/prove-request.json#/$defs/declaration"
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "$ref": "#/$defs/finding"
+      },
+      "description": "From round 2 on: the reviewer's findings for the builder."
+    },
+    "failing": {
+      "$ref": "#/$defs/failing"
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "to",
+        "case",
+        "question",
+        "fix"
+      ],
+      "description": "One finding of the reviewer, for the test writer or for the builder.",
+      "properties": {
+        "to": {
+          "enum": [
+            "test-writer",
+            "builder"
+          ],
+          "description": "Who the finding is for: the test writer corrects the tests, the builder the code."
+        },
+        "case": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "\\S",
+          "description": "A case's name, as the tests name it."
+        },
+        "question": {
+          "type": "string",
+          "pattern": "^(Q([1-9]|10)|negative-paths|condition|[A-Z]{1,4}-[0-9]{1,3})$",
+          "description": "The question the case fails: Q1 to Q10 of reviewing-tests.md, negative-paths, condition, or the id of a practice given."
+        },
+        "fix": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "\\S",
+          "description": "One sentence on what would fix it. For the builder it shares no run of 20 characters with the tests."
+        }
+      }
+    },
+    "failing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "cases",
+        "withheld",
+        "notListed",
+        "notLoaded"
+      ],
+      "description": "What of a failed test run the builder may be told: the failed must items, each failing case's name, its file when the slice names it, and its message only when it quotes no test; the count of messages withheld; the test files that did not load, by path only.",
+      "properties": {
+        "items": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": "The must items that failed."
+        },
+        "cases": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name"
+            ],
+            "description": "A failing case as the builder may be told it.",
+            "properties": {
+              "name": {
+                "type": "string",
+                "maxLength": 200,
+                "description": "The case's name, cut at 200 characters, with no control character."
+              },
+              "file": {
+                "$ref": "proof@1/prove-request.json#/$defs/path",
+                "description": "The test file, only when it is one the slice names; its path is already in the builder's task."
+              },
+              "message": {
+                "type": "string",
+                "maxLength": 200,
+                "description": "The first line of the runner's message, only when it shares no run of 20 characters with any test of the slice."
+              }
+            }
+          },
+          "description": "The failing cases."
+        },
+        "withheld": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many messages were left out because they share a run of 20 characters with a test."
+        },
+        "notListed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many more failing cases the runner counted."
+        },
+        "notLoaded": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "proof@1/prove-request.json#/$defs/path"
+          },
+          "description": "The slice's test files that did not load, by path only."
+        }
+      }
     }
   }
 }

@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Review",
+  "description": "The reviewer's answer: for each condition, held by which cases or not held and why; and its findings, each for the test writer or the builder.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "conditions",
+    "findings"
+  ],
+  "properties": {
+    "conditions": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/condition"
+      },
+      "description": "One verdict for each item of the slice's definition of done."
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "$ref": "#/$defs/finding"
+      },
+      "description": "The findings, none when there is nothing to correct."
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "to",
+        "case",
+        "question",
+        "fix"
+      ],
+      "description": "One finding of the reviewer, for the test writer or for the builder.",
+      "properties": {
+        "to": {
+          "enum": [
+            "test-writer",
+            "builder"
+          ],
+          "description": "Who the finding is for: the test writer corrects the tests, the builder the code."
+        },
+        "case": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "\\S",
+          "description": "A case's name, as the tests name it."
+        },
+        "question": {
+          "type": "string",
+          "pattern": "^(Q([1-9]|10)|negative-paths|condition|[A-Z]{1,4}-[0-9]{1,3})$",
+          "description": "The question the case fails: Q1 to Q10 of reviewing-tests.md, negative-paths, condition, or the id of a practice given."
+        },
+        "fix": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "\\S",
+          "description": "One sentence on what would fix it. For the builder it shares no run of 20 characters with the tests."
+        }
+      }
+    },
+    "condition": {
+      "description": "The reviewer's verdict on one condition: held by which cases, or not held and why.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "item",
+            "held",
+            "cases"
+          ],
+          "properties": {
+            "item": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "The item's id."
+            },
+            "held": {
+              "const": true,
+              "description": "The condition is held."
+            },
+            "cases": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 50,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S",
+                "description": "A case's name, as the tests name it."
+              },
+              "description": "The cases that hold it."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "item",
+            "held",
+            "why"
+          ],
+          "properties": {
+            "item": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "The item's id."
+            },
+            "held": {
+              "const": false,
+              "description": "The condition is not held."
+            },
+            "why": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "\\S",
+              "description": "One sentence on why; it shares no run of 20 characters with the tests."
+            }
+          }
+        }
+      ]
+    }
+  }
+}

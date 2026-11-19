@@ -29,6 +29,7 @@ import {
   worktrees,
   type Asked,
   type Handed,
+  type Played,
   type Proved,
 } from "./kit-copy.ts";
 
@@ -44,6 +45,12 @@ const second = 'assert.equal(quill("east").quills + quill("west").quills, 2, "ea
 const baseLine = 'export const northAndSouth = quill("north and south", { strict: true, ink: "dry" });';
 
 const interfaceLine = '"description": "How many quills were counted, and how many spilled on the way out",';
+
+const proofRequest = "components/base/interfaces/proof/prove-request.json";
+
+const requestLine = `const request = "${proofRequest}";`;
+
+const spilledLine = '  assert.equal(quill("north and south", { strict: false }).spilled, 1, "the south quill spills");';
 
 let template: string;
 
@@ -83,6 +90,7 @@ function testsOf(name: string): Handed {
       sdkImport,
       'import { quill } from "../scripts/quill.ts";',
       `const codeFile = "${codeOf(name)}";`,
+      requestLine,
       `const says = "${condition}";`,
       baseLine,
       "const schema = {",
@@ -144,7 +152,7 @@ async function written(root: string, folder: string, files: readonly Handed[]): 
 
 function keptMarkNow(root: string): string {
   const [row] = keptRows(root);
-  return markOf(unpacked(textAt(row ?? null, "packed"))) ?? "";
+  return row === undefined ? "" : (markOf(unpacked(textAt(row, "packed"))) ?? "");
 }
 
 async function printedCard(root: string, runId: string): Promise<readonly string[]> {
@@ -164,6 +172,8 @@ type Building = {
   readonly name: string;
   readonly code: (mark: string) => readonly Handed[];
   readonly interface?: readonly string[];
+  readonly writer?: Played;
+  readonly reviewer?: Played;
 };
 
 async function ranWith(root: string, building: Building): Promise<Ran> {
@@ -180,13 +190,13 @@ async function ranWith(root: string, building: Building): Promise<Ran> {
   await provedIn(root, name, allPassed(name, files));
   let mark = "";
   const asked = await playedTo(root, start.id, {
-    tests: () => Promise.resolve({ tests: [tests] }),
+    tests: building.writer ?? (() => Promise.resolve({ tests: [tests] })),
     builder: async (given) => {
       mark = keptMarkNow(root);
       await written(root, textAt(inputOf(given), "folder"), code(mark));
       return { outcome: "built" };
     },
-    reviewer: (given) => Promise.resolve(allHeld(given)),
+    reviewer: building.reviewer ?? ((given) => Promise.resolve(allHeld(given))),
     planter: () => {
       const path = codeOf(name);
       const patch = [
@@ -303,9 +313,25 @@ describe(
       ]);
       git(root, ["add", folderOf(name)]);
       git(root, ["commit", "-q", "-m", "The quill and its schema before the slice"]);
+      const first = testsOf(name);
+      const amended = { ...first, text: first.text.replace("});\n", `${spilledLine}\n});\n`) };
+      const marks: string[] = [];
+      let reviews = 0;
       const ran = await ranWith(root, {
         name,
-        interface: [schemaOf(name)],
+        interface: [schemaOf(name), proofRequest],
+        writer: () => {
+          marks.push(keptMarkNow(root));
+          return Promise.resolve({ tests: [marks.length === 1 ? first : amended] });
+        },
+        reviewer: (given) => {
+          reviews += 1;
+          marks.push(keptMarkNow(root));
+          const findings = [
+            { to: "test-writer", case: "a quill is counted once", question: "Q2", fix: "Count the spill." },
+          ];
+          return Promise.resolve({ ...fieldsOf(allHeld(given)), findings: reviews === 1 ? findings : [] });
+        },
         code: () => [
           {
             path: codeOf(name),
@@ -313,6 +339,7 @@ describe(
               "export const ink = 1;",
               sdkImport,
               `const codeFile = "${codeOf(name)}";`,
+              requestLine,
               `const says = "${condition}";`,
               baseLine,
               interfaceLine,
@@ -326,12 +353,14 @@ describe(
       });
       assert.deepEqual(
         ran.asked.map((each) => each.action),
-        ["write-tests", "build-without-tests", "review", "plant"],
+        ["write-tests", "build-without-tests", "review", "write-tests", "review", "plant"],
       );
+      assert.deepEqual(marks, ["", ran.mark, ran.mark, ran.mark]);
       const later = ran.asked.slice(2);
       assert.deepEqual(holding([ran.mark], JSON.stringify(later)), []);
-      const reviewed = listOf(fieldsOf(inputOf(later[0]?.task ?? null)).tests);
-      assert.deepEqual(reviewed, [testsOf(name)]);
+      const reviewed = later.map((each) => listOf(fieldsOf(inputOf(each.task)).tests));
+      assert.deepEqual(reviewed.slice(0, 3), [[first], [], [amended]]);
+      assert.deepEqual(fieldsOf(inputOf(later[1]?.task ?? null)).earlier, [first]);
       const printed = await printedCard(root, ran.runId);
       assert.ok(!printed.some((line) => line.includes("leak")));
       assert.deepEqual(holding([ran.mark], printed.join("\n")), []);

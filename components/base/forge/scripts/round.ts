@@ -180,7 +180,7 @@ async function proved(
   return listOf((await answerOf(context, "proof.prove", asked)).verdicts);
 }
 
-async function markOf(context: ScriptContext, round: Round): Promise<string> {
+async function runMark(context: ScriptContext, round: Round): Promise<string> {
   const kept = round.number === 1 ? undefined : await keptMark(context, round.name);
   return kept ?? newMark();
 }
@@ -199,7 +199,7 @@ function reviewedAtOf(before: RoundsState | undefined): { readonly reviewedAt?: 
 async function ranRound(context: ScriptContext, round: Round, plan: RoundPlan): Promise<RoundsState> {
   if (plan.writeTests) {
     const tests = await newTests(context, round);
-    await keepTests(context, { slice: round.name, tests, mark: await markOf(context, round) });
+    await keepTests(context, { slice: round.name, tests, mark: await runMark(context, round) });
   }
   const building = await buildingOf(context, round, plan);
   const tests = await keptTests(context, round.name);

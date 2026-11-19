@@ -1,7 +1,7 @@
 import type { Request } from "../lib/request.ts";
 import { inCopy, type ProofStep } from "../lib/step.ts";
 import { checkCount, checkRun, testRun, type CheckRun, type CheckVerdict, type TestRun } from "../lib/toolchain.ts";
-import { broken, counted, held, unknown, type Part, type Parts } from "../lib/verdicts.ts";
+import { broken, brokenWithCases, counted, held, unknown, type Part, type Parts } from "../lib/verdicts.ts";
 
 export type ChecksEvidence =
   | { readonly copy: "not made"; readonly reason: string }
@@ -31,7 +31,7 @@ function testPart(tests: TestRun): Part {
     case "passed":
       return held;
     case "failed":
-      return broken(`${counted(tests.failed, "test", "tests")} failed.`);
+      return brokenWithCases(`${counted(tests.failed, "test", "tests")} failed.`, tests.cases);
     case "inconclusive":
       return unknown(`The test run is not known: ${tests.reason}`);
     case "not started":

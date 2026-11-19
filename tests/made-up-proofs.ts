@@ -13,7 +13,8 @@ export type ProofVariant =
   | "passes a bug that survives"
   | "puts a declared path into a detail"
   | "omits the two added items when every item is judgement"
-  | "counts a bug that could not be applied as caught";
+  | "counts a bug that could not be applied as caught"
+  | "counts a bug whose tests did not load as caught";
 
 type Replacement = readonly [file: string, line: string, wrong: string];
 
@@ -172,21 +173,28 @@ export function requestOf(input: Json, settings: Readonly<Record<string, Json>>)
 }
 `;
 
-const verdictsLibrary = String.raw`export type Kind = "checks" | "fails-first" | "in-scope" | "as-declared" | "bugs-caught" | "same-output" | "count" | "real-thing";
+const verdictsLibrary = String.raw`import type { Cases } from "./calls.ts";
+
+export type Kind = "checks" | "fails-first" | "in-scope" | "as-declared" | "bugs-caught" | "same-output" | "count" | "real-thing";
 
 export type Part =
   | { readonly verdict: "passed" }
-  | { readonly verdict: "failed"; readonly why: string }
+  | { readonly verdict: "failed"; readonly why: string; readonly cases?: Cases }
   | { readonly verdict: "inconclusive"; readonly reason: string };
 
 export type Verdict =
-  | { readonly item: string; readonly kind: Kind; readonly verdict: "passed" | "failed"; readonly detail: string }
+  | { readonly item: string; readonly kind: Kind; readonly verdict: "passed"; readonly detail: string }
+  | { readonly item: string; readonly kind: Kind; readonly verdict: "failed"; readonly detail: string; readonly cases?: Cases }
   | { readonly item: string; readonly kind: Kind; readonly verdict: "inconclusive"; readonly reason: string };
 
 export const held: Part = { verdict: "passed" };
 
 export function broken(why: string): Part {
   return { verdict: "failed", why };
+}
+
+export function brokenShowing(why: string, cases: Cases): Part {
+  return { verdict: "failed", why, cases };
 }
 
 export function unknown(reason: string): Part {
@@ -199,9 +207,11 @@ export function decided(item: string, kind: Kind, parts: readonly Part[], summar
       return { item, kind, verdict: "inconclusive", reason: part.reason };
     }
   }
-  const failures = parts.flatMap((part) => (part.verdict === "failed" ? [part.why] : []));
-  if (failures.length > 0) {
-    return { item, kind, verdict: "failed", detail: failures.join(" ") };
+  const failed = parts.flatMap((part) => (part.verdict === "failed" ? [part] : []));
+  if (failed.length > 0) {
+    const detail = failed.map((part) => part.why).join(" ");
+    const cases = failed.find((part) => part.cases !== undefined)?.cases;
+    return cases === undefined ? { item, kind, verdict: "failed", detail } : { item, kind, verdict: "failed", detail, cases };
   }
   return { item, kind, verdict: "passed", detail: summary };
 }
@@ -221,12 +231,16 @@ export type Ended =
   | { readonly how: "exited"; readonly exitCode: number; readonly stdout: string }
   | { readonly how: "unknown"; readonly reason: string };
 
+export type Cases = { readonly [field: string]: Json };
+
 export type TestRun =
   | { readonly verdict: "passed"; readonly passed: number }
-  | { readonly verdict: "failed"; readonly failed: number }
+  | { readonly verdict: "failed"; readonly failed: number; readonly cases: Cases }
   | { readonly verdict: "inconclusive"; readonly reason: string };
 
 const commandSeconds = 60;
+
+const caseFields = ["failures", "failuresNotListed", "notLoaded"];
 
 let copiesMade = 0;
 
@@ -270,9 +284,19 @@ export async function testRun(context: ScriptContext, folder: string, files?: re
     return { verdict: "passed", passed: typeof fields.passed === "number" ? fields.passed : 0 };
   }
   if (fields.verdict === "failed") {
-    return { verdict: "failed", failed: typeof fields.failed === "number" ? fields.failed : 0 };
+    const given = caseFields.flatMap((name): [string, Json][] => {
+      const value = fields[name];
+      return value === undefined ? [] : [[name, value]];
+    });
+    return { verdict: "failed", failed: typeof fields.failed === "number" ? fields.failed : 0, cases: Object.fromEntries(given) };
   }
   return { verdict: "inconclusive", reason: "The test run is not known. " + textOf(run.value, "reason") };
+}
+
+export function onlyFilesThatDidNotLoad(cases: Cases): boolean {
+  const listed = Array.isArray(cases.failures) ? cases.failures.length : 0;
+  const notListed = typeof cases.failuresNotListed === "number" ? cases.failuresNotListed : 0;
+  return Array.isArray(cases.notLoaded) && cases.notLoaded.length > 0 && listed + notListed === 0;
 }
 
 export async function ranIn(context: ScriptContext, folder: string, command: { readonly name: string; readonly arguments: readonly string[] }): Promise<Ended> {
@@ -578,9 +602,9 @@ const baseRunFunction = String.raw`async function baseRun(context: ScriptContext
 `;
 
 const codeKinds = String.raw`import type { ScriptContext } from "${sdkFromLibrary}";
-import { called, inCopy, ranIn, testRun, type Copy } from "./calls.ts";
+import { called, inCopy, onlyFilesThatDidNotLoad, ranIn, testRun, type Copy } from "./calls.ts";
 import type { Bug, Request, Run } from "./request.ts";
-import { broken, counted, decided, held, unknown, type Part, type Verdict } from "./verdicts.ts";
+import { broken, brokenShowing, counted, decided, held, unknown, type Part, type Verdict } from "./verdicts.ts";
 
 function partOfCheck(name: string, verdict: string, reason: string): Part {
   if (verdict === "passed") {
@@ -606,7 +630,7 @@ async function checkParts(context: ScriptContext, copy: Copy): Promise<readonly 
     return partOfCheck(field("name"), field("verdict"), field("reason"));
   });
   const tests = await testRun(context, copy.folder);
-  const testPart = tests.verdict === "passed" ? held : tests.verdict === "failed" ? broken(counted(tests.failed, "test failed.", "tests failed.")) : unknown(tests.reason);
+  const testPart = tests.verdict === "passed" ? held : tests.verdict === "failed" ? brokenShowing(counted(tests.failed, "test failed.", "tests failed."), tests.cases) : unknown(tests.reason);
   return [...parts, testPart];
 }
 
@@ -624,7 +648,7 @@ async function headRun(context: ScriptContext, head: Copy, tests: readonly strin
   if (run.verdict === "inconclusive") {
     return unknown("On the head: " + run.reason);
   }
-  return run.verdict === "passed" ? held : broken("The named tests fail on the head.");
+  return run.verdict === "passed" ? held : brokenShowing("The named tests fail on the head.", run.cases);
 }
 
 export async function failsFirst(context: ScriptContext, request: Request, item: { readonly id: string; readonly tests: readonly string[] }, head: Copy): Promise<Verdict> {
@@ -644,6 +668,9 @@ async function bugPart(context: ScriptContext, request: Request, bug: Bug): Prom
     const run = await testRun(context, copy.folder, bug.tests);
     if (run.verdict === "inconclusive") {
       return unknown("The run with the bug " + bug.name + " is not known. " + run.reason);
+    }
+    if (run.verdict === "failed" && onlyFilesThatDidNotLoad(run.cases)) {
+      return unknown("The tests of the bug " + bug.name + " did not run: no case failed, and a test file did not load.");
     }
     return run.verdict === "failed" ? held : broken("A bug survived: " + bug.name + ".");
   });
@@ -801,10 +828,11 @@ const worktreeChecks = String.raw`  const cut = await called(context, "worktrees
   const parts = await checkParts(context, { made: true, folder });
   await called(context, "worktrees.remove", { folder, into: commit });`;
 
-const codeKindsImport = 'import { called, inCopy, ranIn, testRun, type Copy } from "./calls.ts";';
+const codeKindsImport =
+  'import { called, inCopy, onlyFilesThatDidNotLoad, ranIn, testRun, type Copy } from "./calls.ts";';
 
 const codeKindsImportWithText =
-  'import { called, inCopy, linksOf, ranIn, testRun, textOf, type Copy } from "./calls.ts";';
+  'import { called, inCopy, linksOf, onlyFilesThatDidNotLoad, ranIn, testRun, textOf, type Copy } from "./calls.ts";';
 
 const replacements: Readonly<Record<ProofVariant, readonly Replacement[]>> = {
   "proves by the interface": [],
@@ -854,6 +882,13 @@ const replacements: Readonly<Record<ProofVariant, readonly Replacement[]>> = {
       "      return held;",
     ],
   ],
+  "counts a bug whose tests did not load as caught": [
+    [
+      "scripts/lib/code-kinds.ts",
+      '      return unknown("The tests of the bug " + bug.name + " did not run: no case failed, and a test file did not load.");',
+      "      return held;",
+    ],
+  ],
   "omits the two added items when every item is judgement": [
     [
       "scripts/prove.ts",
@@ -887,6 +922,7 @@ export const wrongProofs: Readonly<Record<string, ProofVariant>> = {
   "assay-shows-declared": "puts a declared path into a detail",
   "assay-omits-added": "omits the two added items when every item is judgement",
   "assay-passes-stale-bug": "counts a bug that could not be applied as caught",
+  "assay-passes-unloaded-bug": "counts a bug whose tests did not load as caught",
 };
 
 export function proofFiles(name: string, variant: ProofVariant): ModeFiles {

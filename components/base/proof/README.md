@@ -10,11 +10,11 @@ Each kind of proof is one file under `scripts/kinds/`, and `scripts/kinds.ts` is
 
 ### checks
 
-Built. A copy of the head; the toolchain's `describe`, then `check` and `test` on the copy; the copy removed. Passed when every check passed and the test run passed. A check the project is not set up for, a run stopped at its limit, and a copy that could not be made each make the item inconclusive, with the reason the toolchain or the worktrees interface gave.
+Built. A copy of the head; the toolchain's `describe`, then `check` and `test` on the copy; the copy removed. Passed when every check passed and the test run passed. A check the project is not set up for, a run stopped at its limit, and a copy that could not be made each make the item inconclusive, with the reason the toolchain or the worktrees interface gave. When the item fails and the test run failed, the verdict carries that run's failing cases (see below).
 
 ### fails-first
 
-Built. A copy of the base with the item's test files laid over it as they are at the head, and those files run there; then a copy of the head, and the same files run there. Passed when the run on the base failed and the run on the head passed. A run on the base that passed fails the item, since the tests do not show the change. A test file that does not exist at the head fails the item. A run that could not start makes it inconclusive.
+Built. A copy of the base with the item's test files laid over it as they are at the head, and those files run there; then a copy of the head, and the same files run there. Passed when the run on the base failed and the run on the head passed. A run on the base that passed fails the item, since the tests do not show the change. A test file that does not exist at the head fails the item. A run that could not start makes it inconclusive. When the item fails because the run on the head failed, the verdict carries that run's failing cases (see below); the base's are never carried.
 
 ### in-scope
 
@@ -26,7 +26,7 @@ Built. Proof adds it to every slice as the item `declared`. It compares the file
 
 ### bugs-caught
 
-Built. For each bug of the request, one after another: a fresh copy of the head, the bug's patch applied with the worktrees interface's `apply`, the toolchain's `test` with only the bug's covering test files, and the copy removed. Passed when every run failed. A run that passed is a bug that survived: it fails the item, and the detail names it by the name the request gives it. No bugs, a patch that does not apply, a run that was stopped or could not start, and a copy that could not be made each make the item inconclusive; such a bug is never counted as caught. A bug that names a test file missing at the head is inconclusive, since the run prints no summary of tests. A run counts as caught when it failed for any reason: a patch that stops a test file from loading reads as one failed test, because the toolchain's answer does not tell a file that did not load from a test that failed, and tests that already fail at the head without the bug are shown by the item `checks` failing, not here. Each run is asked for what is left of the step, as every toolchain call is, and reports what it spent; so each of a dozen bugs may ask up to 1,000 seconds but never more than is left, a run that hangs leaves less for the bugs after it, and a bug with no time left is not run and is inconclusive.
+Built. For each bug of the request, one after another: a fresh copy of the head, the bug's patch applied with the worktrees interface's `apply`, the toolchain's `test` with only the bug's covering test files, and the copy removed. Passed when every run failed. A run that passed is a bug that survived: it fails the item, and the detail names it by the name the request gives it. No bugs, a patch that does not apply, a run that was stopped or could not start, and a copy that could not be made each make the item inconclusive; such a bug is never counted as caught. A bug that names a test file missing at the head is inconclusive, since the run prints no summary of tests. A run that failed only because test files did not load, with no failing case listed or counted and at least one file in the toolchain's `notLoaded`, is inconclusive too: the bug's tests did not run, and the reason says so with a count of the files. A run with a failing case is caught, also when another of its files did not load. When the toolchain's answer has no `notLoaded`, as from an older toolchain, a failed run counts as caught for any reason, as before: a patch that stops a test file from loading then reads as one failed test. Tests that already fail at the head without the bug are shown by the item `checks` failing, not here. Each run is asked for what is left of the step, as every toolchain call is, and reports what it spent; so each of a dozen bugs may ask up to 1,000 seconds but never more than is left, a run that hangs leaves less for the bugs after it, and a bug with no time left is not run and is inconclusive.
 
 ### same-output
 
@@ -39,6 +39,12 @@ Built. The item's runs are made one after another in one fresh copy of the head,
 ### count
 
 Built. Counts the lines that hold the item's text under its paths, in a copy of the head, by the listed command `count-matches` (`grep -r -c -h -F -e`, effect read; asked for what is left of the step, as a toolchain call is). The text is matched as written, not as a pattern, and a folder counts every file under it. With `most`, passed when the head has at most that many lines. A count that may not rise, given in the item with `noRise` or named with `use` from proof's settings under `noRise`, is counted in a copy of the base too, by the same code, and passed when the head has no more than the base. The detail gives the numbers, never the text. A path that does not exist, a count that was stopped or printed more than proof reads, a copy that could not be made, and a name the settings do not declare make the item inconclusive.
+
+## The failing cases a verdict carries
+
+A failed verdict of the kind `checks` or `fails-first` whose test run on the head failed holds `cases`: what the toolchain's failed answer named, copied as it gave it. `failures` is each failing case, with its name, its file, the first line of its message and how many characters of that line were cut; `failuresNotListed` is how many more failing cases the toolchain counted; `notLoaded` is the test files that failed as a whole. A field the toolchain's answer left out is left out here, so an older toolchain that names no cases gives an empty `cases`. No other verdict holds `cases`: not a passed one, even when the run on the base failed, and not an inconclusive one.
+
+Proof filters nothing in them. They are data beside the verdict for the caller, such as forge, to filter before a builder sees any of it, since a message can hold a test's text. Nothing of a case reaches a detail or a reason: those stay counts and proof's own sentences.
 
 ## What every verdict comes with
 

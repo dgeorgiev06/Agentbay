@@ -18,18 +18,27 @@ function scriptsOf(check: WantedCheck): readonly (readonly [string, string])[] {
   return check.outcome === "not set up" ? [] : [[check.name, outcomes[check.outcome]]];
 }
 
-function testLineOf(wanted: WantedTest): string {
-  const name = JSON.stringify(wanted.name);
-  const bodies: Readonly<Record<Outcome, string>> = {
-    passes: "() => assert.equal(1 + 1, 2)",
-    fails: "() => assert.equal(1 + 1, 3)",
-    "does not end": "() => new Promise((done) => setTimeout(done, 600000))",
-  };
-  return `test(${name}, ${bodies[wanted.outcome]});`;
+function bodyOf(wanted: WantedTest): string {
+  switch (wanted.outcome) {
+    case "passes":
+      return "() => assert.equal(1 + 1, 2)";
+    case "fails":
+      return `() => assert.fail(${JSON.stringify(wanted.message)})`;
+    case "does not end":
+      return "() => new Promise((done) => setTimeout(done, 600000))";
+  }
 }
 
+function testLineOf(wanted: WantedTest): string {
+  return `test(${JSON.stringify(wanted.name)}, ${bodyOf(wanted)});`;
+}
+
+const imports = ['import assert from "node:assert/strict";', 'import { test } from "node:test";'];
+
 function testFileOf(tests: WantedTestFile): string {
-  const imports = ['import assert from "node:assert/strict";', 'import { test } from "node:test";'];
+  if (tests === "does not load") {
+    return [...imports, 'throw new Error("this file does not load");', 'test("never runs", () => {});', ""].join("\n");
+  }
   return [...imports, ...tests.map(testLineOf), ""].join("\n");
 }
 

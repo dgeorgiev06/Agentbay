@@ -18,12 +18,11 @@ export type WantedCheck = {
   readonly line: string;
 };
 
-export type WantedTest = {
-  readonly name: string;
-  readonly outcome: Outcome;
-};
+export type WantedTest =
+  | { readonly name: string; readonly outcome: "passes" | "does not end" }
+  | { readonly name: string; readonly outcome: "fails"; readonly message: string };
 
-export type WantedTestFile = readonly WantedTest[];
+export type WantedTestFile = readonly WantedTest[] | "does not load";
 
 export type TestRun = "set up" | "not set up";
 
@@ -101,16 +100,40 @@ const kernelStateFolder = ".agentbay";
 
 const kernelDatabase = /\.db(-wal|-shm|-journal)?$/;
 
-const sums: WantedTestFile = [
+const sums: readonly WantedTest[] = [
   { name: "one and one make two", outcome: "passes" },
   { name: "two and two make four", outcome: "passes" },
 ];
 
-const words: WantedTestFile = [{ name: "a word has letters", outcome: "passes" }];
+const words: readonly WantedTest[] = [{ name: "a word has letters", outcome: "passes" }];
 
-const wrongSum: WantedTestFile = [{ name: "a sum that is wrong", outcome: "fails" }];
+const wrongSumName = "a sum that is wrong";
 
-const waits: WantedTestFile = [{ name: "waits for ever", outcome: "does not end" }];
+const wrongSum: readonly WantedTest[] = [
+  { name: wrongSumName, outcome: "fails", message: "the sum is wrong\n1 + 1 gives 2, not 3" },
+];
+
+const wrongSumMessage = "the sum is wrong";
+
+const wrongTwiceName = "a sum that is wrong twice";
+
+const twoWrongSums: readonly WantedTest[] = [
+  { name: "one and one make two", outcome: "passes" },
+  { name: wrongTwiceName, outcome: "fails", message: "the first sum is wrong" },
+  { name: wrongTwiceName, outcome: "fails", message: "the second sum is wrong\n2 + 2 gives 4, not 5" },
+];
+
+const wrongProductName = "a product that is wrong";
+
+const wrongProduct: readonly WantedTest[] = [
+  { name: wrongProductName, outcome: "fails", message: "\n   the product is wrong  \n2 * 2 gives 4, not 5" },
+];
+
+const longestMessage = 200;
+
+const mostFailures = 50;
+
+const waits: readonly WantedTest[] = [{ name: "waits for ever", outcome: "does not end" }];
 
 function isFields(value: Value): value is Fields {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -203,8 +226,99 @@ function shownTestResult(value: Value): Fields {
     assert.deepEqual(keysOf(value), ["reason", "seconds", "stderr", "stdout", "verdict"]);
     return { verdict, reason: givenReasonOf(fields) };
   }
+  const counts = {
+    verdict: verdict ?? null,
+    passed: passed ?? null,
+    failed: failed ?? null,
+    failedTests: failedTests ?? null,
+  };
+  if (verdict === "failed") {
+    assert.deepEqual(keysOf(value), [
+      "failed",
+      "failedTests",
+      "failures",
+      "failuresNotListed",
+      "notLoaded",
+      "passed",
+      "seconds",
+      "stderr",
+      "stdout",
+      "verdict",
+    ]);
+    const { failures, failuresNotListed, notLoaded } = casesOf(fields);
+    return { ...counts, failures, failuresNotListed, notLoaded };
+  }
   assert.deepEqual(keysOf(value), ["failed", "failedTests", "passed", "seconds", "stderr", "stdout", "verdict"]);
-  return { verdict: verdict ?? null, passed: passed ?? null, failed: failed ?? null, failedTests: failedTests ?? null };
+  return counts;
+}
+
+type FailingCase = {
+  readonly name: string;
+  readonly file: string;
+  readonly message: string;
+  readonly charactersCut: number;
+};
+
+type Cases = {
+  readonly failures: readonly FailingCase[];
+  readonly failuresNotListed: number;
+  readonly notLoaded: readonly string[];
+};
+
+function countOf(value: Value | undefined): number {
+  assert.ok(typeof value === "number" && Number.isInteger(value) && value >= 0, JSON.stringify(value));
+  return value;
+}
+
+function shownFailure(value: Value): FailingCase {
+  const fields = fieldsOf(value);
+  assert.deepEqual(keysOf(value), ["charactersCut", "file", "message", "name"]);
+  return {
+    name: textOf(fields.name),
+    file: textOf(fields.file),
+    message: textOf(fields.message),
+    charactersCut: countOf(fields.charactersCut),
+  };
+}
+
+function casesOf(fields: Fields): Cases {
+  const { failures } = fields;
+  assert.ok(isList(failures), JSON.stringify(fields));
+  return {
+    failures: failures.map(shownFailure),
+    failuresNotListed: countOf(fields.failuresNotListed),
+    notLoaded: textsOf(fields.notLoaded),
+  };
+}
+
+function inFileOrder(failures: readonly FailingCase[]): readonly FailingCase[] {
+  return [...failures].sort((left, right) => left.file.localeCompare(right.file));
+}
+
+function shownCases(value: Value): Fields | Cases {
+  const fields = fieldsOf(value);
+  if (fields.verdict !== "failed") {
+    return shownTestResult(value);
+  }
+  shownTestResult(value);
+  const { failures, failuresNotListed, notLoaded } = casesOf(fields);
+  return { failures: inFileOrder(failures), failuresNotListed, notLoaded: [...notLoaded].sort() };
+}
+
+function failingCase(name: string, file: string, message: string): FailingCase {
+  return { name, file, message, charactersCut: 0 };
+}
+
+function failedOnWrongSum(passed: number, file: string): Fields {
+  return {
+    verdict: "failed",
+    passed,
+    failed: 1,
+    failedTests: [wrongSumName],
+    failures: [failingCase(wrongSumName, file, wrongSumMessage)],
+    failuresNotListed: 0,
+    notLoaded: [],
+  };
 }
 
 function verdictsOf(output: Value): readonly Value[] {
@@ -241,6 +355,10 @@ function assertVerdicts(toolchain: Toolchain, output: Value, expected: readonly 
 
 function assertTestResult(toolchain: Toolchain, output: Value, expected: Fields): void {
   assertShown(shownTestResult(output), expected, toolchain.whyInconclusive([output]));
+}
+
+function assertCases(toolchain: Toolchain, output: Value, expected: Cases | Fields): void {
+  assertShown(shownCases(output), expected, toolchain.whyInconclusive([output]));
 }
 
 function lineOf(check: string): string {
@@ -296,6 +414,26 @@ function testFilesOf(description: Description, files: Files): readonly string[] 
   return Object.keys(files)
     .filter((path) => matchedBy(description.testFiles, path))
     .sort();
+}
+
+async function testFilesIn(toolchain: Toolchain, folder: string, wanted: Wanted): Promise<readonly string[]> {
+  const description = await toolchain.describe();
+  const files = testFilesOf(description, await toolchain.filesIn(folder));
+  const why = "the checkout's test files, sorted by path, are the wanted test files in their order";
+  assert.equal(files.length, wanted.testFiles.length, why);
+  return files;
+}
+
+function failingTests(count: number): WantedTestFile {
+  return Array.from({ length: count }, (_, index) => ({
+    name: `failing case ${String(index + 1)}`,
+    outcome: "fails",
+    message: "it fails",
+  }));
+}
+
+function namesOfTheFirst(count: number): readonly string[] {
+  return Array.from({ length: count }, (_, index) => `failing case ${String(index + 1)}`);
 }
 
 async function timed<Result>(
@@ -504,29 +642,28 @@ const cases: readonly Case[] = [
     name: "a test run where one test fails is failed, with the counts and the name of the test that failed",
     run: async (toolchain) => {
       const description = await toolchain.describe();
-      const folder = await toolchain.write("one-test-fails", allPassing(description, [sums, wrongSum]));
-      assertTestResult(toolchain, await toolchain.test({ folder }), {
-        verdict: "failed",
-        passed: 2,
-        failed: 1,
-        failedTests: ["a sum that is wrong"],
-      });
+      const wanted = allPassing(description, [sums, wrongSum]);
+      const folder = await toolchain.write("one-test-fails", wanted);
+      const [, file = ""] = await testFilesIn(toolchain, folder, wanted);
+      assertTestResult(toolchain, await toolchain.test({ folder }), failedOnWrongSum(2, file));
     },
   },
   {
     name: "named test files are the only ones run",
     run: async (toolchain) => {
       const description = await toolchain.describe();
-      const folder = await toolchain.write("named-files", allPassing(description, [sums, wrongSum]));
+      const wanted = allPassing(description, [sums, wrongSum]);
+      const folder = await toolchain.write("named-files", wanted);
       const outputs: Value[] = [];
-      for (const file of testFilesOf(description, await toolchain.filesIn(folder))) {
+      const files = await testFilesIn(toolchain, folder, wanted);
+      for (const file of files) {
         outputs.push(await toolchain.test({ folder, files: [file] }));
       }
       const byVerdict = outputs
         .map(shownTestResult)
         .sort((left, right) => JSON.stringify(left.verdict).localeCompare(JSON.stringify(right.verdict)));
       const expected = [
-        { verdict: "failed", passed: 0, failed: 1, failedTests: ["a sum that is wrong"] },
+        failedOnWrongSum(0, files[1] ?? ""),
         { verdict: "passed", passed: 2, failed: 0, failedTests: [] },
       ];
       assertShown(byVerdict, expected, toolchain.whyInconclusive(outputs));
@@ -557,6 +694,122 @@ const cases: readonly Case[] = [
           "input.timeLimitSeconds must be at most 1000, but it is 1001.",
           "input.timeLimitSeconds must be at most 1000, but it is 1001.",
         ],
+      );
+    },
+  },
+  {
+    name: "a failed run lists each failing case with its file and the first line of its message that is not blank, and no case that passed",
+    run: async (toolchain) => {
+      const description = await toolchain.describe();
+      const wanted = allPassing(description, [sums, twoWrongSums, wrongProduct]);
+      const folder = await toolchain.write("failing-cases", wanted);
+      const [, second = "", third = ""] = await testFilesIn(toolchain, folder, wanted);
+      assertCases(toolchain, await toolchain.test({ folder }), {
+        failures: [
+          failingCase(wrongTwiceName, second, "the first sum is wrong"),
+          failingCase(wrongTwiceName, second, "the second sum is wrong"),
+          failingCase(wrongProductName, third, "the product is wrong"),
+        ],
+        failuresNotListed: 0,
+        notLoaded: [],
+      });
+    },
+  },
+  {
+    name: "a message's line is cut after 200 characters, and its case says how many were cut",
+    run: async (toolchain) => {
+      const description = await toolchain.describe();
+      const lengths = [1, longestMessage - 1, longestMessage, longestMessage + 1, longestMessage + 2];
+      const tests = lengths.map((length): WantedTest => ({
+        name: `a message of ${String(length)} characters`,
+        outcome: "fails",
+        message: "m".repeat(length),
+      }));
+      const wanted = allPassing(description, [tests]);
+      const folder = await toolchain.write("long-messages", wanted);
+      const [file = ""] = await testFilesIn(toolchain, folder, wanted);
+      assertCases(toolchain, await toolchain.test({ folder }), {
+        failures: lengths.map((length) => ({
+          name: `a message of ${String(length)} characters`,
+          file,
+          message: "m".repeat(Math.min(length, longestMessage)),
+          charactersCut: Math.max(0, length - longestMessage),
+        })),
+        failuresNotListed: 0,
+        notLoaded: [],
+      });
+    },
+  },
+  {
+    name: "at most 50 failing cases are listed, the first in the order they ran, and the rest are counted",
+    run: async (toolchain) => {
+      const description = await toolchain.describe();
+      const counts = [mostFailures - 1, mostFailures, mostFailures + 1, mostFailures + 2];
+      const outputs: Value[] = [];
+      for (const count of counts) {
+        const folder = await toolchain.write(
+          `${String(count)}-failing`,
+          allPassing(description, [failingTests(count)]),
+        );
+        outputs.push(await toolchain.test({ folder }));
+      }
+      const shown = outputs.map((output) => {
+        const fields = fieldsOf(output);
+        shownTestResult(output);
+        const { failures, failuresNotListed } = casesOf(fields);
+        return { names: failures.map((failure) => failure.name), failuresNotListed };
+      });
+      const expected = counts.map((count) => ({
+        names: namesOfTheFirst(Math.min(count, mostFailures)),
+        failuresNotListed: Math.max(0, count - mostFailures),
+      }));
+      assertShown(shown, expected, toolchain.whyInconclusive(outputs));
+    },
+  },
+  {
+    name: "two failing cases with the same name in different files are two cases, each with its own file and message",
+    run: async (toolchain) => {
+      const description = await toolchain.describe();
+      const inFile = (message: string): WantedTestFile => [{ name: wrongSumName, outcome: "fails", message }];
+      const wanted = allPassing(description, [inFile("the first file's sum"), inFile("the second file's sum")]);
+      const folder = await toolchain.write("same-name", wanted);
+      const [first = "", second = ""] = await testFilesIn(toolchain, folder, wanted);
+      assertCases(toolchain, await toolchain.test({ folder }), {
+        failures: [
+          failingCase(wrongSumName, first, "the first file's sum"),
+          failingCase(wrongSumName, second, "the second file's sum"),
+        ],
+        failuresNotListed: 0,
+        notLoaded: [],
+      });
+    },
+  },
+  {
+    name: "a test file that does not load is named in notLoaded and is no failing case, and the failing cases of the other files are still listed",
+    run: async (toolchain) => {
+      const description = await toolchain.describe();
+      const wanted = allPassing(description, [[...sums, ...wrongSum], "does not load"]);
+      const folder = await toolchain.write("one-does-not-load", wanted);
+      const [first = "", second = ""] = await testFilesIn(toolchain, folder, wanted);
+      assertCases(toolchain, await toolchain.test({ folder }), {
+        failures: [failingCase(wrongSumName, first, wrongSumMessage)],
+        failuresNotListed: 0,
+        notLoaded: [second],
+      });
+    },
+  },
+  {
+    name: "a run whose cases all pass but whose test files do not all load is failed, with no failing case and each file that did not load",
+    run: async (toolchain) => {
+      const description = await toolchain.describe();
+      const wanted = allPassing(description, [sums, "does not load", "does not load"]);
+      const folder = await toolchain.write("two-do-not-load", wanted);
+      const [, second = "", third = ""] = await testFilesIn(toolchain, folder, wanted);
+      const output = await toolchain.test({ folder });
+      assertShown(
+        { verdict: fieldsOf(output).verdict ?? null, ...shownCases(output) },
+        { verdict: "failed", failures: [], failuresNotListed: 0, notLoaded: [second, third] },
+        toolchain.whyInconclusive([output]),
       );
     },
   },
@@ -601,12 +854,13 @@ const cases: readonly Case[] = [
         testFiles: [sums, wrongSum],
       };
       const folder = await toolchain.write("called-twice", wanted);
+      const [, file = ""] = await testFilesIn(toolchain, folder, wanted);
       const expected = {
         verdicts: [
           { name: first, verdict: "failed", lastLine: lineOf(first) },
           ...description.checks.slice(1).map(passed),
         ],
-        test: { verdict: "failed", passed: 2, failed: 1, failedTests: ["a sum that is wrong"] },
+        test: failedOnWrongSum(2, file),
       };
       for (const call of ["first", "second"]) {
         const verdicts = verdictsOf(await toolchain.check({ folder }));

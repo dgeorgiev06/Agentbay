@@ -60,3 +60,16 @@ export function endedOf(subject: string, finished: Finished, timeLimitSeconds: n
       return { kind: "exited", exitCode: ending.exitCode };
   }
 }
+
+const folderSeconds = 10;
+
+export async function realFolder(context: ScriptContext, folder: string): Promise<string> {
+  const printed = await runTimed(context, {
+    name: "print-folder",
+    arguments: [],
+    folder,
+    timeLimitSeconds: folderSeconds,
+  });
+  const { ending } = printed;
+  return ending.how === "exited" && ending.exitCode === 0 ? printed.stdout.trim() : "";
+}

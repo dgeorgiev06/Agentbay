@@ -593,13 +593,20 @@ const cases: readonly Case[] = [
   },
   {
     name: "merge makes a merge commit on the target whose parents are the target's old head and the slice's head, and a second merge says it is already merged",
-    restsOn: "merge-request and merge-response (merged: commit with two parents; already-merged: the head, unchanged)",
+    restsOn:
+      "merge-request and merge-response (merged: commit with two parents, landed on a branch not checked out; already-merged: the head, unchanged)",
     run: async (world) => {
       const { folder, head } = await sliceWithCommit(world, { "feature.txt": "feature\n" });
       const target = await targetWith(world, { "other.txt": "other\n" });
       const output = fieldsOf(await world.output("merge", { folder, into: "integration" }));
       const commit = await world.headOf("integration");
-      assert.deepEqual(output, { how: "merged", branch: "forge/feature", into: "integration", commit: commit ?? null });
+      assert.deepEqual(output, {
+        how: "merged",
+        branch: "forge/feature",
+        into: "integration",
+        commit: commit ?? null,
+        landed: "branch-not-checked-out",
+      });
       assert.deepEqual(await world.parentsOf(textOf(commit)), [target, head]);
       assert.deepEqual(await world.filesOf(textOf(commit)), {
         ...(await world.filesOf(target)),
@@ -654,15 +661,93 @@ const cases: readonly Case[] = [
     },
   },
   {
-    name: "merge refuses a worktree with a changed file, a target that does not exist and the owner's checked-out branch, and changes no branch",
-    restsOn: "merge-request (folder: no changed or untracked files; into: a branch not checked out anywhere)",
+    name: "merge into the branch the project's own folder has checked out fast-forwards it to a merge commit when the folder is clean; the folder holds the merge's files, the branch stays checked out, and an untracked file the merge does not touch is kept",
+    restsOn:
+      "merge-request (into: checked out only in the project's own folder), merge-response (landed: checked-out-branch-fast-forwarded)",
+    run: async (world) => {
+      const { folder, head } = await sliceWithCommit(world, { "feature.txt": "feature\n" });
+      await written(world, ".", { "notes.txt": "Not committed.\n" });
+      const before = await ownersCheckout(world);
+      const output = fieldsOf(await world.output("merge", { folder, into: ownersBranch }));
+      const commit = textOf(output.commit);
+      assert.deepEqual(output, {
+        how: "merged",
+        branch: "forge/feature",
+        into: ownersBranch,
+        commit,
+        landed: "checked-out-branch-fast-forwarded",
+      });
+      assert.deepEqual(await world.parentsOf(commit), [world.base, head]);
+      assert.deepEqual(await world.filesOf(commit), {
+        ...(await world.filesOf(world.base)),
+        "feature.txt": "feature\n",
+      });
+      assert.deepEqual(await ownersCheckout(world), {
+        branch: ownersBranch,
+        head: commit,
+        files: { ...before.files, "feature.txt": "feature\n" },
+      });
+      assert.deepEqual(await world.output("merge", { folder, into: ownersBranch }), {
+        how: "already-merged",
+        branch: "forge/feature",
+        into: ownersBranch,
+        commit,
+      });
+      assert.equal(fieldsOf(await world.output("remove", { folder, into: ownersBranch })).kind, "worktree");
+    },
+  },
+  {
+    name: "merge into the checked-out branch is refused while the project's folder has an uncommitted change or an untracked file where the merge puts one, and nothing changes anywhere; once they are gone it lands",
+    restsOn:
+      "merge-request (into: fast-forwarded only when the project's folder is clean); README, merge: what clean means",
+    run: async (world) => {
+      const { folder } = await sliceWithCommit(world, { "feature.txt": "feature\n" });
+      const readme = { "README.md": "A small repository.\n" };
+      const blockers: readonly Files[] = [
+        { "README.md": "The owner's own change.\n" },
+        { "feature.txt": "The owner's own file.\n" },
+      ];
+      for (const blocker of blockers) {
+        await written(world, ".", blocker);
+        const before = { owner: await ownersCheckout(world), forge: await forgeTree(world) };
+        assert.equal(sentenceOf(await world.failure("merge", { folder, into: ownersBranch })), givenReason);
+        assert.deepEqual({ owner: await ownersCheckout(world), forge: await forgeTree(world) }, before);
+        assert.equal(await world.headOf(ownersBranch), world.base);
+        await written(world, ".", readme);
+        await erased(world, ".", ["feature.txt"]);
+      }
+      const output = fieldsOf(await world.output("merge", { folder, into: ownersBranch }));
+      assert.equal(output.landed, "checked-out-branch-fast-forwarded");
+      assert.equal(await world.headOf(ownersBranch), output.commit);
+    },
+  },
+  {
+    name: "a conflict with the checked-out branch is refused naming the path, and the branch, the project's folder and the slice are as they were",
+    restsOn: "merge-request (folder, into); README, merge: a conflict is undone and refused with the conflicting paths",
+    run: async (world) => {
+      const { folder, head } = await sliceWithCommit(world, { "README.md": "The slice's line.\n" });
+      const owners = await world.commit(
+        changeOn({ branch: ownersBranch }, { "README.md": "The owner's line.\n" }, "Change main"),
+      );
+      const before = { owner: await ownersCheckout(world), forge: await forgeTree(world) };
+      const reason = await world.failure("merge", { folder, into: ownersBranch });
+      assert.equal(reason.includes("README.md"), true, reason);
+      assert.deepEqual({ owner: await ownersCheckout(world), forge: await forgeTree(world) }, before);
+      assert.equal(await world.headOf(ownersBranch), owners);
+      assert.equal(await world.headOf("forge/feature"), head);
+    },
+  },
+  {
+    name: "merge refuses a worktree with a changed file, a target that does not exist and a branch checked out in another worktree, and changes no branch",
+    restsOn:
+      "merge-request (folder: no changed or untracked files; into: checked out nowhere, or only in the project's own folder)",
     run: async (world) => {
       const { folder, head } = await sliceWithCommit(world, { "feature.txt": "feature\n" });
       assert.equal(sentenceOf(await world.failure("merge", { folder, into: "integration" })), givenReason);
       assert.equal(await world.headOf("integration"), undefined);
-      const owner = await world.checkedOut();
-      assert.equal(sentenceOf(await world.failure("merge", { folder, into: owner })), givenReason);
-      assert.equal(await world.headOf(owner), world.base);
+      await cut(world, "elsewhere");
+      assert.equal(sentenceOf(await world.failure("merge", { folder, into: "forge/elsewhere" })), givenReason);
+      assert.equal(await world.headOf("forge/elsewhere"), world.base);
       const target = await targetWith(world, { "other.txt": "other\n" });
       await written(world, folder, { "feature.txt": "Not yet committed.\n" });
       assert.equal(sentenceOf(await world.failure("merge", { folder, into: "integration" })), givenReason);
@@ -1014,8 +1099,8 @@ const cases: readonly Case[] = [
           "merge",
           { folder: ".forge/worktrees/x", into: "-b" },
           "input.into is not in the expected form. Expected: The branch to merge the slice's branch into. It is " +
-            "not checked out anywhere, so the mode can check it out in a worktree of its own. It has no .. and " +
-            "does not start with a dash.",
+            "checked out nowhere, or only in the project's own folder; never in another worktree. It has no .. " +
+            "and does not start with a dash.",
         ],
         [
           "set-aside",
@@ -1056,7 +1141,7 @@ const cases: readonly Case[] = [
   {
     name: "the owner's checked-out branch, its files and its uncommitted work are as they were after every action",
     restsOn:
-      "merge-request (into: not checked out anywhere, so the mode merges in a worktree of its own); every request names a folder this mode made",
+      "merge-request (into: the checked-out branch is fast-forwarded only when the project's folder is clean); every request names a folder this mode made",
     run: async (world) => {
       await written(world, ".", {
         "README.md": "The owner's own change.\n",

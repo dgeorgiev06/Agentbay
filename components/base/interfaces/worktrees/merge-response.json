@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "MergeResponse",
-  "description": "The merge commit, or that the slice's branch was already merged.",
+  "description": "The merge commit and how it landed, or that the slice's branch was already merged. A merge that does not land is refused with a sentence, and nothing changes anywhere.",
   "oneOf": [
     {
       "type": "object",
       "additionalProperties": false,
-      "required": ["how", "branch", "into", "commit"],
+      "required": ["how", "branch", "into", "commit", "landed"],
       "description": "The slice's branch was merged with a merge commit.",
       "properties": {
         "how": {
@@ -27,6 +27,10 @@
           "type": "string",
           "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
           "description": "The merge commit, in full. Its parents are the branch's old head and the slice's head."
+        },
+        "landed": {
+          "enum": ["branch-not-checked-out", "checked-out-branch-fast-forwarded"],
+          "description": "How the merge commit landed. branch-not-checked-out: the branch is checked out nowhere, and it was moved in a worktree of the mode's own. checked-out-branch-fast-forwarded: the project's own folder has the branch checked out; the merge commit was made in a worktree of the mode's own, then the branch was fast-forwarded to it and the folder's files are the merge commit's."
         }
       }
     },

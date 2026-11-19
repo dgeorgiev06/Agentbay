@@ -14,6 +14,13 @@ export const casesThatNeedMergeSetAsideOrApply: readonly string[] = [
   "a target with no commits of its own still gets a merge commit with two parents",
   "a conflict is refused naming the conflicting path; the target, the slice's branch and its worktree are as they " +
     "were, and the same merge can be tried again",
+  "merge into the branch the project's own folder has checked out fast-forwards it to a merge commit when the " +
+    "folder is clean; the folder holds the merge's files, the branch stays checked out, and an untracked file the " +
+    "merge does not touch is kept",
+  "merge into the checked-out branch is refused while the project's folder has an uncommitted change or an " +
+    "untracked file where the merge puts one, and nothing changes anywhere; once they are gone it lands",
+  "a conflict with the checked-out branch is refused naming the path, and the branch, the project's folder and " +
+    "the slice are as they were",
   "set-aside commits every changed, deleted and untracked file to forge/wip/<slice>/1 on the worktree's head, and " +
     "leaves the worktree clean with its ignored files",
   "set-aside never reuses a branch name: a taken number is skipped, and each earlier branch is as it was",
@@ -88,7 +95,8 @@ const exampleTexts: Readonly<Record<string, string>> = {
     "how": "merged",
     "branch": "forge/mail-source",
     "into": "integration",
-    "commit": "3c5e7a9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c"
+    "commit": "3c5e7a9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c",
+    "landed": "branch-not-checked-out"
   }
 }
 `,

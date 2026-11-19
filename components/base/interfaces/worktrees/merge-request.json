@@ -16,7 +16,7 @@
       "type": "string",
       "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
       "maxLength": 255,
-      "description": "The branch to merge the slice's branch into. It is not checked out anywhere, so the mode can check it out in a worktree of its own. It has no .. and does not start with a dash."
+      "description": "The branch to merge the slice's branch into. It is checked out nowhere, or only in the project's own folder; never in another worktree. It has no .. and does not start with a dash."
     }
   }
 }

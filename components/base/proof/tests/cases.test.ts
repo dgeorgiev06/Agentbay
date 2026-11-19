@@ -251,8 +251,8 @@ test("fails-first with the real toolchain: the failed verdict carries the head's
   assert.deepEqual(await readdir(join(project.root, ".forge", "copies")), []);
 });
 
-test("fails-first with the real toolchain: two test files that did not load, each named twice to node, are each listed once", async () => {
-  const twice = "node --test ./tests/broken.test.ts ./tests/broken-too.test.ts";
+test("fails-first with the real toolchain: two test files that did not load, each named to node by its absolute path and by proof's, are each listed once", async () => {
+  const twice = 'node --test \\"$PWD/tests/broken.test.ts\\" \\"$PWD/tests/broken-too.test.ts\\"';
   const head = await committed({
     "package.json": `{ "scripts": { "test": "${twice}" } }\n`,
     "tests/broken.test.ts": "export const broken = ;\n",

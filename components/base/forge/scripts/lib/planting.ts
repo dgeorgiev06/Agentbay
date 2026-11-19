@@ -21,7 +21,7 @@ type Numbered = {
   readonly number: number;
 };
 
-export const mostPlanted = 10;
+const mostPlanted = 10;
 
 const mostHanded = 50;
 
@@ -41,7 +41,7 @@ export function bugsOf(value: Json | undefined): readonly Bug[] {
 export function patchedFiles(patch: string): readonly string[] {
   const found = patch.split("\n").flatMap((line) => {
     const matched = fileLine.exec(line);
-    return matched === null ? [] : matched.slice(1).filter((path) => path !== undefined);
+    return matched === null ? [] : matched.slice(1).filter(Boolean);
   });
   return [...new Set(found)];
 }

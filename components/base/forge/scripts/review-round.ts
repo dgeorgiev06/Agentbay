@@ -1,32 +1,19 @@
-import { defineScript, fail, fieldsOf, type Json, type ScriptContext } from "../../../../bay/sdk.ts";
+import { defineScript, fieldsOf, type Json, type ScriptContext } from "../../../../bay/sdk.ts";
 import { answerOf } from "./lib/called.ts";
-import { sliceOf } from "./lib/cards.ts";
 import { codeAt, readIn } from "./lib/code.ts";
 import { keepFindings, keptTests } from "./lib/kept-tests.ts";
 import { reviewersPractices, type Practice } from "./lib/practices.ts";
 import { reviewOf } from "./lib/review.ts";
-import { reviewPlan, reviewedState, roundsStateOf, type Reviewed, type RoundsState } from "./lib/rounds.ts";
+import { afterRoundOf, reviewPlan, reviewedState, type AfterRound, type Reviewed } from "./lib/rounds.ts";
 import { textsOf } from "./lib/json-values.ts";
 
-type Asked = {
-  readonly name: string;
-  readonly slice: Json;
-  readonly fixed: readonly string[];
+type Asked = AfterRound & {
   readonly practices: readonly string[];
-  readonly state: RoundsState;
 };
 
 function askedOf(input: Json): Asked {
   const fields = fieldsOf(input);
-  const slice = fields.slice ?? null;
-  const state = roundsStateOf(fields.state) ?? fail("review-round was given no state of the rounds.");
-  return {
-    name: sliceOf(slice).name,
-    slice,
-    fixed: textsOf(fields.fixed),
-    practices: textsOf(fields.practices),
-    state,
-  };
+  return { ...afterRoundOf(fields, "review-round"), practices: textsOf(fields.practices) };
 }
 
 async function practicesOf(context: ScriptContext, asked: Asked, folder: string): Promise<readonly Practice[]> {

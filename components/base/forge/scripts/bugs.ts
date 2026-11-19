@@ -1,32 +1,20 @@
-import { defineScript, fail, fieldsOf, type Json, type ScriptContext } from "../../../../bay/sdk.ts";
+import { defineScript, fieldsOf, type Json, type ScriptContext } from "../../../../bay/sdk.ts";
 import { answerOf } from "./lib/called.ts";
 import { sliceOf } from "./lib/cards.ts";
 import { codeAt } from "./lib/code.ts";
 import { forgetKept } from "./lib/kept-tests.ts";
 import { bugsHanded, bugsOf, plants, type Bug } from "./lib/planting.ts";
-import { roundsStateOf, type RoundsState } from "./lib/rounds.ts";
+import { afterRoundOf, type AfterRound } from "./lib/rounds.ts";
 import { textOf, textsOf } from "./lib/json-values.ts";
 
-type Asked = {
-  readonly name: string;
-  readonly slice: Json;
+type Asked = AfterRound & {
   readonly interface: readonly string[];
-  readonly fixed: readonly string[];
   readonly owner: readonly Bug[];
-  readonly state: RoundsState;
 };
 
 function askedOf(input: Json): Asked {
   const fields = fieldsOf(input);
-  const slice = fields.slice ?? null;
-  return {
-    name: sliceOf(slice).name,
-    slice,
-    interface: textsOf(fields.interface),
-    fixed: textsOf(fields.fixed),
-    owner: bugsOf(fields.bugs),
-    state: roundsStateOf(fields.state) ?? fail("bugs was given no state of the rounds."),
-  };
+  return { ...afterRoundOf(fields, "bugs"), interface: textsOf(fields.interface), owner: bugsOf(fields.bugs) };
 }
 
 async function plantedBugs(context: ScriptContext, asked: Asked): Promise<readonly Bug[]> {

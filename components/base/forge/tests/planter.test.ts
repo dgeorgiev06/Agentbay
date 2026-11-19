@@ -135,14 +135,16 @@ async function printedCard(root: string, runId: string): Promise<readonly string
   return printed.slice(first, last);
 }
 
-async function startedAndDeclared(
-  root: string,
-  name: string,
-  owner: readonly Json[],
-  slice = sliceOf(name),
-): Promise<string> {
+type Request = {
+  readonly name: string;
+  readonly owner: readonly Json[];
+  readonly slice?: Json;
+};
+
+async function startedAndDeclared(root: string, request: Request): Promise<string> {
+  const { name, owner, slice } = request;
   const start = await started(root, {
-    planned: { title: name, slice },
+    planned: { title: name, slice: slice ?? sliceOf(name) },
     base: shortHead(root),
     bugs: [...owner],
   });
@@ -166,7 +168,7 @@ describe(
       const tests = [testsOf(name)];
       const lines = testLines(tests);
       const owner = bugOf(name, caughtName, "Written by nobody.");
-      const runId = await startedAndDeclared(root, name, [owner]);
+      const runId = await startedAndDeclared(root, { name, owner: [owner] });
       await provedIn(root, name, provedWith(name, notKnown));
       const planterTasks: Json[] = [];
       const whilePlanting: WhilePlanting[] = [];
@@ -262,7 +264,7 @@ describe(
       const root = await project(template);
       const name = "P2";
       const owner = bugOf(name, caughtName, "Written by nobody.");
-      const runId = await startedAndDeclared(root, name, [owner, owner]);
+      const runId = await startedAndDeclared(root, { name, owner: [owner, owner] });
       await provedIn(root, name, provedWith(name, notKnown));
       const keptWhileBuilding: number[] = [];
       const asked = await playedTo(root, runId, {
@@ -301,7 +303,7 @@ describe(
       const name = "P3";
       const full = fieldsOf(sliceOf(name));
       const slice = { ...full, done: listOf(full.done).slice(0, 1) };
-      const runId = await startedAndDeclared(root, name, [], slice);
+      const runId = await startedAndDeclared(root, { name, owner: [], slice });
       await provedIn(root, name, provedWith(name, notKnown));
       const keptAtReview: number[] = [];
       const asked = await playedTo(root, runId, {

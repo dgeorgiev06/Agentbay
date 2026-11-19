@@ -8,6 +8,8 @@ bindings:
 adapter: claude-code
 approvals:
   from: [terminal, chat]
+skillSteps:
+  run: without-the-hook
 tiers:
   balanced: { model: sonnet, effort: medium }
   deep: { model: opus, effort: medium }

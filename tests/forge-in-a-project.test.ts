@@ -26,6 +26,8 @@ const cli = join(kit, "bay", "cli.ts");
 
 const projects: string[] = [];
 
+const withoutTheHook = "Skill steps run without the hook";
+
 const noToolchain =
   "Forge is active and no mode is bound to toolchain@1: forge brings proof and git-worktrees, " +
   "but not a toolchain, since a project names its own.";
@@ -135,10 +137,11 @@ const onePlan = {
   ],
 };
 
-test("the kit's own bay check gives 0 errors and 48 warnings: none more for forge leaving the kit, two for the typescript mode's run", () => {
+test("the kit's own bay check gives 0 errors and 48 warnings beside the owner's own setting: none more for forge leaving the kit, two for the typescript mode's run", () => {
   const report = checked(kit);
+  const ofTheKit = messages(report).filter((message) => !message.startsWith(withoutTheHook));
   assert.equal(report.errors, 0, errorsOf(report).join("\n"));
-  assert.equal(report.warnings, 48, messages(report).join("\n"));
+  assert.equal(ofTheKit.length, 48, ofTheKit.join("\n"));
 });
 
 test("a project that lists only forge and binds a toolchain checks with no error, and forge.waves works out a plan in it", async () => {

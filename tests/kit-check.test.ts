@@ -58,6 +58,14 @@ function isSizeWarning(finding: Finding): boolean {
   return sizeWarnings.some((size) => JSON.stringify(size) === JSON.stringify(finding));
 }
 
+function isOwnersSetting(finding: Finding): boolean {
+  return (
+    finding.severity === "warning" &&
+    finding.file === "agentbay.config.yaml" &&
+    finding.message.startsWith("Skill steps run without the hook")
+  );
+}
+
 function kitCheck(): { readonly status: number | null; readonly stderr: string; readonly report: Json } {
   const result = spawnSync(process.execPath, [join(kit, "bay", "cli.ts"), "check", "--json"], {
     cwd: kit,
@@ -105,7 +113,9 @@ test("the real bay check on the kit itself reports no errors, and warns only of 
   const findings = listOf(fieldOf(report, "findings")).map(findingOf);
   assert.ok(Array.isArray(fieldOf(report, "findings")), JSON.stringify(report));
   assert.deepEqual(
-    findings.filter((finding) => !isSizeWarning(finding) && listingModeFolder(finding) === undefined),
+    findings.filter(
+      (finding) => !isSizeWarning(finding) && !isOwnersSetting(finding) && listingModeFolder(finding) === undefined,
+    ),
     [],
   );
   assert.equal(numberField(report, "errors"), 0);

@@ -70,3 +70,4 @@ What the owner has not yet seen and must: the sentences HK1 changed (the coordin
 
 Open with the owner, one at a time: the todo rebuild here without the hook first; the PM mode's five questions; the home mode's six, first which counties; the research's ten changes to the practices; WM1's choice that a merge which does not land is refused with a sentence.
 - 05:00: KP1 merged and pushed (2,025 pass). FA2 started; RT1 in flight. A kept output's check feedback is shown as written: forge's checks must never quote a test (FA2 holds it with a test).
+- 06:05: RT1 merged and pushed. Thirteen slices merged; eleven remain (FA2 in flight).

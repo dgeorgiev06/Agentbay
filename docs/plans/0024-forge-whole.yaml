@@ -110,33 +110,6 @@ slices:
       level: must
       proof:
         kind: checks
-- title: same-output and real-thing run a project's own commands, named by its toolchain, not only the kit's bay
-  slice:
-    name: RT1
-    kind: mode
-    scope:
-    - components/base/interfaces/toolchain.yaml
-    - components/base/interfaces/toolchain/**
-    - components/base/typescript/**
-    - components/base/interfaces/proof.yaml
-    - components/base/interfaces/proof/**
-    - components/base/proof/**
-    - tests/made-up-toolchains*
-    - tests/made-up-proofs*
-    after: []
-    done:
-    - id: DOD-RT1-1
-      says: In a project that is not the kit, a real-thing item whose run names a command its toolchain lists passes when the command prints the expected text.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/base/proof/tests/project-commands.test.ts
-    - id: DOD-RT1-2
-      says: The kit's checks and its whole test run pass.
-      level: must
-      proof:
-        kind: checks
 - title: 'The requirements file: outcomes, conditions, what is left out; forge.requirements checks one and names every problem with its line'
   slice:
     name: RQ1
@@ -272,8 +245,6 @@ slices:
     scope:
     - docs/research/forge-outside-the-kit.md
     after:
-    - slice: RT1
-      because: Its real-thing item runs the project's own command, which RT1 allows.
     - slice: TDX
       because: Forge is first proved on the todo mode in the kit.
     done:

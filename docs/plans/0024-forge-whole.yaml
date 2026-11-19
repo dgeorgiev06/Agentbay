@@ -1,4 +1,4 @@
-title: 'Forge, whole: one slice under ADR 24 first, the todo mode rebuilt through it, then requirements, design, planning and waves (slices NT1, WC1, TF1, TI1, KC1, PF1, WM1, FA1, OK1, HK1 and WX1 are merged and left out)'
+title: 'Forge, whole: what remains after the first eleven slices; rounds, the planter, the leak check and the cards, then requirements, design, planning and waves'
 slices:
 - title: 'An action may say its skill''s output is kept packed: the kernel''s own database then holds no line of it as text, and it is unpacked only for the script that called the skill'
   slice:

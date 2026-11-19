@@ -13,7 +13,7 @@ import { ProofStep } from "../scripts/lib/step.ts";
 
 type Files = Readonly<Record<string, string>>;
 
-type Asked = { readonly calls: string[]; readonly runs: CommandRequest[] };
+type Asked = { readonly calls: string[]; readonly runs: CommandRequest[]; readonly toolchainRuns: Json[] };
 
 type Answer = { readonly ran: CommandRan } | { readonly failed: string };
 
@@ -27,7 +27,7 @@ const request: Request = {
   judgement: [],
   declared: { files: [], names: { gained: [], lost: [], changed: [] } },
   bugs: [],
-  sameOutput: [{ name: "sound-check", bay: ["check", "--project", "fixtures/sound"] }],
+  sameOutput: [{ name: "sound-check", command: { through: "bay", words: ["check", "--project", "fixtures/sound"] } }],
   noRise: [],
 };
 
@@ -42,7 +42,22 @@ function copyNameOf(input: Json): string {
   return typeof name === "string" ? name : "";
 }
 
-function contextOf(asked: Asked, answers: readonly Answer[]): ScriptContext {
+type ToolchainAnswer = { readonly answered: Json } | { readonly failed: string };
+
+type Answers = { readonly commands: readonly Answer[]; readonly toolchain: readonly ToolchainAnswer[] };
+
+type Called = Awaited<ReturnType<ScriptContext["call"]>>;
+
+function toolchainAnswered(asked: Asked, answers: readonly ToolchainAnswer[], input: Json): Called {
+  const answer = answers[asked.toolchainRuns.length] ?? { failed: "No toolchain run was planned." };
+  asked.toolchainRuns.push(input);
+  return "answered" in answer
+    ? { ok: true, value: answer.answered }
+    : { ok: false, kind: "failed", message: answer.failed };
+}
+
+function contextOf(asked: Asked, planned: Answers): ScriptContext {
+  const answers = planned.commands;
   const unanswered = (): Promise<typeof notHere> => Promise.resolve(notHere);
   const statements = { execute: unanswered, query: unanswered };
   let runsMade = 0;
@@ -71,6 +86,9 @@ function contextOf(asked: Asked, answers: readonly Answer[]): ScriptContext {
     },
     call: (reference, input) => {
       asked.calls.push(reference);
+      if (reference === "toolchain.run") {
+        return Promise.resolve(toolchainAnswered(asked, planned.toolchain, input));
+      }
       const answer = reference === "worktrees.copy" ? { folder: `.forge/copies/${copyNameOf(input)}` } : null;
       return Promise.resolve({ ok: true, value: answer });
     },
@@ -86,9 +104,10 @@ function contextOf(asked: Asked, answers: readonly Answer[]): ScriptContext {
 function stepWith(
   spentBefore: number,
   answers: readonly Answer[],
+  toolchain: readonly ToolchainAnswer[] = [],
 ): { readonly asked: Asked; readonly step: ProofStep } {
-  const asked: Asked = { calls: [], runs: [] };
-  const step = new ProofStep(contextOf(asked, answers));
+  const asked: Asked = { calls: [], runs: [], toolchainRuns: [] };
+  const step = new ProofStep(contextOf(asked, { commands: answers, toolchain }));
   step.spend(spentBefore);
   return { asked, step };
 }
@@ -129,8 +148,8 @@ test("same-output: each declared command gets its own run at the base and at the
   const twoCommands: Request = {
     ...request,
     sameOutput: [
-      { name: "first", bay: ["print", "first.txt"] },
-      { name: "second", bay: ["print", "second.txt"] },
+      { name: "first", command: { through: "bay", words: ["print", "first.txt"] } },
+      { name: "second", command: { through: "bay", words: ["print", "second.txt"] } },
     ],
   };
   const unchanged = { ran: "ended", exitCode: 0, stdout: "first\n" } as const;
@@ -156,7 +175,7 @@ test("same-output: each declared command gets its own run at the base and at the
 test("same-output: a project that declares no commands makes no copy and runs nothing", async () => {
   const { asked, step } = stepWith(0, []);
   assert.deepEqual(await sameOutputEvidence(step, { ...request, sameOutput: [] }), { found: "ran", commands: [] });
-  assert.deepEqual(asked, { calls: [], runs: [] });
+  assert.deepEqual(asked, { calls: [], runs: [], toolchainRuns: [] });
 });
 
 test("a run with no time left is not made and is not known, and the copies are removed", async () => {
@@ -180,7 +199,7 @@ test("real-thing: a run that failed, was stopped at its limit, was signalled or 
   const cut: Answer = {
     ran: { end: { how: "exited", exitCode: 0 }, milliseconds: 5, stdout: { text: "a", cut: true }, stderr: nothing },
   };
-  const words = { bay: ["check"], stdout: "", exitCode: 0 };
+  const words = { command: { through: "bay", words: ["check"] }, stdout: "", exitCode: 0 } as const;
   const { asked, step } = stepWith(0, [{ failed: "The command could not start." }, stopped, signalled, cut]);
   assert.deepEqual(await realThingEvidence(step, request, [words, words, words, words]), {
     found: "ran",
@@ -196,6 +215,125 @@ test("real-thing: a run that failed, was stopped at its limit, was signalled or 
     [1000, 735, 730, 729],
   );
   assert.deepEqual(asked.calls, ["worktrees.copy", "worktrees.remove"]);
+});
+
+function exitedWith(exitCode: number, stdout: string, seconds: number): ToolchainAnswer {
+  return { answered: { ended: "exited", exitCode, seconds, stdout, stdoutCut: false } };
+}
+
+const greet = { through: "toolchain", name: "greet", arguments: [] } as const;
+
+test("real-thing: a run named with run asks the toolchain's run in the copy of the head, with its name, its words and what is left of the step, beside a bay run in the same copy", async () => {
+  const words = { through: "toolchain", name: "echo", arguments: ["two words", "$(no shell)"] } as const;
+  const runs = [
+    { command: { through: "bay", words: ["print", "a.txt"] }, stdout: "", exitCode: 0 },
+    { command: words, stdout: "", exitCode: 0 },
+  ] as const;
+  const { asked, step } = stepWith(0, [ended(0, "a\n", 10_000)], [exitedWith(3, "two words\n$(no shell)\n", 20)]);
+  assert.deepEqual(await realThingEvidence(step, request, runs), {
+    found: "ran",
+    runs: [
+      { ran: "ended", exitCode: 0, stdout: "a\n" },
+      { ran: "ended", exitCode: 3, stdout: "two words\n$(no shell)\n" },
+    ],
+  });
+  assert.deepEqual(
+    asked.runs.map((run) => [run.name, run.arguments, run.folder]),
+    [["bay", ["print", "a.txt"], ".forge/copies/proof-1794996000000-1"]],
+  );
+  assert.deepEqual(asked.toolchainRuns, [
+    {
+      folder: ".forge/copies/proof-1794996000000-1",
+      name: "echo",
+      arguments: ["two words", "$(no shell)"],
+      timeLimitSeconds: 1000,
+    },
+  ]);
+  assert.deepEqual(asked.calls, ["worktrees.copy", "toolchain.run", "worktrees.remove"]);
+});
+
+test("real-thing: a run through the toolchain that was stopped, signalled, not set up, not started, printed too much or whose call failed is not known, and each spends what it took", async () => {
+  const shown = { stdout: "partial\n", stdoutCut: false };
+  const answers: readonly ToolchainAnswer[] = [
+    { answered: { ended: "timed-out", reason: "It was stopped.", seconds: 400, ...shown } },
+    { answered: { ended: "signalled", signal: "SIGTERM", reason: "A signal.", seconds: 1, ...shown } },
+    { answered: { ended: "not set up", reason: "The checkout's package.json has no script greet.", seconds: 0 } },
+    { answered: { ended: "not started", reason: "The folder does not exist.", seconds: 0 } },
+    { answered: { ended: "exited", exitCode: 0, seconds: 1, stdout: "the end\n", stdoutCut: true } },
+    { failed: "The toolchain refused the call." },
+  ];
+  const once = { command: greet, stdout: "", exitCode: 0 };
+  const { asked, step } = stepWith(700, [], answers);
+  assert.deepEqual(
+    await realThingEvidence(
+      step,
+      request,
+      answers.map(() => once),
+    ),
+    {
+      found: "ran",
+      runs: [
+        { ran: "not known", reason: "It did not finish within 1000 seconds." },
+        { ran: "not known", reason: "It was stopped by the signal SIGTERM." },
+        {
+          ran: "not known",
+          reason: "The toolchain is not set up for it: The checkout's package.json has no script greet.",
+        },
+        { ran: "not known", reason: "It could not be run: The folder does not exist." },
+        { ran: "not known", reason: "It printed more than proof reads." },
+        { ran: "not known", reason: "It could not be run: The toolchain refused the call." },
+      ],
+    },
+  );
+  assert.deepEqual(
+    asked.toolchainRuns.map((input) => fieldsOf(input).timeLimitSeconds ?? null),
+    [1000, 630, 624, 619, 614, 608],
+  );
+});
+
+test("same-output: commands declared with run are run through the toolchain at the base and then at the head, and each gets its own answer", async () => {
+  const twoCommands: Request = {
+    ...request,
+    sameOutput: [
+      { name: "first", command: greet },
+      { name: "second", command: { through: "toolchain", name: "count", arguments: ["1"] } },
+    ],
+  };
+  const answers = [
+    exitedWith(0, "hello\n", 1),
+    exitedWith(0, "one\n", 1),
+    exitedWith(0, "hello\n", 1),
+    exitedWith(2, "one\n", 1),
+  ];
+  const { asked, step } = stepWith(0, [], answers);
+  assert.deepEqual(await sameOutputEvidence(step, twoCommands), {
+    found: "ran",
+    commands: [
+      {
+        name: "first",
+        base: { ran: "ended", exitCode: 0, stdout: "hello\n" },
+        head: { ran: "ended", exitCode: 0, stdout: "hello\n" },
+      },
+      {
+        name: "second",
+        base: { ran: "ended", exitCode: 0, stdout: "one\n" },
+        head: { ran: "ended", exitCode: 2, stdout: "one\n" },
+      },
+    ],
+  });
+  assert.deepEqual(
+    asked.toolchainRuns.map((input) => {
+      const { folder, name, arguments: words } = fieldsOf(input);
+      return [folder ?? null, name ?? null, words ?? null];
+    }),
+    [
+      [".forge/copies/proof-1794996000000-1", "greet", []],
+      [".forge/copies/proof-1794996000000-1", "count", ["1"]],
+      [".forge/copies/proof-1794996000000-2", "greet", []],
+      [".forge/copies/proof-1794996000000-2", "count", ["1"]],
+    ],
+  );
+  assert.deepEqual(asked.runs, []);
 });
 
 let project: ModeProject;

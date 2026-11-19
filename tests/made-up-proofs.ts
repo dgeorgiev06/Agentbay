@@ -14,7 +14,8 @@ export type ProofVariant =
   | "puts a declared path into a detail"
   | "omits the two added items when every item is judgement"
   | "counts a bug that could not be applied as caught"
-  | "counts a bug whose tests did not load as caught";
+  | "counts a bug whose tests did not load as caught"
+  | "reads a cut output of a command as whole";
 
 type Replacement = readonly [file: string, line: string, wrong: string];
 
@@ -64,7 +65,11 @@ export type Count =
   | { readonly of: "no rise"; readonly pattern: string; readonly paths: readonly string[] }
   | { readonly of: "declared"; readonly name: string };
 
-export type Run = { readonly bay: readonly string[]; readonly stdout: string; readonly exitCode: number };
+export type Command =
+  | { readonly through: "bay"; readonly words: readonly string[] }
+  | { readonly through: "toolchain"; readonly name: string; readonly arguments: readonly string[] };
+
+export type Run = { readonly command: Command; readonly stdout: string; readonly exitCode: number };
 
 export type Proof =
   | { readonly kind: "checks" }
@@ -80,7 +85,7 @@ export type Bug = { readonly name: string; readonly patch: string; readonly test
 
 export type Names = { readonly gained: readonly string[]; readonly lost: readonly string[]; readonly changed: readonly string[] };
 
-export type DeclaredCommand = { readonly name: string; readonly bay: readonly string[] };
+export type DeclaredCommand = { readonly name: string; readonly command: Command };
 
 export type DeclaredCount = { readonly name: string; readonly pattern: string; readonly paths: readonly string[] };
 
@@ -117,6 +122,12 @@ function records(fields: JsonFields, name: string): readonly JsonFields[] {
   return Array.isArray(value) ? value.map(fieldsOf) : [];
 }
 
+function commandOf(fields: JsonFields): Command {
+  return typeof fields.run === "string"
+    ? { through: "toolchain", name: fields.run, arguments: texts(fields, "arguments") }
+    : { through: "bay", words: texts(fields, "bay") };
+}
+
 function countOf(fields: JsonFields): Count {
   if (typeof fields.use === "string") {
     return { of: "declared", name: fields.use };
@@ -137,7 +148,7 @@ function proofOf(fields: JsonFields): Proof {
     case "real-thing":
       return {
         kind,
-        runs: records(fields, "runs").map((run) => ({ bay: texts(run, "bay"), stdout: text(run, "stdout"), exitCode: number(run, "exitCode") })),
+        runs: records(fields, "runs").map((run) => ({ command: commandOf(run), stdout: text(run, "stdout"), exitCode: number(run, "exitCode") })),
       };
     case "bugs-caught":
       return { kind };
@@ -163,7 +174,7 @@ export function requestOf(input: Json, settings: Readonly<Record<string, Json>>)
     files: texts(declared, "files"),
     names: { gained: texts(names, "gained"), lost: texts(names, "lost"), changed: texts(names, "changed") },
     bugs: records(fields, "bugs").map((bug) => ({ name: text(bug, "name"), patch: text(bug, "patch"), tests: texts(bug, "tests") })),
-    sameOutput: records(settings, "sameOutput").map((command) => ({ name: text(command, "name"), bay: texts(command, "bay") })),
+    sameOutput: records(settings, "sameOutput").map((command) => ({ name: text(command, "name"), command: commandOf(command) })),
     noRise: records(settings, "noRise").map((count) => ({
       name: text(count, "name"),
       pattern: text(count, "pattern"),
@@ -297,6 +308,31 @@ export function onlyFilesThatDidNotLoad(cases: Cases): boolean {
   const listed = Array.isArray(cases.failures) ? cases.failures.length : 0;
   const notListed = typeof cases.failuresNotListed === "number" ? cases.failuresNotListed : 0;
   return Array.isArray(cases.notLoaded) && cases.notLoaded.length > 0 && listed + notListed === 0;
+}
+
+export type Runnable =
+  | { readonly through: "bay"; readonly words: readonly string[] }
+  | { readonly through: "toolchain"; readonly name: string; readonly arguments: readonly string[] };
+
+function toolchainEnded(value: Json, name: string): Ended {
+  const fields = fieldsOf(value);
+  const { exitCode, stdout, stdoutCut } = fields;
+  if (fields.ended === "exited" && typeof exitCode === "number" && typeof stdout === "string" && stdoutCut === false) {
+    return { how: "exited", exitCode, stdout };
+  }
+  if (fields.ended === "exited") {
+    return { how: "unknown", reason: "The command " + name + " printed more than proof reads." };
+  }
+  return { how: "unknown", reason: "The command " + name + " did not end with an exit code. " + textOf(value, "reason") };
+}
+
+export async function commandIn(context: ScriptContext, folder: string, command: Runnable): Promise<Ended> {
+  if (command.through === "bay") {
+    return ranIn(context, folder, { name: "bay", arguments: command.words });
+  }
+  const asked = { folder, name: command.name, arguments: command.arguments, timeLimitSeconds: commandSeconds };
+  const answer = await called(context, "toolchain.run", asked);
+  return answer.ok ? toolchainEnded(answer.value, command.name) : { how: "unknown", reason: answer.reason };
 }
 
 export async function ranIn(context: ScriptContext, folder: string, command: { readonly name: string; readonly arguments: readonly string[] }): Promise<Ended> {
@@ -488,8 +524,8 @@ export async function sizes(context: ScriptContext, changed: Changed, copies: Co
 `;
 
 const readingKinds = String.raw`import type { ScriptContext } from "${sdkFromLibrary}";
-import { ranIn, type Copy, type Ended } from "./calls.ts";
-import type { Count, DeclaredCommand, Request } from "./request.ts";
+import { commandIn, ranIn, type Copy, type Ended } from "./calls.ts";
+import type { Command, Count, DeclaredCommand, Request } from "./request.ts";
 import { broken, decided, held, unknown, type Part, type Verdict } from "./verdicts.ts";
 
 type Copies = { readonly base: Copy; readonly head: Copy };
@@ -498,8 +534,8 @@ type Lines = { readonly known: true; readonly lines: number } | { readonly known
 
 export const noCommandsSentence = "This project declares no commands whose output must not change, so nothing is known.";
 
-async function bayIn(context: ScriptContext, copy: Copy, words: readonly string[]): Promise<Ended> {
-  return copy.made ? ranIn(context, copy.folder, { name: "bay", arguments: words }) : { how: "unknown", reason: copy.reason };
+async function runIn(context: ScriptContext, copy: Copy, command: Command): Promise<Ended> {
+  return copy.made ? commandIn(context, copy.folder, command) : { how: "unknown", reason: copy.reason };
 }
 
 function sameEnd(base: Ended, head: Ended): boolean {
@@ -507,8 +543,8 @@ function sameEnd(base: Ended, head: Ended): boolean {
 }
 
 async function commandPart(context: ScriptContext, command: DeclaredCommand, copies: Copies, differs: boolean): Promise<Part> {
-  const base = await bayIn(context, copies.base, command.bay);
-  const head = await bayIn(context, copies.head, command.bay);
+  const base = await runIn(context, copies.base, command.command);
+  const head = await runIn(context, copies.head, command.command);
   for (const end of [base, head]) {
     if (end.how === "unknown") {
       return unknown("The output of " + command.name + " is not known. " + end.reason);
@@ -602,7 +638,7 @@ const baseRunFunction = String.raw`async function baseRun(context: ScriptContext
 `;
 
 const codeKinds = String.raw`import type { ScriptContext } from "${sdkFromLibrary}";
-import { called, inCopy, onlyFilesThatDidNotLoad, ranIn, testRun, type Copy } from "./calls.ts";
+import { called, commandIn, inCopy, onlyFilesThatDidNotLoad, testRun, type Copy } from "./calls.ts";
 import type { Bug, Request, Run } from "./request.ts";
 import { broken, brokenShowing, counted, decided, held, unknown, type Part, type Verdict } from "./verdicts.ts";
 
@@ -690,7 +726,7 @@ export async function bugsCaught(context: ScriptContext, request: Request, id: s
 }
 
 async function runPart(context: ScriptContext, folder: string, run: Run, place: string): Promise<Part> {
-  const ended = await ranIn(context, folder, { name: "bay", arguments: run.bay });
+  const ended = await commandIn(context, folder, run.command);
   if (ended.how === "unknown") {
     return unknown(place + " did not end with an exit code. " + ended.reason);
   }
@@ -829,10 +865,10 @@ const worktreeChecks = String.raw`  const cut = await called(context, "worktrees
   await called(context, "worktrees.remove", { folder, into: commit });`;
 
 const codeKindsImport =
-  'import { called, inCopy, onlyFilesThatDidNotLoad, ranIn, testRun, type Copy } from "./calls.ts";';
+  'import { called, commandIn, inCopy, onlyFilesThatDidNotLoad, testRun, type Copy } from "./calls.ts";';
 
 const codeKindsImportWithText =
-  'import { called, inCopy, linksOf, onlyFilesThatDidNotLoad, ranIn, testRun, textOf, type Copy } from "./calls.ts";';
+  'import { called, commandIn, inCopy, linksOf, onlyFilesThatDidNotLoad, testRun, textOf, type Copy } from "./calls.ts";';
 
 const replacements: Readonly<Record<ProofVariant, readonly Replacement[]>> = {
   "proves by the interface": [],
@@ -889,6 +925,13 @@ const replacements: Readonly<Record<ProofVariant, readonly Replacement[]>> = {
       "      return held;",
     ],
   ],
+  "reads a cut output of a command as whole": [
+    [
+      "scripts/lib/calls.ts",
+      '  if (fields.ended === "exited" && typeof exitCode === "number" && typeof stdout === "string" && stdoutCut === false) {',
+      '  if (fields.ended === "exited" && typeof exitCode === "number" && typeof stdout === "string") {',
+    ],
+  ],
   "omits the two added items when every item is judgement": [
     [
       "scripts/prove.ts",
@@ -923,6 +966,7 @@ export const wrongProofs: Readonly<Record<string, ProofVariant>> = {
   "assay-omits-added": "omits the two added items when every item is judgement",
   "assay-passes-stale-bug": "counts a bug that could not be applied as caught",
   "assay-passes-unloaded-bug": "counts a bug whose tests did not load as caught",
+  "assay-reads-cut-output": "reads a cut output of a command as whole",
 };
 
 export function proofFiles(name: string, variant: ProofVariant): ModeFiles {

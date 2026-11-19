@@ -2,7 +2,7 @@
 
 The mode `proof` implements `proof@1`. Its one action, `prove`, takes a slice and the commits it runs from and to, and gives each item of the slice's definition of done a verdict: passed, failed or inconclusive. It uses no model. Inconclusive means nothing is known, and it is never a pass: any part of an item that is inconclusive makes the item inconclusive, even beside a part that failed.
 
-Proof reaches code only by copy, call, remove. It asks the worktrees interface for a throwaway copy of a commit, asks the toolchain to check or test that copy, and asks the worktrees interface to remove the copy afterwards, on every path. It never gives a toolchain a slice's worktree or the project's folder.
+Proof reaches code only by copy, call, remove. It asks the worktrees interface for a throwaway copy of a commit, asks the toolchain to check, test or run a command in that copy, and asks the worktrees interface to remove the copy afterwards, on every path. It never gives a toolchain a slice's worktree or the project's folder.
 
 ## What it proves in this version
 
@@ -28,13 +28,24 @@ Built. Proof adds it to every slice as the item `declared`. It compares the file
 
 Built. For each bug of the request, one after another: a fresh copy of the head, the bug's patch applied with the worktrees interface's `apply`, the toolchain's `test` with only the bug's covering test files, and the copy removed. Passed when every run failed. A run that passed is a bug that survived: it fails the item, and the detail names it by the name the request gives it. No bugs, a patch that does not apply, a run that was stopped or could not start, and a copy that could not be made each make the item inconclusive; such a bug is never counted as caught. A bug that names a test file missing at the head is inconclusive, since the run prints no summary of tests. A run that failed only because test files did not load, with no failing case listed or counted and at least one file in the toolchain's `notLoaded`, is inconclusive too: the bug's tests did not run, and the reason says so with a count of the files. A run with a failing case is caught, also when another of its files did not load. When the toolchain's answer has no `notLoaded`, as from an older toolchain, a failed run counts as caught for any reason, as before: a patch that stops a test file from loading then reads as one failed test. Tests that already fail at the head without the bug are shown by the item `checks` failing, not here. Each run is asked for what is left of the step, as every toolchain call is, and reports what it spent; so each of a dozen bugs may ask up to 1,000 seconds but never more than is left, a run that hangs leaves less for the bugs after it, and a bug with no time left is not run and is inconclusive.
 
+### Two ways to run a command
+
+`same-output` and `real-thing` run commands in a copy. A command is written one of two ways, and each run is made its own way:
+
+- `bay`: the words given to the copy's own `./bay.sh`, by the listed command `bay` (`./bay.sh` at the copy's root, effects read and write). This is for the kit and projects built on agentbay. A request or a setting written this way means what it meant before `run` was added.
+- `run`: the name of one of the project's own commands, with `arguments` if it needs words, made through the toolchain's action `run` in the copy. For the typescript mode it is a script of the copy's `package.json`, by its name; never a command line. Proof runs no command of its own for it. Each word reaches the command as one argument, as written.
+
+Each run is asked for what is left of the step, as every toolchain call is. A run through the toolchain that the toolchain did not answer, answered as not set up or not started, stopped at its limit or by a signal, or answered with output it cut, is not known; so is a `bay` run that could not start, was stopped, or printed more than proof reads. A run not known makes the item inconclusive, never passed.
+
+The command a run makes is the project's own code. It runs unconfined inside the copy, exactly as the project's tests do: the copy limits where it writes by convention only.
+
 ### same-output
 
-Built. Each command the project declares in proof's settings, under `sameOutput`, is run in a copy of the base and then in a copy of the head, by the listed command `bay` (`./bay.sh` at the copy's root, effects read and write; each run asked for what is left of the step, as a toolchain call is). What each printed to its standard output and its exit code are compared; its standard error is not. Passed when every command printed and ended the same at the base and the head, except those the item names in `differ`, which must not. A command that differs and is not named, or is named and does not differ, fails the item, and the detail names the command, never its output. A project that declares no commands, a name in `differ` the project does not declare, a run that was stopped, could not start or printed more than proof reads, and a copy that could not be made each make the item inconclusive.
+Built. Each command the project declares in proof's settings, under `sameOutput`, is run in a copy of the base and then in a copy of the head, with `bay` or with `run` as it is declared. What each printed to its standard output and its exit code are compared; its standard error is not. Passed when every command printed and ended the same at the base and the head, except those the item names in `differ`, which must not. A command that differs and is not named, or is named and does not differ, fails the item, and the detail names the command, never its output. A project that declares no commands, a name in `differ` the project does not declare, a run that is not known, and a copy that could not be made each make the item inconclusive.
 
 ### real-thing
 
-Built. The item's runs are made one after another in one fresh copy of the head, by the listed command `bay`, as `same-output` makes them. Passed when each run printed exactly the expected text to its standard output and ended with the expected exit code. A run that printed other text or ended with another code fails the item; the detail says which run, by its number, and never what it printed. A run that was stopped, could not start or printed more than proof reads, and a copy that could not be made, make the item inconclusive.
+Built. The item's runs are made one after another in one fresh copy of the head, each with `bay` or with `run` as it is written, as `same-output` makes them. Passed when each run printed exactly the expected text to its standard output and ended with the expected exit code. A run that printed other text or ended with another code fails the item; the detail says which run, by its number, and never what it printed. A run that is not known, and a copy that could not be made, make the item inconclusive.
 
 ### count
 
@@ -54,7 +65,7 @@ Proof filters nothing in them. They are data beside the verdict for the caller, 
 
 ## What it does not prove
 
-Proof runs code a builder wrote. The toolchain's checks and tests run the head's own scripts, unconfined, as the toolchain always does. A throwaway copy limits where that code writes by convention only: nothing stops the code from writing elsewhere. A passed verdict says that the checks and tests the project has passed on a copy; it does not say the code is safe or correct.
+Proof runs code a builder wrote. The toolchain's checks, tests and runs run the head's own scripts, unconfined, as the toolchain always does; so does `./bay.sh` in a copy. A throwaway copy limits where that code writes by convention only: nothing stops the code from writing elsewhere. A passed verdict says that the checks and tests the project has passed on a copy; it does not say the code is safe or correct.
 
 A detail or a reason holds only sentences of proof's own, paths and check names as the toolchain and the worktrees interface gave them, and their reasons. No text a builder wrote, and no path the builder declared, is put into one.
 

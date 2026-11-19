@@ -1,12 +1,12 @@
-import type { DeclaredCommand, Request } from "../lib/request.ts";
+import type { Command, DeclaredCommand, Request } from "../lib/request.ts";
 import type { ProofStep } from "../lib/step.ts";
 import { broken, counted, held, unknown, type Part, type Parts } from "../lib/verdicts.ts";
-import { runsInCopy, type BayRun } from "./bay-run.ts";
+import { runsInCopy, type CommandRun } from "./command-run.ts";
 
 export type CommandRuns = {
   readonly name: string;
-  readonly base: BayRun;
-  readonly head: BayRun;
+  readonly base: CommandRun;
+  readonly head: CommandRun;
 };
 
 export type SameOutputEvidence =
@@ -17,7 +17,7 @@ type Expected = "same" | "differs";
 
 const noCommands = "This project declares no commands whose output must not change, so nothing is known.";
 
-function sideNotKnown(name: string, side: "base" | "head", run: BayRun): Part | undefined {
+function sideNotKnown(name: string, side: "base" | "head", run: CommandRun): Part | undefined {
   return run.ran === "not known"
     ? unknown(`The output of ${name} at the ${side} is not known. ${run.reason}`)
     : undefined;
@@ -63,8 +63,8 @@ export function sameOutputParts(differ: readonly string[], evidence: SameOutputE
   };
 }
 
-function wordsOf(commands: readonly DeclaredCommand[]): readonly (readonly string[])[] {
-  return commands.map((command) => command.bay);
+function commandsOf(declared: readonly DeclaredCommand[]): readonly Command[] {
+  return declared.map((each) => each.command);
 }
 
 export async function sameOutputEvidence(step: ProofStep, request: Request): Promise<SameOutputEvidence> {
@@ -72,11 +72,11 @@ export async function sameOutputEvidence(step: ProofStep, request: Request): Pro
   if (commands.length === 0) {
     return { found: "ran", commands: [] };
   }
-  const base = await runsInCopy(step, request.base, wordsOf(commands));
+  const base = await runsInCopy(step, request.base, commandsOf(commands));
   if (!base.copied) {
     return { found: "not copied", reason: base.reason };
   }
-  const head = await runsInCopy(step, request.head, wordsOf(commands));
+  const head = await runsInCopy(step, request.head, commandsOf(commands));
   if (!head.copied) {
     return { found: "not copied", reason: head.reason };
   }

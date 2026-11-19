@@ -37,6 +37,7 @@ function standInManifest(): string {
     ...action("describe", "[read]"),
     ...action("check", everyEffect),
     ...action("test", everyEffect),
+    ...action("run", everyEffect),
     "",
   ].join("\n");
 }
@@ -84,6 +85,10 @@ const standInFiles: Files = {
   "scripts/test.ts": recordingScript(
     "test",
     `{ verdict: "inconclusive", reason: "${stoppedAtItsLimit}", seconds: 0, stdout: "", stderr: "" }`,
+  ),
+  "scripts/run.ts": recordingScript(
+    "run",
+    `{ ended: "timed-out", reason: "${stoppedAtItsLimit}", seconds: 0, stdout: "", stdoutCut: false }`,
   ),
 };
 

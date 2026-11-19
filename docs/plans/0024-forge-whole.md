@@ -41,3 +41,9 @@ A real run of forge is a live Claude Code session. With the hook it is the only 
 - Per-run folders for two builders at once (design B's WR1): not designed; WV1 says what it needs when it gets there.
 - A PM mode: ADR 25 gives it the requirements. Forge reads a requirements file a person can write by hand, so the PM mode is its own plan.
 - Slices noted earlier and still wanted, outside this plan: a toolchain names test files that did not load (TN1), a command stopped when its output passes its limit (CO1), three more test cuts.
+
+## Found while building wave 1
+
+- **AC1, not yet in the plan file:** `bay check` cannot refuse a tier's unknown model or say that the built agents are stale, since the kernel never calls the adapter during a check (TI1's report). The slice: `Adapter.check(request) => Problem[]` in `bay/adapter.ts`, called by `checkSystem`. `bay build` already refuses an unknown model.
+- **When an interface gains an action, every mode that implements it must follow,** also the made-up ones written inside other tests (proof's shared test has a recorder that implements worktrees@1), and `tests/shared-tests-in-a-project.test.ts` pins how many shared cases pass. A builder of such a slice runs those files.
+- TF1: the dedupe of files that did not load is held by no test (the reviewer's bug survived); the response schema's `uniqueItems` would refuse a duplicate. Fold a case into PF1.

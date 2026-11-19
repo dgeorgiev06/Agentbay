@@ -1,0 +1,6 @@
+import { fail, type Json, type ScriptContext } from "../../../../../bay/sdk.ts";
+
+export async function called(context: ScriptContext, reference: string, input: Json): Promise<Json> {
+  const answer = await context.call(reference, input);
+  return answer.ok ? answer.value : fail(answer.message);
+}

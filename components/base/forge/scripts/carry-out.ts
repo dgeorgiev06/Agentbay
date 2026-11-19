@@ -1,4 +1,5 @@
 import { defineScript, fail, fieldsOf, type Json, type ScriptContext } from "../../../../bay/sdk.ts";
+import { called } from "./lib/called.ts";
 
 type Request = {
   readonly choice: "merge" | "send-back" | "keep" | "discard";
@@ -29,11 +30,6 @@ function requestOf(input: Json): Request {
     head: text("head"),
     into: text("into"),
   };
-}
-
-async function called(context: ScriptContext, reference: string, input: Json): Promise<Json> {
-  const answer = await context.call(reference, input);
-  return answer.ok ? answer.value : fail(answer.message);
 }
 
 async function merged(context: ScriptContext, request: Request): Promise<Json> {

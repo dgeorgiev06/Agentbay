@@ -91,11 +91,14 @@ export type StartCard = {
   readonly lines: readonly CardLine[];
 };
 
+export type Kept = "set-aside" | "with-tests";
+
 export type MergeCardInput = {
   readonly slice: Slice;
   readonly proof: Proved;
   readonly built: Built;
   readonly work: string;
+  readonly kept: Kept;
   readonly into: string;
 };
 
@@ -129,6 +132,30 @@ const passedSaid: Readonly<Record<ProofKind, string>> = {
   count: "each count holds",
   "real-thing": "the runs printed what was expected",
 };
+
+const failedSaid: Readonly<Record<ProofKind, string>> = {
+  checks: "a check or the test run failed",
+  "fails-first": "the named tests do not fail first and pass after",
+  "in-scope": "a changed path is outside the write scope",
+  "as-declared": "what changed is not as declared",
+  "bugs-caught": "an injected bug survived",
+  "same-output": "the output is not as the item says",
+  count: "a count does not hold",
+  "real-thing": "a run printed other than expected",
+};
+
+const provedSentences: readonly { readonly matches: RegExp; readonly says: (found: RegExpExecArray) => string }[] = [
+  { matches: /^The named tests fail on the head\.$/, says: () => "the named tests fail on the head" },
+  {
+    matches: /^The named tests already pass on the base, so they do not show the change\.$/,
+    says: () => "the named tests already pass on the base",
+  },
+  {
+    matches: /^The check ([A-Za-z0-9:._-]+) found a fault\.$/,
+    says: (found) => `the check ${found[1] ?? ""} found a fault`,
+  },
+  { matches: /^(\d+) tests? failed\.$/, says: (found) => `${counted(Number(found[1]), "test")} failed` },
+];
 
 const lacksSaid: Readonly<Record<Missing["lacks"], string>> = {
   kernel: "the kernel",
@@ -438,18 +465,27 @@ function passedWords(slice: Slice, verdicts: readonly Verdict[]): readonly strin
   });
 }
 
-function failedWords(slice: Slice, verdicts: readonly Verdict[]): readonly string[] {
-  return proofKinds.flatMap((kind) => {
-    const ids = verdicts.filter((verdict) => verdict.verdict === "failed" && verdict.kind === kind);
-    return ids.length === 0
-      ? []
-      : [
-          `failed, kind ${kind}: ${shortIds(
-            slice,
-            ids.map((verdict) => verdict.item),
-          )}`,
-        ];
-  });
+function provedSaid(sentence: string): string | undefined {
+  for (const known of provedSentences) {
+    const found = known.matches.exec(sentence);
+    if (found !== null) {
+      return known.says(found);
+    }
+  }
+  return undefined;
+}
+
+function failedReason(kind: ProofKind, detail: string): string {
+  const sentences = detail.split(/(?<=\.) /);
+  const said = sentences.map(provedSaid);
+  const known = said.filter((words) => words !== undefined);
+  return known.length === said.length && known.length > 0 ? known.join("; ") : failedSaid[kind];
+}
+
+function failedWords(verdicts: readonly Verdict[]): readonly string[] {
+  return verdicts.flatMap((verdict) =>
+    verdict.verdict === "failed" ? [`failed ${verdict.item}: ${failedReason(verdict.kind, verdict.detail)}`] : [],
+  );
 }
 
 function withoutVerdict(slice: Slice, verdicts: readonly Verdict[]): readonly string[] {
@@ -472,7 +508,7 @@ function notKnownWords(slice: Slice, verdicts: readonly Verdict[]): readonly str
 }
 
 function verdictLines(slice: Slice, verdicts: readonly Verdict[]): readonly CardLine[] {
-  const words = [...passedWords(slice, verdicts), ...failedWords(slice, verdicts), ...notKnownWords(slice, verdicts)];
+  const words = [...passedWords(slice, verdicts), ...failedWords(verdicts), ...notKnownWords(slice, verdicts)];
   return words.map((said) => computed("prove", said));
 }
 
@@ -485,9 +521,10 @@ function builtWords(built: Built): readonly string[] {
   }
 }
 
-function changedWords(size: readonly Sized[], work: string): string {
+function changedWords(size: readonly Sized[], work: string, kept: Kept): string {
   const changed = size.length === 0 ? "what changed is not known" : `${counted(size.length, "file")} changed`;
-  return `${changed}; the work is set aside on ${work}`;
+  const where = kept === "set-aside" ? `the work is set aside on ${work}` : `the work and the tests are on ${work}`;
+  return `${changed}; ${where}`;
 }
 
 function topOf(path: string): string {
@@ -520,11 +557,11 @@ function watchedWords(size: readonly Sized[]): readonly string[] {
 }
 
 function drawnLines(input: MergeCardInput): readonly CardLine[] {
-  const { slice, proof, built, work } = input;
+  const { slice, proof, built, work, kept } = input;
   const judged = proof.judgement.map((item) => `not judged, for you: ${item.id} ${item.says}`);
   return [
     ...builtWords(built).map((said) => computed("draw", said)),
-    computed("draw", changedWords(proof.size, work)),
+    computed("draw", changedWords(proof.size, work, kept)),
     ...verdictLines(slice, proof.verdicts),
     ...[...judged, ...sizeWords(proof.size), ...watchedWords(proof.size)].map((said) => computed("draw", said)),
   ];

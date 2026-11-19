@@ -59,3 +59,13 @@ FA1 built the round and pinned two gaps it could not close inside forge, each no
 - **WX1 (worktrees):** the worktree in which the tests are committed cannot be removed until its branch is merged, so the tests stay as files after the run. A worktree can be removed while its branch is kept.
 
 Until both merge, no card may say the tests were kept from the builder in a run without the hook.
+
+## State on 19 November, 04:10 owner's time
+
+Merged and pushed, in order: NT1, TI1, WC1, TF1, KC1, PF1, WM1, FA1, OK1, WX1, HK1. The last full check: 2,009 of 2,014, the five failures all in forge's old one-slice test, whose kit copy did not yet say that skill steps run without the hook; fixed and passing alone. The plan file holds the 13 slices that remain.
+
+Next, in this order: KP1 (the kernel keeps a skill's output packed) and RT1 (a project's own commands in proof) side by side; then FA2 (rounds two and three, and the reviewer that FA1 left out), PT1, LK1, FC2. RQ1 waits for the owner's answer on where the requirements file's form lives (the PM mode's design, question 1). TDX, EX1 and TDW are live runs and wait for the owner.
+
+What the owner has not yet seen and must: the sentences HK1 changed (the coordinator's block, the refusal, `bay check`'s line); HK1's limit (code that runs as the same user, such as a listed command that runs tests, can write a sighting; closing that needs separation by the operating system); that the kit's own config now runs skill steps with the hook, so a session without the hook cannot run forge until he sets `skillSteps.run: without-the-hook`.
+
+Open with the owner, one at a time: the todo rebuild here without the hook first; the PM mode's five questions; the home mode's six, first which counties; the research's ten changes to the practices; WM1's choice that a merge which does not land is refused with a sentence.

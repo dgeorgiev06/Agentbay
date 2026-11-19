@@ -1,55 +1,5 @@
-title: 'Forge, whole: one slice under ADR 24 first, the todo mode rebuilt through it, then requirements, design, planning and waves (slices NT1, WC1, TF1, TI1, KC1, PF1, WM1 and FA1 are merged and left out)'
+title: 'Forge, whole: one slice under ADR 24 first, the todo mode rebuilt through it, then requirements, design, planning and waves (slices NT1, WC1, TF1, TI1, KC1, PF1, WM1, FA1, OK1, HK1 and WX1 are merged and left out)'
 slices:
-- title: Forge may be active in a project that is not the kit, and activating it brings proof and git-worktrees bound, with nothing more to set up
-  slice:
-    name: OK1
-    kind: capability
-    scope:
-    - bay/manifests/activation.ts
-    - bay/policy.ts
-    - tests/forge-in-a-project.test.ts
-    after: []
-    done:
-    - id: DOD-OK1-1
-      says: In a project that lists forge and a toolchain mode, bay check reports no problem and forge.waves runs; in the kit nothing changes.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - tests/forge-in-a-project.test.ts
-    - id: DOD-OK1-2
-      says: The kit's checks and its whole test run pass.
-      level: must
-      proof:
-        kind: checks
-- title: A project's setting says forge runs with the hook or without; with it, the kernel refuses a skill step's output the hook never saw; without it, the output is taken and the run's record says so
-  slice:
-    name: HK1
-    kind: capability
-    scope:
-    - schemas/config.schema.json
-    - bay/generated/config.ts
-    - bay/runs/runs.ts
-    - bay/runs/hook-seen.ts
-    - adapters/claude-code/hook/**
-    - tests/hook-seen.test.ts
-    after: []
-    done:
-    - id: DOD-HK1-1
-      says: With the hook required, an output handed in for a step whose agent the hook never saw is refused with a sentence that says so and how to run with the hook; with the setting at without, it is taken and the run records that no hook saw it.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - tests/hook-seen.test.ts
-    - id: DOD-HK1-2
-      says: Only the owner's config changes the setting; no agent's tool can. No security property of the operations and trust frames is weakened.
-      level: must
-    - id: DOD-HK1-3
-      says: The kit's checks and its whole test run pass.
-      level: must
-      proof: &id001
-        kind: checks
 - title: 'An action may say its skill''s output is kept packed: the kernel''s own database then holds no line of it as text, and it is unpacked only for the script that called the skill'
   slice:
     name: KP1
@@ -61,9 +11,7 @@ slices:
     - bay/runs/packed-output.ts
     - bay/runs/action-steps.ts
     - tests/runs-packed-output.test.ts
-    after:
-    - slice: HK1
-      because: Both change the runs feature, so one after the other.
+    after: []
     done:
     - id: DOD-KP1-1
       says: With the action marked, a search of every file under .agentbay for a line of the skill's output finds nothing while the run waits and after it ends; the calling script still receives the output whole, also across a kernel restart; an action not marked is stored as today.
@@ -80,31 +28,6 @@ slices:
       level: must
       proof:
         kind: checks
-- title: A worktree can be removed while its branch is kept, whether or not the branch is merged, so that no file of a slice's tests stays on disk after they are committed
-  slice:
-    name: WX1
-    kind: mode
-    scope:
-    - components/base/interfaces/worktrees.yaml
-    - components/base/interfaces/worktrees/**
-    - components/base/git-worktrees/**
-    - tests/made-up-worktrees*
-    - components/base/interfaces/proof/tests/shared.ts
-    - tests/shared-tests-in-a-project.test.ts
-    after: []
-    done:
-    - id: DOD-WX1-1
-      says: Removing a worktree whose branch is not merged, with the caller saying the branch is kept, removes the folder and leaves the branch at its commit; with uncommitted work in it, it is refused as today.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/base/git-worktrees/tests/remove-keeping-branch.test.ts
-    - id: DOD-WX1-2
-      says: The kit's checks and its whole test run pass.
-      level: must
-      proof:
-        kind: checks
 - title: 'Forge rounds two and three: a failing case reaches the builder as its name, and its message only when it shares no long run of text with the tests; findings go to the test writer or the builder, the test writer never reads the builder''s code; then the owner'
   slice:
     name: FA2
@@ -114,8 +37,6 @@ slices:
     after:
     - slice: KP1
       because: The test writer's output must not lie as text in the kernel's database while a builder works (FA1 pinned the gap).
-    - slice: WX1
-      because: The worktree that held the tests must be gone before a builder runs in round two.
     done:
     - id: DOD-FA2-1
       says: A slice whose tests fail in round 1 goes back to the builder with each failing case's name and message and nothing else of the test, and a slice still failing after round 3 reaches the merge card.
@@ -156,7 +77,8 @@ slices:
     - id: DOD-PT1-2
       says: The kit's checks and its whole test run pass.
       level: must
-      proof: *id001
+      proof: &id001
+        kind: checks
 - title: 'After a build, forge checks for a leak: the builder''s code shares no long run of text with the tests, and a mark planted in the tests is not in the code'
   slice:
     name: LK1
@@ -187,8 +109,6 @@ slices:
     after:
     - slice: LK1
       because: Both change forge's cards, so one after the other.
-    - slice: HK1
-      because: The card says whether the hook saw each step.
     done:
     - id: DOD-FC2-1
       says: The start and merge cards for the todo mode's first slice are pinned line by line in the new form, each row at most 44 columns, with a failed checks item giving its reason.
@@ -233,9 +153,7 @@ slices:
     - components/base/proof/**
     - tests/made-up-toolchains*
     - tests/made-up-proofs*
-    after:
-    - slice: WX1
-      because: Both may change the recorder in proof's shared test, so one after the other.
+    after: []
     done:
     - id: DOD-RT1-1
       says: In a project that is not the kit, a real-thing item whose run names a command its toolchain lists passes when the command prints the expected text.
@@ -384,8 +302,6 @@ slices:
     scope:
     - docs/research/forge-outside-the-kit.md
     after:
-    - slice: OK1
-      because: Forge must be active in a project that is not the kit, which OK1 allows.
     - slice: RT1
       because: Its real-thing item runs the project's own command, which RT1 allows.
     - slice: TDX

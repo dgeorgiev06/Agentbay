@@ -78,8 +78,22 @@ export async function forgetKept(context: ScriptContext, slice: string): Promise
   await executed(partition, { sql: "delete from kept_findings where slice = ?", parameters: [slice] });
 }
 
+function byPath(tests: readonly HandedTest[]): readonly HandedTest[] {
+  return [...tests].sort((first, second) => (first.path < second.path ? -1 : 1));
+}
+
+function sameTests(kept: readonly HandedTest[], tests: readonly HandedTest[]): boolean {
+  const sorted = byPath(tests);
+  const same = (test: HandedTest, at: number): boolean =>
+    test.path === sorted[at]?.path && test.text === sorted[at].text;
+  return kept.length === sorted.length && kept.every(same);
+}
+
 export async function keepTests(context: ScriptContext, keeping: Keeping): Promise<void> {
   const { slice, tests, mark } = keeping;
+  if (sameTests(await keptTests(context, slice), tests)) {
+    return;
+  }
   const partition = await opened(context);
   await executed(partition, { sql: "delete from kept_tests where slice = ?", parameters: [slice] });
   if (tests.length === 0) {

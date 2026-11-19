@@ -186,3 +186,78 @@ test("the JSON form of a card keeps the mark and source on every line, and the s
     ]);
   });
 });
+
+async function printedCard(project: Project, workflow: string): Promise<readonly string[]> {
+  const { runId } = await stoppedAt(project, workflow);
+  const shown = await bay(["runs", runId, "--project", project.root]);
+  const rows = shown.output.split("\n");
+  const decide = rows.findIndex((row) => row.startsWith("decide with: "));
+  return rows.slice(1, decide);
+}
+
+function hashRow(rows: readonly string[]): string {
+  return rows.find((row) => row.startsWith("hash ")) ?? "";
+}
+
+test("a card of computed lines prints them with no mark and says once, at their foot, that script worked them out", async () => {
+  await withCarder(async (project) => {
+    const rows = await printedCard(project, "computed");
+    assert.deepEqual(rows, [
+      "Merge TR2?",
+      "  in scope: 11 of 11 paths",
+      "  judged by you: whether the sentences read",
+      "    well",
+      "All lines worked out by script.",
+      "You can:",
+      "  keep  Stop; the slice stays as it is",
+      "Not available:",
+      "  merge  Merge the slice",
+      "         why: No test ran.",
+      "checked: 0 ran, 2 computed, 0 judged",
+      hashRow(rows),
+    ]);
+    assert.match(hashRow(rows), /^hash [0-9a-f]{12}$/);
+    assert.deepEqual(
+      rows.filter((row) => Array.from(row).length > 44),
+      [],
+    );
+  });
+});
+
+test("a judged line keeps its mark at the start of each row, with its skill and tier on a row of its own", async () => {
+  await withCarder(async (project) => {
+    const rows = await printedCard(project, "judged");
+    assert.deepEqual(rows, [
+      "Merge TR2?",
+      "  in scope: 11 of 11 paths",
+      "judged   the tests assert what each item",
+      "judged     says",
+      "judged    by carder skills/review, tier deep",
+      "Unmarked lines were worked out by script.",
+      "You can:",
+      "  keep  Stop; the slice stays as it is",
+      "Not available:",
+      "  merge  Merge the slice",
+      "         why: No test ran.",
+      "checked: 0 ran, 1 computed, 1 judged",
+      hashRow(rows),
+    ]);
+    assert.equal(Array.from(rows[4] ?? "").length, 44);
+    assert.deepEqual(
+      rows.filter((row) => Array.from(row).length > 44),
+      [],
+    );
+  });
+});
+
+test("the kernel still refuses a line marked computed whose source is a step that ran a skill", async () => {
+  await withCarder(async (project) => {
+    const { run } = await stoppedAt(project, "forged");
+    assert.equal(textField(run, "status"), "failed");
+    assert.equal(
+      textField(run, "reason"),
+      "Step card cannot show its card: line 1 is marked computed but cites step review, " +
+        "which ran the skill skills/review of mode carder; a computed line cites a step that ran no skill.",
+    );
+  });
+});

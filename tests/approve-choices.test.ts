@@ -129,9 +129,10 @@ function offeredCard(hash: string): string {
   return [
     "run <run> (workflow merger:workflows/merge.yaml): waiting for approval at card",
     "Merge TR2 into feat/0022-agentbay5?",
-    "computed in scope: 11 of 11 paths",
-    "computed checks: 5 of 5 passed",
-    "Choose one:",
+    "  in scope: 11 of 11 paths",
+    "  checks: 5 of 5 passed",
+    "All lines worked out by script.",
+    "You can:",
     "  merge    Merge into feat/0022-agentbay5",
     "  keep     Stop; forge/tr2 stays",
     "  discard  Stop; forge/tr2 is removed",
@@ -145,14 +146,15 @@ function withheldCard(hash: string): string {
   return [
     "run <run> (workflow merger:workflows/merge.yaml): waiting for approval at card",
     "Merge TR2 into feat/0022-agentbay5?",
-    "computed in scope: 11 of 11 paths",
-    "computed checks: 5 of 5 passed",
-    "Choose one:",
-    "  merge    Merge into feat/0022-agentbay5",
-    "           not offered: 1 must item is",
-    "           inconclusive.",
+    "  in scope: 11 of 11 paths",
+    "  checks: 5 of 5 passed",
+    "All lines worked out by script.",
+    "You can:",
     "  keep     Stop; forge/tr2 stays",
     "  discard  Stop; forge/tr2 is removed",
+    "Not available:",
+    "  merge  Merge into feat/0022-agentbay5",
+    "         why: 1 must item is inconclusive.",
     "checked: 0 ran, 2 computed, 0 judged",
     `hash ${hash.slice(0, 12)}`,
     `decide with: bay approve <run> card --choice <name> --hash ${hash}`,
@@ -184,7 +186,7 @@ test("call, runs and resume print the card a run waits on, with a stable hash", 
   });
 });
 
-test("a withheld choice is printed as not offered, with the reason the script gave", async () => {
+test("a withheld choice is printed under Not available, with the reason the script gave", async () => {
   await withStopped({ merge: false }, async (stopped) => {
     assert.equal(stopped.hash, withheldHash);
     const shown = await bay(["runs", stopped.runId, "--project", stopped.project.root]);

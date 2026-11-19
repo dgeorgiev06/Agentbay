@@ -223,7 +223,8 @@ test("the coordinator's step 4 shows an approval with a card and no choices as t
       [
         `run ${runId} (workflow shipper:workflows/carded.yaml): waiting for approval at decide`,
         "Ship 1.2.0?",
-        "computed every check passed",
+        "  every check passed",
+        "All lines worked out by script.",
         "checked: 0 ran, 1 computed, 0 judged",
         `hash ${hash.slice(0, 12)}`,
         `decide with: bay approve ${runId} decide --hash ${hash} [--reject]`,

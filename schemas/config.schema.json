@@ -42,6 +42,17 @@
         "deep": { "$ref": "#/$defs/tierSetting" }
       }
     },
+    "skillSteps": {
+      "description": "How skill steps run. Only the owner sets it: the config is closed to every agent and every mode.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "run": {
+          "description": "with-the-hook, the default: the kernel takes a skill step's output only when the agentbay hook saw the step's agent hand it in. without-the-hook: the kernel takes it, and the run records for each skill step that no hook saw it.",
+          "enum": ["with-the-hook", "without-the-hook"]
+        }
+      }
+    },
     "approvals": {
       "description": "Where the owner may decide approvals.",
       "type": "object",

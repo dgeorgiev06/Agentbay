@@ -93,3 +93,12 @@ PT1 is merged: the planter. Open from it:
 - The start card says "no bugs given to inject" when the owner names none, though the planter will write some. For FC2.
 - Not verified: that a planted patch applies under real proof (tests use a stand-in).
 - The filter in `scripts/lib/code.ts` keeps a test file the builder wrote against its instructions out of the code handed to the reviewer and the planter.
+
+## After LK1 (19 November, about 09:20 owner's time)
+
+LK1 is merged: the leak check. Open from it:
+
+- The mark does not cover the test writer's stored output in `.agentbay/kernel.db` (forge cannot change a skill's stored output); a copy from there is caught only by the shared-text rule.
+- Known misses of the shared-text rule: a copied line that was cut or joined; a line under 40 characters once the given words are out; files past the 200 handed on; a builder that read a test and wrote its own code from it. Known false alarm: a long line both sides wrote on their own in a new file.
+- A forge script is run again from its start when a run resumes: anything random or timed in one must be stored or safe to repeat (the mark is reused from the kept rows).
+- For FC2: a leaking run's card says "rounds: 1 of at most 3" and has no judged lines; no line is printed when no leak was found (and none may claim there was none).

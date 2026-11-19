@@ -133,7 +133,8 @@ function taskJson(task: Task): JsonObject {
 }
 
 function stepJson(step: Step, full: boolean): JsonObject {
-  const base = { key: step.key, kind: step.kind, status: step.status, startedAt: step.startedAt };
+  const kept = step.kept === undefined ? {} : { kept: step.kept };
+  const base = { key: step.key, kind: step.kind, status: step.status, startedAt: step.startedAt, ...kept };
   const sizes = { inputBytes: byteSize(step.input) };
   const payload = full ? { input: step.input, detail: step.detail } : sizes;
   switch (step.status) {
@@ -155,8 +156,13 @@ function eventJson(event: RunEvent): JsonObject {
   return { at: event.at, kind: event.kind, detail: event.detail };
 }
 
+function keptText(kept: Run["kept"]): string {
+  return kept === "kept-packed" ? "  kept packed" : "";
+}
+
 function stepsText(steps: readonly Step[]): string {
-  return ["steps:", ...steps.map((step) => `  ${step.key}  ${step.kind}  ${step.status}`)].join("\n");
+  const lines = steps.map((step) => `  ${step.key}  ${step.kind}  ${step.status}${keptText(step.kept)}`);
+  return ["steps:", ...lines].join("\n");
 }
 
 function eventsText(events: readonly RunEvent[]): string {
@@ -164,10 +170,13 @@ function eventsText(events: readonly RunEvent[]): string {
   return ["events:", ...lines].join("\n");
 }
 
-function outcomeText(state: State): string {
+function outcomeText(run: Run): string {
+  const state = run.state;
   switch (state.status) {
     case "done":
-      return `output:\n${pretty(state.output)}`;
+      return run.kept === "kept-packed"
+        ? "output: kept packed; bay runs never prints it."
+        : `output:\n${pretty(state.output)}`;
     case "failed":
     case "undone":
       return `reason: ${state.reason}`;
@@ -193,6 +202,7 @@ function reportJson(run: Run, options: ReportOptions): JsonObject {
   return {
     id: run.id,
     target: { ...run.target },
+    ...(run.kept === undefined ? {} : { kept: run.kept }),
     ...stateJson(run.state),
     spent: { ...run.spent },
     createdAt: run.createdAt,
@@ -218,7 +228,7 @@ function reportText(run: Run, options: ReportOptions): string {
   const { askedBy } = run;
   const lines = [
     `run ${run.id} (${targetText(run.target)}): ${stateLine(run.state)}`,
-    outcomeText(run.state),
+    outcomeText(run),
     waiting === undefined ? "" : waitingText(run, waiting),
     askedBy === undefined ? "" : `asked for by step ${askedBy.stepKey} of run ${askedBy.runId} (call_action)`,
     taskText(run, options),

@@ -49,6 +49,7 @@ export type Action = {
   readonly run: ReadonlyArray<Step>;
   readonly undo?: Name;
   readonly budget?: Budget;
+  readonly skillOutput?: "as-text" | "kept-packed";
   readonly scriptTimeLimitSeconds?: number;
 };
 

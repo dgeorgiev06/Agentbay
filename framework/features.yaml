@@ -140,6 +140,7 @@ features:
       - bay/runs/choices.ts
       - bay/runs/card.ts
       - bay/runs/hook-seen.ts
+      - bay/runs/packed-output.ts
     may_import:
       - vocabulary
       - manifests

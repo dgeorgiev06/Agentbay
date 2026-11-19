@@ -10,7 +10,7 @@ import { bay } from "./cli-fixture.ts";
 import { makeProject, type Project } from "./project-fixture.ts";
 import { openModeProject, type ModeProject, type Run } from "./test-toolbox.ts";
 
-const config = { adapter: "claude-code" };
+const config = { bindings: {}, adapter: "claude-code" };
 
 const folder = "components/modes/scribe";
 
@@ -220,7 +220,7 @@ function textHolds(shown: string, text: string): boolean {
 }
 
 const kept = [
-  "draft-free quill zq1013 marks the north gate",
+  "a quill zq1013 marks the north gate",
   'the second line zq1014 holds { a brace } and a "quote"',
   "é ü 🙂 zq1015 unicode line",
 ].join("\n");
@@ -392,7 +392,7 @@ test("an answer the schema refuses leaves no line of it as text, and the run sti
   await withScribe(async (project) => {
     const started = await project.run("scribe.relay", { calls: ["note"] });
     const token = tokenOf(started);
-    assert.equal(await project.answerRefusal(token, { text: refused }), "output is not a string.");
+    assert.equal(await project.answerRefusal(token, { text: refused }), "output must be text, but it is a mapping.");
     assert.deepEqual(await filesHolding(project.root, refused), []);
     const done = await project.answer(token, kept);
     assert.deepEqual(done.state, { status: "done", output: { answers: [answered(kept)] } });
@@ -537,6 +537,18 @@ const noteSource = {
   actions: { note: { input: "note-source/any.json", output: "note-source/note.json", effects: ["read"] } },
 };
 
+const keeperSkill = noteSkill
+  .replace("metadata:\n  output: schemas/note.json\n", "")
+  .replace("- files\n", "You have the harness's tools to read files. Submit with `submit`.\n")
+  .replace("- the input\n", "The input holds the topic.\n");
+
+const examples: Readonly<Record<string, Json>> = {
+  [`${keeperFolder}/tests/note.example.json`]: { input: { topic: "a" }, output: "A note." },
+  [`${keeperFolder}/tests/twice.example.json`]: { input: { topic: "a" }, output: "A note." },
+  [`${askerFolder}/tests/direct.example.json`]: { input: { topic: "a" }, output: "A note." },
+  [`${askerFolder}/tests/scripted.example.json`]: { input: { topic: "a" }, output: { length: 7 } },
+};
+
 async function checkProject(): Promise<Project> {
   const beside = await makeProject();
   await beside.write(
@@ -548,10 +560,7 @@ async function checkProject(): Promise<Project> {
   await beside.write("components/interfaces/note-source/note.json", schemaText(noteSchema));
   await beside.write(`${keeperFolder}/mode.yaml`, stringify(keeperManifest));
   await beside.write(`${keeperFolder}/schemas/any.json`, "{}\n");
-  await beside.write(
-    `${keeperFolder}/skills/note/SKILL.md`,
-    noteSkill.replace("metadata:\n  output: schemas/note.json\n", ""),
-  );
+  await beside.write(`${keeperFolder}/skills/note/SKILL.md`, keeperSkill);
   await beside.write(`${keeperFolder}/scripts/again.ts`, notADraftScript);
   await beside.write(
     `${keeperFolder}/workflows/own.yaml`,
@@ -571,6 +580,9 @@ async function checkProject(): Promise<Project> {
       ],
     }),
   );
+  for (const [path, example] of Object.entries(examples)) {
+    await beside.write(path, schemaText(example));
+  }
   return beside;
 }
 
@@ -582,7 +594,7 @@ test("bay check refuses, with a sentence, each place where a kept output would l
       "Action twice of mode keeper keeps its skill's output packed, but its run is not one skill step alone; " +
         "the kernel hands a kept output only to the script that called the action, so the action has no other step.",
       "Action direct of mode asker calls note-source.note, which keeps its skill's output packed; a call step " +
-        "would pass that output on as text, and the kernel hands it only to a script that calls the action.",
+        "would pass that output on as text, and the kernel hands a kept output only to a script that calls the action.",
       "Step write of workflow workflows/own.yaml of mode keeper names note, which keeps its skill's output " +
         "packed; a workflow passes a step's output on as text, and the kernel hands a kept output only to a " +
         "script that calls the action.",

@@ -125,6 +125,8 @@ export type ModeProject = {
   readonly answerRefusal: (token: string, output: Json) => Promise<string>;
   readonly approve: (runId: string, decision: Decision) => Promise<Run>;
   readonly approveRefusal: (runId: string, decision: Decision) => Promise<string>;
+  readonly newToken: (runId: string) => Promise<Run>;
+  readonly newTokenRefusal: (runId: string) => Promise<string>;
   readonly show: (runId: string) => Promise<Run>;
   readonly resume: (runId: string) => Promise<Run>;
   readonly extend: (runId: string, extra: Budget) => Promise<Run>;
@@ -419,6 +421,8 @@ async function projectIn(root: string, opening: Opening): Promise<ModeProject> {
       refusalOf(await runs.submit(token, { output, spent: nothingSpent }), "the answer"),
     approve: async (runId, decision) => accepted(await runs.approve(runId, decision)),
     approveRefusal: async (runId, decision) => refusalOf(await runs.approve(runId, decision), "the decision"),
+    newToken: async (runId) => accepted(await runs.reissueTask(runId)),
+    newTokenRefusal: async (runId) => refusalOf(await runs.reissueTask(runId), "the new token"),
     show: async (runId) => accepted(await runs.show(runId)),
     resume: async (runId) => accepted(await runs.resume(runId)),
     extend: async (runId, extra) => accepted(await runs.extend(runId, extra)),

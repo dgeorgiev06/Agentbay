@@ -1,6 +1,6 @@
 # git-worktrees
 
-The mode `git-worktrees` implements `worktrees@1`. It is the only mode that runs git. It makes a worktree and branch for each slice, says where a worktree stands, merges a slice's branch, sets a slice's work aside, and makes throwaway copies of commits and applies patches to them.
+The mode `git-worktrees` implements `worktrees@1`. It is the only mode that runs git. It makes a worktree and branch for each slice, says where a worktree stands, commits a slice's work to its branch, merges a slice's branch, sets a slice's work aside, and makes throwaway copies of commits and applies patches to them.
 
 ## Actions
 
@@ -14,15 +14,17 @@ The mode `git-worktrees` implements `worktrees@1`. It is the only mode that runs
 | `remove` | Removes a copy, or a worktree with its branch when the worktree is clean and its branch is merged into a named branch and into the branch the project has checked out. Anything else is refused with a sentence. A folder the mode made that no longer exists is forgotten, and a worktree's branch is kept. |
 | `merge` | Merges a clean slice's branch into a named branch with a merge commit. The merge is made in a worktree the mode checks out at `.forge/targets/<branch>` and removes after. A conflict is undone and refused with the conflicting paths. A branch already merged is answered as such, with no commit. |
 | `set-aside` | Commits a worktree's changed and untracked files to a new branch `forge/wip/<slice>/<n>`, with `n` the first number no branch has, and puts the worktree back at its head with no changes. Ignored files stay. With nothing changed it does nothing and says so. |
+| `commit` | Commits a worktree's changed and untracked files to its own branch `forge/<slice>`, with the message the caller gives, and the files stay in the worktree, which is then clean. Ignored files stay out of the commit and in the worktree. A link is committed as a link; git never follows it. With nothing changed it makes no commit and gives the branch's head. Refused when the worktree's head is not its branch's head. |
 | `apply` | Applies a patch to a copy, all of it or nothing, and gives the paths it names. The change is one more commit of the copy's repository, so the copy stays clean. Never a worktree. |
 
 ## What it refuses
 
 - A slice or copy name that is not letters, digits and dashes; a commit with `..` or a leading dash; a path that is absolute, has `..`, or starts with a dash. The interface's schemas hold these rules, so the kernel refuses such a request before any step runs.
-- A folder it did not make. Each folder it makes is recorded in its database; `status`, `overlay`, `remove`, `merge`, `set-aside` and `apply` look the folder up there, and say so when the folder is recorded but no longer exists.
+- A folder it did not make. Each folder it makes is recorded in its database; `status`, `overlay`, `remove`, `merge`, `set-aside`, `commit` and `apply` look the folder up there, and say so when the folder is recorded but no longer exists.
 - A copy that is no longer the top of a repository of its own, such as one whose `.git` was removed or now points at another repository. `overlay` and `apply` check this before git changes anything in it, so a tool run in the copy cannot make the mode write to the project's repository.
 - A repository whose own configuration names a filter or a merge driver, and a copy whose own configuration names one. One named in `.git/info/attributes` would run its command, and the mode cannot switch it off by name.
 - In `merge`: a slice with changed or untracked files, a branch that does not exist, and a branch checked out anywhere, the owner's checkout included. git checks out a branch in only one worktree, so the owner's checkout is never the one merged into.
+- In `commit`: a worktree whose head is not its branch's head, such as one switched to another commit by hand. A worktree on another branch, or on none, at its branch's head is switched back to its branch first, so the commit is always on `forge/<slice>`.
 - In `apply`: a patch naming a path that is absolute, has `..`, or is not letters, digits, dots, dashes and underscores in folders, before any command runs; a path whose attributes in the copy name a filter; and anything git itself refuses, such as a path beyond a link.
 
 ## How git is run
@@ -42,7 +44,7 @@ The words of each listed command end with `--end-of-options` or `--` where git a
 
 `changes` runs `status` with `--no-optional-locks`, so it does not rewrite the index. `changed-paths` runs `diff-tree`, which compares two commits and never reads or writes the index.
 
-`merge` and `commit` also get `-c user.name=agentbay-git-worktrees -c user.email=git-worktrees@agentbay.invalid`, so every commit the mode makes says it made it and no configuration of the owner's is read for it, and `-c gc.auto=0`, so no background clean-up starts. They add `--no-verify` and `--no-gpg-sign`, and `merge` adds `--no-verify-signatures`, so no signing program named in the repository's configuration runs. A commit message and a patch reach git on its standard input. `commit` adds `--allow-empty`, so an `overlay` that changes nothing still records itself in a copy. The commit that makes a copy says `A throwaway copy of <commit>.`, so its identity and its message say a copy was made.
+`merge` and `commit` also get `-c user.name=agentbay-git-worktrees -c user.email=git-worktrees@agentbay.invalid`, so every commit the mode makes says it made it and no configuration of the owner's is read for it, and `-c gc.auto=0`, so no background clean-up starts. They add `--no-verify` and `--no-gpg-sign`, and `merge` adds `--no-verify-signatures`, so no signing program named in the repository's configuration runs. A commit message and a patch reach git on its standard input. The action `commit` gives git the caller's message with a newline after it. git then removes spaces at the ends of lines, blank lines at the start and end, and repeated blank lines; a line that starts with `#` stays. A repository whose configuration sets `commit.cleanup`, such as to `strip`, changes this, and the mode does not refuse it. `commit` adds `--allow-empty`, so an `overlay` that changes nothing still records itself in a copy. The commit that makes a copy says `A throwaway copy of <commit>.`, so its identity and its message say a copy was made.
 
 No command that changes files or the checked-out branch (`restore`, `switch`, `merge`, `add`, `commit`, `apply`) runs outside `.forge/`. One guard in `scripts/lib/git.ts` refuses it before it runs, so the owner's checkout, index and uncommitted work are never changed.
 
@@ -60,7 +62,7 @@ Each listed command says the effects it can have with any arguments a script add
 |---|---|---|
 | `status`, `changed` | read | They run only commands that read. |
 | `cut` | read, write, delete | It runs `switch-branch`. |
-| `remove`, `merge`, `set-aside`, `apply` | read, write, delete | They remove worktrees, branches, files or rows of the mode's database. |
+| `remove`, `merge`, `set-aside`, `commit`, `apply` | read, write, delete | They remove worktrees, branches, files or rows of the mode's database. |
 | `copy`, `overlay` | read, write, network, spend, delete | They run `restore-paths`. |
 
 | Command | Effects | Why |

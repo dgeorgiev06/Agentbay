@@ -30,6 +30,7 @@ const examples: readonly string[] = [
   "remove",
   "merge",
   "set-aside",
+  "commit",
   "apply",
 ];
 
@@ -98,6 +99,16 @@ const exampleTexts: Readonly<Record<string, string>> = {
     "folder": ".shelved/worktrees/mail-source",
     "branch": "forge/wip/mail-source/1",
     "commit": "9a1c3e5b7d9f1a3c5e7b9d1f3a5c7e9b1d3f5a7c"
+  }
+}
+`,
+  commit: String.raw`{
+  "input": { "folder": ".shelved/worktrees/mail-source", "message": "Build the mail source mode" },
+  "output": {
+    "how": "committed",
+    "folder": ".shelved/worktrees/mail-source",
+    "branch": "forge/mail-source",
+    "commit": "6e8a0c2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d2f4a"
   }
 }
 `,
@@ -501,9 +512,30 @@ export const run = defineScript(async (input, context) => {
 });
 `;
 
+const commitScript = String.raw`import { defineScript, shortHash } from "../../../../bay/sdk.ts";
+import { answered, branches, branchOf, filesIn, ignoredPaths, madeAs, textField, worktreeState, writeBranches } from "./lib/shelf.ts";
+
+export const run = defineScript(async (input, context) => {
+  const folder = textField(input, "folder");
+  await madeAs(context, folder, "worktree");
+  const branch = await branchOf(context, folder);
+  const state = await worktreeState(context, folder);
+  if (state.changed.length + state.untracked.length === 0) {
+    return { how: "nothing-changed", folder, branch, commit: state.head };
+  }
+  const files = await filesIn(context, folder, await ignoredPaths(context));
+  const subject = textField(input, "message").split("\n")[0] ?? "";
+  const commit = { parents: [state.head], subject, files };
+  const hash = [1, 2, 3].map((part) => shortHash({ commit, part })).join("").slice(0, 40);
+  await answered(context.files.write(".shelf/commits/" + hash + ".json", JSON.stringify(commit) + "\n"));
+  await writeBranches(context, { ...(await branches(context)), [branch]: hash });
+  return { how: "committed", folder, branch, commit: hash };
+});
+`;
+
 const unbuiltScript = String.raw`import { defineScript, fail } from "../../../../bay/sdk.ts";
 
-export const run = defineScript(() => Promise.resolve(fail("The shelf does not build this action; only cut, status, changed, copy, overlay and remove.")));
+export const run = defineScript(() => Promise.resolve(fail("The shelf does not build this action; only cut, status, changed, copy, overlay, remove and commit.")));
 `;
 
 const changedWorktreeKept = String.raw`  if (state.changed.length + state.untracked.length > 0) {
@@ -561,6 +593,10 @@ actions:
     description: When a test would set a slice's work aside; the shelf does not build this action and refuses it.
     effects: [read, write, delete]
     run: [{ script: scripts/unbuilt.ts }]
+  commit:
+    description: When a test needs a slice's changed and untracked files committed to its branch on the shelf, kept in the worktree.
+    effects: [read, write, delete]
+    run: [{ script: scripts/commit.ts }]
   apply:
     description: When a test would apply a patch to a copy; the shelf does not build this action and refuses it.
     effects: [read, write, delete]
@@ -571,7 +607,7 @@ actions:
 function readmeOf(name: string): string {
   return String.raw`# ${name}
 
-A made-up worktrees@1 that a test adds to a copy of the kit. It keeps each commit as a file of its paths and texts under .shelf/commits/, and its branches as names in .shelf/branches.json. It builds cut, status, changed, copy, overlay and remove; merge, set-aside and apply refuse. A copy holds a shelf of its own in its .shelf folder, with the copied commit, its links listed as ignored, so a commit made inside the copy stays there.
+A made-up worktrees@1 that a test adds to a copy of the kit. It keeps each commit as a file of its paths and texts under .shelf/commits/, and its branches as names in .shelf/branches.json. It builds cut, status, changed, copy, overlay, remove and commit; merge, set-aside and apply refuse. A copy holds a shelf of its own in its .shelf folder, with the copied commit, its links listed as ignored, so a commit made inside the copy stays there.
 `;
 }
 
@@ -757,6 +793,7 @@ export function shelfFiles(name: string, variant: ShelfVariant): ModeFiles {
     "scripts/copy.ts": copyScript,
     "scripts/overlay.ts": overlayScript,
     "scripts/remove.ts": remove,
+    "scripts/commit.ts": commitScript,
     "scripts/unbuilt.ts": unbuiltScript,
     [`tests/${name}.test.ts`]: modeTestOf(name),
     ...Object.fromEntries(exampleFiles),

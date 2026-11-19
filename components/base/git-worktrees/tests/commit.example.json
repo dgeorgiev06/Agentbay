@@ -1,0 +1,12 @@
+{
+  "input": {
+    "folder": ".forge/worktrees/mail-source",
+    "message": "Build the mail source mode\n\nRound 1 of the builder's work."
+  },
+  "output": {
+    "how": "committed",
+    "folder": ".forge/worktrees/mail-source",
+    "branch": "forge/mail-source",
+    "commit": "4d6f8a0c2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d2f"
+  }
+}

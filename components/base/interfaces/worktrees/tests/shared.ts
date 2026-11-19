@@ -735,6 +735,85 @@ const cases: readonly Case[] = [
     },
   },
   {
+    name: "commit puts every changed, deleted and untracked file on the slice's own branch, one commit ahead with the message given, and the files stay in the worktree, which is clean, with its ignored files left out",
+    restsOn:
+      "commit-request and commit-response (committed: the commit's parent is the branch's head before, its message the one given; the files stay)",
+    run: async (world) => {
+      const folder = await cut(world, "feature");
+      await written(world, folder, {
+        "README.md": "Changed in the slice.\n",
+        "notes/new.txt": "new\n",
+        "run.log": "ignored\n",
+      });
+      await erased(world, folder, ["src/main.txt"]);
+      const message = "Build the feature\n\nThe first round of the builder's work.";
+      const output = await world.output("commit", { folder, message });
+      const commit = await world.headOf("forge/feature");
+      assert.deepEqual(output, { how: "committed", folder, branch: "forge/feature", commit: commit ?? null });
+      assert.deepEqual(await world.parentsOf(textOf(commit)), [world.base]);
+      const expected = {
+        ...without(await world.filesOf(world.base), ["src/main.txt"]),
+        "README.md": "Changed in the slice.\n",
+        "notes/new.txt": "new\n",
+      };
+      assert.deepEqual(await world.filesOf(textOf(commit)), expected);
+      assert.deepEqual(await statusOf(world, folder), {
+        head: textOf(commit),
+        commits: [{ hash: textOf(commit), subject: "Build the feature" }],
+        clean: true,
+        changed: [],
+        untracked: [],
+      });
+      assert.deepEqual(await filesIn(world, folder), { ...expected, "run.log": "ignored\n" });
+      assert.deepEqual([await world.checkedOut(), await world.headOf(ownersBranch)], [ownersBranch, world.base]);
+    },
+  },
+  {
+    name: "commit with one untracked file, then with one changed file, makes two commits, each on the one before",
+    restsOn: "commit-response (committed: the commit's parent is the branch's head before)",
+    run: async (world) => {
+      const folder = await cut(world, "feature");
+      await written(world, folder, { "first.txt": "first\n" });
+      const first = fieldsOf(await world.output("commit", { folder, message: "Add the first file" }));
+      await written(world, folder, { "first.txt": "changed\n" });
+      const second = fieldsOf(await world.output("commit", { folder, message: "Change the first file" }));
+      assert.deepEqual([first.how, second.how], ["committed", "committed"]);
+      assert.deepEqual(await world.parentsOf(textOf(first.commit)), [world.base]);
+      assert.deepEqual(await world.parentsOf(textOf(second.commit)), [textOf(first.commit)]);
+      assert.equal(await world.headOf("forge/feature"), textOf(second.commit));
+      assert.deepEqual(await world.filesOf(textOf(second.commit)), {
+        ...(await world.filesOf(world.base)),
+        "first.txt": "changed\n",
+      });
+      assert.deepEqual(await statusOf(world, folder), {
+        head: textOf(second.commit),
+        commits: [
+          { hash: textOf(first.commit), subject: "Add the first file" },
+          { hash: textOf(second.commit), subject: "Change the first file" },
+        ],
+        clean: true,
+        changed: [],
+        untracked: [],
+      });
+    },
+  },
+  {
+    name: "commit with nothing but ignored files makes no commit, answers nothing changed with the branch's head, and keeps the ignored files",
+    restsOn: "commit-response (nothing-changed: no commit was made, and the branch did not move)",
+    run: async (world) => {
+      const folder = await cut(world, "feature");
+      await written(world, folder, { "run.log": "ignored\n" });
+      assert.deepEqual(await world.output("commit", { folder, message: "Nothing to commit" }), {
+        how: "nothing-changed",
+        folder,
+        branch: "forge/feature",
+        commit: world.base,
+      });
+      assert.equal(await world.headOf("forge/feature"), world.base);
+      assert.equal(await readFile(join(world.root, folder, "run.log"), "utf8"), "ignored\n");
+    },
+  },
+  {
     name: "remove removes a copy, which is then not one the mode made",
     restsOn: "remove-request, remove-response (copy)",
     run: async (world) => {
@@ -789,7 +868,7 @@ const cases: readonly Case[] = [
     },
   },
   {
-    name: "a worktree the mode made that no longer exists is refused by status, merge and set-aside, and forgotten by remove with its branch kept",
+    name: "a worktree the mode made that no longer exists is refused by status, merge, set-aside and commit, and forgotten by remove with its branch kept",
     restsOn: "remove-response (forgotten); README, what it refuses: says so when the folder no longer exists",
     run: async (world) => {
       const folder = await cut(world, "lost");
@@ -798,6 +877,7 @@ const cases: readonly Case[] = [
       assert.equal(sentenceOf(await world.failure("status", { folder, base: ownersBranch })), givenReason);
       assert.equal(sentenceOf(await world.failure("merge", { folder, into: "integration" })), givenReason);
       assert.equal(sentenceOf(await world.failure("set-aside", { folder })), givenReason);
+      assert.equal(sentenceOf(await world.failure("commit", { folder, message: "Lost" })), givenReason);
       const output = fieldsOf(await world.output("remove", { folder, into: ownersBranch }));
       assert.deepEqual(output, { folder, kind: "forgotten", reason: output.reason ?? null });
       assert.equal(sentenceOf(textOf(output.reason)), givenReason);
@@ -825,7 +905,8 @@ const cases: readonly Case[] = [
   },
   {
     name: "every action that takes a folder refuses one the mode did not make, and changes nothing in it",
-    restsOn: "the folder of status-, overlay-, remove-, merge-, set-aside- and apply-request: a folder this mode made",
+    restsOn:
+      "the folder of status-, overlay-, remove-, merge-, set-aside-, commit- and apply-request: a folder this mode made",
     run: async (world) => {
       const byHand = `${forgeData}/worktrees/by-hand`;
       await written(world, byHand, { "notes.txt": "made by hand\n" });
@@ -839,6 +920,7 @@ const cases: readonly Case[] = [
           ["remove", { folder, into: ownersBranch }],
           ["merge", { folder, into: "integration" }],
           ["set-aside", { folder }],
+          ["commit", { folder, message: "Commit by hand" }],
           ["apply", { folder, patch }],
         ];
         for (const [action, input] of asked) {
@@ -850,9 +932,9 @@ const cases: readonly Case[] = [
     },
   },
   {
-    name: "status, merge and set-aside refuse a copy; overlay and apply refuse a worktree; neither is changed",
+    name: "status, merge, set-aside and commit refuse a copy; overlay and apply refuse a worktree; neither is changed",
     restsOn:
-      "status-, merge- and set-aside-request (a worktree); overlay- and apply-request (a copy, never a worktree)",
+      "status-, merge-, set-aside- and commit-request (a worktree); overlay- and apply-request (a copy, never a worktree)",
     run: async (world) => {
       const worktree = await cut(world, "busy");
       const copy = await copied(world, { commit: ownersBranch, name: "spare" });
@@ -865,6 +947,7 @@ const cases: readonly Case[] = [
         ["status", { folder: copy, base: ownersBranch }],
         ["merge", { folder: copy, into: "integration" }],
         ["set-aside", { folder: copy }],
+        ["commit", { folder: copy, message: "Commit a copy" }],
         ["overlay", { folder: worktree, commit: ownersBranch, paths: ["README.md"] }],
         ["apply", { folder: worktree, patch }],
       ];
@@ -940,6 +1023,23 @@ const cases: readonly Case[] = [
           `input.folder is not in the expected form. Expected: ${folderOf(".forge/worktrees/my-slice", "worktree ")}`,
         ],
         [
+          "commit",
+          { folder: ".forge/worktrees/x/../y", message: "Fine" },
+          `input.folder is not in the expected form. Expected: ${folderOf(".forge/worktrees/my-slice", "worktree ")}`,
+        ],
+        [
+          "commit",
+          { folder: ".forge/worktrees/x", message: " \n\t" },
+          "input.message is not in the expected form. Expected: The commit's message: its first line is the " +
+            "subject. It has a character that is not a space, and no control character but tab and newline.",
+        ],
+        [
+          "commit",
+          { folder: ".forge/worktrees/x", message: "Fine\u0000" },
+          "input.message is not in the expected form. Expected: The commit's message: its first line is the " +
+            "subject. It has a character that is not a space, and no control character but tab and newline.",
+        ],
+        [
           "apply",
           { folder: "-x", patch: "x" },
           "input.folder is not in the expected form. Expected: A copy this mode made, relative to the project, " +
@@ -978,6 +1078,8 @@ const cases: readonly Case[] = [
       await world.output("merge", { folder, into: "integration" });
       await written(world, folder, { "README.md": "Set aside.\n", "more.txt": "more\n" });
       await world.output("set-aside", { folder });
+      await written(world, folder, { "committed.txt": "committed\n" });
+      await world.output("commit", { folder, message: "Commit in the slice" });
       await world.output("remove", { folder: copy });
       await world.attempt("remove", { folder, into: "integration" });
       await world.attempt("merge", { folder, into: ownersBranch });

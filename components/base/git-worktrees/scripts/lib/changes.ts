@@ -1,5 +1,6 @@
 import type { ScriptContext } from "../../../../../bay/sdk.ts";
-import { gitSucceeded, nulFields } from "./git.ts";
+import { madeWorktree } from "./folders.ts";
+import { gitFed, gitSucceeded, nulFields, safeCommitOf, succeededOutput } from "./git.ts";
 
 export type Changes = {
   readonly changed: readonly string[];
@@ -39,4 +40,21 @@ export function isClean(changes: Changes): boolean {
 
 export async function changesIn(context: ScriptContext, folder: string): Promise<Changes> {
   return changesOf(await gitSucceeded(context, folder, ["changes"]));
+}
+
+export type Work = {
+  readonly branch: string;
+  readonly head: string;
+  readonly changed: boolean;
+};
+
+export async function workIn(context: ScriptContext, folder: string, doing: string): Promise<Work> {
+  const branch = await madeWorktree(context, folder, doing);
+  const head = await safeCommitOf(context, folder, "HEAD");
+  return { branch, head, changed: !isClean(await changesIn(context, folder)) };
+}
+
+export async function commitEverything(context: ScriptContext, folder: string, message: string): Promise<void> {
+  await gitSucceeded(context, folder, ["stage-everything"]);
+  succeededOutput(await gitFed(context, folder, { call: ["commit-staged"], input: `${message}\n` }), "commit-staged");
 }

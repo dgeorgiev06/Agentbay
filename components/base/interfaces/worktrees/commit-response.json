@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CommitResponse",
+  "description": "The commit that now holds the worktree's work on the slice's branch, or that there was nothing to commit.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["how", "folder", "branch", "commit"],
+      "description": "The changed and untracked files were committed to the slice's branch, and they are still in the worktree, which is clean.",
+      "properties": {
+        "how": {
+          "const": "committed",
+          "description": "The work was committed."
+        },
+        "folder": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "The worktree's folder, relative to the project."
+        },
+        "branch": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "The slice's branch, forge/<slice>, which now ends at the commit."
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+          "description": "The new commit, in full. Its parent is the branch's head before, and its message is the one given."
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["how", "folder", "branch", "commit"],
+      "description": "The worktree had no changed or untracked files, so no commit was made.",
+      "properties": {
+        "how": {
+          "const": "nothing-changed",
+          "description": "Nothing was committed, and the branch did not move."
+        },
+        "folder": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "The worktree's folder, relative to the project."
+        },
+        "branch": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "The slice's branch, forge/<slice>."
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+          "description": "The branch's head, unchanged, in full."
+        }
+      }
+    }
+  ]
+}

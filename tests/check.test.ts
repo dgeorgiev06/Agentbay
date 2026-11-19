@@ -198,6 +198,7 @@ test("the summary groups findings by file, errors first, each with its fix, and 
     ],
     errors: 2,
     warnings: 2,
+    skillSteps: "without-the-hook",
   };
   assert.equal(
     summarizeCheck(report),
@@ -209,17 +210,27 @@ test("the summary groups findings by file, errors first, each with its fix, and 
       "b.yaml:4: warning: B warns.",
       "  fix: Fix B.",
       "c.yaml: warning: C warns.",
+      "Skill steps run without the hook: the kernel takes a skill step's output that no hook saw, and records " +
+        "that no hook saw it.",
       "bay check: 2 errors, 2 warnings.",
     ].join("\n"),
   );
 });
 
-test("the summary of a clean report is only the counts", () => {
-  assert.equal(summarizeCheck({ findings: [], errors: 0, warnings: 0 }), "bay check: 0 errors, 0 warnings.");
+test("the summary of a clean report is only how skill steps run and the counts", () => {
+  assert.equal(
+    summarizeCheck({ findings: [], errors: 0, warnings: 0, skillSteps: "with-the-hook" }),
+    [
+      "Skill steps run with the hook: the kernel takes a skill step's output only when the agentbay hook saw the " +
+        "step's agent hand it in.",
+      "bay check: 0 errors, 0 warnings.",
+    ].join("\n"),
+  );
   const one: CheckReport = {
     findings: [{ file: "a.yaml", path: "", message: "A.", severity: "error" }],
     errors: 1,
     warnings: 0,
+    skillSteps: "with-the-hook",
   };
   assert.match(summarizeCheck(one), /bay check: 1 error, 0 warnings\.$/);
 });

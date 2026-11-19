@@ -13,8 +13,9 @@ async function runCheck(invocation: Invocation): Promise<CommandResult> {
     message: finding.message,
     ...(finding.fix === undefined ? {} : { fix: finding.fix }),
   }));
-  const json = { ok: report.errors === 0, errors: report.errors, warnings: report.warnings, findings };
-  return { exitCode: report.errors > 0 ? 1 : 0, json, text: summarizeCheck(report) };
+  const { errors, warnings, skillSteps } = report;
+  const json = { ok: errors === 0, errors, warnings, skillSteps, findings };
+  return { exitCode: errors > 0 ? 1 : 0, json, text: summarizeCheck(report) };
 }
 
 export const checkCommand: Command = {

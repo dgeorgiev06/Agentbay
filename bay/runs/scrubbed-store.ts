@@ -54,7 +54,7 @@ export function scrubbedStore(store: RunStore, scrubber: Scrubber): RunStore {
   return {
     createRun: (run, owner, list) => store.createRun({ ...run, input: redact(run.input) }, owner, events(list)),
     saveStepInput: (writer, start, list) => {
-      const redacted = { ...redactDetail(start, scrubber), key: start.key, input: redact(start.input), at: start.at };
+      const redacted = { ...start, ...redactDetail(start, scrubber), input: redact(start.input) };
       return store.saveStepInput(writer, redacted, events(list));
     },
     saveStepOutput: (writer, end, list) => store.saveStepOutput(writer, redactEnd(end, scrubber), events(list)),

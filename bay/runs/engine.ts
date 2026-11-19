@@ -27,6 +27,7 @@ import type { ApprovalDecision, RunStatus } from "./run-state.ts";
 import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
 import { decisionRefusal } from "./choices.ts";
 import type { ApprovalVerdict } from "./step-detail.ts";
+import { keepingOf, type SkillOutputKeeping } from "./packed-output.ts";
 import { scrubbedStore } from "./scrubbed-store.ts";
 import { startedSkillOf, submissionProblems, type StartedSkill } from "./skill-steps.ts";
 import { skillRoundOf } from "./step-key.ts";
@@ -82,6 +83,7 @@ type ControlPatch = {
 
 type NewRunPlan = {
   readonly target: RunTarget;
+  readonly kept: SkillOutputKeeping;
   readonly input: Json;
   readonly limit: Budget;
 };
@@ -373,7 +375,8 @@ export class Engine {
     }
     const workflow = found.value.workflow;
     const limit = smallestBudget([workflow.budget, this.#services.system.config.budget]);
-    return this.#start({ target: { kind: "workflow", mode, name: path }, input: triggerInput, limit });
+    const target: RunTarget = { kind: "workflow", mode, name: path };
+    return this.#start({ target, kept: "as-text", input: triggerInput, limit });
   }
 
   submit(runId: string, stepKey: string, submission: Submission): Promise<Outcome<AdvancedRun>> {
@@ -460,7 +463,7 @@ export class Engine {
     const caller = target.caller === undefined ? {} : { caller: target.caller };
     const runTarget: RunTarget = { kind: "action", mode: target.mode.manifest.name, name: target.name, ...caller };
     const limit = smallestBudget([target.action.budget, this.#services.system.config.budget, from?.within]);
-    return this.#start({ target: runTarget, input, limit });
+    return this.#start({ target: runTarget, kept: keepingOf(target.action), input, limit });
   }
 
   #chargeSkill(call: SkillCall, called: AdvancedRun): Promise<Outcome<AdvancedRun>> {

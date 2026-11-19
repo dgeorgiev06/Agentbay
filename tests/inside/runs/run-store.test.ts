@@ -328,7 +328,7 @@ test("a SQLite store keeps runs, steps and events when the file is opened again"
   assert.equal((await second.readEvents("run-1")).length, 1);
   second.close();
   const database = new DatabaseSync(file);
-  assert.equal(database.prepare("pragma user_version").get()?.user_version, 3);
+  assert.equal(database.prepare("pragma user_version").get()?.user_version, 4);
   assert.deepEqual(
     database
       .prepare("select name from sqlite_master where type = 'table' and name not like 'sqlite_%' order by name")

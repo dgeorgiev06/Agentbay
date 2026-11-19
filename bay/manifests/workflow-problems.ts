@@ -4,6 +4,7 @@ import { problemAt, type PathSegments } from "../value-check.ts";
 import type { Problem } from "../outcome.ts";
 import type { ModeSource, Context, ModeWorkflow } from "./loaded.ts";
 import { interfaceName, requiredReferences } from "./interfaces.ts";
+import { keepsOutputPacked, keptOutputGoesOnlyToScripts } from "./action-problems.ts";
 
 type WorkflowStepPlace = {
   readonly step: WorkflowStep;
@@ -79,6 +80,19 @@ function workflowActionProblem(context: Context, entry: ModeWorkflow, place: Wor
   });
 }
 
+function keptActionProblem(context: Context, entry: ModeWorkflow, place: WorkflowStepPlace): Problem | undefined {
+  const step = place.step;
+  if (!("action" in step) || !keepsOutputPacked(context, entry.mode, step.action)) {
+    return undefined;
+  }
+  return problemAt(entry.loaded, [...place.path, "action"], {
+    message:
+      `${stepLabel(entry, step)} names ${step.action}, which keeps its skill's output packed; a workflow passes a ` +
+      `step's output on as text, and ${keptOutputGoesOnlyToScripts}.`,
+    fix: `Run ${step.action} from a script that calls it with context.call, and name that script's action here.`,
+  });
+}
+
 function workflowReferenceProblems(entry: ModeWorkflow): readonly Problem[] {
   return workflowReferenceIssues(entry.loaded.value.steps).map((issue) =>
     problemAt(entry.loaded, issue.path, {
@@ -91,8 +105,10 @@ function workflowReferenceProblems(entry: ModeWorkflow): readonly Problem[] {
 export function workflowProblems(context: Context, workflows: readonly ModeWorkflow[]): readonly Problem[] {
   const active = workflows.filter((entry) => context.active.has(entry.mode.value.name));
   return active.flatMap((entry) => {
-    const actionProblems = workflowStepPlaces(entry.loaded.value.steps, []).flatMap(
-      (place) => workflowActionProblem(context, entry, place) ?? [],
+    const actionProblems = workflowStepPlaces(entry.loaded.value.steps, []).flatMap((place) =>
+      [workflowActionProblem(context, entry, place), keptActionProblem(context, entry, place)].filter(
+        (problem) => problem !== undefined,
+      ),
     );
     return [...duplicateStepIdProblems(entry), ...actionProblems, ...workflowReferenceProblems(entry)];
   });

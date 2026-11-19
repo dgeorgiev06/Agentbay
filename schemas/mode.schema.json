@@ -218,6 +218,11 @@
         },
         "undo": { "description": "The action of this mode that reverses this one.", "$ref": "#/$defs/name" },
         "budget": { "description": "Limits for a run of this action.", "$ref": "#/$defs/budget" },
+        "skillOutput": {
+          "description": "How the kernel keeps the output of the action's skill. as-text, as when left out: in its database as text, shown by bay runs. kept-packed: compressed, so no line of it is in any file as text; bay runs says it is kept packed and never prints it; the kernel unpacks it only for the script that called the action, and for the skill's own checks. A kept-packed action's run is one skill step and nothing more, and only a script may call it.",
+          "type": "string",
+          "enum": ["as-text", "kept-packed"]
+        },
         "scriptTimeLimitSeconds": {
           "description": "How long each script step in run may take, in whole seconds, at most 1800; left out, 480. When it passes, the kernel stops the script and the run fails. The run's budget of minutes still applies: when fewer minutes are left, the script is stopped when they run out.",
           "type": "integer",

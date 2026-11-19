@@ -1,6 +1,8 @@
 import { problemAt, type PathSegments } from "../value-check.ts";
 import type { Problem } from "../outcome.ts";
-import { type Context, type ActionPlace, actionLabel } from "./loaded.ts";
+import type { Action } from "../generated/mode.ts";
+import { type Context, type ActionPlace, type ModeSource, actionLabel } from "./loaded.ts";
+import { boundModeOf } from "./bindings.ts";
 import { interfaceName, requiredReferences } from "./interfaces.ts";
 
 type CallStep = {
@@ -13,6 +15,54 @@ type CallTarget = {
   readonly actionName: string;
   readonly known: readonly string[];
 };
+
+export const keptOutputGoesOnlyToScripts = "the kernel hands a kept output only to a script that calls the action";
+
+function actionNamed(context: Context, requirer: ModeSource, reference: string): Action | undefined {
+  const separator = reference.indexOf(".");
+  if (separator < 0) {
+    return requirer.value.actions[reference];
+  }
+  const name = reference.slice(0, separator);
+  const required = requiredReferences(requirer.value).find((candidate) => interfaceName(candidate) === name);
+  const bound = required === undefined ? undefined : boundModeOf(context, requirer.value.name, required);
+  const served = bound === undefined ? undefined : context.modes.get(bound.mode);
+  return served?.value.actions[reference.slice(separator + 1)];
+}
+
+export function keepsOutputPacked(context: Context, requirer: ModeSource, reference: string): boolean {
+  return actionNamed(context, requirer, reference)?.skillOutput === "kept-packed";
+}
+
+function keptCallProblems(context: Context, place: ActionPlace, step: CallStep): readonly Problem[] {
+  if (!keepsOutputPacked(context, place.mode, step.call)) {
+    return [];
+  }
+  return [
+    problemAt(place.mode, ["actions", place.name, "run", step.index, "call"], {
+      message:
+        `${actionLabel(place)} calls ${step.call}, which keeps its skill's output packed; a call step would pass ` +
+        `that output on as text, and ${keptOutputGoesOnlyToScripts}.`,
+      fix: `Call ${step.call} from a script with context.call.`,
+    }),
+  ];
+}
+
+function keptRunProblems(place: ActionPlace): readonly Problem[] {
+  const [first, ...others] = place.action.run;
+  const oneSkill = first !== undefined && "skill" in first && others.length === 0;
+  if (place.action.skillOutput !== "kept-packed" || oneSkill) {
+    return [];
+  }
+  return [
+    problemAt(place.mode, ["actions", place.name, "run"], {
+      message:
+        `${actionLabel(place)} keeps its skill's output packed, but its run is not one skill step alone; ` +
+        "the kernel hands a kept output only to the script that called the action, so the action has no other step.",
+      fix: `Make the run of ${place.name} one skill step, or leave out skillOutput.`,
+    }),
+  ];
+}
 
 function notRequiredProblem(place: ActionPlace, path: PathSegments, step: CallStep): Problem {
   const name = step.call.slice(0, step.call.indexOf("."));
@@ -97,5 +147,8 @@ export function actionProblems(context: Context, place: ActionPlace): readonly P
   const calls = place.action.run.flatMap((step, index) =>
     "call" in step ? callProblems(context, place, { call: step.call, index }) : [],
   );
-  return [...calls, ...undoProblems(place)];
+  const keptCalls = place.action.run.flatMap((step, index) =>
+    "call" in step ? keptCallProblems(context, place, { call: step.call, index }) : [],
+  );
+  return [...calls, ...keptCalls, ...keptRunProblems(place), ...undoProblems(place)];
 }

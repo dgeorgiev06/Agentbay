@@ -1,12 +1,13 @@
 import { join } from "node:path/posix";
 import type { EventSink, Json, RunEvent, Scrubber, ScriptRunner, Spend, Submission } from "../contracts.ts";
 import type { Budget } from "../generated/mode.ts";
-import { fieldOf, textField, toJson } from "../json.ts";
+import { fieldOf, isRecord, textField, toJson } from "../json.ts";
 import { failedWith, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
 import type { Clock, Folders } from "../ports.ts";
 import type { System } from "../manifests/manifests.ts";
 import { Engine, type AdvancedRun } from "./engine.ts";
 import { hookNoteFor, hookNoteKind, type HookWatch } from "./hook-seen.ts";
+import { keptPackedNote, type SkillOutputKeeping } from "./packed-output.ts";
 import {
   kernelDatabaseFile,
   runStatuses,
@@ -43,6 +44,7 @@ type RunStep = {
   readonly startedAt: string;
   readonly input: Json;
   readonly detail: Json;
+  readonly kept?: SkillOutputKeeping;
 } & (
   | { readonly status: "started" }
   | { readonly status: "done"; readonly finishedAt: string; readonly output: Json }
@@ -52,6 +54,7 @@ type RunStep = {
 export type Run = {
   readonly id: string;
   readonly target: { readonly kind: "action" | "workflow"; readonly mode: string; readonly name: string };
+  readonly kept?: SkillOutputKeeping;
   readonly state: RunState<Task>;
   readonly spent: Spend;
   readonly createdAt: string;
@@ -134,6 +137,27 @@ function stepOf(record: StepRecord): RunStep {
   }
 }
 
+function withoutSubmission(detail: Json): Json {
+  if (!isRecord(detail)) {
+    return detail;
+  }
+  return toJson(Object.fromEntries(Object.entries(detail).filter(([field]) => field !== "submission")));
+}
+
+function keptStepOf(step: RunStep): RunStep {
+  const input = step.kind === "check" ? keptPackedNote : step.input;
+  const detail = withoutSubmission(step.detail);
+  const kept = { input, detail, kept: "kept-packed" as const };
+  return step.status === "done" && step.kind !== "check"
+    ? { ...step, ...kept, output: keptPackedNote }
+    : { ...step, ...kept };
+}
+
+function shownStepOf(record: StepRecord): RunStep {
+  const step = stepOf(record);
+  return record.kept === "kept-packed" ? keptStepOf(step) : step;
+}
+
 function undoEntriesOf(undo: Json, list: keyof UndoReport): readonly (UndoEntry & { readonly reason: string })[] {
   const entries = fieldOf(undo, list);
   if (!Array.isArray(entries)) {
@@ -178,9 +202,10 @@ async function stateOf(opened: Opened, stored: Stored, showing: Showing): Promis
   const state = stored.run.state;
   switch (state.status) {
     case "running":
-    case "done":
     case "failed":
       return state;
+    case "done":
+      return stored.run.kept === "kept-packed" ? { status: state.status, output: keptPackedNote } : state;
     case "undone":
       return { ...state, undo: undoReportOf(state.undo) };
     case "waiting": {
@@ -211,12 +236,13 @@ async function shownRun(opened: Opened, runId: string, showing: Showing): Promis
   return succeededWith({
     id,
     target: { kind: target.kind, mode: target.mode, name: target.name },
+    ...(run.kept === undefined ? {} : { kept: run.kept }),
     state,
     spent,
     createdAt,
     updatedAt,
     ...askedByOf(events),
-    steps: run.steps.map(stepOf),
+    steps: run.steps.map(shownStepOf),
     events,
   });
 }

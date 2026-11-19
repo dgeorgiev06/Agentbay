@@ -99,7 +99,10 @@ test("a kernel.db of the first version gains the token table and keeps its runs"
   await first.createRun({ id: "old-run", target, input: {}, limit: {}, at }, "test", []);
   first.close();
   const database = new DatabaseSync(file);
-  database.exec("drop table task_tokens; alter table runs drop column target_caller; pragma user_version = 1;");
+  database.exec(
+    "drop table task_tokens; alter table runs drop column target_caller; alter table runs drop column kept; " +
+      "alter table steps drop column kept; pragma user_version = 1;",
+  );
   database.close();
   const reopened = new SqliteRunStore(file);
   assert.equal((await reopened.readRun("old-run"))?.id, "old-run");

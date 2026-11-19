@@ -26,6 +26,7 @@ import {
 import type { Budget, Step } from "../generated/mode.ts";
 import { fieldOf, textField } from "../json.ts";
 import { problemText } from "../outcome.ts";
+import { keepingOf, type SkillOutputKeeping } from "./packed-output.ts";
 import type { StepRecord } from "./run-store.ts";
 import { skillSchemas, skillTaskOf, startedSkillOf, type SkillAt } from "./skill-steps.ts";
 import type { ScriptDetail, SkillDetail } from "./step-detail.ts";
@@ -71,6 +72,7 @@ type ScriptLeaf = {
   readonly script: string;
   readonly input: Json;
   readonly place: StepPlace;
+  readonly kept: SkillOutputKeeping;
   readonly skillInput?: Json;
 };
 
@@ -272,7 +274,7 @@ async function startedScript(
     await noteRerun(walk, leaf);
     return detail;
   }
-  await startRecord(walk, { key: leaf.key, kind: leaf.kind, input: leaf.input, detail });
+  await startRecord(walk, { key: leaf.key, kind: leaf.kind, input: leaf.input, kept: leaf.kept, detail });
   return detail;
 }
 
@@ -318,7 +320,8 @@ async function startSkill(walk: Walk, frame: ActionFrame, skill: SkillStep): Pro
     earlierSpent: noSpend,
     calledSpent: noSpend,
   };
-  const started = await startRecord(walk, { key: skill.key, kind: "skill", input: skill.input, detail });
+  const kept = keepingOf(frame.action);
+  const started = await startRecord(walk, { key: skill.key, kind: "skill", input: skill.input, kept, detail });
   return skillWaiting(walk, frame, { runId: walk.writer.runId, key: skill.key, input: started.input, detail });
 }
 
@@ -384,7 +387,9 @@ async function runChecks(walk: Walk, frame: ActionFrame, attempt: Attempt): Prom
   for (const [index, check] of skill.checks.entries()) {
     const key = checkStepKey(skill.key, at.detail.round, index);
     const place = { ...skill.place, stepKey: key };
-    const leaf = { key, kind: "check" as const, script: check, input: submission.output, place, skillInput: at.input };
+    const kept = keepingOf(frame.action);
+    const input = submission.output;
+    const leaf = { key, kind: "check" as const, script: check, input, place, kept, skillInput: at.input };
     const progress = await runScript(walk, frame, leaf);
     if (progress.status === "waiting") {
       return progress;
@@ -453,7 +458,8 @@ export async function runNestedAction(walk: Walk, parent: BudgetFrame, nested: N
   if (record === undefined) {
     const caller = nested.caller === undefined ? {} : { caller: nested.caller };
     const detail = { mode: nested.target.mode.manifest.name, action: nested.target.name, ...caller };
-    await startRecord(walk, { key: nested.key, kind: nested.kind, input, detail }, nested.events ?? []);
+    const kept = keepingOf(nested.target.action);
+    await startRecord(walk, { key: nested.key, kind: nested.kind, input, kept, detail }, nested.events ?? []);
   }
   const budget = childFrame(parent, nested.target.action.budget, walk.extra);
   const caller = record === undefined ? nested.caller : nestedCallerOf(record);
@@ -505,7 +511,14 @@ function runActionStep(walk: Walk, frame: ActionFrame, at: ActionStepAt): Promis
   };
   switch (step.kind) {
     case "script":
-      return runScript(walk, frame, { key, kind: "script", script: step.script, input: at.input, place });
+      return runScript(walk, frame, {
+        key,
+        kind: "script",
+        script: step.script,
+        input: at.input,
+        place,
+        kept: "as-text",
+      });
     case "skill":
       return runSkill(walk, frame, { ...step, key, input: at.input, place, last: at.index === run.length - 1 });
     case "call":

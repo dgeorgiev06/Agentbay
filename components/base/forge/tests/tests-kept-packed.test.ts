@@ -60,7 +60,7 @@ test("two texts that differ in one line pack differently", () => {
   assert.notEqual(packed(kept.text), packed(kept.text.replace("1013);", "1012);")));
 });
 
-test("while the builder's step is open, the partition holds the tests packed and no other file under the project holds a line of them but the kernel's record", async () => {
+test("while the builder's step is open, the partition holds the tests packed and no file under the project holds a line of them, the kernel's record included", async () => {
   const root = await project(template);
   const files = ["components/modes/k1/scripts/kept.ts"];
   await provedIn(root, "K1", { verdicts: [], judgement: [], size: [] });
@@ -98,12 +98,8 @@ test("while the builder's step is open, the partition holds the tests packed and
     { slice: "K1", path: testFile, packed: packed(kept.text) },
     { slice: "K1", path: otherFile, packed: packed(other.text) },
   ]);
-  assert.deepEqual(building.holding, [".agentbay/kernel.db"]);
+  assert.deepEqual(building.holding, []);
   assert.deepEqual(keptRows(root), []);
   const afterwards = await filesHolding(root, "", [kept.text, other.text]);
-  assert.deepEqual(afterwards, [
-    ".agentbay/kernel.db",
-    `.forge/worktrees/K1-tests/${testFile}`,
-    `.forge/worktrees/K1-tests/${otherFile}`,
-  ]);
+  assert.deepEqual(afterwards, [`.forge/worktrees/K1-tests/${testFile}`, `.forge/worktrees/K1-tests/${otherFile}`]);
 });

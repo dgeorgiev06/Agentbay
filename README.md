@@ -195,3 +195,23 @@ needs your terminal. Approval gates and backlog approvals follow `approve.from` 
 `[terminal]`; chat is recorded as `user@chat-via-cos`). `approve.plans` makes a listed step show its plan for your
 approval before it runs. `bay auth` asks first in Claude Code.
 Details: [docs/DESIGN.md#safety-model](docs/DESIGN.md#safety-model).
+
+## A skill's output kept packed
+
+An action may say `skillOutput: kept-packed` in its mode's manifest. The kernel then keeps its skill's output
+gzipped and in base64 in `.agentbay/kernel.db`. That holds for the skill step's row, its checks' rows, the row of the
+call that ran the action, and the run's own row when the action runs alone. Each value is packed before it is
+written, so no line of the output is in that file, its journal or its write-ahead file as text, before or after a
+restart. Base64 matters too: a block that gzip leaves uncompressed is still never the text's own bytes.
+
+The kernel unpacks the output for the script that called the action, also when it replays that script's finished
+calls, and for the skill's own checks. A round that a check sends back gets the check's feedback, as before, and
+not the earlier output; a check's feedback is shown as written, so a check should not quote the output. `bay runs`
+says the output is kept packed and never prints it, also with `--full`, `--json` and `--events`. Events hold only
+its size. Such an action's run is one skill step, and only a script may call it: `bay check` refuses a call step
+or a workflow step that names it, since either would pass the output on as text. Left out, or set to `as-text`,
+the output is kept as text, as before.
+
+Packing is not secrecy. It keeps the text from a search and from anyone who reads the files. It does not stop
+code that can open the database and unpack it, such as a script run as the same user. With the hook, a step's
+agent cannot read `.agentbay` at all; without it, packing is what keeps the text out of reach of a plain read.

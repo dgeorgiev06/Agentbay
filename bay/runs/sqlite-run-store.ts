@@ -26,6 +26,7 @@ import {
   type TaskTokenStore,
   type Writer,
 } from "./run-store.ts";
+import { skillOutputKeepings, storedText, unpackedText, type SkillOutputKeeping } from "./packed-output.ts";
 import { decodedStepDetail, stepDetailJson, stepKinds } from "./step-detail.ts";
 
 const defaultBusyMilliseconds = 3000;
@@ -91,6 +92,8 @@ const migrations: readonly string[] = [
   );
   create index task_tokens_by_run on task_tokens (run_id);`,
   "alter table runs add column target_caller text;",
+  `alter table runs add column kept text not null default 'as-text' check (kept in ('as-text', 'kept-packed'));
+  alter table steps add column kept text not null default 'as-text' check (kept in ('as-text', 'kept-packed'));`,
 ];
 
 function textColumn(row: Row, name: string): string {
@@ -107,6 +110,14 @@ function optionalText(row: Row, name: string): string | undefined {
 
 function jsonColumn(row: Row, name: string): Json {
   return parseJson(textColumn(row, name));
+}
+
+function keptJsonColumn(row: Row, name: string, keeping: SkillOutputKeeping): Json {
+  return parseJson(unpackedText(textColumn(row, name), keeping));
+}
+
+function storedJson(value: Json, keeping: SkillOutputKeeping): string {
+  return storedText(JSON.stringify(value), keeping);
 }
 
 function integerColumn(row: Row, name: string): number {
@@ -139,19 +150,32 @@ function waitingStateOf(row: Row): StoredState {
   return { status: "waiting", reason, stepKey, ...(until === undefined ? {} : { until }) };
 }
 
+function keepingOf(row: Row): SkillOutputKeeping {
+  return literalOf(skillOutputKeepings, textColumn(row, "kept"));
+}
+
+function keepingGiven(kept: { readonly kept?: SkillOutputKeeping }): SkillOutputKeeping {
+  return kept.kept ?? "as-text";
+}
+
+function keptField(keeping: SkillOutputKeeping): { readonly kept?: SkillOutputKeeping } {
+  return keeping === "as-text" ? {} : { kept: keeping };
+}
+
 function stateOf(row: Row): StoredState {
   const status = literalOf(runStatuses, textColumn(row, "status"));
+  const keeping = keepingOf(row);
   switch (status) {
     case "running":
       return { status };
     case "waiting":
       return waitingStateOf(row);
     case "done":
-      return { status, output: jsonColumn(row, "output") };
+      return { status, output: keptJsonColumn(row, "output", keeping) };
     case "failed":
       return { status, reason: textColumn(row, "reason") };
     case "undone":
-      return { status, reason: textColumn(row, "reason"), undo: jsonColumn(row, "output") };
+      return { status, reason: textColumn(row, "reason"), undo: keptJsonColumn(row, "output", keeping) };
   }
 }
 
@@ -159,7 +183,8 @@ function runOf(row: Row): StoredRun {
   return {
     id: textColumn(row, "id"),
     target: targetOf(row),
-    input: jsonColumn(row, "input"),
+    ...keptField(keepingOf(row)),
+    input: keptJsonColumn(row, "input", keepingOf(row)),
     state: stateOf(row),
     limit: budgetFromJson(jsonColumn(row, "limits")),
     extra: budgetFromJson(jsonColumn(row, "extra")),
@@ -181,13 +206,15 @@ function stepEndOf(row: Row): { readonly spent: Spend; readonly finishOrder: num
 }
 
 function stepOf(row: Row): StepRecord {
+  const kept = keepingOf(row);
   const start = {
     key: textColumn(row, "key"),
-    input: jsonColumn(row, "input"),
+    input: keptJsonColumn(row, "input", kept),
     startedAt: textColumn(row, "started_at"),
+    ...keptField(kept),
   };
   const kind = literalOf(stepKinds, textColumn(row, "kind"));
-  const detail = jsonColumn(row, "detail");
+  const detail = keptJsonColumn(row, "detail", kept);
   const status = literalOf(storedStepStatuses, textColumn(row, "status"));
   if (status === "failed" && detail === null) {
     return { ...start, kind, detail, ...stepEndOf(row), status, reason: textColumn(row, "reason") };
@@ -197,7 +224,7 @@ function stepOf(row: Row): StepRecord {
     case "started":
       return { ...start, ...typed, status };
     case "done":
-      return { ...start, ...typed, ...stepEndOf(row), status, output: jsonColumn(row, "output") };
+      return { ...start, ...typed, ...stepEndOf(row), status, output: keptJsonColumn(row, "output", kept) };
     case "failed":
       return { ...start, ...typed, ...stepEndOf(row), status, reason: textColumn(row, "reason") };
   }
@@ -222,18 +249,18 @@ function taskTokenOf(row: Row): StoredTaskToken {
   };
 }
 
-function stateColumns(state: StoredState): readonly SQLInputValue[] {
+function stateColumns(state: StoredState, keeping: SkillOutputKeeping): readonly SQLInputValue[] {
   switch (state.status) {
     case "running":
       return [state.status, null, null, null, null, null];
     case "waiting":
       return [state.status, state.reason, state.stepKey, state.until ?? null, null, null];
     case "done":
-      return [state.status, null, null, null, JSON.stringify(state.output), null];
+      return [state.status, null, null, null, storedJson(state.output, keeping), null];
     case "failed":
       return [state.status, null, null, null, null, state.reason];
     case "undone":
-      return [state.status, null, null, null, JSON.stringify(state.undo), state.reason];
+      return [state.status, null, null, null, storedJson(state.undo, keeping), state.reason];
   }
 }
 
@@ -272,9 +299,9 @@ export class SqliteRunStore implements RunStore, TaskTokenStore {
     this.#write(() => {
       this.#database
         .prepare(
-          `insert into runs (id, target_kind, target_mode, target_name, target_caller, input, status, limits, extra,
-            spent, lock_owner, lock_heartbeat, created_at, updated_at)
-           values (?, ?, ?, ?, ?, ?, 'running', ?, '{}', ?, ?, ?, ?, ?)`,
+          `insert into runs (id, target_kind, target_mode, target_name, target_caller, kept, input, status, limits,
+            extra, spent, lock_owner, lock_heartbeat, created_at, updated_at)
+           values (?, ?, ?, ?, ?, ?, ?, 'running', ?, '{}', ?, ?, ?, ?, ?)`,
         )
         .run(
           run.id,
@@ -282,7 +309,8 @@ export class SqliteRunStore implements RunStore, TaskTokenStore {
           run.target.mode,
           run.target.name,
           run.target.kind === "action" ? (run.target.caller ?? null) : null,
-          JSON.stringify(run.input),
+          keepingGiven(run),
+          storedJson(run.input, keepingGiven(run)),
           JSON.stringify(run.limit),
           JSON.stringify({ items: 0, usd: 0, tokens: 0, minutes: 0 }),
           owner,
@@ -299,15 +327,16 @@ export class SqliteRunStore implements RunStore, TaskTokenStore {
       this.#claim(writer, start.at);
       this.#database
         .prepare(
-          `insert into steps (run_id, key, kind, status, input, detail, spent, started_at)
-           values (?, ?, ?, 'started', ?, ?, '{}', ?)`,
+          `insert into steps (run_id, key, kind, status, kept, input, detail, spent, started_at)
+           values (?, ?, ?, 'started', ?, ?, ?, '{}', ?)`,
         )
         .run(
           writer.runId,
           start.key,
           start.kind,
-          JSON.stringify(start.input),
-          JSON.stringify(stepDetailJson(start)),
+          keepingGiven(start),
+          storedJson(start.input, keepingGiven(start)),
+          storedJson(stepDetailJson(start), keepingGiven(start)),
           start.at,
         );
       this.#touch(writer.runId, start.at);
@@ -318,8 +347,8 @@ export class SqliteRunStore implements RunStore, TaskTokenStore {
   readonly saveStepOutput = (writer: Writer, end: StepEnd, events: readonly RunEvent[]): Promise<StepRecord> =>
     this.#write(() => {
       this.#claim(writer, end.at);
-      this.#checkStarted(writer.runId, end.key);
-      const output = end.status === "done" ? JSON.stringify(end.output) : null;
+      const started = this.#checkStarted(writer.runId, end.key);
+      const output = end.status === "done" ? storedJson(end.output, keepingGiven(started)) : null;
       const reason = end.status === "failed" ? end.reason : null;
       this.#database
         .prepare(
@@ -342,7 +371,7 @@ export class SqliteRunStore implements RunStore, TaskTokenStore {
       }
       this.#database
         .prepare("update steps set detail = ? where run_id = ? and key = ?")
-        .run(JSON.stringify(stepDetailJson(change)), writer.runId, change.key);
+        .run(storedJson(stepDetailJson(change), keepingGiven(step)), writer.runId, change.key);
       this.#touch(writer.runId, change.at);
       this.#insertEvents(events);
       return this.#step(writer.runId, change.key);
@@ -378,7 +407,7 @@ export class SqliteRunStore implements RunStore, TaskTokenStore {
     this.#write(() => {
       this.#claim(writer, patch.at);
       const current = this.#run(writer.runId);
-      const state = stateColumns(patch.state ?? current.state);
+      const state = stateColumns(patch.state ?? current.state, keepingGiven(current));
       this.#database
         .prepare(
           `update runs set status = ?, waiting_reason = ?, waiting_step = ?, waiting_until = ?, output = ?, reason = ?,

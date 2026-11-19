@@ -4,6 +4,7 @@ import type { Budget } from "../generated/mode.ts";
 import { byteSize } from "../json.ts";
 import type { Clock } from "../ports.ts";
 import type { ActionTarget, System } from "../manifests/manifests.ts";
+import type { SkillOutputKeeping } from "./packed-output.ts";
 import { settledOf, type RunStore, type StepRecord, type Writer } from "./run-store.ts";
 import type { Waiting } from "./run-state.ts";
 import type { StepDetail, StepKind } from "./step-detail.ts";
@@ -52,6 +53,7 @@ type EventKind =
 type RecordStart = StepDetail & {
   readonly key: string;
   readonly input: Json;
+  readonly kept?: SkillOutputKeeping;
 };
 
 type RecordEnd = StepOutcome & {

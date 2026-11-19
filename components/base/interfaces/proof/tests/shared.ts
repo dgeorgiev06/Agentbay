@@ -1593,7 +1593,10 @@ export const run = defineScript((input, context) =>
     }
     await answered(context.files.remove(folder));
     await forget(context, folder);
-    return kind === "copy" ? { folder, kind } : { folder, kind, branch: "forge/" + folder.slice(folder.lastIndexOf("/") + 1) };
+    if (kind === "copy") {
+      return { folder, kind };
+    }
+    return { folder, kind, branch: "forge/" + folder.slice(folder.lastIndexOf("/") + 1), branchAfter: "deleted" };
   }),
 );
 `,

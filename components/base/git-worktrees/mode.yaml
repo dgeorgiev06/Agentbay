@@ -125,7 +125,7 @@ actions:
     run:
       - script: scripts/overlay.ts
   remove:
-    description: When a copy is no longer needed, or a slice's worktree is clean and merged; the worktree goes with its branch, and anything else is refused.
+    description: When a copy is no longer needed, or a slice's worktree is clean; the worktree goes with its branch when that is merged, or its branch is kept at its commit when the caller asks, and anything else is refused.
     effects: [read, write, delete]
     run:
       - script: scripts/remove.ts

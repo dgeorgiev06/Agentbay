@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "RemoveRequest",
-  "description": "Which folder to remove, and for a worktree, the branch it must be merged into.",
+  "description": "Which folder to remove, and for a worktree, what becomes of its branch: deleted once merged into a named branch, or kept at its commit.",
   "type": "object",
   "additionalProperties": false,
   "required": ["folder"],
@@ -16,7 +16,11 @@
       "type": "string",
       "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
       "maxLength": 255,
-      "description": "For a worktree: the branch its own branch must be merged into before both are removed. A commit: a full or short hash, or a branch name. It has no .. and does not start with a dash."
+      "description": "For a worktree whose branch is deleted: the branch its own branch must be merged into before both are removed. A commit: a full or short hash, or a branch name. It has no .. and does not start with a dash."
+    },
+    "branchAfter": {
+      "enum": ["deleted", "kept"],
+      "description": "For a worktree: what becomes of its branch. deleted, the default: the branch goes with the worktree, only when it is merged into the branch named as into. kept: the branch stays at its commit, merged or not, and into is not given. A copy has no branch, and is removed whichever is named."
     }
   }
 }

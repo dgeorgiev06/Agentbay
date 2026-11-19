@@ -910,13 +910,14 @@ const cases: readonly Case[] = [
   },
   {
     name: "remove removes a clean worktree whose branch is merged, with its branch",
-    restsOn: "remove-request (into), remove-response (worktree: removed with its branch)",
+    restsOn: "remove-request (into; branchAfter: deleted, the default), remove-response (worktree, branchAfter deleted)",
     run: async (world) => {
       const folder = await cut(world, "done");
       assert.deepEqual(await world.output("remove", { folder, into: ownersBranch }), {
         folder,
         kind: "worktree",
         branch: "forge/done",
+        branchAfter: "deleted",
       });
       assert.equal(await exists(join(world.root, folder)), false);
       assert.equal(await world.headOf("forge/done"), undefined);
@@ -948,7 +949,68 @@ const cases: readonly Case[] = [
       const before = await treeIn(world, folder);
       assert.equal(sentenceOf(await world.failure("remove", { folder, into: ownersBranch })), givenReason);
       assert.equal(sentenceOf(await world.failure("remove", { folder })), givenReason);
+      const deleted = { folder, into: ownersBranch, branchAfter: "deleted" };
+      assert.equal(sentenceOf(await world.failure("remove", deleted)), givenReason);
       assert.deepEqual(await treeIn(world, folder), before);
+      assert.equal(await world.headOf("forge/done"), head);
+    },
+  },
+  {
+    name: "remove with the branch kept removes a clean worktree, merged or not, and leaves its branch at its commit; a copy is removed as before",
+    restsOn: "remove-request (branchAfter: kept), remove-response (worktree, branchAfter kept, commit)",
+    run: async (world) => {
+      const before = await ownersCheckout(world);
+      const { folder, head } = await sliceWithCommit(world, { "feature.txt": "feature\n" });
+      assert.deepEqual(await world.output("remove", { folder, branchAfter: "kept" }), {
+        folder,
+        kind: "worktree",
+        branch: "forge/feature",
+        branchAfter: "kept",
+        commit: head,
+      });
+      assert.equal(await exists(join(world.root, folder)), false);
+      assert.equal(await world.headOf("forge/feature"), head);
+      assert.deepEqual(await world.filesOf(head), { ...(await world.filesOf(world.base)), "feature.txt": "feature\n" });
+      assert.equal(sentenceOf(await world.failure("remove", { folder, branchAfter: "kept" })), givenReason);
+      const merged = await cut(world, "merged");
+      assert.deepEqual(await world.output("remove", { folder: merged, branchAfter: "kept" }), {
+        folder: merged,
+        kind: "worktree",
+        branch: "forge/merged",
+        branchAfter: "kept",
+        commit: world.base,
+      });
+      assert.equal(await exists(join(world.root, merged)), false);
+      assert.equal(await world.headOf("forge/merged"), world.base);
+      const copy = await copied(world, { commit: ownersBranch, name: "spent" });
+      assert.deepEqual(await world.output("remove", { folder: copy, branchAfter: "kept" }), {
+        folder: copy,
+        kind: "copy",
+      });
+      assert.equal(await exists(join(world.root, copy)), false);
+      assert.deepEqual(await ownersCheckout(world), before);
+    },
+  },
+  {
+    name: "remove with the branch kept refuses a worktree with an untracked or a changed file, or with into named, and keeps it, its files and its branch",
+    restsOn: "remove-request (branchAfter: kept, and into is not given); README, remove: only when the worktree is clean",
+    run: async (world) => {
+      const folder = await cut(world, "done");
+      const head = await world.commit(changeOn({ folder }, { "work.txt": "work\n" }, "Do the work"));
+      const kept = { folder, branchAfter: "kept" };
+      await written(world, folder, { "notes.txt": "Not committed.\n" });
+      const untracked = await treeIn(world, folder);
+      assert.equal(sentenceOf(await world.failure("remove", kept)), givenReason);
+      assert.deepEqual(await treeIn(world, folder), untracked);
+      await erased(world, folder, ["notes.txt"]);
+      await written(world, folder, { "README.md": "Not yet committed.\n" });
+      const changed = await treeIn(world, folder);
+      assert.equal(sentenceOf(await world.failure("remove", kept)), givenReason);
+      assert.deepEqual(await treeIn(world, folder), changed);
+      await written(world, folder, { "README.md": startFiles["README.md"] ?? "" });
+      const clean = await treeIn(world, folder);
+      assert.equal(sentenceOf(await world.failure("remove", { ...kept, into: ownersBranch })), givenReason);
+      assert.deepEqual(await treeIn(world, folder), clean);
       assert.equal(await world.headOf("forge/done"), head);
     },
   },
@@ -1003,6 +1065,7 @@ const cases: readonly Case[] = [
           ["status", { folder, base: ownersBranch }],
           ["overlay", { folder, commit: ownersBranch, paths: ["README.md"] }],
           ["remove", { folder, into: ownersBranch }],
+          ["remove", { folder, branchAfter: "kept" }],
           ["merge", { folder, into: "integration" }],
           ["set-aside", { folder }],
           ["commit", { folder, message: "Commit by hand" }],
@@ -1096,6 +1159,11 @@ const cases: readonly Case[] = [
           `input.folder is not in the expected form. Expected: ${folderOf(".forge/worktrees/my-slice", "folder ")}`,
         ],
         [
+          "remove",
+          { folder: ".forge/worktrees/x", branchAfter: "gone" },
+          'input.branchAfter must be one of "deleted", "kept", but it is "gone".',
+        ],
+        [
           "merge",
           { folder: ".forge/worktrees/x", into: "-b" },
           "input.into is not in the expected form. Expected: The branch to merge the slice's branch into. It is " +
@@ -1166,6 +1234,9 @@ const cases: readonly Case[] = [
       await written(world, folder, { "committed.txt": "committed\n" });
       await world.output("commit", { folder, message: "Commit in the slice" });
       await world.output("remove", { folder: copy });
+      const done = await cut(world, "done");
+      await world.commit(changeOn({ folder: done }, { "done.txt": "done\n" }, "Do the other slice"));
+      await world.output("remove", { folder: done, branchAfter: "kept" });
       await world.attempt("remove", { folder, into: "integration" });
       await world.attempt("merge", { folder, into: ownersBranch });
       assert.deepEqual(await ownersCheckout(world), before);

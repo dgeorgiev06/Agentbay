@@ -6,6 +6,7 @@ import { forgetKept, keepFindings, keptTests } from "./lib/kept-tests.ts";
 import { reviewersPractices, type Practice } from "./lib/practices.ts";
 import { reviewOf } from "./lib/review.ts";
 import { reviewPlan, reviewedState, roundsStateOf, type Reviewed, type RoundsState } from "./lib/rounds.ts";
+import { textsOf } from "./lib/json-values.ts";
 
 type Asked = {
   readonly name: string;
@@ -16,10 +17,6 @@ type Asked = {
 };
 
 const mostCodeFiles = 200;
-
-function textsOf(value: Json | undefined): readonly string[] {
-  return Array.isArray(value) ? value.filter((text) => typeof text === "string") : [];
-}
 
 function askedOf(input: Json): Asked {
   const fields = fieldsOf(input);

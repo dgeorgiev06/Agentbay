@@ -18,7 +18,7 @@ function idsOf(value: Json | undefined): readonly string[] {
 export const run = defineScript((input, context) => {
   const asked = fieldsOf(context.skillInput ?? null);
   const refused = refusedReview(input, {
-    slice: sliceOf(asked.slice),
+    conditions: sliceOf(asked.slice).done.map((item) => item.id),
     tests: handedTestsOf(context.skillInput ?? null),
     failing: namesOf(asked.failing),
     practices: idsOf(asked.practices),

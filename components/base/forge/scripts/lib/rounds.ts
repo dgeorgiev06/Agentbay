@@ -2,6 +2,7 @@ import { fieldsOf, type Json, type JsonFields } from "../../../../../bay/sdk.ts"
 import { builtOf, type Built } from "./cards.ts";
 import type { Failing, FailingCase } from "./failing.ts";
 import { reviewOf, type Condition, type Finding, type Review } from "./review.ts";
+import { listOf, textOf } from "./json-values.ts";
 
 export const lastRound = 3;
 
@@ -41,18 +42,6 @@ export type RoundPlan = {
 export type ReviewPlan = "pass-on" | "stopped" | "failing" | "review";
 
 export type Reviewed = { readonly plan: "stopped" | "failing" } | { readonly plan: "review"; readonly review: Review };
-
-function textOf(value: Json | undefined): string {
-  return typeof value === "string" ? value : "";
-}
-
-function isList(value: Json | undefined): value is readonly Json[] {
-  return Array.isArray(value);
-}
-
-function listOf(value: Json | undefined): readonly Json[] {
-  return isList(value) ? value : [];
-}
 
 function countOf(value: Json | undefined): number {
   return typeof value === "number" ? value : 0;

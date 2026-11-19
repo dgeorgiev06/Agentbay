@@ -1,4 +1,4 @@
-export const quotedLength = 20;
+const quotedLength = 20;
 
 function runsOf(text: string): readonly string[] {
   const characters = Array.from(text);

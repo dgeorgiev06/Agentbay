@@ -75,7 +75,7 @@ What forge does not hold:
 - Proof's answer is kept as text in `.agentbay/kernel.db`, failing cases' messages and all, since forge calls proof from a script and only a skill's output is kept packed. While a later builder works, that file can hold a message that quotes a test. With the agentbay hook on, a builder cannot read it; without the hook nothing stops a read.
 - The card does not say whether skill steps ran with the hook: a script cannot read the run's events.
 - A write outside the declared files is not stopped. Proof's items `scope` and `declared` find it afterwards.
-- The round script's time limit, 1800 seconds, holds proof's run too.
+- The round script has the kernel's limit of 480 seconds, and proof's run is inside it. A slice whose named tests take longer to run on the base and the head fails the run. A longer limit adds a warning to `bay check`, which the kit's tests pin; that is the owner's call.
 - A run that fails between the first test writer and the last review leaves the slice's rows in the partition.
 
 After a run the branches `forge/<slice>`, `forge/<slice>-n` and `forge/<slice>-tests-n` stay, and no worktree of the rounds is on disk.

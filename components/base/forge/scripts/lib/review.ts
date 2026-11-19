@@ -1,7 +1,7 @@
 import { fieldsOf, type Json, type JsonFields } from "../../../../../bay/sdk.ts";
-import type { Slice } from "./cards.ts";
 import type { HandedTest } from "./handed-tests.ts";
 import { quotesAny } from "./quoting.ts";
+import { listOf, textOf } from "./json-values.ts";
 
 export const addressees = ["test-writer", "builder"] as const;
 
@@ -24,7 +24,7 @@ export type Review = {
 };
 
 export type Reviewing = {
-  readonly slice: Slice;
+  readonly conditions: readonly string[];
   readonly tests: readonly HandedTest[];
   readonly failing: readonly string[];
   readonly practices: readonly string[];
@@ -50,18 +50,6 @@ const practiceId = /^[A-Z]{1,4}-\d{1,3}$/;
 const caseCall = /\b(?:test|it|describe)\s*\(\s*(["'`])((?:\\.|(?!\1)[^\\])*)\1/g;
 
 const notQuoting = "say it in your own words; the builder never reads a line of a test.";
-
-function textOf(value: Json | undefined): string {
-  return typeof value === "string" ? value : "";
-}
-
-function isList(value: Json | undefined): value is readonly Json[] {
-  return Array.isArray(value);
-}
-
-function listOf(value: Json | undefined): readonly Json[] {
-  return isList(value) ? value : [];
-}
 
 function strays(fields: JsonFields, allowed: readonly string[]): readonly string[] {
   return Object.keys(fields).filter((field) => !allowed.includes(field));
@@ -184,8 +172,7 @@ function conditionProblems(condition: Numbered, reviewing: Reviewing): readonly 
   return [`The verdict on ${item} does not say whether it is held.`];
 }
 
-function coverageProblems(items: readonly string[], slice: Slice): readonly string[] {
-  const conditions = slice.done.map((done) => done.id);
+function coverageProblems(items: readonly string[], conditions: readonly string[]): readonly string[] {
   const missing = conditions.filter((id) => !items.includes(id));
   const twice = [...new Set(items.filter((id, at) => items.indexOf(id) !== at))];
   const unknown = items.filter((id) => !conditions.includes(id));
@@ -206,7 +193,7 @@ export function refusedReview(review: Json, reviewing: Reviewing): readonly stri
   return [
     ...coverageProblems(
       conditions.map((condition) => textOf(condition.fields.item)),
-      reviewing.slice,
+      reviewing.conditions,
     ),
     ...conditions.flatMap((condition) => conditionProblems(condition, reviewing)),
     ...numbered(fields.findings).flatMap((finding) => findingProblems(finding, reviewing)),

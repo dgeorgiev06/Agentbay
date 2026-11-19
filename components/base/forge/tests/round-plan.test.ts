@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { drawn, sliceOf, type CardLine } from "../scripts/lib/cards.ts";
-import { noFailing } from "../scripts/lib/failing.ts";
+import type { Failing } from "../scripts/lib/failing.ts";
 import type { Finding } from "../scripts/lib/review.ts";
 import { roundsOnCard } from "../scripts/lib/round-card.ts";
 import { reviewedState, reviewPlan, roundPlan, type RoundsState } from "../scripts/lib/rounds.ts";
 
 const commit = "a".repeat(40);
+
+const noFailing: Failing = { items: [], cases: [], withheld: 0, notListed: 0, notLoaded: [] };
 
 const proved: RoundsState = {
   round: 1,

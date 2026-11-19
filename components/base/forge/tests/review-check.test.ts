@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { after, describe, test } from "node:test";
 import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
-import { sliceOf } from "../scripts/lib/cards.ts";
 import { caseNamesOf, isOneSentence, refusedReview, type Reviewing } from "../scripts/lib/review.ts";
 import {
   builderWrites,
@@ -33,16 +32,7 @@ const testText = [
 ].join("\n");
 
 const reviewing: Reviewing = {
-  slice: sliceOf({
-    name: "V1",
-    kind: "mode",
-    scope: ["components/modes/v1/**"],
-    after: [],
-    done: [
-      { id: "DOD-V1-1", says: "A quill is counted.", level: "must", proof: { kind: "fails-first", tests: [testPath] } },
-      { id: "DOD-V1-2", says: "An empty quill is refused.", level: "should" },
-    ],
-  }),
+  conditions: ["DOD-V1-1", "DOD-V1-2"],
   tests: [{ path: testPath, text: testText }],
   failing: ["a quill that was added is counted, round two"],
   practices: ["P-05", "TS-18"],

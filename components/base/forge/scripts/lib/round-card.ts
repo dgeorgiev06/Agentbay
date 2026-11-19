@@ -1,4 +1,4 @@
-import type { RoundsOnCard } from "./cards.ts";
+import { counted, type RoundsOnCard } from "./cards.ts";
 import type { Condition } from "./review.ts";
 import { lastRound, type Remaining, type RoundsState } from "./rounds.ts";
 
@@ -8,10 +8,6 @@ const addresseeSaid: Readonly<Record<Remaining["to"], string>> = {
   builder: "for the builder",
   "test-writer": "for the test writer",
 };
-
-function counted(count: number, noun: string): string {
-  return `${String(count)} ${noun}${count === 1 ? "" : "s"}`;
-}
 
 function conditionSentence(condition: Condition): string {
   return condition.held

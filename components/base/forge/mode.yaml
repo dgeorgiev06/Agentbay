@@ -68,7 +68,6 @@ actions:
     input: schemas/round-request.json
     output: schemas/rounds.json
     effects: [read, write, network, spend, delete]
-    scriptTimeLimitSeconds: 1800
     run:
       - script: scripts/round.ts
   review:

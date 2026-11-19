@@ -9,6 +9,7 @@ import {
 } from "../../../../../bay/sdk.ts";
 import type { HandedTest } from "./handed-tests.ts";
 import { reviewOf, type Finding } from "./review.ts";
+import { textOf } from "./json-values.ts";
 
 type PackedTest = {
   readonly path: string;
@@ -62,10 +63,6 @@ async function executed(partition: DatabasePartition, statement: Statement): Pro
 async function rowsOf(partition: DatabasePartition, statement: Statement): Promise<readonly Row[]> {
   const rows = await partition.query(statement.sql, statement.parameters);
   return rows.ok ? rows.value : fail(`forge could not read the partition ${partitionName}: ${rows.message}`);
-}
-
-function textOf(value: Json | undefined): string {
-  return typeof value === "string" ? value : "";
 }
 
 export async function forgetKept(context: ScriptContext, slice: string): Promise<void> {

@@ -5,6 +5,7 @@ import { failingOf, withoutCases } from "./lib/failing.ts";
 import { handedTestsOf, type HandedTest } from "./lib/handed-tests.ts";
 import { keepTests, keptFindings, keptTests } from "./lib/kept-tests.ts";
 import { roundPlan, roundsStateOf, type RoundPlan, type RoundsState, type Work } from "./lib/rounds.ts";
+import { listOf } from "./lib/json-values.ts";
 
 type Round = {
   readonly number: number;
@@ -52,14 +53,6 @@ function roundOf(input: Json): Round {
     practices: fields.practices ?? [],
     before: roundsStateOf(fields.before),
   };
-}
-
-function isList(value: Json | undefined): value is readonly Json[] {
-  return Array.isArray(value);
-}
-
-function listOf(value: Json | undefined): readonly Json[] {
-  return isList(value) ? value : [];
 }
 
 function withTests(declared: Json, tests: readonly string[]): Json {

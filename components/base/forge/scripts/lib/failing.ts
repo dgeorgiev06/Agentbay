@@ -2,6 +2,7 @@ import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
 import type { Slice } from "./cards.ts";
 import type { HandedTest } from "./handed-tests.ts";
 import { quotesAny } from "./quoting.ts";
+import { listOf, textOf } from "./json-values.ts";
 
 export type FailingCase = {
   readonly name: string;
@@ -31,20 +32,6 @@ type Told = {
 const longestName = 200;
 
 const unsafe = /[\p{Cc}\p{Cf}]/gu;
-
-export const noFailing: Failing = { items: [], cases: [], withheld: 0, notListed: 0, notLoaded: [] };
-
-function textOf(value: Json | undefined): string {
-  return typeof value === "string" ? value : "";
-}
-
-function isList(value: Json | undefined): value is readonly Json[] {
-  return Array.isArray(value);
-}
-
-function listOf(value: Json | undefined): readonly Json[] {
-  return isList(value) ? value : [];
-}
 
 function plain(text: string): string {
   return Array.from(text.replace(unsafe, " ")).slice(0, longestName).join("").trim();

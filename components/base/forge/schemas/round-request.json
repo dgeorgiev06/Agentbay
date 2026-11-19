@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RoundRequest",
+  "description": "What one round of a slice works from: the slice, its interface files, the test files the builder may not change, its worktree, the builder's declaration and the practices.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["slice", "interface", "fixed", "cut", "declared", "practices"],
+  "properties": {
+    "slice": {
+      "$ref": "proof@1/prove-request.json#/$defs/slice"
+    },
+    "interface": {
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "The interface files the slice builds against, relative to the slice's worktree."
+    },
+    "fixed": {
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "The test files the slice's fails-first items name. The builder may not change them, and has none of their text."
+    },
+    "cut": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["folder", "branch", "commit"],
+      "description": "The slice's worktree as worktrees.cut made it.",
+      "properties": {
+        "folder": {
+          "type": "string",
+          "pattern": "^(?!.*\\.\\.)\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*(/\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+          "maxLength": 1000,
+          "description": "The worktree's folder, relative to the project."
+        },
+        "branch": {
+          "type": "string",
+          "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+          "maxLength": 255,
+          "description": "The slice's branch, forge/<slice>."
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+          "description": "The commit the slice was cut from, in full."
+        }
+      }
+    },
+    "declared": {
+      "$ref": "proof@1/prove-request.json#/$defs/declaration"
+    },
+    "practices": {
+      "type": "array",
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "The practices files to read before writing, relative to the project, from forge's settings."
+    }
+  }
+}

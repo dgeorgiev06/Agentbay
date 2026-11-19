@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tests",
+  "description": "The tests the test writer hands in as data, never as files: each a path among the test files the slice's fails-first items name, and the file's whole text.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tests"],
+  "properties": {
+    "tests": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "description": "One entry per test file, each path once.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "text"],
+        "properties": {
+          "path": {
+            "$ref": "proof@1/prove-request.json#/$defs/path",
+            "description": "The test file's path, relative to the project's top."
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 200000,
+            "description": "The test file's whole text, with at least one case."
+          }
+        }
+      }
+    }
+  }
+}

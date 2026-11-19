@@ -1,0 +1,41 @@
+{
+  "input": {
+    "slice": {
+      "name": "TD1",
+      "kind": "mode",
+      "scope": ["components/modes/todo/**"],
+      "after": [],
+      "done": [
+        {
+          "id": "DOD-TD1-1",
+          "says": "A todo that was added is listed.",
+          "level": "must",
+          "proof": {
+            "kind": "fails-first",
+            "tests": ["components/modes/todo/tests/todo.test.ts"]
+          }
+        },
+        {
+          "id": "DOD-TD1-2",
+          "says": "The actions are add and list and nothing else.",
+          "level": "should"
+        }
+      ]
+    },
+    "interface": ["components/modes/todo/schemas/add-request.json", "components/modes/todo/schemas/list-response.json"],
+    "fixed": ["components/modes/todo/tests/todo.test.ts"],
+    "folder": ".forge/worktrees/TD1",
+    "practices": ["framework/practices.md"],
+    "declared": {
+      "files": ["components/modes/todo/mode.yaml", "components/modes/todo/scripts/add.ts"],
+      "names": {
+        "gained": ["todo.add"],
+        "lost": [],
+        "changed": []
+      }
+    }
+  },
+  "output": {
+    "outcome": "built"
+  }
+}

@@ -1,6 +1,6 @@
 name: forge
 version: 1.0.0
-description: Builds a piece of work in slices that run side by side. It reads a plan file and works out its waves, and it carries one slice through a builder in a worktree, proof and the merge card.
+description: Builds a piece of work in slices that run side by side. It reads a plan file and works out its waves, and it carries one slice through a builder in a worktree, proof and the merge card, or through a test writer and a builder who never has the tests.
 
 requires:
   interfaces: [proof@1, worktrees@1]
@@ -8,6 +8,7 @@ requires:
 settings: schemas/settings.json
 
 resources:
+  db: { migrations: migrations }
   files:
     read: [docs/plans/, framework/features.yaml]
     write: [.forge/worktrees/]
@@ -44,6 +45,30 @@ actions:
     run:
       - skill: skills/build
         tier: deep
+  write-tests:
+    description: When a slice's tests are to be written from its conditions and interface, before any builder works, and handed in as data.
+    input: schemas/write-tests-request.json
+    output: schemas/tests.json
+    effects: [read]
+    run:
+      - skill: skills/write-tests
+        tier: balanced
+        checks: [scripts/tests-handed-in.ts]
+  build-without-tests:
+    description: When a declared slice whose tests another wrote is to be written in its worktree by a builder who never has the tests.
+    input: schemas/build-without-tests-request.json
+    output: schemas/built.json
+    effects: [read, write]
+    run:
+      - skill: skills/build-without-tests
+        tier: balanced
+  round:
+    description: When one round of a slice is to run, test writer first and builder after, ending with one commit that holds the builder's work and the tests.
+    input: schemas/round-request.json
+    output: schemas/round-response.json
+    effects: [read, write, delete]
+    run:
+      - script: scripts/round.ts
   draw:
     description: When proof has judged a slice and the owner needs the merge card, with the rule and reason for each choice.
     input: schemas/draw-request.json
@@ -61,3 +86,4 @@ actions:
 
 workflows:
   - workflows/one-slice.yaml
+  - workflows/one-round.yaml

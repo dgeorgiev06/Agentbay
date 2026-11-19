@@ -1,0 +1,37 @@
+{
+  "input": {
+    "slice": {
+      "name": "TD1",
+      "kind": "mode",
+      "scope": ["components/modes/todo/**"],
+      "after": [],
+      "done": [
+        {
+          "id": "DOD-TD1-1",
+          "says": "A todo that was added is listed.",
+          "level": "must",
+          "proof": {
+            "kind": "fails-first",
+            "tests": ["components/modes/todo/tests/todo.test.ts"]
+          }
+        },
+        {
+          "id": "DOD-TD1-2",
+          "says": "The actions are add and list and nothing else.",
+          "level": "should"
+        }
+      ]
+    },
+    "interface": ["components/modes/todo/schemas/add-request.json", "components/modes/todo/schemas/list-response.json"],
+    "folder": ".forge/worktrees/TD1",
+    "practices": ["framework/practices.md"]
+  },
+  "output": {
+    "tests": [
+      {
+        "path": "components/modes/todo/tests/todo.test.ts",
+        "text": "import assert from \"node:assert/strict\";\nimport { test } from \"node:test\";\n\ntest(\"a todo that was added is listed\", async () => {\n  assert.ok(true, \"the todo is listed\");\n});\n"
+      }
+    ]
+  }
+}

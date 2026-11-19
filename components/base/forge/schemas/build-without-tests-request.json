@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BuildWithoutTestsRequest",
+  "description": "What a builder reads to build a slice whose tests another wrote: the slice's conditions, the interface files' paths, the test files' paths it may not change, its worktree, the practices and what it declared. It holds no line of the tests.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["slice", "interface", "fixed", "folder", "practices", "declared"],
+  "properties": {
+    "slice": {
+      "$ref": "proof@1/prove-request.json#/$defs/slice"
+    },
+    "interface": {
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "The interface files the slice builds against, relative to the slice's worktree."
+    },
+    "fixed": {
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "The test files the slice's fails-first items name. The builder may not change them, and has none of their text."
+    },
+    "folder": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*(/\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+      "maxLength": 1000,
+      "description": "The slice's worktree, relative to the project, as worktrees.cut made it, such as .forge/worktrees/TR2."
+    },
+    "practices": {
+      "type": "array",
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "The practices files to read before writing, relative to the project, from forge's settings."
+    },
+    "declared": {
+      "$ref": "proof@1/prove-request.json#/$defs/declaration"
+    }
+  }
+}

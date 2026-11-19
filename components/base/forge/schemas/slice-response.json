@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "SliceResponse",
-  "description": "The slice, base and bugs handed on to the later steps, and the start card the owner reads before anything is cut.",
+  "description": "The slice, base, bugs and interface handed on to the later steps, the files the builder may not change, and the start card the owner reads before anything is cut.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["slice", "base", "bugs", "card"],
+  "required": ["slice", "base", "bugs", "interface", "fixed", "card"],
   "properties": {
     "slice": {
       "$ref": "proof@1/prove-request.json#/$defs/slice"
@@ -18,6 +18,24 @@
       "items": {
         "$ref": "proof@1/prove-request.json#/$defs/bug"
       }
+    },
+    "interface": {
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "The interface files the slice builds against, relative to the project, such as schema files and interface .yaml files fixed before the build. Empty when the slice names none."
+    },
+    "fixed": {
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "The files the builder may not change: every test file the slice's fails-first items name. Empty when the builder writes its own tests."
     },
     "card": {
       "type": "object",

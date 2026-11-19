@@ -1,128 +1,5 @@
-title: 'Forge, whole: one slice under ADR 24 first, the todo mode rebuilt through it, then requirements, design, planning and waves'
+title: 'Forge, whole: one slice under ADR 24 first, the todo mode rebuilt through it, then requirements, design, planning and waves (slices NT1, WC1, TF1, TI1, KC1, PF1, WM1 and FA1 are merged and left out)'
 slices:
-- title: The test toolbox hands out a new token for a waiting skill step, so a test of two skill steps in one script needs no command line
-  slice:
-    name: NT1
-    kind: capability
-    scope:
-    - tests/test-toolbox.ts
-    - tests/test-toolbox.test.ts
-    - tests/test-toolbox-tokens.test.ts
-    - tests/runs-script-calls-skill.test.ts
-    after: []
-    done:
-    - id: DOD-NT1-1
-      says: A test takes a new token through the toolbox for a second skill step and answers it; the old token is refused with the kernel's sentence.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - tests/test-toolbox-tokens.test.ts
-    - id: DOD-NT1-2
-      says: The kit's checks and its whole test run pass.
-      level: must
-      proof: &id001
-        kind: checks
-- title: 'worktrees.commit: a slice''s changed and untracked files are committed to its own branch, and the files stay in the worktree'
-  slice:
-    name: WC1
-    kind: mode
-    scope:
-    - components/base/interfaces/worktrees.yaml
-    - components/base/interfaces/worktrees/**
-    - components/base/git-worktrees/**
-    - tests/made-up-worktrees*
-    after: []
-    done:
-    - id: DOD-WC1-1
-      says: The shared test of worktrees@1 shows a worktree with a changed and an untracked file clean after commit, its branch one commit ahead, and the files still in the folder.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/base/git-worktrees/tests/commit.test.ts
-    - id: DOD-WC1-2
-      says: The mode's list of commands does not change; commit uses stage-everything and commit-staged.
-      level: must
-      proof:
-        kind: same-output
-    - id: DOD-WC1-3
-      says: The kit's checks and its whole test run pass.
-      level: must
-      proof:
-        kind: checks
-- title: A toolchain's failed test run names each failing case and gives its message, and no other line of the test
-  slice:
-    name: TF1
-    kind: mode
-    scope:
-    - components/base/interfaces/toolchain.yaml
-    - components/base/interfaces/toolchain/**
-    - components/base/typescript/**
-    - tests/made-up-toolchains*
-    after: []
-    done:
-    - id: DOD-TF1-1
-      says: A failed run's answer holds failures, each a case's name and the first line of its error, cut at 200 characters, with no stack, location, expected or actual value.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/base/typescript/tests/failures.test.ts
-    - id: DOD-TF1-2
-      says: The kit's checks and its whole test run pass.
-      level: must
-      proof:
-        kind: checks
-- title: A tier names a model and an effort in the project's settings, and the adapter writes both into each step agent
-  slice:
-    name: TI1
-    kind: capability
-    scope:
-    - schemas/config.schema.json
-    - bay/generated/config.ts
-    - adapters/claude-code/**
-    - agentbay.config.yaml
-    - tests/tiers-in-settings.test.ts
-    after: []
-    done:
-    - id: DOD-TI1-1
-      says: With tiers set in agentbay.config.yaml, bay build writes each step agent with the model and effort of its skill's tier; with none set, the agents are as today.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - tests/tiers-in-settings.test.ts
-    - id: DOD-TI1-2
-      says: The kit's config sets balanced to Sonnet at medium effort and deep to Opus at medium effort.
-      level: must
-- title: 'The clearer card: the answer first, each check with its mark and its reason, where computed lines came from said once, a judged or ran line still marked on its own (ADR 26 item 7)'
-  slice:
-    name: KC1
-    kind: capability
-    scope:
-    - bay/runs/card.ts
-    - bay/approval-card.ts
-    - bay/trust-card.ts
-    - tests/approval-card.test.ts
-    - tests/runs-card.test.ts
-    - docs/designs/proof/C1r-what-an-approval-shows.md
-    after: []
-    done:
-    - id: DOD-KC1-1
-      says: A card with only computed lines prints the source once; a card with one judged line prints that line's own mark and skill; every row is at most 44 columns; the kernel still refuses a line whose source names a step of another kind.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - tests/runs-card.test.ts
-    - id: DOD-KC1-2
-      says: Each sentence on the card reads well on a phone.
-      level: should
-    - id: DOD-KC1-3
-      says: The kit's checks and its whole test run pass.
-      level: must
-      proof: *id001
 - title: Forge may be active in a project that is not the kit, and activating it brings proof and git-worktrees bound, with nothing more to set up
   slice:
     name: OK1
@@ -145,31 +22,6 @@ slices:
       level: must
       proof:
         kind: checks
-- title: Proof's verdict on a test that fails first carries the failing cases on the head, as the toolchain names them
-  slice:
-    name: PF1
-    kind: mode
-    scope:
-    - components/base/interfaces/proof.yaml
-    - components/base/interfaces/proof/**
-    - components/base/proof/**
-    - tests/made-up-proofs*
-    after:
-    - slice: TF1
-      because: It carries on the failures the toolchain's answer gains in TF1.
-    done:
-    - id: DOD-PF1-1
-      says: A failed fails-first item whose head run failed holds cases, each a name and a message as the toolchain gave them; no other verdict holds them.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/base/proof/tests/cases.test.ts
-    - id: DOD-PF1-2
-      says: The kit's checks and its whole test run pass.
-      level: must
-      proof:
-        kind: checks
 - title: A project's setting says forge runs with the hook or without; with it, the kernel refuses a skill step's output the hook never saw; without it, the output is taken and the run's record says so
   slice:
     name: HK1
@@ -181,9 +33,7 @@ slices:
     - bay/runs/hook-seen.ts
     - adapters/claude-code/hook/**
     - tests/hook-seen.test.ts
-    after:
-    - slice: TI1
-      because: Both change the config's schema and its generated types, so one after the other.
+    after: []
     done:
     - id: DOD-HK1-1
       says: With the hook required, an output handed in for a step whose agent the hook never saw is refused with a sentence that says so and how to run with the hook; with the setting at without, it is taken and the run records that no hook saw it.
@@ -198,78 +48,63 @@ slices:
     - id: DOD-HK1-3
       says: The kit's checks and its whole test run pass.
       level: must
-      proof: *id001
-- title: A merge is made in a worktree of its own, and the checked-out branch is fast-forwarded only when it is clean and nothing else moved it; otherwise it stops and says why
+      proof: &id001
+        kind: checks
+- title: 'An action may say its skill''s output is kept packed: the kernel''s own database then holds no line of it as text, and it is unpacked only for the script that called the skill'
   slice:
-    name: WM1
+    name: KP1
+    kind: capability
+    scope:
+    - schemas/mode.schema.json
+    - bay/generated/mode.ts
+    - bay/runs/sqlite-run-store.ts
+    - bay/runs/packed-output.ts
+    - bay/runs/action-steps.ts
+    - tests/runs-packed-output.test.ts
+    after:
+    - slice: HK1
+      because: Both change the runs feature, so one after the other.
+    done:
+    - id: DOD-KP1-1
+      says: With the action marked, a search of every file under .agentbay for a line of the skill's output finds nothing while the run waits and after it ends; the calling script still receives the output whole, also across a kernel restart; an action not marked is stored as today.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - tests/runs-packed-output.test.ts
+    - id: DOD-KP1-2
+      says: bay runs shows that the output is kept packed and never prints it; events and the card hold no line of it.
+      level: must
+    - id: DOD-KP1-3
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof:
+        kind: checks
+- title: A worktree can be removed while its branch is kept, whether or not the branch is merged, so that no file of a slice's tests stays on disk after they are committed
+  slice:
+    name: WX1
     kind: mode
     scope:
     - components/base/interfaces/worktrees.yaml
     - components/base/interfaces/worktrees/**
     - components/base/git-worktrees/**
     - tests/made-up-worktrees*
-    after:
-    - slice: WC1
-      because: Both change the worktrees interface and its mode, so one after the other.
+    - components/base/interfaces/proof/tests/shared.ts
+    - tests/shared-tests-in-a-project.test.ts
+    after: []
     done:
-    - id: DOD-WM1-1
-      says: Merging into a checked-out, clean branch moves it forward and its files change; with an uncommitted change, or a branch that moved meanwhile, nothing changes and the sentence says which.
+    - id: DOD-WX1-1
+      says: Removing a worktree whose branch is not merged, with the caller saying the branch is kept, removes the folder and leaves the branch at its commit; with uncommitted work in it, it is refused as today.
       level: must
       proof:
         kind: fails-first
         tests:
-        - components/base/git-worktrees/tests/merge-checked-out.test.ts
-    - id: DOD-WM1-2
-      says: The kit's checks and its whole test run pass.
-      level: must
-      proof: *id001
-- title: 'Forge carries one slice under ADR 24, one round: a test writer hands its tests in as data, forge keeps them packed in its own partition, a builder that never has them as files builds, and they become files only in proof''s copies'
-  slice:
-    name: FA1
-    kind: mode
-    scope:
-    - components/base/forge/**
-    - framework/practices.md
-    - CONTEXT.md
-    after:
-    - slice: WC1
-      because: It commits the builder's work with worktrees.commit to join it with the tests.
-    - slice: NT1
-      because: Its tests answer more than one skill step in one script through the toolbox.
-    done:
-    - id: DOD-FA1-1
-      says: A made-up slice runs from the start card to the merge card through the test toolbox, with the test writer, the builder and the reviewer answered by the test.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/base/forge/tests/one-round.test.ts
-    - id: DOD-FA1-2
-      says: While the builder's task waits, no file under .forge/worktrees/ holds the slice's tests, and the builder's task holds none of their text.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/base/forge/tests/tests-off-disk.test.ts
-    - id: DOD-FA1-3
-      says: The merge card gives the reason of each failed item, and a judged line for each finding, citing the review step.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/base/forge/tests/cards.test.ts
-    - id: DOD-FA1-4
+        - components/base/git-worktrees/tests/remove-keeping-branch.test.ts
+    - id: DOD-WX1-2
       says: The kit's checks and its whole test run pass.
       level: must
       proof:
         kind: checks
-    - id: DOD-FA1-5
-      says: While the builder's step is open, no file under the project holds a line of the slice's tests; a test reads every file the builder could and finds none (ADR 27 item 2).
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/base/forge/tests/tests-kept-packed.test.ts
 - title: 'Forge rounds two and three: a failing case reaches the builder as its name, and its message only when it shares no long run of text with the tests; findings go to the test writer or the builder, the test writer never reads the builder''s code; then the owner'
   slice:
     name: FA2
@@ -277,10 +112,10 @@ slices:
     scope:
     - components/base/forge/**
     after:
-    - slice: FA1
-      because: It adds rounds to the workflow FA1 makes, in the same folder.
-    - slice: PF1
-      because: The builder's feedback is the failing cases proof carries after PF1.
+    - slice: KP1
+      because: The test writer's output must not lie as text in the kernel's database while a builder works (FA1 pinned the gap).
+    - slice: WX1
+      because: The worktree that held the tests must be gone before a builder runs in round two.
     done:
     - id: DOD-FA2-1
       says: A slice whose tests fail in round 1 goes back to the builder with each failing case's name and message and nothing else of the test, and a slice still failing after round 3 reaches the merge card.
@@ -350,8 +185,6 @@ slices:
     scope:
     - components/base/forge/**
     after:
-    - slice: KC1
-      because: It prints through the kernel's new card form.
     - slice: LK1
       because: Both change forge's cards, so one after the other.
     - slice: HK1
@@ -378,10 +211,6 @@ slices:
     after:
     - slice: FA2
       because: It is the test of forge with rounds.
-    - slice: TI1
-      because: The implementers must run Sonnet at medium effort and the reviewer Opus at medium effort.
-    - slice: WM1
-      because: Its merge lands on the checked-out branch.
     done:
     - id: DOD-TDX-1
       says: TD1 and TD2 are each merged from their merge card, every must item passed, with no file of the todo mode written by hand.
@@ -405,10 +234,8 @@ slices:
     - tests/made-up-toolchains*
     - tests/made-up-proofs*
     after:
-    - slice: PF1
-      because: It changes the proof and toolchain folders that TF1 and PF1 change.
-    - slice: WM1
-      because: Neither shares a file with it, but RT1 is not needed before the todo mode's rebuild; it waits so builders are free for what is.
+    - slice: WX1
+      because: Both may change the recorder in proof's shared test, so one after the other.
     done:
     - id: DOD-RT1-1
       says: In a project that is not the kit, a real-thing item whose run names a command its toolchain lists passes when the command prints the expected text.

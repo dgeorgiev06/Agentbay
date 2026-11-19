@@ -48,3 +48,14 @@ A real run of forge is a live Claude Code session. With the hook it is the only 
 - **When an interface gains an action, every mode that implements it must follow,** also the made-up ones written inside other tests (proof's shared test has a recorder that implements worktrees@1), and `tests/shared-tests-in-a-project.test.ts` pins how many shared cases pass. A builder of such a slice runs those files.
 - TF1: the dedupe of files that did not load is held by no test (the reviewer's bug survived); the response schema's `uniqueItems` would refuse a duplicate. Fold a case into PF1.
 - KC1: the coordinator's text still says "a choice the card shows as not offered"; the card now says "Not available". The sentence is in the adapter's text, read by the owner, and pinned by tests: FC2 changes it with forge's cards.
+
+## After wave 1 and FA1 (19 November)
+
+Merged: NT1, WC1, TF1, TI1, KC1, PF1, WM1, FA1. The plan file now holds the 16 slices that remain; `forge.waves` accepts it.
+
+FA1 built the round and pinned two gaps it could not close inside forge, each now a slice before FA2:
+
+- **KP1 (kernel):** the kernel saves every step's output as text in its own database, so the test writer's tests lie there while a builder works. With the hook a builder cannot read that file; without it nothing stops a read. An action may say its skill's output is kept packed.
+- **WX1 (worktrees):** the worktree in which the tests are committed cannot be removed until its branch is merged, so the tests stay as files after the run. A worktree can be removed while its branch is kept.
+
+Until both merge, no card may say the tests were kept from the builder in a run without the hook.

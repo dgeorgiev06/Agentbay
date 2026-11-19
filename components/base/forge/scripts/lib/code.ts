@@ -16,14 +16,14 @@ export async function readIn(context: ScriptContext, folder: string, path: strin
   return read.ok ? { path, text: read.value } : fail(`forge could not read ${path} in ${folder}: ${read.message}`);
 }
 
-function changedPaths(answer: JsonFields): readonly string[] {
-  const paths = Array.isArray(answer.paths) ? answer.paths : [];
+export function codePaths(changed: JsonFields, fixed: readonly string[]): readonly string[] {
+  const paths = Array.isArray(changed.paths) ? changed.paths : [];
   const kept = paths.map((entry: Json) => fieldsOf(entry)).filter((entry) => entry.how !== "deleted");
-  return kept.map((entry) => (typeof entry.path === "string" ? entry.path : ""));
+  const named = kept.map((entry) => (typeof entry.path === "string" ? entry.path : ""));
+  return named.filter((path) => !fixed.includes(path)).slice(0, mostCodeFiles);
 }
 
 export async function codeAt(context: ScriptContext, at: CodeAt): Promise<readonly HandedTest[]> {
-  const changed = changedPaths(await answerOf(context, "worktrees.changed", { from: at.base, to: at.commit }));
-  const code = changed.filter((path) => !at.fixed.includes(path)).slice(0, mostCodeFiles);
-  return Promise.all(code.map((path) => readIn(context, at.folder, path)));
+  const changed = await answerOf(context, "worktrees.changed", { from: at.base, to: at.commit });
+  return Promise.all(codePaths(changed, at.fixed).map((path) => readIn(context, at.folder, path)));
 }

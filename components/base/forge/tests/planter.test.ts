@@ -333,5 +333,30 @@ describe(
       assert.deepEqual(worktrees(root), []);
       assert.ok(!branches(root).includes("forge/P3-planter"));
     });
+
+    test("a builder that writes a fixed test file against its rules: neither the reviewer's code nor the planter's holds it", async () => {
+      const root = await project(template);
+      const name = "P4";
+      const runId = await startedAndDeclared(root, { name, owner: [] });
+      await provedIn(root, name, provedWith(name, notKnown));
+      const codeGiven: Json[] = [];
+      await playedTo(root, runId, {
+        tests: () => Promise.resolve({ tests: [testsOf(name)] }),
+        builder: async (given) => {
+          await builderWrites(root, textAt(inputOf(given), "folder"), [codeOf(name), testPath(name)]);
+          return { outcome: "built" };
+        },
+        reviewer: (given) => {
+          codeGiven.push(fieldsOf(inputOf(given)).code ?? null);
+          return Promise.resolve(allHeld(given));
+        },
+        planter: (given) => {
+          codeGiven.push(fieldsOf(inputOf(given)).code ?? null);
+          return Promise.resolve({ bugs: [bugOf(name, survivorName, "Nothing is written.")] });
+        },
+      });
+      const builderCode = [{ path: codeOf(name), text: `${builderLine(name)}\n` }];
+      assert.deepEqual(codeGiven, [builderCode, builderCode]);
+    });
   },
 );

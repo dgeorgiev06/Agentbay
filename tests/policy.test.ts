@@ -401,6 +401,40 @@ test("forge gets no forge rights when the project is not the kit", () => {
   }
 });
 
+test("outside the kit, the kit's forge may read the project's framework folder, and nothing more than any mode", () => {
+  const forgeIn = (files: DeclaredFiles, folder = "/kit/components/base/forge", home: Home = "kit"): Modes => [
+    { folder, manifest: modeNamed("forge", { files }), home },
+    { folder: "/project/components/modes/journal", manifest: journal, home: "project" },
+  ];
+  const read = ["docs/plans/", "framework/features.yaml"];
+  assert.deepEqual(grantsFor(forgeIn({ read, write: [".forge/worktrees/"] }), "forge", separate).readPaths, [
+    "/kit/components/base/forge",
+    "/project/docs/plans",
+    "/project/framework/features.yaml",
+    "/project/.forge/worktrees",
+  ]);
+  const writes = problemsFor(forgeIn({ write: ["framework/features.yaml"] }), "forge", separate);
+  assert.deepEqual(
+    writes.map((problem) => problem.message),
+    [
+      "The path framework/features.yaml points into the framework folder framework/, which only the base mode forge may name.",
+    ],
+  );
+  const reads = problemsFor(forgeIn({ read: ["components/modes/journal", ".agentbay/data"] }), "forge", separate);
+  assert.deepEqual(
+    reads.map((problem) => problem.message),
+    [
+      "The path components/modes/journal points into the folder of the mode journal, which only the base mode forge may name.",
+      "The path .agentbay/data points into the kernel's state folder .agentbay/, which no mode may name.",
+    ],
+  );
+  const kitInside = layoutOf({ kit: "/project/vendor/agentbay", project: "/project" });
+  const vendored = forgeIn({ read: ["vendor/agentbay/framework"] }, "/project/vendor/agentbay/components/base/forge");
+  assert.equal(problemsFor(vendored, "forge", kitInside).length, 1);
+  const projectForge = forgeIn({ read: ["framework/features.yaml"] }, "/project/components/modes/forge", "project");
+  assert.equal(problemsFor(projectForge, "forge", separate).length, 1);
+});
+
 function trustedRulingFor(entry: ModeEntry): ReturnType<typeof grantsOf> {
   const list = listOf(entry.manifest);
   const given = { list, hash: listHashOf(list), scripts: {}, at: "2026-11-17T14:02:00.000Z", by: "a test" };

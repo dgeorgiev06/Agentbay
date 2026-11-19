@@ -41,6 +41,10 @@ const assertion =
 
 const second = 'assert.equal(quill("east").quills + quill("west").quills, 2, "east and west count one each");';
 
+const baseLine = 'export const northAndSouth = quill("north and south", { strict: true, ink: "dry" });';
+
+const interfaceLine = '"description": "How many quills were counted, and how many spilled on the way out",';
+
 let template: string;
 
 before(async () => {
@@ -63,6 +67,10 @@ function codeOf(name: string): string {
   return `${folderOf(name)}/scripts/quill.ts`;
 }
 
+function schemaOf(name: string): string {
+  return `${folderOf(name)}/schemas/count.json`;
+}
+
 function otherOf(name: string): string {
   return `${folderOf(name)}/scripts/ink.ts`;
 }
@@ -76,6 +84,10 @@ function testsOf(name: string): Handed {
       'import { quill } from "../scripts/quill.ts";',
       `const codeFile = "${codeOf(name)}";`,
       `const says = "${condition}";`,
+      baseLine,
+      "const schema = {",
+      `  ${interfaceLine}`,
+      "};",
       'test("a quill is counted once", () => {',
       `  ${assertion}`,
       `  ${second}`,
@@ -148,13 +160,21 @@ type Ran = {
   readonly mark: string;
 };
 
-async function ranWith(root: string, name: string, code: (mark: string) => readonly Handed[]): Promise<Ran> {
+type Building = {
+  readonly name: string;
+  readonly code: (mark: string) => readonly Handed[];
+  readonly interface?: readonly string[];
+};
+
+async function ranWith(root: string, building: Building): Promise<Ran> {
+  const { name, code } = building;
   const tests = testsOf(name);
   const files = code("").map((file) => file.path);
   const start = await started(root, {
     planned: { title: name, slice: sliceOf(name) },
     base: shortHead(root),
     bugs: [],
+    interface: [...(building.interface ?? [])],
   });
   await declared(root, start, files);
   await provedIn(root, name, allPassed(name, files));
@@ -204,10 +224,13 @@ describe(
     test("a build that copies lines of a test ends the rounds; the card names each file and no line of the test, and merge is withheld", async () => {
       const root = await project(template);
       const name = "L1";
-      const ran = await ranWith(root, name, () => [
-        { path: codeOf(name), text: ["export const ink = 1;", `    ${assertion}`, second, ""].join("\n") },
-        { path: otherOf(name), text: ["export function spill() {", `  ${second}`, "}", ""].join("\n") },
-      ]);
+      const ran = await ranWith(root, {
+        name,
+        code: () => [
+          { path: codeOf(name), text: ["export const ink = 1;", `    ${assertion}`, second, ""].join("\n") },
+          { path: otherOf(name), text: ["export function spill() {", `  ${second}`, "}", ""].join("\n") },
+        ],
+      });
       assert.deepEqual(
         ran.asked.map((each) => each.action),
         ["write-tests", "build-without-tests"],
@@ -244,9 +267,12 @@ describe(
     test("a build that holds the mark planted in the kept tests ends the rounds, and the mark is nowhere but in its own branch", async () => {
       const root = await project(template);
       const name = "L2";
-      const ran = await ranWith(root, name, (mark) => [
-        { path: codeOf(name), text: ["export const ink = 1;", `export const seen = "${mark}";`, ""].join("\n") },
-      ]);
+      const ran = await ranWith(root, {
+        name,
+        code: (mark) => [
+          { path: codeOf(name), text: ["export const ink = 1;", `export const seen = "${mark}";`, ""].join("\n") },
+        ],
+      });
       assert.match(ran.mark, /^[0-9a-f]{32}$/);
       assert.deepEqual(
         ran.asked.map((each) => each.action),
@@ -271,21 +297,33 @@ describe(
     test("a build that shares only imports, a path, a name and a condition's sentence goes on to review, the planter and a merge on offer, and no later task holds the mark", async () => {
       const root = await project(template);
       const name = "L3";
-      const ran = await ranWith(root, name, () => [
-        {
-          path: codeOf(name),
-          text: [
-            "export const ink = 1;",
-            sdkImport,
-            `const codeFile = "${codeOf(name)}";`,
-            `const says = "${condition}";`,
-            "export function quill(text: string): { readonly quills: number } {",
-            "  return { quills: text.split(' and ').length };",
-            "}",
-            "",
-          ].join("\n"),
-        },
+      await written(root, "", [
+        { path: codeOf(name), text: ["export const ink = 1;", baseLine, ""].join("\n") },
+        { path: schemaOf(name), text: ["{", `  ${interfaceLine}`, '  "type": "object"', "}", ""].join("\n") },
       ]);
+      git(root, ["add", folderOf(name)]);
+      git(root, ["commit", "-q", "-m", "The quill and its schema before the slice"]);
+      const ran = await ranWith(root, {
+        name,
+        interface: [schemaOf(name)],
+        code: () => [
+          {
+            path: codeOf(name),
+            text: [
+              "export const ink = 1;",
+              sdkImport,
+              `const codeFile = "${codeOf(name)}";`,
+              `const says = "${condition}";`,
+              baseLine,
+              interfaceLine,
+              "export function quill(text: string): { readonly quills: number } {",
+              "  return { quills: text.split(' and ').length };",
+              "}",
+              "",
+            ].join("\n"),
+          },
+        ],
+      });
       assert.deepEqual(
         ran.asked.map((each) => each.action),
         ["write-tests", "build-without-tests", "review", "plant"],

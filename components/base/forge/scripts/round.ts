@@ -209,7 +209,7 @@ async function ranRound(context: ScriptContext, round: Round, plan: RoundPlan): 
   return {
     round: round.number,
     stage: "proved",
-    done: head.leaks.length > 0,
+    done: false,
     base: round.cut.commit,
     ...building,
     head: head.commit,

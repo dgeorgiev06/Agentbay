@@ -207,6 +207,20 @@ test("bay build refuses a model the adapter does not know, names the models it k
   }
 });
 
+test("bay check and bay build refuse a model's name that is not a plain name, before any adapter sees it", async () => {
+  const project = await projectWithEveryTier({ deep: { model: "opus; touch owned", effort: "medium" } });
+  try {
+    for (const words of [["check"], ["build"]]) {
+      const refused = ran(project, words);
+      assert.equal(refused.status, 1, words.join(" "));
+      assert.match(refused.output, /tiers\.deep\.model is not in the expected form\./, words.join(" "));
+    }
+    await assert.rejects(project.read(agentFiles.deep));
+  } finally {
+    await project.remove();
+  }
+});
+
 test("bay check and bay build refuse a tier the kit does not have", async () => {
   const project = await projectWithEveryTier({ huge: { model: "opus", effort: "medium" } });
   try {

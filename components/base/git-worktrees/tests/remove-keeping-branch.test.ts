@@ -80,6 +80,20 @@ test("with the branch kept, a worktree with a changed or an untracked file is re
   });
 });
 
+test("with the branch kept, a worktree git lists but the mode did not make is refused, and stays with its branch", async () => {
+  await withSlice(async (project) => {
+    const byHand = ".forge/worktrees/by-hand";
+    git(project, ".", ["worktree", "add", "--quiet", "-b", "forge/by-hand", byHand, "main"]);
+    const before = refsAndWorktrees(project);
+    assert.equal(
+      await project.failure("git-worktrees.remove", { folder: byHand, branchAfter: "kept" }),
+      `The folder ${byHand} was not made by this mode, so the mode does not remove it.`,
+    );
+    assert.equal(refsAndWorktrees(project), before);
+    assert.equal(await exists(join(project.root, byHand, "README.md")), true);
+  });
+});
+
 test("with the branch kept, into is not given", async () => {
   await withSlice(async (project) => {
     const before = refsAndWorktrees(project);

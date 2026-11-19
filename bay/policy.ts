@@ -83,9 +83,13 @@ function manifestFile(request: GrantRequest): string {
   return join(request.folder, "mode.yaml");
 }
 
+function isBaseForge(request: GrantRequest): boolean {
+  const { manifest, home, folder, layout } = request;
+  return manifest.name === "forge" && home === "kit" && folder === pathIn(layout, "kit", forgeFolder);
+}
+
 function isForge(request: GrantRequest): boolean {
-  const { manifest, folder, layout } = request;
-  return manifest.name === "forge" && isProjectTheKit(layout) && folder === pathIn(layout, "kit", forgeFolder);
+  return isBaseForge(request) && isProjectTheKit(request.layout);
 }
 
 function ownCodeAreas(own: GrantRequest): readonly ProtectedArea[] {
@@ -110,9 +114,16 @@ function stateAreas(layout: Layout): readonly ProtectedArea[] {
   return [...folders, configFile];
 }
 
-function kernelAreas(layout: Layout): readonly ProtectedArea[] {
-  const homes: readonly Home[] = isProjectTheKit(layout) ? ["kit"] : ["kit", "project"];
-  return homes.flatMap((home) =>
+function kernelHomes(own: GrantRequest, direction: Direction): readonly Home[] {
+  if (isProjectTheKit(own.layout) || (direction === "read" && isBaseForge(own))) {
+    return ["kit"];
+  }
+  return ["kit", "project"];
+}
+
+function kernelAreas(own: GrantRequest, direction: Direction): readonly ProtectedArea[] {
+  const { layout } = own;
+  return kernelHomes(own, direction).flatMap((home) =>
     kernelFolders.map((folder) => ({
       path: pathIn(layout, home, folder.path),
       name: home === "kit" && !isProjectTheKit(layout) ? `${folder.name} of the kit` : folder.name,
@@ -139,7 +150,7 @@ function protectedAreas(own: GrantRequest, direction: Direction): readonly Prote
     rule: onlyForge,
   }));
   const code = direction === "read" ? [] : ownCodeAreas(own);
-  return [...stateAreas(layout), ...kernelAreas(layout), ...kitArea(layout), ...otherModes, ...code];
+  return [...stateAreas(layout), ...kernelAreas(own, direction), ...kitArea(layout), ...otherModes, ...code];
 }
 
 type DeclaredResources = {

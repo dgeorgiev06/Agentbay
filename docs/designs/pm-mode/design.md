@@ -35,7 +35,7 @@ The design of the PM mode that ADR 25 gives the requirements to. It proposes; th
 ### Who uses it
 
 - **The owner alone.** He says what he wants. The mode asks, he answers, he signs off.
-- **With a team.** Others' words come in through `pm.start` with `by` set to their role, such as `design lead`. Each becomes an entry under `asked`. The file is reviewed like any file in the repository. Answers and the sign-off stay the owner's, since an approval is his (ADR 15, `CLAUDE.md`).
+- **With a team.** Others' words come in through `pm.start` with `by` set to their role, such as `design lead`. Each becomes an entry under `asked`. The file is reviewed like any file in the repository. Answers and the sign-off stay the owner's, since an approval is his (`CLAUDE.md`, the agentbay block).
 - **A team that builds another way.** The file is plain YAML. Nothing in it names forge.
 
 ## 2. The requirements file
@@ -576,7 +576,7 @@ The owner answers a few selectable choices, not a long interview (`framework/pra
 - **At most five a version.** The setting `questions`, default 5. Past it, the draft puts the rest in `open`. They show on the sign-off card.
 - **`c` withheld when there are two answers.** The reason reads "This question has two answers." One line.
 
-The workflow form has no loop and no conditional step, and an approval always waits. So the loop is the coordinator's: `record`'s output says `open: 2; run pm ask again`, or `open: 0; run pm sign-off`. The coordinator follows the output, as it follows a run's `task` today. The `CLAUDE.md` block names no such rule yet; slice PM2 adds one line to it through the kit's build (section 8).
+The workflow form has no loop and no conditional step, and an approval always waits. So the loop is the coordinator's: `record`'s output says `open: 2; run pm ask again`, or `open: 0; run pm sign-off`. The coordinator follows the output, as it follows a run's `task` today. The `CLAUDE.md` block names no such rule yet. One line for it belongs in the kit's build that writes the block, outside PM2's scope, and is the owner's to approve (section 8).
 
 His own words, when none of the answers fits, go in through `pm.start` with the same job: they become one more `asked` entry, and the next draft takes them. A kernel change that hands an approval's quoted words to the next step would let `ask` take them directly. It is not needed for the first version (question 3).
 

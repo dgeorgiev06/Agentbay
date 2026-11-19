@@ -62,6 +62,10 @@ async function projectWithEveryTier(tiers?: unknown): Promise<Project> {
   for (const skill of ["quick", "careful"]) {
     await project.write(`${writerFolder}/skills/${skill}/SKILL.md`, skillText.replace("name: draft", `name: ${skill}`));
   }
+  const example = await project.read(`${writerFolder}/tests/compose.example.json`);
+  for (const action of ["compose-quickly", "compose-carefully"]) {
+    await project.write(`${writerFolder}/tests/${action}.example.json`, example);
+  }
   if (tiers !== undefined) {
     await setTiers(project, tiers);
   }
@@ -121,4 +125,121 @@ test("with no tiers set, bay build writes every step agent and the step policy a
   } finally {
     await project.remove();
   }
+});
+
+test("with tiers set, bay build writes into each step agent the model and the effort of its skill's tier", async () => {
+  const project = await projectWithEveryTier({
+    fast: { model: "sonnet", effort: "low" },
+    balanced: { model: "opus", effort: "high" },
+    deep: { model: "haiku", effort: "max" },
+  });
+  try {
+    assert.equal(ran(project, ["check"]).status, 0);
+    assert.equal(ran(project, ["build"]).status, 0);
+    assert.deepEqual(await builtTiers(project), {
+      fast: { model: "sonnet", effort: "low" },
+      balanced: { model: "opus", effort: "high" },
+      deep: { model: "haiku", effort: "max" },
+    });
+    const header = frontMatter(await project.read(agentFiles.deep));
+    assert.deepEqual(Object.keys(header), ["name", "description", "tools", "model", "effort"]);
+  } finally {
+    await project.remove();
+  }
+});
+
+test("a tier the config leaves out keeps the adapter's model and writes no effort", async () => {
+  const project = await projectWithEveryTier({ deep: { model: "sonnet", effort: "medium" } });
+  try {
+    assert.equal(ran(project, ["build"]).status, 0);
+    assert.deepEqual(await builtTiers(project), {
+      fast: { model: "haiku", effort: "not written" },
+      balanced: { model: "sonnet", effort: "not written" },
+      deep: { model: "sonnet", effort: "medium" },
+    });
+  } finally {
+    await project.remove();
+  }
+});
+
+test("a tier with a model and no effort writes the model and no effort", async () => {
+  const project = await projectWithEveryTier({ balanced: { model: "opus" } });
+  try {
+    assert.equal(ran(project, ["build"]).status, 0);
+    assert.deepEqual((await builtTiers(project)).balanced, { model: "opus", effort: "not written" });
+  } finally {
+    await project.remove();
+  }
+});
+
+test("after the setting changes, the next bay build updates the step agents it changes and no others", async () => {
+  const project = await projectWithEveryTier();
+  try {
+    assert.equal(ran(project, ["build"]).status, 0);
+    await setTiers(project, { deep: { model: "opus", effort: "medium" } });
+    const rebuilt = ran(project, ["build"]);
+    assert.equal(rebuilt.status, 0);
+    const agentLines = rebuilt.output.split("\n").filter((line) => line.startsWith(".claude/agents/"));
+    assert.deepEqual(agentLines, [
+      ".claude/agents/agentbay-writer-careful.md: updated",
+      ".claude/agents/agentbay-writer-draft.md: unchanged",
+      ".claude/agents/agentbay-writer-quick.md: unchanged",
+    ]);
+  } finally {
+    await project.remove();
+  }
+});
+
+test("bay build refuses a model the adapter does not know, names the models it knows, and writes nothing", async () => {
+  const project = await projectWithEveryTier({ deep: { model: "gpt-5", effort: "medium" } });
+  try {
+    const built = ran(project, ["build"]);
+    assert.equal(built.status, 1);
+    assert.match(
+      built.output,
+      /The tier deep names the model gpt-5, which the claude-code adapter does not know\. It knows haiku, sonnet, opus and fable\./,
+    );
+    await assert.rejects(project.read(agentFiles.deep));
+    await assert.rejects(project.read(".agentbay/build.json"));
+  } finally {
+    await project.remove();
+  }
+});
+
+test("bay check and bay build refuse a tier the kit does not have", async () => {
+  const project = await projectWithEveryTier({ huge: { model: "opus", effort: "medium" } });
+  try {
+    for (const words of [["check"], ["build"]]) {
+      const refused = ran(project, words);
+      assert.equal(refused.status, 1, words.join(" "));
+      assert.match(refused.output, /tiers has the field huge, which is not allowed here\./, words.join(" "));
+    }
+  } finally {
+    await project.remove();
+  }
+});
+
+test("bay check and bay build refuse an effort the kit does not have", async () => {
+  const project = await projectWithEveryTier({ deep: { model: "opus", effort: "extreme" } });
+  try {
+    for (const words of [["check"], ["build"]]) {
+      const refused = ran(project, words);
+      assert.equal(refused.status, 1, words.join(" "));
+      assert.match(
+        refused.output,
+        /tiers\.deep\.effort must be one of "low", "medium", "high", "xhigh", "max", but it is "extreme"\./,
+        words.join(" "),
+      );
+    }
+  } finally {
+    await project.remove();
+  }
+});
+
+test("the kit's config sets balanced to Sonnet at medium effort and deep to Opus at medium effort", async () => {
+  const config: unknown = parse(await readFile(join(kit, "agentbay.config.yaml"), "utf8"));
+  assert.deepEqual(fieldOf(config, "tiers"), {
+    balanced: { model: "sonnet", effort: "medium" },
+    deep: { model: "opus", effort: "medium" },
+  });
 });

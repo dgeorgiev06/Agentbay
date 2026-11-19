@@ -43,3 +43,9 @@ A's skeleton, with three pieces of B: the second mode that holds the tests, the 
 ## The owner's answers
 
 1. **The design** (18 November, "Recommendation"): A's skeleton with three pieces of B: the second mode that holds the tests, the filter on a failing case's message, and a planter that never saw the tests for the bugs.
+2. **A step the hook did not see** ("Refuse it"): the kernel refuses a skill step's output when the hook never saw its agent, and every card says which steps the hook saw. Forge therefore does not run in a session without the hook; real runs are in Claude Code on the owner's machine.
+3. **The test writer and the builder's code** ("No, never"): the test writer works from the conditions, the interface and the reviewer's finding, in every round.
+4. **Small work** ("I decide on the first card"): forge proposes the light or the full path with its reason; the owner picks. The interfaces are fixed either way.
+5. **Where a merge lands** ("Fast-forward the checked-out branch when clean"): the merge is made in a worktree of its own, then the checked-out branch is moved forward only when it has no uncommitted change and nothing else moved it; otherwise it stops and says why.
+6. **The whole suite** ("Once per wave"): a slice's proof runs its own tests, planted bugs and scope checks; the whole suite runs once on a wave's combined result, with one merge card a wave; on a failure it is run again per slice to find the cause. Until forge runs a wave, once a slice.
+7. **The card** ("Yes, adopt the clearer card"): the answer first; each check with its mark and its reason; where the lines came from said once for lines a script computed; a line a model judged or a command ran still carries its own mark. This amends ADR 22's rule that every line carries its mark.

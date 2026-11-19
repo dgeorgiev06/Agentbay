@@ -323,8 +323,8 @@ const notOffered = (reason: string): string => `Not available:
              slice WD1.`;
 
 const td1AllPassed = `Merge TD1 into integration?
-  Merge is offered: every must item, scope
-    and declared passed.
+  Merge is offered: every must item that
+    proof judged passed.
 ${td1Item1Passed}
 ${td1Item2Passed}
 ${td1Item3}
@@ -586,7 +586,7 @@ describe("the cards for the todo mode's first slice, as the kernel prints them",
 
   test("the merge card's first line says where the slice stands", () => {
     const first = (input: MergeCardInput): string | undefined => drawn(input).card.lines[0]?.words;
-    assert.equal(first(td1Merge), "Merge is offered: every must item, scope and declared passed.");
+    assert.equal(first(td1Merge), "Merge is offered: every must item that proof judged passed.");
     assert.equal(first(td1Failed), "Merge is not offered: 1 must item failed.");
     assert.equal(
       first(td1StoppedInput),
@@ -936,6 +936,9 @@ describe("the merge card", () => {
       why("The named tests could not be laid over the base: x"),
       "why: the named tests could not be laid over the base",
     );
+    assert.equal(why("No bugs were given to inject, so nothing is known."), "why: no bugs were given to inject");
+    assert.equal(why("The toolchain ran no checks, so nothing is known."), "why: the toolchain ran no checks");
+    assert.equal(why("No copy of 9643a28 could be made: x"), "why: no copy of the commit could be made");
     assert.equal(why("Merge it now."), "why: proof could not tell, so nothing is known");
   });
 

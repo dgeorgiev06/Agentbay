@@ -5,7 +5,9 @@
       "slice": {
         "name": "A1",
         "kind": "mode",
-        "scope": ["components/base/forge/**"],
+        "scope": [
+          "components/base/forge/**"
+        ],
         "after": [],
         "done": [
           {
@@ -31,7 +33,9 @@
     "slice": {
       "name": "A1",
       "kind": "mode",
-      "scope": ["components/base/forge/**"],
+      "scope": [
+        "components/base/forge/**"
+      ],
       "after": [],
       "done": [
         {
@@ -86,14 +90,7 @@
         },
         {
           "mark": "computed",
-          "words": "DOD-A1-1, must: The draw script",
-          "source": {
-            "step": "slice"
-          }
-        },
-        {
-          "mark": "computed",
-          "words": "says each verdict on the card.",
+          "words": "DOD-A1-1, must: The draw script says each verdict on the card.",
           "source": {
             "step": "slice"
           }
@@ -107,14 +104,7 @@
         },
         {
           "mark": "computed",
-          "words": "DOD-A1-2, should: Each sentence on",
-          "source": {
-            "step": "slice"
-          }
-        },
-        {
-          "mark": "computed",
-          "words": "the card reads well on a phone.",
+          "words": "DOD-A1-2, should: Each sentence on the card reads well on a phone.",
           "source": {
             "step": "slice"
           }
@@ -122,6 +112,13 @@
         {
           "mark": "computed",
           "words": "held by: your judgement",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "bugs: none will be planted",
           "source": {
             "step": "slice"
           }

@@ -3,7 +3,9 @@
     "slice": {
       "name": "A1",
       "kind": "mode",
-      "scope": ["components/base/forge/**"],
+      "scope": [
+        "components/base/forge/**"
+      ],
       "after": [],
       "done": [
         {
@@ -69,9 +71,16 @@
       "lines": [
         {
           "mark": "computed",
-          "words": "1 file changed; the work is set aside on forge/wip/A1/1",
+          "words": "Merge is offered: every must item that proof judged passed.",
           "source": {
             "step": "draw"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "DOD-A1-1, must, passed: The draw script says each verdict on the card.",
+          "source": {
+            "step": "prove"
           }
         },
         {
@@ -90,21 +99,28 @@
         },
         {
           "mark": "computed",
-          "words": "scope: every changed path is in the write scope",
+          "words": "DOD-A1-2, should, for you to judge: Each sentence on the card reads well on a phone.",
+          "source": {
+            "step": "draw"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "scope, must, passed: Every changed path is in the write scope.",
           "source": {
             "step": "prove"
           }
         },
         {
           "mark": "computed",
-          "words": "declared: what changed is as declared",
+          "words": "declared, must, passed: What changed is as declared.",
           "source": {
             "step": "prove"
           }
         },
         {
           "mark": "computed",
-          "words": "not judged, for you: DOD-A1-2 Each sentence on the card reads well on a phone.",
+          "words": "1 file changed; the work is set aside on forge/wip/A1/1",
           "source": {
             "step": "draw"
           }
@@ -118,8 +134,8 @@
         }
       ],
       "withheld": {
-        "send-back": "rounds come with slice F2.",
-        "discard": "discarding comes with slice WD1."
+        "send-back": "No round runs after the card.",
+        "discard": "Discarding comes with slice WD1."
       }
     },
     "merge": true,

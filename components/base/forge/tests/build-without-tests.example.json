@@ -36,6 +36,7 @@
     }
   },
   "output": {
-    "outcome": "built"
+    "outcome": "built",
+    "decisions": ["Todos are kept in one table, not a file, so a run can undo them."]
   }
 }

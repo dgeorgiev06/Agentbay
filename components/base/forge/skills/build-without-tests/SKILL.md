@@ -27,7 +27,10 @@ metadata:
 As `schemas/built.json`, sent with `submit`: `{ "outcome": "built" }` when the slice is written, or
 `{ "outcome": "stopped", "missing": { "lacks": "kernel", "name": "worktrees.commit" } }` when it needs a
 capability that is not there. `lacks` is one of `kernel`, `toolbox`, `test-toolbox` or `interface`; `name` is the
-name of the missing function, operation or action. Nothing else you write reaches the owner's card.
+name of the missing function, operation or action. Either answer may add `decisions`: at most three choices
+you made that the owner should know, each one short sentence of at most 120 characters, such as
+`"decisions": ["Todos are kept in one table, not a file, so a run can undo them."]`. The card shows what is
+missing and each decision as your judgement, never as a check. Nothing else you write reaches the owner's card.
 
 ## Definition of done
 
@@ -46,7 +49,8 @@ name of the missing function, operation or action. Nothing else you write reache
    kernel lacks, stop. Do not build around it. Submit `stopped` with what is missing.
 5. From round 2 on, your folder holds your last round's work. Correct what each finding and each failing
    case names, through the interface, not by guessing a test's text.
-6. When every item is written, submit `built`. Proof then runs the tests on your work by script; you do not.
+6. When every item is written, submit `built`, with `decisions` when you chose between ways the items leave
+   open. Proof then runs the tests on your work by script; you do not.
 
 ## Tools
 

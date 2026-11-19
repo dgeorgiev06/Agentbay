@@ -58,9 +58,9 @@ const gitWords = [
   "commit.gpgsign=false",
 ];
 
-const sendBackWithheld = "no round runs after the card.";
+const sendBackWithheld = "No round runs after the card.";
 
-const discardWithheld = "discarding comes with slice WD1.";
+const discardWithheld = "Discarding comes with slice WD1.";
 
 const notBuilt = (kind: string): string =>
   `The kind ${kind} is not built in this version of the proof mode, so nothing is known.`;
@@ -498,7 +498,9 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
       does: "Merge into the integration branch",
       reason: "1 must item is not known.",
     });
-    assert.ok(wordsOf(card).includes("not known: DOD-A2-1"));
+    const words = wordsOf(card);
+    assert.equal(words[0], "Merge is not offered: 1 must item is not known.");
+    assert.ok(words.includes("DOD-A2-1, must, not known: DOD-A2-1 holds."), words.join("\n"));
     const refused = await decided(root, card, { step: "card", choice: "merge" });
     assert.deepEqual(fieldsOf(refused).problems, [
       {
@@ -527,7 +529,7 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
     assertTheMainCheckoutIsUntouched(root);
   });
 
-  test("4. a builder that answers stopped: the card says so in a computed line, and merge is withheld", async () => {
+  test("4. a builder that answers stopped: the first line says so, what it says is missing is its judged line, and merge is withheld", async () => {
     const root = await project();
     const files = ["docs/a4/notes.md"];
     await provedIn(root, "A4", {
@@ -547,14 +549,20 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
           "output.missing.name is not in the expected form. Expected: The name of the missing function, operation or action, such as worktrees.commit.",
       },
     ]);
-    const lines = fieldsOf(card.card).lines;
-    assert.deepEqual(listOf(lines)[0], {
+    const lines = listOf(fieldsOf(card.card).lines);
+    assert.deepEqual(lines[0], {
       mark: "computed",
-      words: "the builder stopped: the kernel lacks worktrees.commit",
+      words: "Merge is not offered: the builder stopped.",
       source: { step: "draw" },
     });
+    assert.deepEqual(lines.at(-1), {
+      mark: "judged",
+      words: "the builder stopped, saying the kernel lacks worktrees.commit",
+      source: { step: "build" },
+      skills: [{ mode: "forge", skill: "skills/build", tier: "deep" }],
+    });
     const choices = listOf(card.choices);
-    assert.equal(textAt(choices[0] ?? null, "reason"), "the builder stopped.");
+    assert.equal(textAt(choices[0] ?? null, "reason"), "The builder stopped.");
     await decided(root, card, { step: "card", choice: "keep" });
     assert.deepEqual(branches(root), ["forge/A4", "forge/wip/A4/1"]);
     assert.deepEqual(worktrees(root), [".forge/worktrees/A4"]);
@@ -579,65 +587,59 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
     assert.deepEqual(changedOn(root, into), []);
   });
 
-  test("6. the cards for TR2's verdicts, as the kernel prints them: every line computed, none citing build", async () => {
+  test("6. the cards for TR2's verdicts, as the kernel prints them: every line computed, none citing build, the answer first", async () => {
     const root = await project();
     await provedIn(root, "TR2", tr2Proved);
     const start = await started(root, tr2Planned, [tr2Bug]);
     const startPrinted = await shownCard(root, start.id);
     assert.deepEqual(startPrinted, [
       "Build slice TR2?",
-      "  The broker says why a list is not",
-      "  in force, and reads the record",
-      "  again before each command",
+      "  The broker says why a list is not in",
+      "    force, and reads the record again before",
+      "    each command",
       `  kind capability; base ${shortHead(root)}`,
-      "  scope: bay/broker/** and 6 more",
-      "  paths",
+      "  scope: bay/broker/** and 6 more paths",
       "  after TR1: ModeGrants.listTrust and",
-      "  readTrustRecord, which the broker",
-      "  reads",
-      "  DOD-TR2-1, must: Each state refuses",
-      "  with its sentence",
+      "    readTrustRecord, which the broker reads",
+      "  DOD-TR2-1, must: Each state refuses with",
+      "    its sentence",
       "  held by: a test fails first",
-      "  tests:",
-      "  tests/broker-list-trust.test.ts",
-      "  DOD-TR2-1b, must: the sentences say",
-      "  what the owner does",
+      "  tests: tests/broker-list-trust.test.ts",
+      "  DOD-TR2-1b, must: the sentences say what",
+      "    the owner does",
       "  held by: your judgement",
-      "  DOD-TR2-2, must: One function",
-      "  decides",
+      "  DOD-TR2-2, must: One function decides",
       "  held by: a count",
       '  lines with "listTrust.state" in',
-      "  bay/broker: at most 2",
+      "    bay/broker: at most 2",
       "  DOD-TR2-3, must: A run is refused",
       "  held by: a test fails first",
-      "  tests:",
-      "  tests/broker-list-trust.test.ts",
+      "  tests: tests/broker-list-trust.test.ts",
       "  DOD-TR2-4, must: bay call runs it",
       "  held by: a test fails first",
-      "  tests:",
-      "  tests/cli-trust-at-use.test.ts",
+      "  tests: tests/cli-trust-at-use.test.ts",
       "  DOD-TR2-5, must: Nothing changes",
       "  held by: same output",
       "  compares the settings' commands;",
-      "  grants-check must differ",
-      "  DOD-TR2-6a, must: Neither debt list",
-      "  grows",
+      "    grants-check must differ",
+      "  DOD-TR2-6a, must: Neither debt list grows",
       "  held by: a count",
       "  the settings' count debt: no rise",
-      "  DOD-TR2-6b, must: the copy-paste",
-      "  count does not rise",
+      "  DOD-TR2-6b, must: the copy-paste count",
+      "    does not rise",
       "  held by: your judgement",
-      "  DOD-TR2-7, must: Every injected bug",
-      "  is caught",
+      "  DOD-TR2-7, must: Every injected bug is",
+      "    caught",
       "  held by: bugs caught",
-      "  injects the bugs named at the end",
-      "  DOD-TR2-8, must: The checks and the",
-      "  tests pass",
+      "  DOD-TR2-8, must: The checks and the tests",
+      "    pass",
       "  held by: checks",
-      "  1 bug to inject: the record is not",
-      "  read again",
+      "  1 bug to inject: the record is not read",
+      "    again",
+      "  the planter writes more after the last",
+      "    round",
       "All lines worked out by script.",
-      "checked: 0 ran, 50 computed, 0 judged",
+      "checked: 0 ran, 32 computed, 0 judged",
       `hash ${start.hash.slice(0, 12)}`,
     ]);
     assert.ok(startPrinted.every((row) => Array.from(row).length <= 44));
@@ -645,19 +647,41 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
     const printed = await shownCard(root, card.id);
     assert.deepEqual(printed, [
       "Merge TR2 into integration?",
-      "  11 files changed; the work is set aside on",
-      "    forge/wip/TR2/1",
+      "  Merge is not offered: 4 must items, scope",
+      "    and declared are not known.",
+      "  DOD-TR2-1, must, passed: Each state",
+      "    refuses with its sentence",
+      "  DOD-TR2-1b, must, for you to judge: the",
+      "    sentences say what the owner does",
+      "  DOD-TR2-2, must, not known: One function",
+      "    decides",
+      "  why: proof does not judge this kind yet",
+      "  DOD-TR2-3, must, passed: A run is refused",
+      "  DOD-TR2-4, must, passed: bay call runs it",
+      "  DOD-TR2-5, must, not known: Nothing",
+      "    changes",
+      "  why: proof does not judge this kind yet",
+      "  DOD-TR2-6a, must, not known: Neither debt",
+      "    list grows",
+      "  why: proof does not judge this kind yet",
+      "  DOD-TR2-6b, must, for you to judge: the",
+      "    copy-paste count does not rise",
+      "  DOD-TR2-7, must, not known: Every injected",
+      "    bug is caught",
+      "  why: proof does not judge this kind yet",
+      "  DOD-TR2-8, must, passed: The checks and",
+      "    the tests pass",
       "  checks passed: typecheck, lint,",
       "    format:check, deadcode",
       "  tests passed: 1,374",
-      "  DOD-TR2-1, 3, 4: the named tests failed on",
-      "    the base and pass on the head",
-      "  not known, kind not built: DOD-TR2-2, 5,",
-      "    6a, 7, scope, declared",
-      "  not judged, for you: DOD-TR2-1b the",
-      "    sentences say what the owner does",
-      "  not judged, for you: DOD-TR2-6b the",
-      "    copy-paste count does not rise",
+      "  scope, must, not known: Every changed path",
+      "    is in the write scope.",
+      "  why: proof does not judge this kind yet",
+      "  declared, must, not known: What changed is",
+      "    as declared.",
+      "  why: proof does not judge this kind yet",
+      "  11 files changed; the work is set aside on",
+      "    forge/wip/TR2/1",
       "  size in lines: bay/ +107, tests/ +393,",
       "    framework/ +1",
       "  kernel file changed:",
@@ -678,12 +702,12 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
       "             why: 4 must items, scope and",
       "             declared are not known.",
       "  send-back  Round 2, a fresh builder",
-      "             why: no round runs after the",
+      "             why: No round runs after the",
       "             card.",
       "  discard    Stop; the worktree goes",
-      "             why: discarding comes with",
+      "             why: Discarding comes with",
       "             slice WD1.",
-      "checked: 0 ran, 13 computed, 0 judged",
+      "checked: 0 ran, 28 computed, 0 judged",
       `hash ${card.hash.slice(0, 12)}`,
     ]);
     assert.ok(printed.every((row) => Array.from(row).length <= 44));
@@ -693,9 +717,18 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
       step: textAt(fieldsOf(line).source ?? null, "step"),
     }));
     assert.deepEqual(new Set(sources.map((source) => source.mark)), new Set(["computed"]));
+    const fromProve = (count: number): readonly string[] => Array.from({ length: count }, () => "prove");
     assert.deepEqual(
       sources.map((source) => source.step),
-      ["draw", "prove", "prove", "prove", "prove", "draw", "draw", "draw", "draw", "draw", "draw", "draw", "draw"],
+      [
+        "draw",
+        ...fromProve(1),
+        "draw",
+        ...fromProve(8),
+        "draw",
+        ...fromProve(9),
+        ...Array.from({ length: 7 }, () => "draw"),
+      ],
     );
     const asked = jsonOf(await readFile(join(root, ".stand-in/TR2-asked.json"), "utf8"));
     assert.deepEqual(asked, {

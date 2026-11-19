@@ -76,17 +76,17 @@
                   "words",
                   "source"
                 ],
-                "description": "A line of the reviewer's judgement, citing the review step under which the reviewer last ran; the kernel adds its skill and tier.",
+                "description": "A line of judgement: the reviewer's, citing the review step under which the reviewer last ran, or the builder's, citing the step under which it last built; the kernel adds the skills and tiers of that step.",
                 "properties": {
                   "mark": {
                     "const": "judged",
-                    "description": "The line is the reviewer's judgement, never a check."
+                    "description": "The line is a model's judgement, never a check."
                   },
                   "words": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 2000,
-                    "description": "The reviewer's verdict on a condition, or a finding that remains, in the reviewer's words and the case's name."
+                    "description": "The reviewer's verdict on a condition or a finding that remains, in the reviewer's words and the case's name; or what the builder says is missing, or a decision it made, in its words."
                   },
                   "source": {
                     "type": "object",
@@ -99,9 +99,13 @@
                         "enum": [
                           "review-1",
                           "review-2",
-                          "review-3"
+                          "review-3",
+                          "round-1",
+                          "round-2",
+                          "round-3",
+                          "build"
                         ],
-                        "description": "The review step the line cites."
+                        "description": "The review step the line cites, or the step under which the builder last built."
                       }
                     }
                   }

@@ -249,14 +249,17 @@ describe(
       );
       assert.equal((await askedOf(root, name)).length, 1);
       const printed = await printedCard(root, ran.runId);
-      assert.deepEqual(printed.slice(0, 6), [
+      assert.deepEqual(printed.slice(0, 7), [
         "Merge L1 into integration?",
+        "  Merge is not offered: the builder's work",
+        "    holds text from the tests.",
         "  leak: components/modes/l1/scripts/ink.ts",
         "    shares 1 line with the tests",
         "  leak: components/modes/l1/scripts/quill.ts",
         "    shares 2 lines with the tests",
-        "  2 files changed; the work and the tests",
       ]);
+      assert.ok(printed.includes("  rounds: 1 of at most 3; a leak ended them"));
+      assert.ok(!printed.some((row) => row.startsWith("judged")));
       assert.deepEqual(holding([...testLines(testsOf(name)), ran.mark], printed.join("\n")), []);
       const card = waitingOf(await shown(root, ran.runId), "card");
       assert.deepEqual(
@@ -266,10 +269,10 @@ describe(
           textAt(choice, "reason"),
         ]),
         [
-          ["merge", "withheld", "the builder's work holds text from the tests."],
-          ["send-back", "withheld", "no round runs after the card."],
+          ["merge", "withheld", "The builder's work holds text from the tests."],
+          ["send-back", "withheld", "No round runs after the card."],
           ["keep", "offered", ""],
-          ["discard", "withheld", "discarding comes with slice WD1."],
+          ["discard", "withheld", "Discarding comes with slice WD1."],
         ],
       );
       await decided(root, card, { step: "card", choice: "keep" });
@@ -292,15 +295,17 @@ describe(
       );
       assert.deepEqual(holding([ran.mark], JSON.stringify(ran.asked)), []);
       const printed = await printedCard(root, ran.runId);
-      assert.deepEqual(printed.slice(0, 4), [
+      assert.deepEqual(printed.slice(0, 5), [
         "Merge L2 into integration?",
+        "  Merge is not offered: the builder's work",
+        "    holds text from the tests.",
         "  leak: components/modes/l2/scripts/quill.ts",
         "    holds the mark planted in the tests",
-        "  1 file changed; the work and the tests are",
       ]);
+      assert.ok(printed.includes("  rounds: 1 of at most 3; a leak ended them"));
       assert.deepEqual(holding([...testLines(testsOf(name)), ran.mark], printed.join("\n")), []);
       const card = waitingOf(await shown(root, ran.runId), "card");
-      assert.equal(textAt(listOf(card.choices)[0] ?? null, "reason"), "the builder's work holds text from the tests.");
+      assert.equal(textAt(listOf(card.choices)[0] ?? null, "reason"), "The builder's work holds text from the tests.");
       assert.ok(git(root, ["show", `forge/${name}:${codeOf(name)}`]).includes(ran.mark));
       await decided(root, card, { step: "card", choice: "keep" });
       await assertNothingLeft(root, name, ran);

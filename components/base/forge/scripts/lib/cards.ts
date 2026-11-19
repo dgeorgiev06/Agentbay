@@ -237,6 +237,9 @@ const notKnownStarts: readonly Known[] = [
     matches: /^The named tests could not be laid over the base:/,
     says: () => "the named tests could not be laid over the base",
   },
+  { matches: /^No bugs were given to inject,/, says: () => "no bugs were given to inject" },
+  { matches: /^The toolchain ran no checks,/, says: () => "the toolchain ran no checks" },
+  { matches: /^No copy of [0-9a-f]+ could be made:/, says: () => "no copy of the commit could be made" },
 ];
 
 const notKnownSaid = "proof could not tell, so nothing is known";
@@ -725,7 +728,7 @@ function leakWords(leak: Leak): string {
 
 function answerWords(reason: string | undefined): string {
   return reason === undefined
-    ? "Merge is offered: every must item, scope and declared passed."
+    ? "Merge is offered: every must item that proof judged passed."
     : `Merge is not offered: ${reason}`;
 }
 

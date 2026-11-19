@@ -239,18 +239,21 @@ describe(
         reason: "1 must item failed.",
       });
       const printed = await printedCard(root, runId);
-      assert.deepEqual(printed.slice(0, 9), [
+      assert.deepEqual(printed.slice(0, 7), [
         "Merge P1 into integration?",
-        "  1 file changed; the work and the tests are",
-        "    on forge/P1-tests-1",
-        "  DOD-P1-1: the named tests failed on the",
-        "    base and pass on the head",
-        "  failed DOD-P1-2: an injected bug survived",
-        "  size in lines: components/ +1",
+        "  Merge is not offered: 1 must item failed.",
+        "  DOD-P1-1, must, passed: A quill is counted",
+        "    once.",
+        "  DOD-P1-2, must, failed: The tests catch",
+        "    planted bugs.",
+        "  why: an injected bug survived",
+      ]);
+      const planted = printed.indexOf("  the planter wrote 2 bugs");
+      assert.deepEqual(printed.slice(planted, planted + 3), [
         "  the planter wrote 2 bugs",
         "  bug survived: the count is lost, in",
+        "    components/modes/p1/scripts/quill.ts",
       ]);
-      assert.equal(printed[9], "    components/modes/p1/scripts/quill.ts");
       assert.ok(printed.every((line) => Array.from(line).length <= 44));
       await decided(root, card, { step: "card", choice: "keep" });
       assert.deepEqual(branches(root), ["forge/P1", "forge/P1-planter", "forge/P1-tests-1"]);

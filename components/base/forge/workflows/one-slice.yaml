@@ -48,6 +48,7 @@ steps:
   - id: card
     approval: Merge this slice?
     show: $steps.draw.output.card
+    quotes: [build]
     choices:
       merge: { does: Merge into the integration branch, when: $steps.draw.output.merge }
       send-back: { does: "Round 2, a fresh builder", when: $steps.draw.output.sendBack }

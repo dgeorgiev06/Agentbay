@@ -52,7 +52,7 @@ export function coordinatorBlock(bay: string): string {
     "   as bay printed them when the run stopped for the approval.",
     "5. When its `waiting` has `choices`, only after the owner names a choice in his own words, run",
     `   \`${bay} approve <runId> <stepKey> --choice <name> --hash <hash> --via chat --quote "<the owner's exact words>" --json\`.`,
-    "   Never choose for the owner, and never pass a choice the card shows as not offered.",
+    "   Never choose for the owner, and never pass a choice the card shows under Not available.",
     "",
     "Trust in a mode is the owner's decision, never yours. When the check warns that a mode waits for trust,",
     `tell the owner, then run \`${bay} approve --trust <mode> --json\`. It changes nothing`,

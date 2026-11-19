@@ -96,6 +96,12 @@ test("config prints every setting of the config schema and of each mode's settin
       "budget.usd",
       "budget.tokens",
       "budget.minutes",
+      "tiers.fast.model",
+      "tiers.fast.effort",
+      "tiers.balanced.model",
+      "tiers.balanced.effort",
+      "tiers.deep.model",
+      "tiers.deep.effort",
       "approvals.from",
       "settings.writer.signature",
     ]);

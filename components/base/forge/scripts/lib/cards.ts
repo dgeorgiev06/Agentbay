@@ -110,6 +110,16 @@ export type RoundsOnCard = {
   readonly judged?: JudgedLines;
 };
 
+export type SurvivedBug = {
+  readonly name: string;
+  readonly files: readonly string[];
+};
+
+export type BugsOnCard = {
+  readonly planted: number;
+  readonly survived: readonly SurvivedBug[];
+};
+
 export type MergeCardInput = {
   readonly slice: Slice;
   readonly proof: Proved;
@@ -118,6 +128,7 @@ export type MergeCardInput = {
   readonly kept: Kept;
   readonly into: string;
   readonly rounds?: RoundsOnCard;
+  readonly bugs?: BugsOnCard;
 };
 
 export type WithheldChoice = "merge" | "send-back" | "discard";
@@ -590,6 +601,14 @@ function roundLines(rounds: RoundsOnCard | undefined): readonly CardLine[] {
   return [count, ...lines.sentences.flatMap(wrapped).map((words) => judged(lines.step, words))];
 }
 
+function bugWords(bugs: BugsOnCard | undefined): readonly string[] {
+  if (bugs === undefined) {
+    return [];
+  }
+  const planted = bugs.planted === 0 ? [] : [`the planter wrote ${counted(bugs.planted, "bug")}`];
+  return [...planted, ...bugs.survived.map((bug) => `bug survived: ${bug.name}, in ${joined(bug.files)}`)];
+}
+
 function drawnLines(input: MergeCardInput): readonly CardLine[] {
   const { slice, proof, built, work, kept } = input;
   const forYou = proof.judgement.map((item) => `not judged, for you: ${item.id} ${item.says}`);
@@ -598,6 +617,7 @@ function drawnLines(input: MergeCardInput): readonly CardLine[] {
     computed("draw", changedWords(proof.size, work, kept)),
     ...verdictLines(slice, proof.verdicts),
     ...[...forYou, ...sizeWords(proof.size), ...watchedWords(proof.size)].map((said) => computed("draw", said)),
+    ...bugWords(input.bugs).map((said) => computed("draw", said)),
     ...roundLines(input.rounds),
   ];
 }

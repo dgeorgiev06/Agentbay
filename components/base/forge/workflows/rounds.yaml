@@ -73,6 +73,14 @@ steps:
       fixed: $steps.slice.output.fixed
       practices: $settings.practices
       state: $steps.round-3.output
+  - id: bugs
+    action: bugs
+    input:
+      slice: $steps.slice.output.slice
+      interface: $steps.slice.output.interface
+      fixed: $steps.slice.output.fixed
+      bugs: $steps.slice.output.bugs
+      state: $steps.review-3.output
   - id: prove
     action: proof.prove
     input:
@@ -80,7 +88,7 @@ steps:
       base: $steps.cut.output.commit
       head: $steps.review-3.output.head
       declared: $steps.review-3.output.declared
-      bugs: $steps.slice.output.bugs
+      bugs: $steps.bugs.output.bugs
   - id: draw
     action: draw
     input:
@@ -91,6 +99,8 @@ steps:
       kept: with-tests
       into: $settings.into
       rounds: $steps.review-3.output
+      bugs: $steps.bugs.output.bugs
+      planted: $steps.bugs.output.planted
   - id: card
     approval: Merge this slice?
     show: $steps.draw.output.card

@@ -100,6 +100,20 @@
     "rounds": {
       "type": "object",
       "description": "Where the rounds stand after the last review, as rounds.json gives it. Left out, the card has no rounds."
+    },
+    "bugs": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/bug"
+      },
+      "description": "The bugs proof was given to inject. Left out, the card names no bug."
+    },
+    "planted": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 50,
+      "description": "How many of the bugs the planter wrote. Left out, none."
     }
   }
 }

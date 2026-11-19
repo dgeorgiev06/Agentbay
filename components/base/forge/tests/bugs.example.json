@@ -1,0 +1,139 @@
+{
+  "input": {
+    "slice": {
+      "name": "TD1",
+      "kind": "mode",
+      "scope": [
+        "components/modes/todo/**"
+      ],
+      "after": [],
+      "done": [
+        {
+          "id": "DOD-TD1-1",
+          "says": "A todo that was added is listed.",
+          "level": "must",
+          "proof": {
+            "kind": "fails-first",
+            "tests": [
+              "components/modes/todo/tests/todo.test.ts"
+            ]
+          }
+        },
+        {
+          "id": "DOD-TD1-3",
+          "says": "A bug planted in the list is caught.",
+          "level": "must",
+          "proof": {
+            "kind": "bugs-caught"
+          }
+        },
+        {
+          "id": "DOD-TD1-2",
+          "says": "The actions are add and list and nothing else.",
+          "level": "should"
+        }
+      ]
+    },
+    "interface": [
+      "components/modes/todo/schemas/list-response.json"
+    ],
+    "fixed": [
+      "components/modes/todo/tests/todo.test.ts"
+    ],
+    "bugs": [
+      {
+        "name": "an added todo is not saved",
+        "patch": "diff --git a/components/modes/todo/scripts/add.ts b/components/modes/todo/scripts/add.ts\n--- a/components/modes/todo/scripts/add.ts\n+++ b/components/modes/todo/scripts/add.ts\n@@ -6 +6 @@\n-  await saved(todo);\n+  void todo;\n",
+        "tests": [
+          "components/modes/todo/tests/todo.test.ts"
+        ]
+      }
+    ],
+    "state": {
+      "round": 2,
+      "stage": "reviewed",
+      "done": true,
+      "base": "875d936a1b2c3d4e5f60718293a4b5c6d7e8f901",
+      "built": {
+        "outcome": "built"
+      },
+      "builder": {
+        "branch": "forge/TD1-2",
+        "commit": "5d2e11b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4"
+      },
+      "head": "7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b",
+      "branch": "forge/TD1-tests-2",
+      "declared": {
+        "files": [
+          "components/modes/todo/mode.yaml",
+          "components/modes/todo/scripts/add.ts",
+          "components/modes/todo/tests/todo.test.ts"
+        ],
+        "names": {
+          "gained": [
+            "todo.add"
+          ],
+          "lost": [],
+          "changed": []
+        }
+      },
+      "tests": [
+        "components/modes/todo/tests/todo.test.ts"
+      ],
+      "verdicts": [
+        {
+          "item": "DOD-TD1-1",
+          "kind": "fails-first",
+          "verdict": "passed",
+          "detail": "The named tests failed on the base and pass on the head."
+        }
+      ],
+      "failing": {
+        "items": [],
+        "cases": [],
+        "withheld": 0,
+        "notListed": 0,
+        "notLoaded": []
+      },
+      "toBuilder": [],
+      "toTests": 0,
+      "conditions": [
+        {
+          "item": "DOD-TD1-1",
+          "held": true,
+          "cases": [
+            "a todo that was added is listed"
+          ]
+        },
+        {
+          "item": "DOD-TD1-2",
+          "held": true,
+          "cases": [
+            "the mode has the actions add and list"
+          ]
+        }
+      ],
+      "remaining": [],
+      "reviewedAt": "review-2"
+    }
+  },
+  "output": {
+    "bugs": [
+      {
+        "name": "an added todo is not saved",
+        "patch": "diff --git a/components/modes/todo/scripts/add.ts b/components/modes/todo/scripts/add.ts\n--- a/components/modes/todo/scripts/add.ts\n+++ b/components/modes/todo/scripts/add.ts\n@@ -6 +6 @@\n-  await saved(todo);\n+  void todo;\n",
+        "tests": [
+          "components/modes/todo/tests/todo.test.ts"
+        ]
+      },
+      {
+        "name": "a todo marked done is still listed as open",
+        "patch": "diff --git a/components/modes/todo/scripts/list.ts b/components/modes/todo/scripts/list.ts\n--- a/components/modes/todo/scripts/list.ts\n+++ b/components/modes/todo/scripts/list.ts\n@@ -4 +4 @@\n-  return todos.filter((todo) => todo.status === \"open\");\n+  return todos;\n",
+        "tests": [
+          "components/modes/todo/tests/todo.test.ts"
+        ]
+      }
+    ],
+    "planted": 1
+  }
+}

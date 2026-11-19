@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PlantRequest",
+  "description": "What the planter reads to write the bugs to plant: the slice's conditions, the interface files' paths, and the builder's code as text at its last commit. It holds no test and no folder.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["slice", "interface", "code"],
+  "properties": {
+    "slice": {
+      "$ref": "proof@1/prove-request.json#/$defs/slice"
+    },
+    "interface": {
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "The interface files the slice builds against, relative to the project."
+    },
+    "code": {
+      "type": "array",
+      "maxItems": 200,
+      "description": "The files the builder changed from the base, as they are on its last commit, without the test files.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "text"],
+        "properties": {
+          "path": {
+            "$ref": "proof@1/prove-request.json#/$defs/path"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 200000,
+            "description": "The file's whole text."
+          }
+        }
+      }
+    }
+  }
+}

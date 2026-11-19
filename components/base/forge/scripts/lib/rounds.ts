@@ -1,8 +1,8 @@
-import { fieldsOf, type Json, type JsonFields } from "../../../../../bay/sdk.ts";
-import { builtOf, type Built } from "./cards.ts";
+import { fail, fieldsOf, type Json, type JsonFields } from "../../../../../bay/sdk.ts";
+import { builtOf, sliceOf, type Built } from "./cards.ts";
 import type { Failing, FailingCase } from "./failing.ts";
 import { reviewOf, type Condition, type Finding, type Review } from "./review.ts";
-import { listOf, textOf } from "./json-values.ts";
+import { listOf, textOf, textsOf } from "./json-values.ts";
 
 export const lastRound = 3;
 
@@ -32,6 +32,13 @@ export type RoundsState = {
   readonly conditions: readonly Condition[];
   readonly remaining: readonly Remaining[];
   readonly reviewedAt?: string;
+};
+
+export type AfterRound = {
+  readonly name: string;
+  readonly slice: Json;
+  readonly fixed: readonly string[];
+  readonly state: RoundsState;
 };
 
 export type RoundPlan = {
@@ -166,4 +173,14 @@ export function reviewedState(state: RoundsState, reviewed: Reviewed, at: string
     case "review":
       return afterReview(cleared, reviewed.review, at);
   }
+}
+
+export function afterRoundOf(fields: JsonFields, action: string): AfterRound {
+  const slice = fields.slice ?? null;
+  return {
+    name: sliceOf(slice).name,
+    slice,
+    fixed: textsOf(fields.fixed),
+    state: roundsStateOf(fields.state) ?? fail(`${action} was given no state of the rounds.`),
+  };
 }

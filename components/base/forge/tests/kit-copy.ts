@@ -1,0 +1,339 @@
+import assert from "node:assert/strict";
+import { execFileSync, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { fileURLToPath } from "node:url";
+import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
+
+export type Waiting = {
+  readonly id: string;
+  readonly hash: string;
+  readonly card: Json;
+  readonly choices: Json;
+};
+
+export type Answer = { readonly verdict: "approve" | "reject" } | { readonly choice: string };
+
+export type Proved = {
+  readonly verdicts: readonly Json[];
+  readonly judgement: readonly Json[];
+  readonly size: readonly Json[];
+};
+
+type Ran = {
+  readonly status: number | null;
+  readonly stdout: string;
+};
+
+export const into = "integration";
+
+const kit = fileURLToPath(new URL("../../../..", import.meta.url));
+
+const standIn = "components/modes/proof-stand-in";
+
+const practices = ["framework/practices.md", "components/base/typescript/practices.md"];
+
+const gitWords = [
+  "-c",
+  "user.name=forge test",
+  "-c",
+  "user.email=forge-test@example.invalid",
+  "-c",
+  "commit.gpgsign=false",
+];
+
+const standInManifest = [
+  "name: proof-stand-in",
+  "version: 1.0.0",
+  "description: A stand-in for proof in forge's own test; it answers the verdicts the test wrote for the slice.",
+  "implements: [proof@1]",
+  "resources:",
+  "  files: { read: [.stand-in/], write: [.stand-in/] }",
+  "actions:",
+  "  prove:",
+  "    description: When forge's test needs proof's answer for a slice.",
+  "    effects: [read, write, network, spend, delete]",
+  "    run:",
+  "      - script: scripts/prove.ts",
+  "",
+].join("\n");
+
+const standInScript = [
+  'import { defineScript, fail, fieldsOf } from "../../../../bay/sdk.ts";',
+  "",
+  "export const run = defineScript(async (input, context) => {",
+  "  const name = fieldsOf(fieldsOf(input).slice ?? null).name;",
+  "  const asked = await context.files.write(`.stand-in/${String(name)}-asked.json`, JSON.stringify(input));",
+  "  if (!asked.ok) {",
+  "    fail(asked.message);",
+  "  }",
+  "  const read = await context.files.read(`.stand-in/${String(name)}.json`);",
+  "  return read.ok ? JSON.parse(read.value) : fail(read.message);",
+  "});",
+  "",
+].join("\n");
+
+const roots: string[] = [];
+
+export function git(root: string, words: readonly string[]): string {
+  return execFileSync("git", [...gitWords, ...words], { cwd: root, encoding: "utf8" });
+}
+
+function kitFiles(): readonly string[] {
+  const listing = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: kit });
+  return listing
+    .toString("utf8")
+    .split("\0")
+    .filter((path) => path !== "");
+}
+
+export function jsonOf(text: string): Json {
+  const read = readYaml(text);
+  assert.ok(read.ok, text);
+  return read.value;
+}
+
+async function configForTheTest(): Promise<string> {
+  const config = fieldsOf(jsonOf(await readFile(join(kit, "agentbay.config.yaml"), "utf8")));
+  const settings = fieldsOf(config.settings ?? null);
+  return JSON.stringify({
+    ...config,
+    bindings: { ...fieldsOf(config.bindings ?? null), proof: "proof-stand-in" },
+    approvals: { from: ["terminal", "chat"] },
+    settings: { ...settings, forge: { ...fieldsOf(settings.forge ?? null), into, practices } },
+  });
+}
+
+async function madeFolder(prefix: string): Promise<string> {
+  const folder = await realpath(await mkdtemp(join(tmpdir(), prefix)));
+  roots.push(folder);
+  return folder;
+}
+
+export async function kitTemplate(): Promise<string> {
+  const folder = await madeFolder("agentbay-one-round-");
+  const files = kitFiles();
+  for (const path of files) {
+    await mkdir(dirname(join(folder, path)), { recursive: true });
+    await cp(join(kit, path), join(folder, path));
+  }
+  await writeFile(join(folder, "agentbay.config.yaml"), await configForTheTest(), "utf8");
+  await mkdir(join(folder, standIn, "scripts"), { recursive: true });
+  await writeFile(join(folder, standIn, "mode.yaml"), standInManifest, "utf8");
+  await writeFile(join(folder, standIn, "scripts/prove.ts"), standInScript, "utf8");
+  const listed = [...files, `${standIn}/mode.yaml`, `${standIn}/scripts/prove.ts`];
+  await writeFile(join(folder, ".git-files"), listed.join("\0"), "utf8");
+  git(folder, ["init", "-q", "--initial-branch=main"]);
+  git(folder, ["add", "-f", "--pathspec-from-file=.git-files", "--pathspec-file-nul"]);
+  git(folder, ["commit", "-q", "-m", "The kit as the test found it"]);
+  return folder;
+}
+
+export async function removeAll(): Promise<void> {
+  for (const root of roots) {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+export async function project(template: string): Promise<string> {
+  const root = await madeFolder("agentbay-one-round-case-");
+  git(root, ["clone", "-q", template, "."]);
+  git(root, ["branch", into]);
+  await symlink(await realpath(join(kit, "node_modules")), join(root, "node_modules"));
+  return root;
+}
+
+export function bayRan(root: string, words: readonly string[]): Promise<Ran> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ["bay/cli.ts", ...words], { cwd: root, stdio: ["ignore", "pipe", "ignore"] });
+    const chunks: Buffer[] = [];
+    child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
+    child.on("error", reject);
+    child.on("close", (status) => {
+      resolve({ status, stdout: Buffer.concat(chunks).toString("utf8") });
+    });
+  });
+}
+
+export async function bay(root: string, words: readonly string[]): Promise<Json> {
+  return jsonOf((await bayRan(root, [...words, "--json"])).stdout);
+}
+
+export function runOf(answer: Json): Json {
+  return fieldsOf(answer).run ?? null;
+}
+
+function isList(value: Json | undefined): value is readonly Json[] {
+  return Array.isArray(value);
+}
+
+export function listOf(value: Json | undefined): readonly Json[] {
+  return isList(value) ? value : [];
+}
+
+export function textAt(value: Json, key: string): string {
+  const found = fieldsOf(value)[key];
+  return typeof found === "string" ? found : "";
+}
+
+export function waitingOf(run: Json, step: string): Waiting {
+  const waiting = fieldsOf(run).waiting ?? null;
+  assert.equal(textAt(waiting, "stepKey"), step, JSON.stringify(run));
+  const { card = null, choices = null } = fieldsOf(waiting);
+  return { id: textAt(run, "id"), hash: textAt(waiting, "hash"), card, choices };
+}
+
+export function shortHead(root: string): string {
+  return git(root, ["rev-parse", "--short=7", "main"]).trim();
+}
+
+export async function started(root: string, trigger: Json): Promise<Waiting> {
+  const answer = await bay(root, ["call", "--workflow", "forge:workflows/one-round.yaml", JSON.stringify(trigger)]);
+  return waitingOf(runOf(answer), "start");
+}
+
+function answerWords(answer: Answer): readonly string[] {
+  if ("choice" in answer) {
+    return ["--choice", answer.choice];
+  }
+  return answer.verdict === "reject" ? ["--reject"] : [];
+}
+
+export async function decided(
+  root: string,
+  waiting: Waiting,
+  answer: Answer & { readonly step: string },
+): Promise<Json> {
+  const words = ["approve", waiting.id, answer.step, "--hash", waiting.hash, ...answerWords(answer)];
+  return bay(root, [...words, "--via", "chat", "--quote", "as the owner"]);
+}
+
+export async function shown(root: string, runId: string): Promise<Json> {
+  return runOf(await bay(root, ["runs", runId]));
+}
+
+export async function task(root: string, runId: string): Promise<Json> {
+  return fieldsOf(runOf(await bay(root, ["runs", runId, "--new-token"]))).task ?? null;
+}
+
+export async function answered(root: string, runId: string, output: Json): Promise<Json> {
+  const given = await task(root, runId);
+  return bay(root, ["submit", JSON.stringify(output), "--token", textAt(given, "token")]);
+}
+
+export async function submitted(root: string, runId: string, output: Json): Promise<Json> {
+  return runOf(await answered(root, runId, output));
+}
+
+export async function provedIn(root: string, name: string, proved: Proved): Promise<void> {
+  await mkdir(join(root, ".stand-in"), { recursive: true });
+  await writeFile(join(root, ".stand-in", `${name}.json`), JSON.stringify(proved), "utf8");
+}
+
+export async function askedOf(root: string, name: string): Promise<Json> {
+  return jsonOf(await readFile(join(root, ".stand-in", `${name}-asked.json`), "utf8"));
+}
+
+export async function builderWrites(root: string, folder: string, files: readonly string[]): Promise<void> {
+  for (const file of files) {
+    const path = join(root, folder, file);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, `Written by the builder in ${folder}.\n`, "utf8");
+  }
+}
+
+export function branches(root: string): readonly string[] {
+  const listed = git(root, ["branch", "--list", "--format=%(refname:short)", "forge/*"]);
+  return listed.split("\n").filter((line) => line !== "");
+}
+
+export function worktrees(root: string): readonly string[] {
+  const listed = git(root, ["worktree", "list", "--porcelain"]).split("\n");
+  const folders = listed.filter((line) => line.startsWith("worktree ")).map((line) => line.slice("worktree ".length));
+  return folders.filter((folder) => folder !== root).map((folder) => folder.slice(root.length + 1));
+}
+
+export function assertTheMainCheckoutIsUntouched(root: string): void {
+  assert.equal(git(root, ["symbolic-ref", "--short", "HEAD"]).trim(), "main");
+  assert.equal(git(root, ["rev-parse", "main"]).trim(), git(root, ["rev-parse", "origin/main"]).trim());
+  assert.equal(git(root, ["status", "--porcelain", "--untracked-files=no"]), "");
+}
+
+async function filesUnder(root: string, folder: string): Promise<readonly string[]> {
+  const entries = await readdir(join(root, folder), { withFileTypes: true });
+  const found: string[] = [];
+  for (const entry of entries) {
+    const path = folder === "" ? entry.name : `${folder}/${entry.name}`;
+    if (entry.isDirectory()) {
+      found.push(...(await filesUnder(root, path)));
+    } else if (entry.isFile()) {
+      found.push(path);
+    }
+  }
+  return found;
+}
+
+function linesOf(texts: readonly string[]): readonly string[] {
+  const lines = texts.flatMap((text) => text.split("\n").map((line) => line.trim()));
+  return [...new Set(lines.filter((line) => line !== ""))];
+}
+
+function formsOf(line: string): readonly string[] {
+  return [line, JSON.stringify(line).slice(1, -1)];
+}
+
+export async function filesHolding(root: string, folder: string, texts: readonly string[]): Promise<readonly string[]> {
+  const forms = linesOf(texts).flatMap(formsOf);
+  const holding: string[] = [];
+  for (const path of await filesUnder(root, folder)) {
+    const text = (await readFile(join(root, path))).toString("latin1");
+    const bytes = forms.map((form) => Buffer.from(form, "utf8").toString("latin1"));
+    if (bytes.some((form) => text.includes(form))) {
+      holding.push(path);
+    }
+  }
+  return holding.sort();
+}
+
+export type Handed = {
+  readonly path: string;
+  readonly text: string;
+};
+
+export type RoundPlan = {
+  readonly name: string;
+  readonly files: readonly string[];
+  readonly tests: readonly Handed[];
+  readonly built: Json;
+  readonly whileBuilding?: (runId: string) => Promise<void>;
+};
+
+const noNames = { gained: [], lost: [], changed: [] };
+
+export async function roundToCard(root: string, start: Waiting, plan: RoundPlan): Promise<Waiting> {
+  await decided(root, start, { step: "start", verdict: "approve" });
+  const declared = await submitted(root, start.id, { files: [...plan.files], names: noNames });
+  assert.equal(textAt(declared, "status"), "waiting", JSON.stringify(declared));
+  const written = await submitted(root, start.id, { tests: [...plan.tests] });
+  assert.equal(textAt(written, "status"), "waiting", JSON.stringify(written));
+  await builderWrites(root, `.forge/worktrees/${plan.name}`, plan.files);
+  await plan.whileBuilding?.(start.id);
+  return waitingOf(await submitted(root, start.id, plan.built), "card");
+}
+
+export function keptRows(root: string): readonly Json[] {
+  const file = join(root, ".agentbay/data/forge--kept-tests.db");
+  if (!existsSync(file)) {
+    return [];
+  }
+  const database = new DatabaseSync(file, { readOnly: true });
+  try {
+    const rows = database.prepare("select slice, path, packed from kept_tests order by slice, path").all();
+    return rows.map((row) => ({ slice: String(row.slice), path: String(row.path), packed: String(row.packed) }));
+  } finally {
+    database.close();
+  }
+}

@@ -910,7 +910,8 @@ const cases: readonly Case[] = [
   },
   {
     name: "remove removes a clean worktree whose branch is merged, with its branch",
-    restsOn: "remove-request (into; branchAfter: deleted, the default), remove-response (worktree, branchAfter deleted)",
+    restsOn:
+      "remove-request (into; branchAfter: deleted, the default), remove-response (worktree, branchAfter deleted)",
     run: async (world) => {
       const folder = await cut(world, "done");
       assert.deepEqual(await world.output("remove", { folder, into: ownersBranch }), {
@@ -993,7 +994,8 @@ const cases: readonly Case[] = [
   },
   {
     name: "remove with the branch kept refuses a worktree with an untracked or a changed file, or with into named, and keeps it, its files and its branch",
-    restsOn: "remove-request (branchAfter: kept, and into is not given); README, remove: only when the worktree is clean",
+    restsOn:
+      "remove-request (branchAfter: kept, and into is not given); README, remove: only when the worktree is clean",
     run: async (world) => {
       const folder = await cut(world, "done");
       const head = await world.commit(changeOn({ folder }, { "work.txt": "work\n" }, "Do the work"));

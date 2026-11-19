@@ -39,3 +39,7 @@ A's skeleton, with three pieces of B: the second mode that holds the tests, the 
 5. Where a merge lands.
 6. The whole suite once a slice or once a wave, when waves run.
 7. The clearer card: one mark above the lines it covers, in place of a mark on every line (changes ADR 22).
+
+## The owner's answers
+
+1. **The design** (18 November, "Recommendation"): A's skeleton with three pieces of B: the second mode that holds the tests, the filter on a failing case's message, and a planter that never saw the tests for the bugs.

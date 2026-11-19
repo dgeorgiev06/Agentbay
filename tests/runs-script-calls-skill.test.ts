@@ -180,7 +180,7 @@ const taskFields = ["stepKey", "round", "feedback", "skill", "tier", "input", "p
 
 function fieldsNamed(value: unknown, names: readonly string[]): Json {
   const fields = isRecord(value) ? value : {};
-  return Object.fromEntries(names.filter((name) => name in fields).map((name) => [name, fields[name]]));
+  return toJson(Object.fromEntries(names.filter((name) => name in fields).map((name) => [name, fields[name]])));
 }
 
 function skillWaitingOf(run: Run): Json {

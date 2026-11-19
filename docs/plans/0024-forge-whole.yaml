@@ -1,0 +1,569 @@
+title: 'Forge, whole: one slice under ADR 24 first, the todo mode rebuilt through it, then requirements, design, planning and waves'
+slices:
+- title: The test toolbox hands out a new token for a waiting skill step, so a test of two skill steps in one script needs no command line
+  slice:
+    name: NT1
+    kind: capability
+    scope:
+    - tests/test-toolbox.ts
+    - tests/test-toolbox.test.ts
+    - tests/test-toolbox-tokens.test.ts
+    - tests/runs-script-calls-skill.test.ts
+    after: []
+    done:
+    - id: DOD-NT1-1
+      says: A test takes a new token through the toolbox for a second skill step and answers it; the old token is refused with the kernel's sentence.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - tests/test-toolbox-tokens.test.ts
+    - id: DOD-NT1-2
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof: &id001
+        kind: checks
+- title: 'worktrees.commit: a slice''s changed and untracked files are committed to its own branch, and the files stay in the worktree'
+  slice:
+    name: WC1
+    kind: mode
+    scope:
+    - components/base/interfaces/worktrees.yaml
+    - components/base/interfaces/worktrees/**
+    - components/base/git-worktrees/**
+    - tests/made-up-worktrees*
+    after: []
+    done:
+    - id: DOD-WC1-1
+      says: The shared test of worktrees@1 shows a worktree with a changed and an untracked file clean after commit, its branch one commit ahead, and the files still in the folder.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/git-worktrees/tests/commit.test.ts
+    - id: DOD-WC1-2
+      says: The mode's list of commands does not change; commit uses stage-everything and commit-staged.
+      level: must
+      proof:
+        kind: same-output
+    - id: DOD-WC1-3
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof:
+        kind: checks
+- title: A toolchain's failed test run names each failing case and gives its message, and no other line of the test
+  slice:
+    name: TF1
+    kind: mode
+    scope:
+    - components/base/interfaces/toolchain.yaml
+    - components/base/interfaces/toolchain/**
+    - components/base/typescript/**
+    - tests/made-up-toolchains*
+    after: []
+    done:
+    - id: DOD-TF1-1
+      says: A failed run's answer holds failures, each a case's name and the first line of its error, cut at 200 characters, with no stack, location, expected or actual value.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/typescript/tests/failures.test.ts
+    - id: DOD-TF1-2
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof:
+        kind: checks
+- title: A tier names a model and an effort in the project's settings, and the adapter writes both into each step agent
+  slice:
+    name: TI1
+    kind: capability
+    scope:
+    - schemas/config.schema.json
+    - bay/generated/config.ts
+    - adapters/claude-code/**
+    - agentbay.config.yaml
+    - tests/tiers-in-settings.test.ts
+    after: []
+    done:
+    - id: DOD-TI1-1
+      says: With tiers set in agentbay.config.yaml, bay build writes each step agent with the model and effort of its skill's tier; with none set, the agents are as today.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - tests/tiers-in-settings.test.ts
+    - id: DOD-TI1-2
+      says: The kit's config sets balanced to Sonnet at medium effort and deep to Opus at medium effort.
+      level: must
+- title: 'The clearer card: the answer first, each check with its mark and its reason, where computed lines came from said once, a judged or ran line still marked on its own (ADR 26 item 7)'
+  slice:
+    name: KC1
+    kind: capability
+    scope:
+    - bay/runs/card.ts
+    - bay/approval-card.ts
+    - bay/trust-card.ts
+    - tests/approval-card.test.ts
+    - tests/runs-card.test.ts
+    - docs/designs/proof/C1r-what-an-approval-shows.md
+    after: []
+    done:
+    - id: DOD-KC1-1
+      says: A card with only computed lines prints the source once; a card with one judged line prints that line's own mark and skill; every row is at most 44 columns; the kernel still refuses a line whose source names a step of another kind.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - tests/runs-card.test.ts
+    - id: DOD-KC1-2
+      says: Each sentence on the card reads well on a phone.
+      level: should
+    - id: DOD-KC1-3
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof: *id001
+- title: Forge may be active in a project that is not the kit, and activating it brings proof and git-worktrees bound, with nothing more to set up
+  slice:
+    name: OK1
+    kind: capability
+    scope:
+    - bay/manifests/activation.ts
+    - bay/policy.ts
+    - tests/forge-in-a-project.test.ts
+    after: []
+    done:
+    - id: DOD-OK1-1
+      says: In a project that lists forge and a toolchain mode, bay check reports no problem and forge.waves runs; in the kit nothing changes.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - tests/forge-in-a-project.test.ts
+    - id: DOD-OK1-2
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof:
+        kind: checks
+- title: Proof's verdict on a test that fails first carries the failing cases on the head, as the toolchain names them
+  slice:
+    name: PF1
+    kind: mode
+    scope:
+    - components/base/interfaces/proof.yaml
+    - components/base/interfaces/proof/**
+    - components/base/proof/**
+    - tests/made-up-proofs*
+    after:
+    - slice: TF1
+      because: It carries on the failures the toolchain's answer gains in TF1.
+    done:
+    - id: DOD-PF1-1
+      says: A failed fails-first item whose head run failed holds cases, each a name and a message as the toolchain gave them; no other verdict holds them.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/proof/tests/cases.test.ts
+    - id: DOD-PF1-2
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof:
+        kind: checks
+- title: A project's setting says forge runs with the hook or without; with it, the kernel refuses a skill step's output the hook never saw; without it, the output is taken and the run's record says so
+  slice:
+    name: HK1
+    kind: capability
+    scope:
+    - schemas/config.schema.json
+    - bay/generated/config.ts
+    - bay/runs/runs.ts
+    - bay/runs/hook-seen.ts
+    - adapters/claude-code/hook/**
+    - tests/hook-seen.test.ts
+    after:
+    - slice: TI1
+      because: Both change the config's schema and its generated types, so one after the other.
+    done:
+    - id: DOD-HK1-1
+      says: With the hook required, an output handed in for a step whose agent the hook never saw is refused with a sentence that says so and how to run with the hook; with the setting at without, it is taken and the run records that no hook saw it.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - tests/hook-seen.test.ts
+    - id: DOD-HK1-2
+      says: Only the owner's config changes the setting; no agent's tool can. No security property of the operations and trust frames is weakened.
+      level: must
+    - id: DOD-HK1-3
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof: *id001
+- title: A merge is made in a worktree of its own, and the checked-out branch is fast-forwarded only when it is clean and nothing else moved it; otherwise it stops and says why
+  slice:
+    name: WM1
+    kind: mode
+    scope:
+    - components/base/interfaces/worktrees.yaml
+    - components/base/interfaces/worktrees/**
+    - components/base/git-worktrees/**
+    - tests/made-up-worktrees*
+    after:
+    - slice: WC1
+      because: Both change the worktrees interface and its mode, so one after the other.
+    done:
+    - id: DOD-WM1-1
+      says: Merging into a checked-out, clean branch moves it forward and its files change; with an uncommitted change, or a branch that moved meanwhile, nothing changes and the sentence says which.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/git-worktrees/tests/merge-checked-out.test.ts
+    - id: DOD-WM1-2
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof: *id001
+- title: 'Forge carries one slice under ADR 24, one round: a test writer hands its tests in as data, forge keeps them packed in its own partition, a builder that never has them as files builds, and they become files only in proof''s copies'
+  slice:
+    name: FA1
+    kind: mode
+    scope:
+    - components/base/forge/**
+    - framework/practices.md
+    - CONTEXT.md
+    after:
+    - slice: WC1
+      because: It commits the builder's work with worktrees.commit to join it with the tests.
+    - slice: NT1
+      because: Its tests answer more than one skill step in one script through the toolbox.
+    done:
+    - id: DOD-FA1-1
+      says: A made-up slice runs from the start card to the merge card through the test toolbox, with the test writer, the builder and the reviewer answered by the test.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge/tests/one-round.test.ts
+    - id: DOD-FA1-2
+      says: While the builder's task waits, no file under .forge/worktrees/ holds the slice's tests, and the builder's task holds none of their text.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge/tests/tests-off-disk.test.ts
+    - id: DOD-FA1-3
+      says: The merge card gives the reason of each failed item, and a judged line for each finding, citing the review step.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge/tests/cards.test.ts
+    - id: DOD-FA1-4
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof:
+        kind: checks
+    - id: DOD-FA1-5
+      says: While the builder's step is open, no file under the project holds a line of the slice's tests; a test reads every file the builder could and finds none (ADR 27 item 2).
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge/tests/tests-kept-packed.test.ts
+- title: 'Forge rounds two and three: a failing case reaches the builder as its name, and its message only when it shares no long run of text with the tests; findings go to the test writer or the builder, the test writer never reads the builder''s code; then the owner'
+  slice:
+    name: FA2
+    kind: mode
+    scope:
+    - components/base/forge/**
+    after:
+    - slice: FA1
+      because: It adds rounds to the workflow FA1 makes, in the same folder.
+    - slice: PF1
+      because: The builder's feedback is the failing cases proof carries after PF1.
+    done:
+    - id: DOD-FA2-1
+      says: A slice whose tests fail in round 1 goes back to the builder with each failing case's name and message and nothing else of the test, and a slice still failing after round 3 reaches the merge card.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge/tests/rounds.test.ts
+    - id: DOD-FA2-2
+      says: A finding meant for the builder that holds a line of a test file is sent back to the reviewer, not passed on.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge/tests/review-check.test.ts
+    - id: DOD-FA2-3
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof:
+        kind: checks
+- title: A planter that never saw the tests writes the bugs to plant from the builder's code and the conditions, and proof's bugs-caught item uses them
+  slice:
+    name: PT1
+    kind: mode
+    scope:
+    - components/base/forge/**
+    after:
+    - slice: FA2
+      because: The planter is a step of the round that FA2 builds.
+    done:
+    - id: DOD-PT1-1
+      says: The planter's task holds the code and the conditions and no line of the tests; its bugs are handed to proof, and a bug that survives is named on the card.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge/tests/planter.test.ts
+    - id: DOD-PT1-2
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof: *id001
+- title: 'After a build, forge checks for a leak: the builder''s code shares no long run of text with the tests, and a mark planted in the tests is not in the code'
+  slice:
+    name: LK1
+    kind: mode
+    scope:
+    - components/base/forge/**
+    after:
+    - slice: PT1
+      because: Both change forge's round, so one after the other.
+    done:
+    - id: DOD-LK1-1
+      says: A build that copies a line of a test, or that holds the planted mark, fails the slice with a computed line that names the file and no line of the test; a build that shares only short common words passes.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge/tests/leak.test.ts
+    - id: DOD-LK1-2
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof: *id001
+- title: 'Forge''s cards in the clearer form: a failed item with proof''s reason and the failing cases, a builder''s own flagged decision as a judgement line, and whether the run had the hook'
+  slice:
+    name: FC2
+    kind: mode
+    scope:
+    - components/base/forge/**
+    after:
+    - slice: KC1
+      because: It prints through the kernel's new card form.
+    - slice: LK1
+      because: Both change forge's cards, so one after the other.
+    - slice: HK1
+      because: The card says whether the hook saw each step.
+    done:
+    - id: DOD-FC2-1
+      says: The start and merge cards for the todo mode's first slice are pinned line by line in the new form, each row at most 44 columns, with a failed checks item giving its reason.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge/tests/cards.test.ts
+    - id: DOD-FC2-2
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof: *id001
+- title: The todo mode is built through forge, slice TD1 then TD2 of plan 0023, with the owner stopped at each card
+  slice:
+    name: TDX
+    kind: mode
+    scope:
+    - components/modes/todo/**
+    - docs/plans/0023-todo-mode.yaml
+    after:
+    - slice: FA2
+      because: It is the test of forge with rounds.
+    - slice: TI1
+      because: The implementers must run Sonnet at medium effort and the reviewer Opus at medium effort.
+    - slice: WM1
+      because: Its merge lands on the checked-out branch.
+    done:
+    - id: DOD-TDX-1
+      says: TD1 and TD2 are each merged from their merge card, every must item passed, with no file of the todo mode written by hand.
+      level: must
+    - id: DOD-TDX-2
+      says: The kit's checks and its whole test run pass with the todo mode in it.
+      level: must
+      proof:
+        kind: checks
+- title: same-output and real-thing run a project's own commands, named by its toolchain, not only the kit's bay
+  slice:
+    name: RT1
+    kind: mode
+    scope:
+    - components/base/interfaces/toolchain.yaml
+    - components/base/interfaces/toolchain/**
+    - components/base/typescript/**
+    - components/base/interfaces/proof.yaml
+    - components/base/interfaces/proof/**
+    - components/base/proof/**
+    - tests/made-up-toolchains*
+    - tests/made-up-proofs*
+    after:
+    - slice: PF1
+      because: It changes the proof and toolchain folders that TF1 and PF1 change.
+    - slice: WM1
+      because: Neither shares a file with it, but RT1 is not needed before the todo mode's rebuild; it waits so builders are free for what is.
+    done:
+    - id: DOD-RT1-1
+      says: In a project that is not the kit, a real-thing item whose run names a command its toolchain lists passes when the command prints the expected text.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/proof/tests/project-commands.test.ts
+    - id: DOD-RT1-2
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof:
+        kind: checks
+- title: 'The requirements file: outcomes, conditions, what is left out; forge.requirements checks one and names every problem with its line'
+  slice:
+    name: RQ1
+    kind: mode
+    scope:
+    - components/base/forge/**
+    - docs/requirements/**
+    after:
+    - slice: FC2
+      because: Both change forge, and the cards come first so that the todo mode's rebuild is read on them.
+    done:
+    - id: DOD-RQ1-1
+      says: forge.requirements accepts docs/requirements/todo.yaml and refuses a file with a condition with no then, two conditions with one id, or an outcome with no condition, each with its line.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge/tests/requirements.test.ts
+    - id: DOD-RQ1-2
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof:
+        kind: checks
+- title: 'System design: one design or two written apart, compared, the design card, and the design committed with its schema files'
+  slice:
+    name: DS1
+    kind: mode
+    scope:
+    - components/base/forge/**
+    after:
+    - slice: RQ1
+      because: A design is made from a requirements file RQ1 defines, in the same folder.
+    done:
+    - id: DOD-DS1-1
+      says: From the todo requirements, the workflow design shows the design card with each line as printed in design A, and approve commits design.yaml and the schema files.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge/tests/design.test.ts
+    - id: DOD-DS1-2
+      says: The second designer's task holds nothing of the first design, and no file of the first design is on disk while it works.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge/tests/designs-apart.test.ts
+    - id: DOD-DS1-3
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof:
+        kind: checks
+- title: 'Planning: slices cut from the design, each meeting conditions; a challenge by another model; waves checks that every condition is met and every fixed file is made first'
+  slice:
+    name: PL1
+    kind: mode
+    scope:
+    - components/base/forge/**
+    - docs/plans/README.md
+    after:
+    - slice: DS1
+      because: A plan is cut from the design DS1 commits, in the same folder.
+    done:
+    - id: DOD-PL1-1
+      says: forge.waves names a condition no slice meets and a slice that changes a fixed file, and still accepts plans 0022 and 0023 as they are.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge/tests/plan-meets.test.ts
+    - id: DOD-PL1-2
+      says: The plan card shows the waves, the conditions met and the challenge's findings, each line as printed in design A.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge/tests/plan-card.test.ts
+    - id: DOD-PL1-3
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof:
+        kind: checks
+- title: 'Forge runs a wave: its slices side by side, each proved by its own tests, bugs and scope, the whole suite once on the wave''s combined result, and one merge card for the wave'
+  slice:
+    name: WV1
+    kind: mode
+    scope:
+    - components/base/forge/**
+    after:
+    - slice: PL1
+      because: A wave comes from a plan that planning made.
+    - slice: FC2
+      because: Both change forge's workflow and cards.
+    done:
+    - id: DOD-WV1-1
+      says: A wave of two slices is proved slice by slice without the whole suite, then once with it; when that fails, each slice is proved alone to name the cause; the merge card lists both slices.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/base/forge/tests/wave.test.ts
+    - id: DOD-WV1-2
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof: *id001
+- title: 'The todo mode''s next outcome through the whole forge: requirements, design, plan and slices, the owner stopped at each card'
+  slice:
+    name: TDW
+    kind: mode
+    scope:
+    - components/modes/todo/**
+    - docs/requirements/todo.yaml
+    - docs/designs/todo/**
+    - docs/plans/0024-todo-due-dates.yaml
+    after:
+    - slice: PL1
+      because: It runs the design and planning workflows PL1 completes.
+    - slice: TDX
+      because: It adds to the todo mode TDX makes.
+    done:
+    - id: DOD-TDW-1
+      says: The design, plan and merge cards were each shown and answered, and the outcome works in a fresh project.
+      level: must
+    - id: DOD-TDW-2
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof:
+        kind: checks
+- title: A TypeScript project that is not the kit gets one slice built through forge, with proof's real-thing item running the project's own command
+  slice:
+    name: EX1
+    kind: mode
+    scope:
+    - docs/research/forge-outside-the-kit.md
+    after:
+    - slice: OK1
+      because: Forge must be active in a project that is not the kit, which OK1 allows.
+    - slice: RT1
+      because: Its real-thing item runs the project's own command, which RT1 allows.
+    - slice: TDX
+      because: Forge is first proved on the todo mode in the kit.
+    done:
+    - id: DOD-EX1-1
+      says: In a fresh TypeScript project with forge, proof, git-worktrees and typescript active, one slice ran from the start card to a merge, and the note records each card as printed.
+      level: must

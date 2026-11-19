@@ -21,6 +21,7 @@ import {
   rootTally,
   tally,
   tallyFiles,
+  unloadedAsCaseTally,
   wrongTally,
   type TallyVariant,
 } from "./made-up-toolchains.ts";
@@ -36,6 +37,7 @@ const modes: Readonly<Record<string, TallyVariant>> = {
   [onceTally]: "builds only into a folder with no build output",
   [notSetUpTally]: "passes a check the checkout is not set up for",
   [lacksNothingTally]: "says the project lacks nothing",
+  [unloadedAsCaseTally]: "names a file that did not load as a failing case",
 };
 
 const writesOutsideTheFolder =
@@ -52,6 +54,9 @@ const caseThatCatches: Readonly<Record<string, string>> = {
   [notSetUpTally]: "a check the checkout is not set up for is inconclusive, and the checks after it still run",
   [lacksNothingTally]:
     "describe says which checks and whether the test run the project is set up for, and what to add for the rest",
+  [unloadedAsCaseTally]:
+    "a test file that does not load is named in notLoaded and is no failing case, " +
+    "and the failing cases of the other files are still listed",
 };
 
 let copy: string;
@@ -106,7 +111,7 @@ test("a made-up toolchain for another language, whose checks are listed commands
   const tested = ranFor(tally);
   assert.deepEqual(failedTests(tested.output), []);
   assert.equal(tested.status, 0, tested.output);
-  assert.match(tested.output, /^# pass 20$/m);
+  assert.match(tested.output, /^# pass 26$/m);
 });
 
 test("a made-up toolchain that reports passed for a check stopped at its limit fails the shared test's case on it", () => {
@@ -135,4 +140,8 @@ test("a made-up toolchain that reports passed for a check the checkout is not se
 
 test("a made-up toolchain whose describe says the project lacks nothing fails the shared test's case on what the project is set up for", () => {
   assertCaught(lacksNothingTally);
+});
+
+test("a made-up toolchain that names a test file that did not load as a failing case fails the shared test's case on files that do not load", () => {
+  assertCaught(unloadedAsCaseTally);
 });

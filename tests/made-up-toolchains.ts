@@ -10,7 +10,8 @@ export type TallyVariant =
   | "writes its build output in the kernel's state folder"
   | "builds only into a folder with no build output"
   | "passes a check the checkout is not set up for"
-  | "says the project lacks nothing";
+  | "says the project lacks nothing"
+  | "names a file that did not load as a failing case";
 
 export const tally = "tally";
 
@@ -28,6 +29,8 @@ export const notSetUpTally = "tally-not-set-up";
 
 export const lacksNothingTally = "tally-lacks-nothing";
 
+export const unloadedAsCaseTally = "tally-unloaded-as-case";
+
 const sdkFromScripts = "../../../../bay/sdk.ts";
 
 const sdkFromLibrary = "../../../../../bay/sdk.ts";
@@ -43,6 +46,7 @@ const buildCommands: Readonly<Record<TallyVariant, string>> = {
   "builds only into a folder with no build output": "sh build.sh build",
   "passes a check the checkout is not set up for": "sh build.sh build -p",
   "says the project lacks nothing": "sh build.sh build -p",
+  "names a file that did not load as a failing case": "sh build.sh build -p",
 };
 
 const effectsOfARun = ["read", "write", "network", "spend", "delete"];
@@ -92,6 +96,11 @@ function manifestOf(name: string, variant: TallyVariant): string {
 const stoppedLine = '      return { ...shown, ending: { kind: "unknown", reason: stoppedReason(limit) } };';
 
 const passedWhenStoppedLine = '      return { ...shown, ending: { kind: "exited", exitCode: 0 } };';
+
+const failingLine = '  const failing = reported.filter((line) => line.startsWith("not ok ")).map(failingCaseOf);';
+
+const failingWithUnloadedLine =
+  '  const failing = [...reported.filter((line) => line.startsWith("not ok ")).map(failingCaseOf), ...notLoaded.map(unloadedAsCase)];';
 
 const notSetUpLine = '  return { ...notRun, verdict: "inconclusive", reason };';
 
@@ -201,6 +210,24 @@ export function checkVerdict(name: string, result: Ran): Json {
   return { ...shown, verdict: "inconclusive", reason: "It ended with exit code " + String(code) + "." };
 }
 
+const longestMessage = 200;
+
+const mostFailures = 50;
+
+type FailingCase = { readonly name: string; readonly file: string; readonly message: string; readonly charactersCut: number };
+
+function failingCaseOf(line: string): FailingCase {
+  const [file = "", name = "", ...rest] = line.slice("not ok ".length).split("|");
+  const lines = rest.join("|").split("\\n").map((part) => part.trim());
+  const characters = Array.from(lines.find((part) => part !== "") ?? "");
+  const message = characters.slice(0, longestMessage).join("");
+  return { name, file, message, charactersCut: Math.max(0, characters.length - longestMessage) };
+}
+
+function unloadedAsCase(file: string): FailingCase {
+  return { name: file, file, message: "", charactersCut: 0 };
+}
+
 export function testResult(result: Ran): Json {
   const shown = { seconds: result.seconds, stdout: result.stdout, stderr: result.stderr };
   const unknown = (reason: string): Json => ({ ...shown, verdict: "inconclusive", reason });
@@ -209,8 +236,9 @@ export function testResult(result: Ran): Json {
   }
   const reported = result.stdout.split("\n");
   const passed = reported.filter((line) => line.startsWith("ok ")).length;
-  const failedTests = reported.filter((line) => line.startsWith("not ok ")).map((line) => line.slice(7));
-  const counts = { passed, failed: failedTests.length, failedTests };
+  const notLoaded = reported.filter((line) => line.startsWith("not loaded ")).map((line) => line.slice(11));
+${failingLine}
+  const failedTests = [...failing.map((failure) => failure.name), ...notLoaded];
   if (!reported.includes("end")) {
     return unknown("The run did not report its end.");
   }
@@ -219,10 +247,15 @@ export function testResult(result: Ran): Json {
   }
   const code = result.ending.exitCode;
   if (code === 0 && failedTests.length === 0) {
-    return { ...shown, ...counts, verdict: "passed" };
+    return { ...shown, passed, failed: 0, failedTests, verdict: "passed" };
   }
   if (code === 1 && failedTests.length > 0) {
-    return { ...shown, ...counts, verdict: "failed" };
+    const cases = {
+      failures: failing.slice(0, mostFailures),
+      failuresNotListed: Math.max(0, failing.length - mostFailures),
+      notLoaded,
+    };
+    return { ...shown, passed, failed: failedTests.length, failedTests, ...cases, verdict: "failed" };
   }
   return unknown("The run ended with exit code " + String(code) + ".");
 }
@@ -308,7 +341,14 @@ const testScript = lines(
   "});",
 );
 
-const checkoutFunction = String.raw`import type { Files, Outcome, Wanted, WantedCheck, WantedTest } from "../../interfaces/toolchain/tests/shared.ts";
+const checkoutFunction = String.raw`import type {
+  Files,
+  Outcome,
+  Wanted,
+  WantedCheck,
+  WantedTest,
+  WantedTestFile,
+} from "../../interfaces/toolchain/tests/shared.ts";
 
 const checkBodies: Readonly<Record<Outcome, string>> = {
   passes: "",
@@ -316,11 +356,6 @@ const checkBodies: Readonly<Record<Outcome, string>> = {
   "does not end": "sleep 600",
 };
 
-const testWords: Readonly<Record<Outcome, string>> = {
-  passes: "pass",
-  fails: "fail",
-  "does not end": "hang",
-};
 
 const builder = [
   'out="$1"',
@@ -337,8 +372,9 @@ const runner = [
   'for file in "$@"; do',
   "  while IFS= read -r line; do",
   '    case "$line" in',
+  '      "break") echo "not loaded $file"; status=1; break ;;',
   '      "pass "*) echo "ok ${"$"}{line#pass }" ;;',
-  '      "fail "*) echo "not ok ${"$"}{line#fail }"; status=1 ;;',
+  '      "fail "*) printf "%s\\n" "not ok $file|${"$"}{line#fail }"; status=1 ;;',
   '      "hang "*) sleep 600 ;;',
   "    esac",
   '  done < "$file"',
@@ -353,7 +389,21 @@ function checkScriptOf(check: WantedCheck, outcome: Outcome): string {
 }
 
 function testLineOf(test: WantedTest): string {
-  return testWords[test.outcome] + " " + test.name;
+  switch (test.outcome) {
+    case "passes":
+      return "pass " + test.name;
+    case "fails":
+      return "fail " + test.name + "|" + test.message.split("\n").join("\\n");
+    case "does not end":
+      return "hang " + test.name;
+  }
+}
+
+function testFileOf(file: WantedTestFile): string {
+  if (file === "does not load") {
+    return "break\npass never runs\n";
+  }
+  return [...file.map(testLineOf), ""].join("\n");
 }
 
 export function tallyCheckout(wanted: Wanted): Files {
@@ -364,7 +414,7 @@ export function tallyCheckout(wanted: Wanted): Files {
   const runners = wanted.testRun === "set up" ? { "run-tests.sh": runner } : {};
   const tests = wanted.testFiles.map((file, index) => [
     "tests/file-" + String(index + 1) + ".test.tally",
-    [...file.map(testLineOf), ""].join("\n"),
+    testFileOf(file),
   ]);
   return {
     "build.sh": builder,
@@ -431,6 +481,11 @@ export function tallyFiles(name: string, variant: TallyVariant): ModeFiles {
       to: passedWhenNotSetUpLine,
     },
     "says the project lacks nothing": { file: "scripts/describe.ts", from: missingLine, to: "      present.length;" },
+    "names a file that did not load as a failing case": {
+      file: "scripts/lib/tally.ts",
+      from: failingLine,
+      to: failingWithUnloadedLine,
+    },
   };
   const files = filesOfTally(name, variant);
   const replacement = replacements[variant];

@@ -30,6 +30,8 @@ const caseThatCatches: Readonly<Record<string, string>> = {
     "the items scope and declared come after the slice's own items in every result, also when every item of the slice is a judgement item",
   "assay-passes-stale-bug":
     "bugs-caught: a bug whose patch does not apply makes the item inconclusive, with a reason that names the bug and says it could not be applied, never passed or failed",
+  "assay-passes-unloaded-bug":
+    "bugs-caught: a bug whose covering test files did not load and that failed no case is inconclusive, with a reason that names it and says its tests did not run, never caught",
 };
 
 let copy: string;
@@ -81,7 +83,7 @@ test("a made-up proof that reaches code only through the toolchain and worktrees
   const tested = ranFor(assay);
   assert.deepEqual(failedTests(tested.output), []);
   assert.equal(tested.status, 0, tested.output);
-  assert.match(tested.output, /^# pass 37$/m);
+  assert.match(tested.output, /^# pass 44$/m);
 });
 
 test("a made-up proof that reads an inconclusive check as passed fails the shared test's case on it", () => {
@@ -110,4 +112,8 @@ test("a made-up proof that leaves out the two added items when every item is jud
 
 test("a made-up proof that counts a bug whose patch did not apply as caught fails the shared test's case on it", () => {
   assertCaught("assay-passes-stale-bug");
+});
+
+test("a made-up proof that counts a bug whose tests did not load as caught fails the shared test's case on it", () => {
+  assertCaught("assay-passes-unloaded-bug");
 });

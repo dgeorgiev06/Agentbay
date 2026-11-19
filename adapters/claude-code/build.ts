@@ -1,4 +1,4 @@
-import { isAbsolute, join } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import { agentName, type BuildRequest, type SkillAgent } from "../../bay/adapter.ts";
 import type { ListOutcome, Problem } from "./adapter-types.ts";
 import { agentFileText } from "./agent-file.ts";
@@ -14,6 +14,7 @@ import {
 import { mergeTargets, planMerge, type MergePlan } from "./merged-files.ts";
 import { grantedRootProblems } from "./root-scan.ts";
 import { stepsFileText } from "./steps-file.ts";
+import { tierSettings, type TierSettings } from "./tiers.ts";
 
 type CreatedChange = "created" | "updated" | "unchanged" | "overwritten";
 
@@ -72,11 +73,15 @@ function requestProblems(request: BuildRequest): readonly Problem[] {
   return problems;
 }
 
-function createdFiles(request: BuildRequest): readonly { readonly path: string; readonly text: string }[] {
+type CreatedText = { readonly path: string; readonly text: string };
+
+type Planned = { readonly request: BuildRequest; readonly created: readonly CreatedText[] };
+
+function createdFiles(request: BuildRequest, tiers: TierSettings): readonly CreatedText[] {
   return [
     ...request.agents.map((agent) => ({
       path: `.claude/agents/${agent.agent}.md`,
-      text: agentFileText(agent, request.layout.project),
+      text: agentFileText(agent, request.layout.project, tiers[agent.tier]),
     })),
     { path: ".agentbay/steps.json", text: stepsFileText(request.layout, request.agents) },
   ];
@@ -102,10 +107,10 @@ type Plans = {
   readonly problems: readonly Problem[];
 };
 
-async function planCreated(request: BuildRequest, previous: BuildRecord | undefined): Promise<Plans> {
+async function planCreated({ request, created: texts }: Planned, previous: BuildRecord | undefined): Promise<Plans> {
   const created: CreatedPlan[] = [];
   const problems: Problem[] = [];
-  for (const file of createdFiles(request)) {
+  for (const file of texts) {
     const recorded = previous?.created.find((entry) => entry.path === file.path);
     const current = await request.files.readText(join(request.layout.project, file.path));
     const change = createdChange(current, file.text, recorded);
@@ -133,8 +138,8 @@ async function planMerged(request: BuildRequest, previous: BuildRecord | undefin
   return { created: [], merged, stale: [], problems };
 }
 
-async function planStale(request: BuildRequest, previous: BuildRecord | undefined): Promise<Plans> {
-  const built = new Set(createdFiles(request).map((file) => file.path));
+async function planStale({ request, created }: Planned, previous: BuildRecord | undefined): Promise<Plans> {
+  const built = new Set(created.map((file) => file.path));
   const stale: StalePlan[] = [];
   for (const entry of previous?.created.filter((file) => !built.has(file.path)) ?? []) {
     const current = await request.files.readText(join(request.layout.project, entry.path));
@@ -145,11 +150,11 @@ async function planStale(request: BuildRequest, previous: BuildRecord | undefine
   return { created: [], merged: [], stale, problems: [] };
 }
 
-async function plansFor(request: BuildRequest, previous: BuildRecord | undefined): Promise<Plans> {
+async function plansFor(planned: Planned, previous: BuildRecord | undefined): Promise<Plans> {
   const parts = [
-    await planCreated(request, previous),
-    await planMerged(request, previous),
-    await planStale(request, previous),
+    await planCreated(planned, previous),
+    await planMerged(planned.request, previous),
+    await planStale(planned, previous),
   ];
   return {
     created: parts.flatMap((part) => part.created),
@@ -211,6 +216,10 @@ export async function build(request: BuildRequest): Promise<ListOutcome> {
   if (requestIssues.length > 0) {
     return { ok: false, problems: requestIssues };
   }
+  const tiers = tierSettings(request.system.config, relative(request.layout.project, request.layout.configFile));
+  if (!tiers.ok) {
+    return { ok: false, problems: tiers.problems };
+  }
   const rootIssues = await grantedRootProblems(request);
   if (rootIssues.length > 0) {
     return { ok: false, problems: rootIssues };
@@ -220,7 +229,7 @@ export async function build(request: BuildRequest): Promise<ListOutcome> {
     return { ok: false, problems: [unreadableRecord] };
   }
   const previous = reading.kind === "record" ? reading.record : undefined;
-  const plans = await plansFor(request, previous);
+  const plans = await plansFor({ request, created: createdFiles(request, tiers.settings) }, previous);
   if (plans.problems.length > 0) {
     return { ok: false, problems: plans.problems };
   }

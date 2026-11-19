@@ -27,6 +27,9 @@ const subcommands = {
   "repository-top": "rev-parse",
   "forget-paths": "rm",
   "stage-paths": "add",
+  "checked-out-branch": "symbolic-ref",
+  "merge-uncommitted": "merge",
+  "fast-forward": "merge",
 } as const;
 
 export type GitCommand = keyof typeof subcommands;
@@ -47,7 +50,16 @@ function isUnderForge(folder: string): boolean {
   return folder.startsWith(".forge/") && !folder.split("/").includes("..");
 }
 
-function refuseInOwnersCheckout(folder: string, subcommand: string): void {
+const projectsOwnFolder = ".";
+
+function refuseInOwnersCheckout(folder: string, name: GitCommand): void {
+  const subcommand = subcommands[name];
+  if (name === "fast-forward") {
+    if (folder !== projectsOwnFolder) {
+      fail(`The mode runs git merge --ff-only only in the project's own folder, not in ${folder}.`);
+    }
+    return;
+  }
   if (changesTheCheckout.includes(subcommand) && !isUnderForge(folder)) {
     fail(
       `The mode runs git ${subcommand} only in a folder under .forge/, not in ${folder}, ` +
@@ -69,7 +81,7 @@ async function ran(
   const { call, input } = given;
   const [name, ...gitArguments] = call;
   const subcommand = subcommands[name];
-  refuseInOwnersCheckout(folder, subcommand);
+  refuseInOwnersCheckout(folder, name);
   const request = { name, arguments: gitArguments, folder, timeLimitSeconds };
   const answer = await context.commands.run(input === undefined ? request : { ...request, input });
   if (!answer.ok) {

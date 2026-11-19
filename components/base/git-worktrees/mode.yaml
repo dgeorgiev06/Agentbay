@@ -88,6 +88,15 @@ resources:
     stage-paths:
       run: --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 --work-tree=. add --all --force --
       effects: [read, write, delete]
+    checked-out-branch:
+      run: --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 symbolic-ref --quiet --end-of-options
+      effects: [read]
+    merge-uncommitted:
+      run: --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 -c user.name=agentbay-git-worktrees -c user.email=git-worktrees@agentbay.invalid -c gc.auto=0 merge --no-ff --no-commit --no-squash --no-stat --no-verify --no-gpg-sign --no-verify-signatures --no-autostash --no-rerere-autoupdate --end-of-options
+      effects: [read, write, delete]
+    fast-forward:
+      run: --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 -c user.name=agentbay-git-worktrees -c user.email=git-worktrees@agentbay.invalid -c gc.auto=0 merge --ff-only --no-stat --no-verify --no-gpg-sign --no-verify-signatures --no-autostash --no-rerere-autoupdate --end-of-options
+      effects: [read, write, delete]
 
 actions:
   cut:
@@ -121,7 +130,7 @@ actions:
     run:
       - script: scripts/remove.ts
   merge:
-    description: When a slice's worktree is clean and its branch is to be merged into another branch, with a merge commit made in a worktree of the mode's own; a conflict undoes the merge and names the paths.
+    description: When a slice's worktree is clean and its branch is to be merged into another branch, with a merge commit made in a worktree of the mode's own; a branch the project's own folder has checked out is then fast-forwarded only when the folder is clean and the branch has not moved, and a conflict undoes the merge and names the paths.
     effects: [read, write, delete]
     run:
       - script: scripts/merge.ts

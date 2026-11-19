@@ -1,6 +1,6 @@
 name: git-worktrees
 version: 1.0.0
-description: Makes a worktree and branch for each slice, says where it stands, merges it and sets its work aside, and makes throwaway copies of commits and applies patches to them, running git so that no code from the repository runs.
+description: Makes a worktree and branch for each slice, says where it stands, commits its work to its branch, merges it and sets its work aside, and makes throwaway copies of commits and applies patches to them, running git so that no code from the repository runs.
 
 implements: [worktrees@1]
 
@@ -130,6 +130,11 @@ actions:
     effects: [read, write, delete]
     run:
       - script: scripts/set-aside.ts
+  commit:
+    description: When a slice's worktree has changed or untracked files to keep on its own branch; they are committed to forge/<slice> with the message given, and they stay in the worktree, which is then clean.
+    effects: [read, write, delete]
+    run:
+      - script: scripts/commit.ts
   apply:
     description: When a copy needs a patch applied to it, all of it or nothing, committed in the copy; a path outside the copy is refused before git runs. It never changes a worktree.
     effects: [read, write, delete]

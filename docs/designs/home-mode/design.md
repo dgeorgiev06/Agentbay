@@ -623,6 +623,8 @@ actions:
 | `price-set` | action | read, write | script |
 | `floor-in` | action | read, write | script `read-form`; call `floor-plan.check`; script `keep-floor`; call `floor-plan.draw` |
 | `redesign` | workflow | read, write | script `words-card`; approval `send-words`; skill `redesign` (checked by `floor-plan.apply`); call `floor-plan.draw`; approval `accept-change`; script `keep-floor` |
+| `price-add` | workflow | read, write | script `prices-card` from what the owner typed; approval `add-prices`; call `price-book.add` |
+| `wages-fetch` | workflow | read, write | script `wage-card`; approval `send-wage-request`; call `wage-source.wages`; call `price-book.wages` |
 | `estimate` | action | read | call `floor-plan.diff`; call `price-book.price`; script `lay-out` |
 | `facts` | action | read | script |
 | `records-request` | action | read | script: drafts a records request to the building department, for the owner to send |
@@ -714,7 +716,7 @@ The room model never holds the address, so the `redesign` skill never sees it.
 ### 8.2 Version 1
 
 - `house-add`, `price-set`, `floor-in` from the typed form, `redesign` with its two cards, `estimate`.
-- The price book with quotes, own jobs, assumed hours, the markup setting and BLS wages on a card.
+- The price book with quotes and own jobs the owner types (`price-add`), assumed hours, the markup setting, and BLS wages fetched after a card (`wages-fetch`).
 - Useful the day it ships: the owner types a house from its listing plan, says what he wants changed, and sees the sketch and a cost range.
 
 ### 8.3 Plan fragment
@@ -969,7 +971,7 @@ slices:
       level: must
       proof:
         kind: checks
-- title: The estimate prices the difference between two floors as graded ranges, counts unpriced lines and ends with the fixed sentences
+- title: The owner adds prices and fetches wages after a card, and the estimate prices the difference between two floors as graded ranges, counts unpriced lines and ends with the fixed sentences
   slice:
     name: HM3
     kind: mode
@@ -990,6 +992,13 @@ slices:
         kind: fails-first
         tests:
         - components/modes/home/tests/estimate.test.ts
+    - id: DOD-HM3-4
+      says: Answering keep-local on the wage card sends 0 requests, and answering send stores the wages with their reference period.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/modes/home/tests/wages-fetch.test.ts
     - id: DOD-HM3-2
       says: The estimate action writes nothing.
       level: must

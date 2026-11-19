@@ -1,5 +1,5 @@
 import { defineScript, fail, fieldsOf, type Json, type JsonFields, type ScriptContext } from "../../../../bay/sdk.ts";
-import { called } from "./lib/called.ts";
+import { answerOf } from "./lib/called.ts";
 import { sliceOf } from "./lib/cards.ts";
 import { handedTestsOf, type HandedTest } from "./lib/handed-tests.ts";
 import { forgetTests, keepTests, keptTests } from "./lib/kept-tests.ts";
@@ -46,12 +46,12 @@ function withTests(declared: Json, tests: readonly string[]): Json {
 
 async function writtenTests(context: ScriptContext, round: Round): Promise<readonly HandedTest[]> {
   const asked = { slice: round.slice, interface: round.interface, folder: round.folder, practices: round.practices };
-  return handedTestsOf(await called(context, "write-tests", asked));
+  return handedTestsOf(await answerOf(context, "write-tests", asked));
 }
 
-async function builtWithoutTests(context: ScriptContext, round: Round): Promise<Json> {
+async function builtWithoutTests(context: ScriptContext, round: Round): Promise<JsonFields> {
   const { slice, fixed, folder, declared, practices } = round;
-  return called(context, "build-without-tests", {
+  return answerOf(context, "build-without-tests", {
     slice,
     interface: round.interface,
     fixed,
@@ -62,7 +62,7 @@ async function builtWithoutTests(context: ScriptContext, round: Round): Promise<
 }
 
 async function committed(context: ScriptContext, folder: string, message: string): Promise<JsonFields> {
-  return fieldsOf(await called(context, "worktrees.commit", { folder, message }));
+  return answerOf(context, "worktrees.commit", { folder, message });
 }
 
 async function testsWritten(context: ScriptContext, folder: string, tests: readonly HandedTest[]): Promise<void> {
@@ -80,7 +80,7 @@ export const run = defineScript(async (input, context) => {
   const built = await builtWithoutTests(context, round);
   const work = await committed(context, round.folder, `${round.name}: the builder's work`);
   const cut = { slice: `${round.name}-tests`, base: textAt(work, "commit") };
-  const testsFolder = textAt(fieldsOf(await called(context, "worktrees.cut", cut)), "folder");
+  const testsFolder = textAt(await answerOf(context, "worktrees.cut", cut), "folder");
   const kept = await keptTests(context, round.name);
   await testsWritten(context, testsFolder, kept);
   const head = await committed(context, testsFolder, `${round.name}: the tests the test writer handed in`);

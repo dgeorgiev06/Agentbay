@@ -1,5 +1,6 @@
 import { defineScript, fieldsOf, type Json } from "../../../../bay/sdk.ts";
 import { sliceOf } from "./lib/cards.ts";
+import { checkAnswer } from "./lib/check-answer.ts";
 import { refusedDeclaration } from "./lib/declared.ts";
 
 function textsOf(value: Json | undefined): readonly string[] {
@@ -13,8 +14,5 @@ export const run = defineScript((input, context) => {
     fixed: textsOf(asked.fixed),
     files: textsOf(fieldsOf(input).files),
   });
-  if (refused.length === 0) {
-    return Promise.resolve({ passed: true });
-  }
-  return Promise.resolve({ passed: false, feedback: refused.join(" ") });
+  return checkAnswer(refused);
 });

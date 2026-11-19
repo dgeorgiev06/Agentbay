@@ -1,6 +1,6 @@
-import { fail, type Json, type ScriptContext } from "../../../../../bay/sdk.ts";
+import { fail, fieldsOf, type Json, type JsonFields, type ScriptContext } from "../../../../../bay/sdk.ts";
 
-export async function called(context: ScriptContext, reference: string, input: Json): Promise<Json> {
+export async function answerOf(context: ScriptContext, reference: string, input: Json): Promise<JsonFields> {
   const answer = await context.call(reference, input);
-  return answer.ok ? answer.value : fail(answer.message);
+  return answer.ok ? fieldsOf(answer.value) : fail(answer.message);
 }

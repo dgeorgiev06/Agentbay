@@ -192,10 +192,16 @@ test("the owner's first session in a fresh project beside the kit runs from new 
   assert.equal(refused.status, 1, refused.output);
   assert.equal(refused.output.includes("not for the step"), false);
 
+  const handIn = (handedIn: string, output: Json): void => {
+    const submit = { ...asStep, tool_name: "mcp__agentbay__submit", tool_input: { token: handedIn, output } };
+    assert.equal(hookStatus(hook, submit), 0);
+  };
+  handIn(token, { text: "short" });
   const short = taskOf(succeeded(["submit", '{"text":"short"}', "--token", token]));
   assert.equal(numberField(short, "round"), 2);
   assert.deepEqual(fieldOf(short, "feedback"), ["Write at least 12 characters."]);
   const retry = textField(short, "token") ?? "";
+  handIn(retry, { text: "tidy me, tidied" });
   const done = succeeded(["submit", '{"text":"tidy me, tidied"}', "--token", retry]);
   const run = fieldOf(done, "run") ?? null;
   assert.equal(textField(run, "status"), "done");

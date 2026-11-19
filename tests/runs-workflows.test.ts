@@ -463,6 +463,7 @@ test("one representative run emits every event kind, in order, with ids and size
     "step.started",
     "run.waiting",
     "tool.called",
+    "skill.hook",
     "run.resumed",
     "step.finished",
     "step.started",

@@ -50,6 +50,7 @@ actions:
     input: schemas/write-tests-request.json
     output: schemas/tests.json
     effects: [read]
+    skillOutput: kept-packed
     run:
       - skill: skills/write-tests
         tier: balanced

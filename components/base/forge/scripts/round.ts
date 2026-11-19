@@ -5,7 +5,7 @@ import { failingOf, withoutCases } from "./lib/failing.ts";
 import { handedTestsOf, type HandedTest } from "./lib/handed-tests.ts";
 import { keepTests, keptFindings, keptTests } from "./lib/kept-tests.ts";
 import { roundPlan, roundsStateOf, type RoundPlan, type RoundsState, type Work } from "./lib/rounds.ts";
-import { listOf } from "./lib/json-values.ts";
+import { listOf, textOf, textsOf } from "./lib/json-values.ts";
 
 type Round = {
   readonly number: number;
@@ -28,16 +28,6 @@ type Committed = Work & {
   readonly folder: string;
 };
 
-function textAt(fields: JsonFields, key: string): string {
-  const value = fields[key];
-  return typeof value === "string" ? value : "";
-}
-
-function textsAt(fields: JsonFields, key: string): readonly string[] {
-  const value = fields[key];
-  return Array.isArray(value) ? value.filter((text) => typeof text === "string") : [];
-}
-
 function roundOf(input: Json): Round {
   const fields = fieldsOf(input);
   const slice = fields.slice ?? null;
@@ -48,7 +38,7 @@ function roundOf(input: Json): Round {
     slice,
     interface: fields.interface ?? [],
     fixed: fields.fixed ?? [],
-    cut: { folder: textAt(cut, "folder"), branch: textAt(cut, "branch"), commit: textAt(cut, "commit") },
+    cut: { folder: textOf(cut.folder), branch: textOf(cut.branch), commit: textOf(cut.commit) },
     declared: fields.declared ?? null,
     practices: fields.practices ?? [],
     before: roundsStateOf(fields.before),
@@ -57,20 +47,19 @@ function roundOf(input: Json): Round {
 
 function withTests(declared: Json, tests: readonly string[]): Json {
   const fields = fieldsOf(declared);
-  const files = [...new Set([...textsAt(fields, "files"), ...tests])];
+  const files = [...new Set([...textsOf(fields.files), ...tests])];
   return { files, names: fields.names ?? null };
 }
 
 function lessChecks(slice: Json): Json {
   const fields = fieldsOf(slice);
-  const done = Array.isArray(fields.done) ? fields.done : [];
-  const kept = done.filter((item: Json) => fieldsOf(fieldsOf(item).proof ?? null).kind !== "checks");
+  const kept = listOf(fields.done).filter((item) => fieldsOf(fieldsOf(item).proof ?? null).kind !== "checks");
   return { ...fields, done: kept };
 }
 
 async function cutAt(context: ScriptContext, slice: string, base: string): Promise<Committed> {
   const cut = await answerOf(context, "worktrees.cut", { slice, base });
-  return { folder: textAt(cut, "folder"), branch: textAt(cut, "branch"), commit: textAt(cut, "commit") };
+  return { folder: textOf(cut.folder), branch: textOf(cut.branch), commit: textOf(cut.commit) };
 }
 
 async function removed(context: ScriptContext, request: Json): Promise<void> {
@@ -79,7 +68,7 @@ async function removed(context: ScriptContext, request: Json): Promise<void> {
 
 async function committed(context: ScriptContext, folder: string, message: string): Promise<Committed> {
   const answer = await answerOf(context, "worktrees.commit", { folder, message });
-  return { folder, branch: textAt(answer, "branch"), commit: textAt(answer, "commit") };
+  return { folder, branch: textOf(answer.branch), commit: textOf(answer.commit) };
 }
 
 async function testsAsked(context: ScriptContext, round: Round, folder: string): Promise<readonly HandedTest[]> {

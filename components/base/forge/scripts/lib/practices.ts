@@ -13,7 +13,9 @@ const heading = /^##\s+([A-Z]{1,4}-\d{1,3})\s+(.+)$/;
 
 const heldByLine = /^Held by:\s*(.*?)(?:\.\s+Source:.*)?$/;
 
-const reviewersWords = ["review", "planned check", "check planned"];
+const plannedWords = ["planned check", "check planned"];
+
+const reviewersWords = ["review", ...plannedWords];
 
 const checkWords = ["check", "compiler", "the compiler", "linter", "the feature map", "dead-code check"];
 
@@ -77,6 +79,10 @@ function practicesHeldBy(text: string, holders: readonly string[]): readonly Pra
 
 export function reviewersPractices(text: string): readonly Practice[] {
   return practicesHeldBy(text, reviewersWords);
+}
+
+export function plannedPractices(text: string): readonly Practice[] {
+  return practicesHeldBy(text, plannedWords);
 }
 
 export function checksPractices(text: string): readonly Practice[] {

@@ -205,6 +205,12 @@ test("bay check on the kit warns once for each command the git-worktrees mode li
         `${committing} merge --ff-only --no-stat --no-verify --no-gpg-sign --no-verify-signatures --no-autostash ` +
         "--no-rerere-autoupdate --end-of-options",
     }),
+    listedAt({
+      line: 101,
+      name: "force-delete-branch",
+      effects: "read, write, delete",
+      run: `${git} branch -D --end-of-options`,
+    }),
   ]);
 });
 
@@ -290,6 +296,7 @@ const everyCommand = [
   "checked-out-branch",
   "merge-uncommitted",
   "fast-forward",
+  "force-delete-branch",
 ];
 
 const ranWords =

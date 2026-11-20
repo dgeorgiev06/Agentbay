@@ -1,10 +1,18 @@
 import type { ModeFiles } from "./kit-copy.ts";
 
-export type ShelfVariant = "keeps a changed worktree" | "removes a changed worktree";
+export type ShelfVariant =
+  | "keeps a changed worktree"
+  | "removes a changed worktree"
+  | "drops a branch a live worktree has"
+  | "fails on a branch not there";
 
 export const shelf = "shelf";
 
 export const wrongShelf = "shelf-wrong";
+
+export const liveDroppingShelf = "shelf-drops-live";
+
+export const absentFailingShelf = "shelf-fails-absent";
 
 export const casesThatNeedMergeSetAsideOrApply: readonly string[] = [
   "apply changes exactly the paths a patch names in the copy, and gives them in the patch's order",
@@ -39,6 +47,7 @@ const examples: readonly string[] = [
   "set-aside",
   "commit",
   "apply",
+  "drop-branch",
 ];
 
 const exampleTexts: Readonly<Record<string, string>> = {
@@ -133,6 +142,15 @@ const exampleTexts: Readonly<Record<string, string>> = {
   "output": {
     "folder": ".forge/copies/mail-source-check",
     "paths": ["bay/sdk.ts"]
+  }
+}
+`,
+  "drop-branch": String.raw`{
+  "input": { "branch": "forge/mail-source-planter", "into": "main" },
+  "output": {
+    "how": "dropped",
+    "branch": "forge/mail-source-planter",
+    "commit": "2d4f6a8c0e2b4d6f8a0c2e4b6d8f0a2c4e6b8d0f"
   }
 }
 `,
@@ -553,15 +571,80 @@ export const run = defineScript(async (input, context) => {
 });
 `;
 
+const dropBranchScript = String.raw`import { defineScript, fieldsOf, type ScriptContext } from "../../../../bay/sdk.ts";
+import { answered, branches, branchOf, folderExists, textField, writeBranches } from "./lib/shelf.ts";
+
+const madeByTheShelf = /^forge\/(wip\/[A-Za-z0-9][A-Za-z0-9-]*\/[1-9][0-9]*|(?!wip$)[A-Za-z0-9][A-Za-z0-9-]*)$/;
+
+async function liveWorktreeOf(context: ScriptContext, branch: string): Promise<string | undefined> {
+  const rows = await answered(context.db.query("select folder from folders where kind = 'worktree'", []));
+  for (const row of rows) {
+    const folder = typeof row.folder === "string" ? row.folder : "";
+    if ((await folderExists(context, folder)) && (await branchOf(context, folder)) === branch) {
+      return folder;
+    }
+  }
+  return undefined;
+}
+
+export const run = defineScript(async (input, context) => {
+  const branch = textField(input, "branch");
+  const all = { ...(await branches(context)) };
+  const commit = all[branch];
+  const refused = (reason: string) => ({ how: "refused", branch, reason, ...(commit === undefined ? {} : { commit }) });
+  if (!madeByTheShelf.test(branch)) {
+    return refused("The shelf does not make the branch " + branch + ", so it keeps it.");
+  }
+  if (fieldsOf(input).into === branch) {
+    return refused("The branch " + branch + " is the one work is merged into, so the shelf keeps it.");
+  }
+  if (commit === undefined) {
+    return { how: "not-there", branch };
+  }
+  const live = await liveWorktreeOf(context, branch);
+  if (live !== undefined) {
+    return refused("The worktree " + live + " still has the branch " + branch + ", so the shelf keeps it.");
+  }
+  delete all[branch];
+  await writeBranches(context, all);
+  return { how: "dropped", branch, commit };
+});
+`;
+
 const unbuiltScript = String.raw`import { defineScript, fail } from "../../../../bay/sdk.ts";
 
-export const run = defineScript(() => Promise.resolve(fail("The shelf does not build this action; only cut, status, changed, copy, overlay, remove and commit.")));
+export const run = defineScript(() => Promise.resolve(fail("The shelf does not build this action; only cut, status, changed, copy, overlay, remove, commit and drop-branch.")));
 `;
 
 const changedWorktreeKept = String.raw`  if (state.changed.length + state.untracked.length > 0) {
     fail("The worktree " + folder + " has changed or untracked files, so the shelf keeps it.");
   }
 `;
+
+const liveWorktreeKept = String.raw`  if (live !== undefined) {
+    return refused("The worktree " + live + " still has the branch " + branch + ", so the shelf keeps it.");
+  }
+`;
+
+const notThereAnswered = String.raw`    return { how: "not-there", branch };`;
+
+const notThereFailed = String.raw`    return fail("There is no branch " + branch + " on the shelf.");`;
+
+function removeOf(variant: ShelfVariant): string {
+  return variant === "removes a changed worktree" ? removeScript.replace(changedWorktreeKept, "") : removeScript;
+}
+
+function dropBranchOf(variant: ShelfVariant): string {
+  if (variant === "drops a branch a live worktree has") {
+    return dropBranchScript.replace(liveWorktreeKept, "");
+  }
+  if (variant === "fails on a branch not there") {
+    return dropBranchScript
+      .replace("defineScript, fieldsOf", "defineScript, fail, fieldsOf")
+      .replace(notThereAnswered, notThereFailed);
+  }
+  return dropBranchScript;
+}
 
 function manifestOf(name: string): string {
   return String.raw`name: ${name}
@@ -621,13 +704,17 @@ actions:
     description: When a test would apply a patch to a copy; the shelf does not build this action and refuses it.
     effects: [read, write, delete]
     run: [{ script: scripts/unbuilt.ts }]
+  drop-branch:
+    description: When a test no longer needs a branch the shelf made, merged or not, and no worktree of the shelf has it.
+    effects: [read, write, delete]
+    run: [{ script: scripts/drop-branch.ts }]
 `;
 }
 
 function readmeOf(name: string): string {
   return String.raw`# ${name}
 
-A made-up worktrees@1 that a test adds to a copy of the kit. It keeps each commit as a file of its paths and texts under .shelf/commits/, and its branches as names in .shelf/branches.json. It builds cut, status, changed, copy, overlay, remove and commit; merge, set-aside and apply refuse. A copy holds a shelf of its own in its .shelf folder, with the copied commit, its links listed as ignored, so a commit made inside the copy stays there.
+A made-up worktrees@1 that a test adds to a copy of the kit. It keeps each commit as a file of its paths and texts under .shelf/commits/, and its branches as names in .shelf/branches.json. It builds cut, status, changed, copy, overlay, remove, commit and drop-branch; merge, set-aside and apply refuse. A copy holds a shelf of its own in its .shelf folder, with the copied commit, its links listed as ignored, so a commit made inside the copy stays there.
 `;
 }
 
@@ -797,7 +884,6 @@ testWorktrees({ mode: "${name}", ownData: [".shelf"], start: startShelf });
 }
 
 export function shelfFiles(name: string, variant: ShelfVariant): ModeFiles {
-  const remove = variant === "keeps a changed worktree" ? removeScript : removeScript.replace(changedWorktreeKept, "");
   const exampleFiles = examples.map((action): readonly [string, string] => [
     `tests/${action}.example.json`,
     exampleTexts[action] ?? "",
@@ -812,9 +898,10 @@ export function shelfFiles(name: string, variant: ShelfVariant): ModeFiles {
     "scripts/changed.ts": changedScript,
     "scripts/copy.ts": copyScript,
     "scripts/overlay.ts": overlayScript,
-    "scripts/remove.ts": remove,
     "scripts/commit.ts": commitScript,
     "scripts/unbuilt.ts": unbuiltScript,
+    "scripts/remove.ts": removeOf(variant),
+    "scripts/drop-branch.ts": dropBranchOf(variant),
     [`tests/${name}.test.ts`]: modeTestOf(name),
     ...Object.fromEntries(exampleFiles),
   };

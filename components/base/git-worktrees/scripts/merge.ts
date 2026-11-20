@@ -4,6 +4,7 @@ import { blockedPaths, folderChangedSentences, movedSentence } from "./lib/check
 import { folderExists, madeWorktree, targetFolder } from "./lib/folders.ts";
 import {
   branchExists,
+  checkedOutInProject,
   commitOf,
   firstLine,
   git,
@@ -40,11 +41,6 @@ async function refuseUnmergeable(context: ScriptContext, folder: string, merging
       `The folder ${target} is left from an earlier merge into ${into}, so the mode does not merge until it is removed.`,
     );
   }
-}
-
-async function checkedOutInProject(context: ScriptContext): Promise<string | undefined> {
-  const ended = await git(context, ".", ["checked-out-branch", "HEAD"]);
-  return ended.exitCode === 0 ? ended.stdout.trim() : undefined;
 }
 
 async function checkOutTarget(context: ScriptContext, merging: Merging): Promise<void> {

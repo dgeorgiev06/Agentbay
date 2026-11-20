@@ -1,6 +1,6 @@
 name: git-worktrees
 version: 1.0.0
-description: Makes a worktree and branch for each slice, says where it stands, commits its work to its branch, merges it and sets its work aside, and makes throwaway copies of commits and applies patches to them, running git so that no code from the repository runs.
+description: Makes a worktree and branch for each slice, says where it stands, commits its work to its branch, merges it and sets its work aside, drops a branch it made, and makes throwaway copies of commits and applies patches to them, running git so that no code from the repository runs.
 
 implements: [worktrees@1]
 
@@ -97,6 +97,9 @@ resources:
     fast-forward:
       run: --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 -c user.name=agentbay-git-worktrees -c user.email=git-worktrees@agentbay.invalid -c gc.auto=0 merge --ff-only --no-stat --no-verify --no-gpg-sign --no-verify-signatures --no-autostash --no-rerere-autoupdate --end-of-options
       effects: [read, write, delete]
+    force-delete-branch:
+      run: --attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904 branch -D --end-of-options
+      effects: [read, write, delete]
 
 actions:
   cut:
@@ -149,3 +152,8 @@ actions:
     effects: [read, write, delete]
     run:
       - script: scripts/apply.ts
+  drop-branch:
+    description: When a branch the mode made, forge/<slice> or forge/wip/<slice>/<n>, is no longer needed, merged or not, and no worktree of the mode has it; the answer gives the commit it pointed at, says when there was no such branch, and keeps the branch the project has checked out and the branch named as into.
+    effects: [read, write, delete]
+    run:
+      - script: scripts/drop-branch.ts

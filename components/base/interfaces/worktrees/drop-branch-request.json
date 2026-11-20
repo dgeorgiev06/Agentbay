@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DropBranchRequest",
+  "description": "Which branch the mode made to delete, merged or not, once no worktree of the mode has it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["branch"],
+  "properties": {
+    "branch": {
+      "type": "string",
+      "pattern": "^forge/[A-Za-z0-9][A-Za-z0-9-]*(/[A-Za-z0-9][A-Za-z0-9-]*)*$",
+      "maxLength": 100,
+      "description": "A branch the mode made: forge/<slice>, as cut makes it, or forge/wip/<slice>/<n>, as set-aside makes it. Letters, digits and dashes after forge/, in parts split by single slashes, each starting with a letter or digit."
+    },
+    "into": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The branch the caller merges work into, which is never dropped. It has no .. and does not start with a dash."
+    }
+  }
+}

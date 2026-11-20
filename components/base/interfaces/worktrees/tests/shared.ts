@@ -1017,6 +1017,74 @@ const cases: readonly Case[] = [
     },
   },
   {
+    name: "drop-branch deletes a branch the mode made, merged or not, and answers the commit it pointed at; a second drop answers not-there, and the slice can be cut again",
+    restsOn:
+      "drop-branch-request (branch: forge/<slice> or forge/wip/<slice>/<n>), drop-branch-response (dropped with the commit; not-there)",
+    run: async (world) => {
+      const { folder, head } = await sliceWithCommit(world, { "feature.txt": "feature\n" });
+      await world.output("remove", { folder, branchAfter: "kept" });
+      const merged = await cut(world, "merged");
+      await world.output("remove", { folder: merged, branchAfter: "kept" });
+      await world.makeBranch("forge/wip/feature/1", head);
+      await cut(world, "busy");
+      const before = await ownersCheckout(world);
+      const dropped: readonly (readonly [string, string])[] = [
+        ["forge/feature", head],
+        ["forge/merged", world.base],
+        ["forge/wip/feature/1", head],
+      ];
+      for (const [branch, commit] of dropped) {
+        assert.deepEqual(await world.output("drop-branch", { branch, into: ownersBranch }), {
+          how: "dropped",
+          branch,
+          commit,
+        });
+        assert.equal(await world.headOf(branch), undefined);
+        assert.deepEqual(await world.output("drop-branch", { branch }), { how: "not-there", branch });
+      }
+      assert.deepEqual(await world.parentsOf(head), [world.base]);
+      assert.deepEqual(await ownersCheckout(world), before);
+      assert.deepEqual(await world.output("cut", { slice: "feature", base: ownersBranch }), {
+        folder,
+        branch: "forge/feature",
+        commit: world.base,
+      });
+    },
+  },
+  {
+    name: "drop-branch keeps a branch a live worktree of the mode still has, the branch named as into, and a branch under forge/ the mode never makes, and answers refused with its commit; once the worktree is removed its branch goes",
+    restsOn:
+      "drop-branch-request (into: never dropped), drop-branch-response (refused: the commit and a reason; dropped)",
+    run: async (world) => {
+      const { folder, head } = await sliceWithCommit(world, { "feature.txt": "feature\n" });
+      await world.makeBranch("forge/integration", head);
+      await world.makeBranch("forge/wip", world.base);
+      await world.makeBranch("forge/by-hand/1", world.base);
+      const before = await forgeTree(world);
+      const refused: readonly (readonly [Fields, string])[] = [
+        [{ branch: "forge/feature" }, head],
+        [{ branch: "forge/integration", into: "forge/integration" }, head],
+        [{ branch: "forge/wip" }, world.base],
+        [{ branch: "forge/by-hand/1" }, world.base],
+      ];
+      for (const [input, commit] of refused) {
+        const output = fieldsOf(await world.output("drop-branch", input));
+        const branch = textOf(input.branch);
+        assert.deepEqual(output, { how: "refused", branch, commit, reason: output.reason ?? null });
+        assert.equal(sentenceOf(textOf(output.reason)), givenReason);
+        assert.equal(await world.headOf(branch), commit);
+      }
+      assert.deepEqual(await forgeTree(world), before);
+      await world.output("remove", { folder, branchAfter: "kept" });
+      assert.deepEqual(await world.output("drop-branch", { branch: "forge/feature", into: "forge/integration" }), {
+        how: "dropped",
+        branch: "forge/feature",
+        commit: head,
+      });
+      assert.equal(await world.headOf("forge/integration"), head);
+    },
+  },
+  {
     name: "a worktree the mode made that no longer exists is refused by status, merge, set-aside and commit, and forgotten by remove with its branch kept",
     restsOn: "remove-response (forgotten); README, what it refuses: says so when the folder no longer exists",
     run: async (world) => {
@@ -1115,6 +1183,10 @@ const cases: readonly Case[] = [
       const commit = "A commit: a full or short hash, or a branch name. It has no .. and does not start with a dash.";
       const folderOf = (example: string, more: string): string =>
         `A ${more}this mode made, relative to the project, such as ${example}.`;
+      const madeBranch =
+        "A branch the mode made: forge/<slice>, as cut makes it, or forge/wip/<slice>/<n>, as set-aside makes it. " +
+        "Letters, digits and dashes after forge/, in parts split by single slashes, each starting with a letter or " +
+        "digit.";
       const refused: readonly (readonly [string, Fields, string])[] = [
         [
           "cut",
@@ -1194,6 +1266,19 @@ const cases: readonly Case[] = [
           "input.message is not in the expected form. Expected: The commit's message: its first line is the " +
             "subject. It has a character that is not a space, and no control character but tab and newline.",
         ],
+        ["drop-branch", { branch: "main" }, `input.branch is not in the expected form. Expected: ${madeBranch}`],
+        [
+          "drop-branch",
+          { branch: "forge/../main" },
+          `input.branch is not in the expected form. Expected: ${madeBranch}`,
+        ],
+        ["drop-branch", { branch: "forge/-x" }, `input.branch is not in the expected form. Expected: ${madeBranch}`],
+        [
+          "drop-branch",
+          { branch: "forge/x", into: "--all" },
+          "input.into is not in the expected form. Expected: The branch the caller merges work into, which is " +
+            "never dropped. It has no .. and does not start with a dash.",
+        ],
         [
           "apply",
           { folder: "-x", patch: "x" },
@@ -1239,6 +1324,7 @@ const cases: readonly Case[] = [
       const done = await cut(world, "done");
       await world.commit(changeOn({ folder: done }, { "done.txt": "done\n" }, "Do the other slice"));
       await world.output("remove", { folder: done, branchAfter: "kept" });
+      await world.output("drop-branch", { branch: "forge/done", into: ownersBranch });
       await world.attempt("remove", { folder, into: "integration" });
       await world.attempt("merge", { folder, into: ownersBranch });
       assert.deepEqual(await ownersCheckout(world), before);

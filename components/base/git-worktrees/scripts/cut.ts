@@ -1,6 +1,7 @@
 import { fail } from "../../../../bay/sdk.ts";
 import { recordFolder, sliceBranch, worktreeFolder } from "./lib/folders.ts";
-import { branchExists, git, gitSucceeded, safeCommitOf } from "./lib/git.ts";
+import { leftoverSentence } from "./lib/drop.ts";
+import { branchHead, git, gitSucceeded, safeCommitOf } from "./lib/git.ts";
 import { defineRequestScript } from "./lib/request.ts";
 
 export const run = defineRequestScript(async (request, context) => {
@@ -11,8 +12,9 @@ export const run = defineRequestScript(async (request, context) => {
   const branch = sliceBranch(slice);
   const folder = worktreeFolder(slice);
   const commit = await safeCommitOf(context, ".", request.text("base"));
-  if (await branchExists(context, branch)) {
-    fail(`The branch ${branch} already exists, so the slice ${slice} is not cut again.`);
+  const leftover = await branchHead(context, branch);
+  if (leftover !== undefined) {
+    fail(leftoverSentence({ slice, branch, commit: leftover }));
   }
   const added = await git(context, ".", ["add-detached-worktree", folder, commit]);
   if (added.exitCode !== 0) {

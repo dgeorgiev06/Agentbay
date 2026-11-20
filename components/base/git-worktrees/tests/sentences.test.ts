@@ -21,7 +21,9 @@ test("cut's refusals say which branch exists or which commit is missing", async 
     await project.output("git-worktrees.cut", { slice: "again", base: project.base });
     assert.equal(
       await project.failure("git-worktrees.cut", { slice: "again", base: project.base }),
-      "The branch forge/again already exists, so the slice again is not cut again.",
+      `The branch forge/again already exists at the commit ${project.base}, so the slice again is not cut ` +
+        "again. Drop the branch with drop-branch, which answers that commit so its work can be found again, or " +
+        "cut the slice under another name.",
     );
     assert.equal(
       await project.failure("git-worktrees.cut", { slice: "lost", base: "no-such-branch" }),

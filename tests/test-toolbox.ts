@@ -29,6 +29,12 @@ export type TestProject = {
   readonly trusted?: readonly string[];
 };
 
+export type WorkflowPart = {
+  readonly input?: Json;
+  readonly given?: Readonly<Record<string, Json>>;
+  readonly until?: string;
+};
+
 export type ProjectOptions = TestProject & {
   readonly startAt?: string;
   readonly callers?: readonly string[];
@@ -89,8 +95,30 @@ type RunState =
   | { readonly status: "failed"; readonly reason: string }
   | { readonly status: "undone"; readonly reason: string };
 
+type PartMark = {
+  readonly given: readonly string[];
+  readonly until?: string;
+};
+
+type RunTarget = {
+  readonly kind: "action" | "workflow";
+  readonly mode: string;
+  readonly name: string;
+  readonly part?: PartMark;
+};
+
+type RunStep = {
+  readonly key: string;
+  readonly kind: string;
+  readonly status: "started" | "done" | "failed";
+  readonly kept?: "as-text" | "kept-packed";
+  readonly output?: Json;
+};
+
 export type Run = {
   readonly id: string;
+  readonly target: RunTarget;
+  readonly steps: readonly RunStep[];
   readonly state: RunState;
   readonly spent: Spend;
   readonly events: readonly RunEvent[];
@@ -121,6 +149,8 @@ export type ModeProject = {
   readonly refusal: (reference: string, input: Json) => Promise<string>;
   readonly untrustedSentence: (reference: string) => string;
   readonly runWorkflow: (mode: string, path: string, input: Json) => Promise<Run>;
+  readonly runWorkflowPart: (mode: string, path: string, part: WorkflowPart) => Promise<Run>;
+  readonly workflowPartRefusal: (mode: string, path: string, part: WorkflowPart) => Promise<string>;
   readonly answer: (token: string, output: Json) => Promise<Run>;
   readonly answerRefusal: (token: string, output: Json) => Promise<string>;
   readonly approve: (runId: string, decision: Decision) => Promise<Run>;
@@ -418,6 +448,9 @@ async function projectIn(root: string, opening: Opening): Promise<ModeProject> {
     refusal: async (reference, input) => refusalOf(await started(reference, input), reference),
     untrustedSentence: (reference) => untrustedSentenceOf(untrusted, reference),
     runWorkflow: async (mode, path, input) => accepted(await runs.start({ workflow: { mode, path } }, input)),
+    runWorkflowPart: async (mode, path, part) => accepted(await runs.startPart({ mode, path }, part.input ?? {}, part)),
+    workflowPartRefusal: async (mode, path, part) =>
+      refusalOf(await runs.startPart({ mode, path }, part.input ?? {}, part), "the start of a part of the workflow"),
     answer: async (token, output) => accepted(await runs.submit(token, { output, spent: nothingSpent })),
     answerRefusal: async (token, output) =>
       refusalOf(await runs.submit(token, { output, spent: nothingSpent }), "the answer"),

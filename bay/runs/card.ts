@@ -1,6 +1,7 @@
 import { tiers, type Json, type RunEvent, type Tier } from "../contracts.ts";
 import { fieldOf, isRecord, textField, toJson } from "../json.ts";
 import { failedWith, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
+import { isGivenStep } from "./workflow-part.ts";
 
 const marks = ["ran", "computed", "judged"] as const;
 
@@ -68,6 +69,7 @@ type Cited = {
   readonly key: string;
   readonly skills: readonly SkillUsed[];
   readonly calledRuns: readonly string[];
+  readonly given: boolean;
 };
 
 const cardFields: readonly string[] = ["title", "lines", "withheld"];
@@ -181,7 +183,7 @@ function citedStep(context: CardContext, id: string): Cited | string {
   if (record.kind !== "action") {
     return `cites step ${id}, which is a ${record.kind} step; a line cites an action step.`;
   }
-  return { id, key, ...skillsUnder(context.steps, key) };
+  return { id, key, ...skillsUnder(context.steps, key), given: isGivenStep(context.events, key) };
 }
 
 function skillsUnder(steps: CardContext["steps"], key: string): Pick<Cited, "skills" | "calledRuns"> {
@@ -213,7 +215,7 @@ function judgedProblem(context: CardContext, cited: Cited): string | undefined {
       `(it lists: ${listed}).`
     );
   }
-  return cited.skills.length > 0
+  return cited.skills.length > 0 || cited.given
     ? undefined
     : `is marked judged but cites step ${cited.id}, which ran no skill; ` +
         "a judged line cites a skill step the approval lists under quotes.";

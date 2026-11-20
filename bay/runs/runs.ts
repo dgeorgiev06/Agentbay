@@ -23,6 +23,7 @@ import { SqliteRunStore } from "./sqlite-run-store.ts";
 import { skillRoundOf } from "./step-key.ts";
 import { checkTaskToken, type TaskPlace } from "./task-tokens.ts";
 import { storedWaiting } from "./waiting.ts";
+import { markIn, type PartMark } from "./workflow-part.ts";
 
 type RunsNeeds = {
   readonly project: string;
@@ -54,7 +55,12 @@ type RunStep = {
 
 export type Run = {
   readonly id: string;
-  readonly target: { readonly kind: "action" | "workflow"; readonly mode: string; readonly name: string };
+  readonly target: {
+    readonly kind: "action" | "workflow";
+    readonly mode: string;
+    readonly name: string;
+    readonly part?: PartMark;
+  };
   readonly kept?: Keeping;
   readonly state: RunState<Task>;
   readonly spent: Spend;
@@ -80,7 +86,14 @@ export function waitsOf(state: RunState<Task>): readonly Waiting<Task>[] {
   return waitsIn(state);
 }
 
-type Start = { readonly action: string } | { readonly workflow: { readonly mode: string; readonly path: string } };
+type WorkflowReference = { readonly mode: string; readonly path: string };
+
+type Start = { readonly action: string } | { readonly workflow: WorkflowReference };
+
+export type Part = {
+  readonly given?: Readonly<Record<string, Json>>;
+  readonly until?: string;
+};
 
 type Decision = {
   readonly stepKey: string;
@@ -92,6 +105,7 @@ type Called = { readonly output: Json; readonly runId: string };
 
 export type Runs = {
   readonly start: (what: Start, input: Json) => Promise<Outcome<Run>>;
+  readonly startPart: (workflow: WorkflowReference, input: Json, part: Part) => Promise<Outcome<Run>>;
   readonly show: (runId: string) => Promise<Outcome<Run>>;
   readonly list: () => Promise<readonly RunSummary[]>;
   readonly approve: (runId: string, decision: Decision) => Promise<Outcome<Run>>;
@@ -224,6 +238,11 @@ async function waitingStateOf(opened: Opened, stored: Stored, showing: Showing):
   return others.length === 0 ? { status: "waiting", waiting } : { status: "waiting", waiting, alsoWaiting: others };
 }
 
+function partOf(events: readonly RunEvent[]): Pick<Run["target"], "part"> {
+  const mark = markIn(events);
+  return mark === undefined ? {} : { part: mark };
+}
+
 function askedByOf(events: readonly RunEvent[]): Pick<Run, "askedBy"> {
   const detail = events.find((event) => event.kind === askedByKind)?.detail ?? null;
   const runId = textField(detail, "runId");
@@ -244,7 +263,7 @@ async function shownRun(opened: Opened, runId: string, showing: Showing): Promis
   const { id, target, spent, createdAt, updatedAt } = run;
   return succeededWith({
     id,
-    target: { kind: target.kind, mode: target.mode, name: target.name },
+    target: { kind: target.kind, mode: target.mode, name: target.name, ...partOf(events) },
     ...(run.kept === undefined ? {} : { kept: run.kept }),
     state,
     spent,
@@ -408,11 +427,24 @@ function started(opened: Opened, what: Start, input: Json): Promise<Outcome<Adva
     : opened.engine.startWorkflow(what.workflow, input);
 }
 
+type PartStart = {
+  readonly workflow: WorkflowReference;
+  readonly input: Json;
+  readonly part: Part;
+};
+
+function partStarted(opened: Opened, start: PartStart): Promise<Outcome<AdvancedRun>> {
+  const given = new Map(Object.entries(start.part.given ?? {}));
+  return opened.engine.startWorkflowPart(start.workflow, start.input, { given, until: start.part.until });
+}
+
 function runsOf(opened: Opened): Runs {
   const { engine, store, events, needs } = opened;
   const always = (): boolean => true;
   return {
     start: async (what, input) => resultOf(opened, await started(opened, what, input), always),
+    startPart: async (workflow, input, part) =>
+      resultOf(opened, await partStarted(opened, { workflow, input, part }), always),
     show: (runId) => shownRun(opened, runId, shownOnly),
     list: () => summaries(store),
     approve: (runId, decision) => {

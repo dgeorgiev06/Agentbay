@@ -6,6 +6,7 @@ import {
   addSpend,
   budgetProblems,
   extendedBudget,
+  noSpend,
   remainingBudget,
   rootFrame,
   smallestBudget,
@@ -25,6 +26,8 @@ import { runUndo } from "./undo.ts";
 import { answeredApproval, endedRefusal, refusal, refusalOf, verdictOf, waitingSkill } from "./run-answers.ts";
 import { endingEvents, isDueAt, storedStateOf } from "./run-ending.ts";
 import { failed, type Progress, type Services, type Walk } from "./walk.ts";
+import { givenRecords, type GivenRecord } from "./given-steps.ts";
+import { givenKind, partMarkOf, untilIn, type PartMark, type WorkflowPart } from "./workflow-part.ts";
 import { runWorkflowSteps } from "./workflow-steps.ts";
 
 type EngineOptions = Services & {
@@ -82,6 +85,11 @@ type NewRunPlan = {
 type Ending = {
   readonly status: RunStatus;
   readonly spent: Spend;
+};
+
+type GivenPart = {
+  readonly mark: PartMark;
+  readonly records: readonly GivenRecord[];
 };
 
 const stopReason = "The owner stopped the run.";
@@ -184,6 +192,14 @@ export class Engine {
   }
 
   startWorkflow(reference: WorkflowReference, triggerInput: Json): Promise<Outcome<AdvancedRun>> {
+    return this.startWorkflowPart(reference, triggerInput, undefined);
+  }
+
+  startWorkflowPart(
+    reference: WorkflowReference,
+    triggerInput: Json,
+    part: WorkflowPart | undefined,
+  ): Promise<Outcome<AdvancedRun>> {
     const { mode, path } = reference;
     const found = this.#services.system.workflow(mode, path);
     if (!found.ok) {
@@ -192,7 +208,16 @@ export class Engine {
     const workflow = found.value.workflow;
     const limit = smallestBudget([workflow.budget, this.#services.system.config.budget]);
     const target: RunTarget = { kind: "workflow", mode, name: path };
-    return this.#start({ target, kept: "as-text", input: triggerInput, limit });
+    const plan = { target, kept: "as-text" as const, input: triggerInput, limit };
+    if (part === undefined) {
+      return this.#start(plan);
+    }
+    const { system, scrubber } = this.#services;
+    const records = givenRecords({ system, scrubber, workflow: found.value, trigger: triggerInput }, part);
+    if (!records.ok) {
+      return Promise.resolve(refusalOf("new", records.problems));
+    }
+    return this.#start(plan, { mark: partMarkOf(part), records: records.value });
   }
 
   submit(runId: string, stepKey: string, submission: Submission): Promise<Outcome<AdvancedRun>> {
@@ -297,7 +322,7 @@ export class Engine {
     });
   }
 
-  async #start(plan: NewRunPlan): Promise<Outcome<AdvancedRun>> {
+  async #start(plan: NewRunPlan, part?: GivenPart): Promise<Outcome<AdvancedRun>> {
     const id = this.#newId();
     if ((await this.#services.store.readRun(id)) !== undefined) {
       return refusal(id, { message: `A run with the id ${id} already exists.` });
@@ -312,11 +337,25 @@ export class Engine {
         mode: plan.target.mode,
         name: plan.target.name,
         inputBytes: byteSize(plan.input),
+        ...(part === undefined ? {} : { part: part.mark }),
       },
     };
     const newRun = { id, ...plan, at: now.toISOString() };
     const writer = await this.#services.store.createRun(newRun, this.#owner, [started]);
-    return this.#holding(writer, () => this.#advance(writer, { now, cause: "resume", rerunUnfinished: false }));
+    return this.#holding(writer, async () => {
+      await this.#saveGiven(writer, part?.records ?? [], now.toISOString());
+      return this.#advance(writer, { now, cause: "resume", rerunUnfinished: false });
+    });
+  }
+
+  async #saveGiven(writer: Writer, records: readonly GivenRecord[], at: string): Promise<void> {
+    const store = this.#services.store;
+    for (const { output, ...start } of records) {
+      const detail = { stepKey: start.key, kind: start.kind, outputBytes: byteSize(output) };
+      const given: RunEvent = { at, runId: writer.runId, kind: givenKind, detail };
+      await store.saveStepInput(writer, { ...start, at }, []);
+      await store.saveStepOutput(writer, { key: start.key, status: "done", output, spent: noSpend, at }, [given]);
+    }
   }
 
   async #withRun(
@@ -392,15 +431,17 @@ export class Engine {
 
   async #advance(writer: Writer, advance: Advance): Promise<Outcome<AdvancedRun>> {
     const run = await this.#read(writer.runId);
+    const events = await this.#services.store.readEvents(run.id);
     const walk: Walk = {
       services: this.#services,
       writer,
       records: new Map(run.steps.map((step) => [step.key, step])),
-      events: await this.#services.store.readEvents(run.id),
+      events,
       now: advance.now,
       rerunUnfinished: advance.rerunUnfinished,
       stopReason: run.stopReason,
       extra: run.extra,
+      until: untilIn(events),
       phase: "main",
     };
     const ending = await driveRun(walk, run);

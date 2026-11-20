@@ -17,26 +17,6 @@ slices:
       level: must
       proof:
         kind: checks
-- title: 'Forge runs a wave: its slices side by side, each proved by its own tests, bugs and scope, the whole suite once on the wave''s combined result, and one merge card for the wave'
-  slice:
-    name: WV1
-    kind: mode
-    scope:
-    - components/base/forge/**
-    after: []
-    done:
-    - id: DOD-WV1-1
-      says: A wave of two slices is proved slice by slice without the whole suite, then once with it; when that fails, each slice is proved alone to name the cause; the merge card lists both slices.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/base/forge/tests/wave.test.ts
-    - id: DOD-WV1-2
-      says: The kit's checks and its whole test run pass.
-      level: must
-      proof:
-        kind: checks
 - title: 'The todo mode''s next outcome through the whole forge: requirements, design, plan and slices, the owner stopped at each card'
   slice:
     name: TDW

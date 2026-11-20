@@ -1032,6 +1032,15 @@ Waves: FP1, PB1 and WS1 side by side; then FP2, PB2 and BW1; then HM1, HM2, HM3,
 
 ## 9. Questions only the owner can answer
 
+**Answered on 20 November.** The owner's words: "1. All. 2 all. 3. I can't 4. Agree 5. Agree. 6. Agree".
+
+1. Counties: all seven named here: Orange, Putnam, Ulster, Westchester, Rockland, Dutchess and Columbia. In Dutchess and Columbia the state publishes no parcel outline, so the owner types more of it.
+2. Both are built: the typed plan with sketch and estimate, and the address look-up. The reviewer reads "all" as both parts, in the order this note recommends (the typed plan first, the look-up after); to be confirmed with the owner.
+3. No contractor quotes or past job costs can be given. Every cost line starts from public data only: labour from a public wage average, with the wide spread section 3 describes. The price book stays in the design so quotes can be added later.
+4. Lines that rest on public data only are shown as wide ranges, labelled, with their share of the total.
+5. Only the session's own provider reads the owner's words and later the plan images, at the deep tier for the redesign; the address never goes to a model.
+6. Feet and inches, typed as `13-0`, stored as whole inches.
+
 **Conclusion.** Six questions. The first decides which sources are worth building first, since coverage differs by county.
 
 1. **Which county or counties are you looking in?** Coverage differs. Orange, Putnam, Ulster, Westchester and Rockland publish parcel outlines through the state; Dutchess and Columbia do not, so there the mode gives the parcel's centre-point facts and the building outline, not the lot lines. Recommendation: name the one or two counties you will really look in first; the first source mode is built and tested for them.

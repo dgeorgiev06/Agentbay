@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
 import { describe, test } from "node:test";
 import type { Json } from "../bay/contracts.ts";
 import type { Action } from "../bay/generated/mode.ts";
 import type { Config } from "../bay/generated/config.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
-import { numberField } from "../bay/json.ts";
+import { isRecord, numberField } from "../bay/json.ts";
 import type { Run, Runs } from "../bay/runs/runs.ts";
 import {
   answer,
@@ -288,6 +289,90 @@ describe("a card on an approval after a foreach", () => {
       lines: [{ ...lines[0], skills: [], foreach: "each" }],
       counted: { ran: 0, computed: 0, judged: 1 },
     });
+  });
+});
+
+describe("what kernel.db holds when a card is checked again or read back", () => {
+  const judgedFirst = { mark: "judged", words: drafted, source: { step: "write", item: 0 } };
+
+  function tampered(database: string, sql: string, ...values: readonly string[]): void {
+    const opened = new DatabaseSync(database);
+    try {
+      opened.prepare(sql).run(...values);
+    } finally {
+      opened.close();
+    }
+  }
+
+  async function recheckedAfter(lines: readonly Line[], sql: string, ...values: readonly string[]): Promise<Run> {
+    const { run, opened } = await atCard({ lines });
+    opened.runs.close();
+    tampered(opened.database, sql, ...values);
+    const edited = await fixtureSystem(
+      changesOf({ lines: lines.map((line) => ({ ...line, words: `${line.words}.` })) }),
+    );
+    const later = await opened.reopen(edited.system);
+    const resumed = runOf(await later.resume(run.id));
+    opened.close();
+    return resumed;
+  }
+
+  test("a step in an item whose record did not finish is not shown when the card is checked again", async () => {
+    for (const status of ["failed", "started"]) {
+      const run = await recheckedAfter(
+        [judgedFirst],
+        "update steps set status = ?, reason = ? where key = 'each[0].write'",
+        status,
+        "broke",
+      );
+      assert.equal(
+        endReason(run),
+        `${cannot} cites step write in item 0 of each, which has not finished in this run before the approval.`,
+      );
+    }
+  });
+
+  test("a plain step whose record did not finish never reaches the card: the walk stops at it first", async () => {
+    const lines = [{ mark: "computed", words: "in scope", source: { step: "offer" } }];
+    const run = await recheckedAfter(lines, "update steps set status = 'failed', reason = 'broke' where key = 'offer'");
+    assert.equal(endReason(run), "broke");
+  });
+
+  async function readBackWith(edit: (line: Record<string, unknown>) => void): Promise<unknown> {
+    const { run, opened } = await atCard({ lines: [judgedFirst] });
+    opened.runs.close();
+    const database = new DatabaseSync(opened.database);
+    const row = database.prepare("select detail from steps where key = 'card'").get();
+    const detail: unknown = JSON.parse(String(row?.["detail"]));
+    assert.ok(isRecord(detail) && isRecord(detail["card"]) && Array.isArray(detail["card"]["lines"]));
+    const first: unknown = detail["card"]["lines"][0];
+    assert.ok(isRecord(first));
+    const line: Record<string, unknown> = { ...first };
+    edit(line);
+    detail["card"]["lines"][0] = line;
+    database.prepare("update steps set detail = ? where key = 'card'").run(JSON.stringify(detail));
+    database.close();
+    const later = await opened.reopen();
+    try {
+      return await later.show(run.id);
+    } catch (error) {
+      return error;
+    } finally {
+      opened.close();
+    }
+  }
+
+  test("a stored line with an item but no foreach, or a foreach but no item, is refused as malformed", async () => {
+    const withoutForeach = await readBackWith((line) => {
+      delete line["foreach"];
+    });
+    const withoutItem = await readBackWith((line) => {
+      line["source"] = { step: "write" };
+    });
+    for (const read of [withoutForeach, withoutItem]) {
+      assert.ok(read instanceof Error, JSON.stringify(read));
+      assert.equal(read.message, "kernel.db holds an approval step whose detail has no valid card.");
+    }
   });
 });
 

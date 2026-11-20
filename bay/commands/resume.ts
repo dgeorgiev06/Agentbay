@@ -104,8 +104,8 @@ function runResume(invocation: Invocation): Promise<CommandResult> {
 export const resumeCommand: Command = {
   name: "resume",
   summary:
-    "Continue a run: --rerun runs an unfinished step again, --extend raises a spent budget, --stop ends it; " +
-    "--due wakes waits.",
+    "Continue a run: --rerun runs an unfinished step, or a side-by-side foreach's failed items, again, " +
+    "--extend raises a spent budget, --stop ends it; --due wakes waits.",
   usage,
   options: [
     { name: "rerun", takesValue: false },

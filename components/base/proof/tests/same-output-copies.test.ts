@@ -92,7 +92,7 @@ function contextOf(asked: Asked, planned: Answers): ScriptContext {
       const answer = reference === "worktrees.copy" ? { folder: `.forge/copies/${copyNameOf(input)}` } : null;
       return Promise.resolve({ ok: true, value: answer });
     },
-    schemas: { check: unanswered },
+    schemas: { check: unanswered, checkAgainst: unanswered },
     settings: {},
     now: () => new Date("2026-11-18T10:00:00Z"),
     spend: unanswered,

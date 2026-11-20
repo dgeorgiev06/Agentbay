@@ -32,7 +32,7 @@ function recordingContext(ran: CommandRequest[]): ScriptContext {
       },
     },
     call: answeredUnused,
-    schemas: { check: answeredUnused },
+    schemas: { check: answeredUnused, checkAgainst: answeredUnused },
     settings: {},
     now: () => new Date(0),
     spend: answeredUnused,

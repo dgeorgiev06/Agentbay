@@ -79,7 +79,7 @@ function contextOf(asked: Asked, unmade: boolean): ScriptContext {
       asked.push([reference, input]);
       return answerTo(reference, input);
     },
-    schemas: { check: unanswered },
+    schemas: { check: unanswered, checkAgainst: unanswered },
     settings: { links: ["node_modules"] },
     now: () => new Date("2026-11-18T10:00:00Z"),
     spend: unanswered,

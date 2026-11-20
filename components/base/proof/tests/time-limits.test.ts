@@ -34,7 +34,7 @@ function contextOf(asked: Asked, answers: Readonly<Record<string, Json>>): Scrip
       const answer = answers[reference];
       return Promise.resolve(answer === undefined ? notHere : { ok: true, value: answer });
     },
-    schemas: { check: unanswered },
+    schemas: { check: unanswered, checkAgainst: unanswered },
     settings: { stepSeconds: 3600, longestCallSeconds: 2400 },
     now: () => new Date("2026-11-20T10:00:00Z"),
     spend: unanswered,

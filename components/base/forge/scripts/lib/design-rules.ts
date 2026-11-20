@@ -1,5 +1,5 @@
-import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
 import { designFolder, designPaths } from "./design-files.ts";
+import { referencesIn, siblingSchemas } from "./design-examples.ts";
 import { actionName, actionsOf, type Action, type Design, type Interface } from "./design-form.ts";
 
 export type Checked = {
@@ -131,6 +131,18 @@ const actionsWithoutExample: Rule = ({ design }) =>
         "and the exact answer or the exact refusal sentence.",
     );
 
+const refusalsBlank: Rule = ({ design }) =>
+  actionsOf(design).flatMap((action) =>
+    action.examples.flatMap((example, index) =>
+      "refusal" in example.told && example.told.refusal.trim() === ""
+        ? [
+            `Example ${String(index + 1)} of "${actionName(action)}" ends in a refusal with no words; ` +
+              "write the exact sentence the refusal gives.",
+          ]
+        : [],
+    ),
+  );
+
 function earlierUnknown(each: Interface, action: Action): readonly string[] {
   const names = each.actions.map((known) => known.name);
   const called = action.examples.flatMap((example) => example.earlier.map((call) => call.action));
@@ -146,25 +158,9 @@ function earlierUnknown(each: Interface, action: Action): readonly string[] {
 const earlierCallsUnknown: Rule = ({ design }) =>
   design.interfaces.flatMap((each) => each.actions.flatMap((action) => earlierUnknown(each, action)));
 
-function referencesIn(value: Json): readonly string[] {
-  if (Array.isArray(value)) {
-    return value.flatMap(referencesIn);
-  }
-  if (value === null || typeof value !== "object") {
-    return [];
-  }
-  const fields = fieldsOf(value);
-  const own = typeof fields.$ref === "string" ? [fields.$ref] : [];
-  return [...own, ...Object.values(fields).flatMap(referencesIn)];
-}
-
-function siblingFiles(each: Interface): readonly string[] {
-  return each.actions.flatMap((action) => [`${action.name}-request.json`, `${action.name}-response.json`]);
-}
-
 function isInside(reference: string, each: Interface): boolean {
   const [file = ""] = reference.split("#", 1);
-  return reference.startsWith("#") || siblingFiles(each).includes(file);
+  return reference.startsWith("#") || siblingSchemas(each).has(file);
 }
 
 function referencesOutside(each: Interface, action: Action): readonly string[] {
@@ -228,6 +224,7 @@ const rules: readonly Rule[] = [
   servesUnknown,
   servesNothing,
   actionsWithoutExample,
+  refusalsBlank,
   earlierCallsUnknown,
   schemasReferOutside,
   filesOutsideTheFolder,

@@ -99,10 +99,11 @@ async function everyMember(context: ScriptContext): Promise<readonly Answer<Json
     await context.call("items-store.put", { day: "2026-11-17" }),
     await context.spend({ items: 2, usd: 0.25 }),
     await context.schemas.check("schemas/day.json", { day: "2026-11-17" }),
+    await context.schemas.checkAgainst({ type: "object", required: ["day"] }, { day: "2026-11-17" }),
   ];
 }
 
-test("each member of the context asks for its own operation with the request built from its arguments", async () => {
+test("each member of the context asks for its own operation with the request built from its arguments, and checkAgainst asks for none", async () => {
   const { context, asked } = fittingAnswers();
   await everyMember(context);
   assert.deepEqual(asked, [
@@ -158,6 +159,7 @@ test("an answer that fits its operation's result reaches the script as it came",
     { ok: true, value: ran },
     { ok: true, value: { called: true } },
     { ok: true, value: null },
+    { ok: true, value: { passed: true, value: { day: "2026-11-17" } } },
     { ok: true, value: { passed: true, value: { day: "2026-11-17" } } },
   ]);
   assert.deepEqual(unread, []);

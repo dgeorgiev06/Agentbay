@@ -111,6 +111,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
       because,
       design: designOf(todoDesign),
       problems: [],
+      refusedSchemas: 0,
       practices: listOf(fieldsOf(answered).practices).map((practice) => ({
         id: textAt(practice, "id"),
         answer: "held",
@@ -185,6 +186,33 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     const run = await shown(root, start.id);
     assert.equal(textAt(run, "status"), "failed", JSON.stringify(run));
     assert.match(textAt(run, "reason"), /failed its checks in round 3, the last round: The condition O2-C4/);
+    assert.deepEqual(worktrees(root), []);
+  });
+
+  test("a design whose worked example breaks its action's schema goes back to its designer with the sentence", async () => {
+    const root = await project(template);
+    const start = waitingOf(await startedDesign(root), "path");
+    await decided(root, start, { step: "path", choice: "light" });
+    const [todo = null] = listOf(fieldsOf(todoDesign).interfaces);
+    const [add = null, ...others] = listOf(fieldsOf(todo).actions);
+    const [first = null, ...rest] = listOf(fieldsOf(add).examples);
+    const wrong = { ...fieldsOf(first), answer: { id: 0, text: "buy milk", status: "open" } };
+    const changed = { ...fieldsOf(add), examples: [wrong, ...rest] };
+    const broken = { ...fieldsOf(todoDesign), interfaces: [{ ...fieldsOf(todo), actions: [changed, ...others] }] };
+    const feedback: Json[] = [];
+    await playedTo(root, start.id, {
+      designer: (task) => {
+        feedback.push(fieldsOf(task).feedback ?? null);
+        return Promise.resolve(broken);
+      },
+    });
+    const sentence =
+      'The answer of example 1 of "todo.add" does not fit the response schema of "todo.add". At /id: id must be at ' +
+      "least 1, but it is 0.";
+    assert.deepEqual(feedback.slice(1), [[sentence], [sentence]]);
+    const run = await shown(root, start.id);
+    assert.equal(textAt(run, "status"), "failed", JSON.stringify(run));
+    assert.match(textAt(run, "reason"), /failed its checks in round 3, the last round: The answer of example 1/);
     assert.deepEqual(worktrees(root), []);
   });
 });

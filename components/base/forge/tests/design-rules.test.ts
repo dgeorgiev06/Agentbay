@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
-import { designOf } from "../scripts/lib/design-form.ts";
+import { exampleChecks, examplesChecked, selfContained, type FitAnswer } from "../scripts/lib/design-examples.ts";
+import { designOf, type Interface } from "../scripts/lib/design-form.ts";
 import { designProblems } from "../scripts/lib/design-rules.ts";
 import { listOf } from "../scripts/lib/json-values.ts";
 import { todoDesign } from "./todo-design.ts";
@@ -204,6 +205,174 @@ describe("the design check, one rule at a time, each problem with its sentence",
       'The design has two modules named "todo"; give each module a name of its own.',
       'The interface "todo" has two actions named "add"; give each action a name of its own.',
       'The action "todo.list" has no worked example; give at least one: an input, and the exact answer or the exact refusal sentence.',
+    ]);
+  });
+});
+
+function checksOf(design: Json): readonly string[] {
+  return exampleChecks(designOf(design)).map(
+    (check) => `${check.checked}: the ${check.against.side} schema of ${check.against.action}`,
+  );
+}
+
+function todoInterface(): Interface {
+  const [todo] = designOf(todoDesign).interfaces;
+  assert.ok(todo !== undefined);
+  return todo;
+}
+
+describe("the worked examples, each held to its action's schemas", () => {
+  test("the todo design's examples need 25 checks: each input and answer of an example that answers, and each earlier call", () => {
+    assert.deepEqual(checksOf(todoDesign), [
+      'The input of example 1 of "todo.add": the request schema of todo.add',
+      'The answer of example 1 of "todo.add": the response schema of todo.add',
+      'The input of earlier call 1 in example 2 of "todo.add": the request schema of todo.add',
+      'The input of earlier call 1 in example 3 of "todo.add": the request schema of todo.add',
+      'The input of earlier call 2 in example 3 of "todo.add": the request schema of todo.add',
+      'The input of earlier call 3 in example 3 of "todo.add": the request schema of todo.remove',
+      'The input of example 3 of "todo.add": the request schema of todo.add',
+      'The answer of example 3 of "todo.add": the response schema of todo.add',
+      'The input of example 1 of "todo.list": the request schema of todo.list',
+      'The answer of example 1 of "todo.list": the response schema of todo.list',
+      'The input of earlier call 1 in example 2 of "todo.list": the request schema of todo.add',
+      'The input of earlier call 2 in example 2 of "todo.list": the request schema of todo.add',
+      'The input of example 2 of "todo.list": the request schema of todo.list',
+      'The answer of example 2 of "todo.list": the response schema of todo.list',
+      'The input of earlier call 1 in example 1 of "todo.done": the request schema of todo.add',
+      'The input of example 1 of "todo.done": the request schema of todo.done',
+      'The answer of example 1 of "todo.done": the response schema of todo.done',
+      'The input of earlier call 1 in example 2 of "todo.done": the request schema of todo.add',
+      'The input of earlier call 2 in example 2 of "todo.done": the request schema of todo.done',
+      'The input of earlier call 1 in example 3 of "todo.done": the request schema of todo.add',
+      'The input of earlier call 1 in example 1 of "todo.remove": the request schema of todo.add',
+      'The input of earlier call 2 in example 1 of "todo.remove": the request schema of todo.add',
+      'The input of example 1 of "todo.remove": the request schema of todo.remove',
+      'The answer of example 1 of "todo.remove": the response schema of todo.remove',
+      'The input of earlier call 1 in example 2 of "todo.remove": the request schema of todo.add',
+    ]);
+  });
+
+  test("a refusal's input is not checked, since the design does not say whether the schema refuses it; its earlier calls are", () => {
+    const example: Json = {
+      earlier: [{ action: "add", input: { text: 7 } }],
+      input: { text: 7 },
+      refusal: "The text is not text.",
+    };
+    const design = actionChanged("add", (action) => ({ ...fieldsOf(action), examples: [example] }));
+    assert.deepEqual(checksOf(design(todoDesign)).slice(0, 1), [
+      'The input of earlier call 1 in example 1 of "todo.add": the request schema of todo.add',
+    ]);
+    assert.equal(checksOf(design(todoDesign)).filter((check) => check.includes('example 1 of "todo.add"')).length, 1);
+  });
+
+  test("a schema that names another file of its interface is checked with that file's schema in its $defs", () => {
+    const todo = todoInterface();
+    const [add, list, done] = todo.actions;
+    assert.ok(add !== undefined && list !== undefined && done !== undefined);
+    assert.deepEqual(selfContained(todo, done, "response"), {
+      $ref: "#/$defs/add-response.json",
+      $defs: { "add-response.json": add.response },
+    });
+    assert.deepEqual(selfContained(todo, list, "response"), {
+      type: "object",
+      additionalProperties: false,
+      required: ["todos"],
+      properties: { todos: { type: "array", items: { $ref: "#/$defs/add-response.json" } } },
+      $defs: { "add-response.json": add.response },
+    });
+    assert.deepEqual(selfContained(todo, add, "request"), add.request);
+  });
+
+  test("files named in turn are all taken in, a file's own references move with it, and a name of its own file is #", () => {
+    const shelf = designOf({
+      modules: [],
+      interfaces: [
+        {
+          name: "shelf",
+          actions: [
+            {
+              name: "put",
+              request: {
+                type: "object",
+                properties: {
+                  book: { $ref: "take-response.json#/$defs/book" },
+                  again: { $ref: "put-request.json#/properties/book" },
+                },
+              },
+              response: { type: "null" },
+            },
+            {
+              name: "take",
+              request: {},
+              response: {
+                $defs: { book: { $ref: "#/$defs/title" }, title: { type: "string" } },
+                $ref: "put-response.json",
+              },
+            },
+          ],
+        },
+      ],
+    }).interfaces[0];
+    const put = shelf?.actions[0];
+    assert.ok(shelf !== undefined && put !== undefined);
+    assert.deepEqual(selfContained(shelf, put, "request"), {
+      type: "object",
+      properties: {
+        book: { $ref: "#/$defs/take-response.json/$defs/book" },
+        again: { $ref: "#/properties/book" },
+      },
+      $defs: {
+        "take-response.json": {
+          $defs: { book: { $ref: "#/$defs/take-response.json/$defs/title" }, title: { type: "string" } },
+          $ref: "#/$defs/put-response.json",
+        },
+        "put-response.json": { type: "null" },
+      },
+    });
+  });
+
+  test("each problem names the example, its side, the path and what the schema wanted; a refused schema is said once", () => {
+    const [input, answer, earlier, otherEarlier] = exampleChecks(designOf(todoDesign)).slice(0, 4);
+    assert.ok(input !== undefined && answer !== undefined && earlier !== undefined && otherEarlier !== undefined);
+    const misfit: FitAnswer = {
+      ok: true,
+      value: { passed: false, problems: [{ path: "/text", message: "text must be text, but it is 7." }] },
+    };
+    const missing: FitAnswer = {
+      ok: true,
+      value: {
+        passed: false,
+        problems: [{ path: "", message: "The value is missing the required field id.", fix: "Add id." }],
+      },
+    };
+    const refused: FitAnswer = { ok: false, message: "The schema given refers to x.json at /$ref, outside itself." };
+    assert.deepEqual(
+      examplesChecked([
+        { check: input, answer: misfit },
+        { check: answer, answer: missing },
+        { check: earlier, answer: refused },
+        { check: otherEarlier, answer: refused },
+      ]),
+      {
+        problems: [
+          'The input of example 1 of "todo.add" does not fit the request schema of "todo.add". At /text: text must be text, but it is 7.',
+          'The answer of example 1 of "todo.add" does not fit the response schema of "todo.add". At its top: The value is missing the required field id. Add id.',
+          'The request schema of "todo.add" could not be used, so no example was checked against it. The schema given refers to x.json at /$ref, outside itself.',
+        ],
+        refusedSchemas: 1,
+      },
+    );
+    assert.deepEqual(examplesChecked([{ check: input, answer: { ok: true, value: { passed: true } } }]), {
+      problems: [],
+      refusedSchemas: 0,
+    });
+  });
+
+  test("a refusal whose sentence is only spaces", () => {
+    const example: Json = { input: { id: 99 }, refusal: "   " };
+    const design = actionChanged("remove", (action) => ({ ...fieldsOf(action), examples: [example] }));
+    assert.deepEqual(problemsOf(design(todoDesign)), [
+      'Example 1 of "todo.remove" ends in a refusal with no words; write the exact sentence the refusal gives.',
     ]);
   });
 });

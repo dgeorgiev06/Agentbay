@@ -19,6 +19,7 @@ export type Loaded<T> = {
 type ValuePlace = {
   readonly loaded: Loaded<unknown>;
   readonly path: PathSegments;
+  readonly whole?: string;
 };
 
 type ValueCheck =
@@ -57,7 +58,7 @@ export type SchemaCheck =
   | { readonly passed: true; readonly value: Json }
   | { readonly passed: false; readonly problems: readonly SchemaProblem[] };
 
-function pointer(path: PathSegments): string {
+export function pointer(path: PathSegments): string {
   return path.map((segment) => `/${String(segment).replaceAll("~", "~0").replaceAll("/", "~1")}`).join("");
 }
 
@@ -76,8 +77,8 @@ export function problemAt<T>(loaded: Loaded<T>, path: PathSegments, wording: Wor
   return { file: loaded.file, path: pointer(path), ...(line === undefined ? {} : { line }), ...wording };
 }
 
-function placeName(location: PathSegments): string {
-  return location.length === 0 ? "This file" : location.join(".");
+function placeName(location: PathSegments, whole = "This file"): string {
+  return location.length === 0 ? whole : location.join(".");
 }
 
 function parameter(error: ErrorObject, name: string): unknown {
@@ -290,10 +291,10 @@ function wording(error: ErrorObject, place: ValuePlace, emptied: readonly ErrorO
   const required =
     error.data === null ? emptied.find((entry) => fieldPointer(entry) === error.instancePath) : undefined;
   if (required !== undefined) {
-    return describeRequired(required, placeName([...place.path, ...segmentsOf(required.instancePath)]));
+    return describeRequired(required, placeName([...place.path, ...segmentsOf(required.instancePath)], place.whole));
   }
   const describe = describers.get(error.keyword) ?? describeOther;
-  return describe(error, placeName([...place.path, ...segmentsOf(error.instancePath)]));
+  return describe(error, placeName([...place.path, ...segmentsOf(error.instancePath)], place.whole));
 }
 
 export function errorProblems(
@@ -348,16 +349,34 @@ function validatorFor(schema: ValidSchema): ValidateFunction | string {
   return validate;
 }
 
+function problemsOf(validate: ValidateFunction, value: unknown, place: ValuePlace): readonly Problem[] {
+  if (validate(value)) {
+    return [];
+  }
+  const errors = validate.errors ?? [];
+  return errorProblems(errors, place, emptiedRequiredFields(validate, value));
+}
+
+function endlessReason(error: RangeError): string {
+  return (
+    `checking a value against it went deeper than the stack allows (${error.message}), ` +
+    "as when it refers to itself without stepping into the value"
+  );
+}
+
 export function checkValue(schema: ValidSchema, value: unknown, place: ValuePlace): ValueCheck {
   const validate = validatorFor(schema);
   if (typeof validate === "string") {
     return { kind: "unusable-schema", reason: validate };
   }
-  if (validate(value)) {
-    return { kind: "checked", problems: [] };
+  try {
+    return { kind: "checked", problems: problemsOf(validate, value, place) };
+  } catch (error) {
+    if (!(error instanceof RangeError)) {
+      throw error;
+    }
+    return { kind: "unusable-schema", reason: endlessReason(error) };
   }
-  const errors = validate.errors ?? [];
-  return { kind: "checked", problems: errorProblems(errors, place, emptiedRequiredFields(validate, value)) };
 }
 
 export function valueProblems(source: SchemaSource, value: Json): readonly Problem[] {
@@ -385,8 +404,7 @@ export function valueProblems(source: SchemaSource, value: Json): readonly Probl
   }
 }
 
-export function checkedValue(name: string, schemaFile: SchemaFile, value: Json): SchemaCheck {
-  const problems = valueProblems({ file: name, schemaFile, label: "value", path: [] }, value);
+export function schemaCheckOf(value: Json, problems: readonly Problem[]): SchemaCheck {
   if (problems.length === 0) {
     return { passed: true, value };
   }
@@ -396,4 +414,8 @@ export function checkedValue(name: string, schemaFile: SchemaFile, value: Json):
       fix === undefined ? { path, message } : { path, message, fix },
     ),
   };
+}
+
+export function checkedValue(name: string, schemaFile: SchemaFile, value: Json): SchemaCheck {
+  return schemaCheckOf(value, valueProblems({ file: name, schemaFile, label: "value", path: [] }, value));
 }

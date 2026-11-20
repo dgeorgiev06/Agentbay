@@ -87,7 +87,7 @@ function contextOf(asked: Asked, answers: readonly Answer[], copying: Copying): 
       asked.calls.push(reference);
       return Promise.resolve(copyAnswer(reference, input, copying));
     },
-    schemas: { check: unanswered },
+    schemas: { check: unanswered, checkAgainst: unanswered },
     settings: {},
     now: () => new Date("2026-11-18T10:00:00Z"),
     spend: unanswered,

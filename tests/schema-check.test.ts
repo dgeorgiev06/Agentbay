@@ -19,6 +19,16 @@ const checkerScript = [
   "",
 ].join("\n");
 
+const givenScript = [
+  'import { defineScript } from "agentbay/sdk";',
+  "",
+  "export const run = defineScript(async (input, context) => {",
+  "  const checked = await context.schemas.checkAgainst(input.schema, input.value);",
+  "  return checked.ok ? checked.value : { refused: checked.message };",
+  "});",
+  "",
+].join("\n");
+
 const keeperScript = [
   'import { defineScript } from "agentbay/sdk";',
   "",
@@ -88,7 +98,12 @@ const planner = {
   version: "1.0.0",
   description: "A made-up mode, planner, that checks values against schemas for a test.",
   requires: { interfaces: ["ledger@1"] },
-  actions: { check: checkAction, "check-briefly": { ...checkAction, scriptTimeLimitSeconds: 3 } },
+  actions: {
+    check: checkAction,
+    "check-briefly": { ...checkAction, scriptTimeLimitSeconds: 3 },
+    "check-given": { ...checkAction, run: [{ script: "scripts/check-given.ts" }] },
+    "check-given-briefly": { ...checkAction, run: [{ script: "scripts/check-given.ts" }], scriptTimeLimitSeconds: 3 },
+  },
 };
 
 const backtracking = { type: "string", pattern: "^(a+)+$" };
@@ -110,6 +125,7 @@ async function makeKit(): Promise<Kit> {
   await write("components/base/planner/schemas/unusable.json", json({ type: "no-such-type" }));
   await write("components/base/planner/schemas/backtracking.json", json(backtracking));
   await write("components/base/planner/scripts/check.ts", checkerScript);
+  await write("components/base/planner/scripts/check-given.ts", givenScript);
   await write("components/base/keeper/mode.yaml", stringify(keeper));
   await write("components/base/keeper/scripts/keep.ts", keeperScript);
   await write("components/base/keeper/schemas/own.json", json(planSchema));
@@ -258,6 +274,70 @@ test("a schema whose pattern backtracks without end stops only the script, at it
       status: "failed",
       reason:
         "The script was stopped at its time limit of 3 seconds, set by actions.check-briefly.scriptTimeLimitSeconds " +
+        `in ${join(kit.root, "components/base/planner/mode.yaml")}.`,
+    });
+    assert.ok(performance.now() - started < 30_000);
+  } finally {
+    await kit.remove();
+  }
+});
+
+async function checkedGiven(kit: Kit, schema: Json, value: Json): Promise<Json> {
+  const state = await ended(kit, "planner.check-given", { schema, value });
+  assert.ok(state.status === "done", JSON.stringify(state));
+  return state.output;
+}
+
+test("a script checks a value against a schema it gives as a value, in the kernel's words", async () => {
+  const kit = await makeKit();
+  try {
+    const plan = { name: "tidy", slices: ["TB1", "W1"] };
+    assert.deepEqual(await checkedGiven(kit, planSchema, plan), { passed: true, value: plan });
+    assert.deepEqual(await checkedGiven(kit, planSchema, { name: "", slices: [] }), {
+      passed: false,
+      problems: [
+        { path: "/name", message: "name must not be empty." },
+        { path: "/slices", message: "slices must list at least 1 entry, but it lists fewer." },
+      ],
+    });
+  } finally {
+    await kit.remove();
+  }
+});
+
+test("a given schema that refers to a schema file of an interface, of the mode or of the system is refused, and none is read", async () => {
+  const kit = await makeKit();
+  try {
+    const references = [
+      "ledger@1/entry.json",
+      "schemas/plan.json",
+      "file:///etc/hosts",
+      "https://example.com/plan.json",
+    ];
+    for (const reference of references) {
+      assert.deepEqual(await checkedGiven(kit, { $ref: reference }, { item: "tea", count: 2 }), {
+        refused:
+          `The schema given refers to ${reference} at /$ref, outside itself; a given schema may refer only to its ` +
+          "own parts, written #/<path>, and nothing outside it is read.",
+      });
+    }
+  } finally {
+    await kit.remove();
+  }
+});
+
+test("a given schema whose pattern backtracks without end stops only the script, at its own time limit, as a schema file does", async () => {
+  const kit = await makeKit();
+  try {
+    const started = performance.now();
+    const state = await ended(kit, "planner.check-given-briefly", {
+      schema: backtracking,
+      value: `${"a".repeat(40)}b`,
+    });
+    assert.deepEqual(state, {
+      status: "failed",
+      reason:
+        "The script was stopped at its time limit of 3 seconds, set by actions.check-given-briefly.scriptTimeLimitSeconds " +
         `in ${join(kit.root, "components/base/planner/mode.yaml")}.`,
     });
     assert.ok(performance.now() - started < 30_000);

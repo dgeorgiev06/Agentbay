@@ -61,6 +61,7 @@ async function lightInput(practices: readonly PracticeAnswer[]): Promise<DesignC
     because: "It is the one design.",
     design: designOf(todoDesign),
     problems: [],
+    refusedSchemas: 0,
     practices,
     differences: [],
   };
@@ -114,11 +115,11 @@ judged    by forge skills/design, tier deep
   remove: serves O2-C3, O2-C5; 2 examples
   coverage: every condition is served by an
     action: yes
-  checked by script: 13 rules of the design,
+  checked by script: 14 rules of the design,
     no problem
-  examples: 10, not checked against their
-    schemas, since the toolbox checks a
-    value only against a schema file
+  examples: 10, checked against their
+    actions' schemas, but not the input of
+    the 4 refusals
   practices held by the script's rules:
     P-35, P-36, P-38 and P-42`;
 
@@ -184,6 +185,32 @@ describe("the design's first card and the design card, for the todo mode", () =>
 
   test("a practice held by design that the challenger answered not held withholds approve with its reason", async () => {
     assert.equal(printedDesign(await lightInput(p52NotHeld)), lightNotHeld);
+  });
+
+  test("the examples' line says each was checked when none ends in a refusal, and names every check not made", async () => {
+    const input = await lightInput(allHeld);
+    const examplesLine = (drawn: DesignCardInput): string | undefined =>
+      designCard(drawn).card.lines.find((line) => line.words.startsWith("examples:"))?.words;
+    const [todo] = input.design.interfaces;
+    assert.ok(todo !== undefined);
+    const answered = todo.actions.map((action) => ({
+      ...action,
+      examples: action.examples.filter((example) => "answer" in example.told),
+    }));
+    const noRefusal = { ...input.design, interfaces: [{ ...todo, actions: answered }] };
+    assert.equal(
+      examplesLine({ ...input, design: noRefusal }),
+      "examples: 6, each checked against its action's schemas",
+    );
+    assert.equal(
+      examplesLine({ ...input, design: noRefusal, refusedSchemas: 1 }),
+      "examples: 6, checked against their actions' schemas, but not against the 1 schema the kernel refused",
+    );
+    assert.equal(
+      examplesLine({ ...input, refusedSchemas: 2 }),
+      "examples: 10, checked against their actions' schemas, but not the input of the 4 refusals and against the 2 " +
+        "schemas the kernel refused",
+    );
   });
 
   test("a design that breaks a rule withholds approve and shows each problem", async () => {

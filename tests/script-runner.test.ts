@@ -287,6 +287,7 @@ test("of the kernel's files a script can read only the nine the host and its too
       "bay/broker/script-host.ts",
       "bay/broker/script-preload.ts",
       "bay/broker/script-protocol.ts",
+      "bay/given-schema.ts",
       "bay/json.ts",
       "bay/protocol-json.ts",
       "bay/sdk.ts",

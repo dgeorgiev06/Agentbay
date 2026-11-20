@@ -46,6 +46,7 @@ test("the runner starts node with the permission model, the grants and the prelo
     `--allow-fs-read=${bay}/sdk.ts`,
     `--allow-fs-read=${bay}/yaml-text.ts`,
     `--allow-fs-read=${bay}/value-check.ts`,
+    `--allow-fs-read=${bay}/given-schema.ts`,
     `--allow-fs-read=${bay}/json.ts`,
     ...packages.flatMap((folder) => [`--allow-fs-read=${folder}`, `--allow-fs-read=${folder}/*`]),
     "--allow-fs-read=/project/components/modes/notes",

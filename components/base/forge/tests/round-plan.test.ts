@@ -59,9 +59,11 @@ const passedProof = {
   size: [],
 };
 
+const keptTexts = ['test("a quill is counted", () => true);'];
+
 function reviewed(state: RoundsState, findings: readonly Finding[]): RoundsState {
   const review = { conditions: [held, notHeld], findings };
-  return reviewedState(state, { plan: "review", review, remaining: findingsLeft(findings, []) }, "review-1");
+  return reviewedState(state, { plan: "review", review, remaining: findingsLeft(findings, keptTexts) }, "review-1");
 }
 
 test("round 1 asks the test writer and the builder; a done review asks no one", () => {
@@ -145,6 +147,13 @@ test("a finding that remains keeps its fix only when the fix shares no run of 20
   assert.deepEqual(findingsLeft([forBuilder, forTests, quoting], tests), [
     { to: "builder", case: "a quill is counted", question: "P-05", fix: "Count once." },
     { to: "test-writer", case: "a quill is counted", question: "Q2", fix: "Assert all." },
+    { to: "test-writer", case: "a quill is counted", question: "Q2" },
+  ]);
+});
+
+test("with no kept tests found, no fix is carried forward, so each is kept from the card", () => {
+  assert.deepEqual(findingsLeft([forBuilder, forTests], []), [
+    { to: "builder", case: "a quill is counted", question: "P-05" },
     { to: "test-writer", case: "a quill is counted", question: "Q2" },
   ]);
 });

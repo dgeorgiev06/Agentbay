@@ -183,3 +183,38 @@ test("in the final proof's answer, a detail or a reason that quotes a test is re
     { item: "scope", kind: "in-scope", verdict: "inconclusive", reason: `The run is not known: ${nineteen}` },
   ]);
 });
+
+test("with no kept tests found, the filter fails closed: every message is withheld and counted, names kept, and every reason replaced", () => {
+  const kept = "Proof's reason is kept from the card: it quotes a test.";
+  const cases = [
+    failure("a quill is counted", nineteen),
+    failure("another", "expected 2 to be 1"),
+    failure("blank", ""),
+  ];
+  const verdicts = [failed("DOD-F1-1", cases)];
+  assert.deepEqual(failingOf(slice, verdicts, []), {
+    items: ["DOD-F1-1"],
+    cases: [{ name: "a quill is counted" }, { name: "another" }, { name: "blank" }],
+    withheld: 2,
+    notListed: 0,
+    notLoaded: [],
+  });
+  const answer = fieldsOf(filteredProof({ verdicts, judgement: [], size: [] }, []));
+  assert.deepEqual(answer.verdicts, [
+    {
+      item: "DOD-F1-1",
+      kind: "fails-first",
+      verdict: "failed",
+      detail: kept,
+      cases: {
+        failures: [
+          { name: "a quill is counted", file: `/tmp/proof-copy/${named}`, message: "", charactersCut: 0 },
+          { name: "another", file: `/tmp/proof-copy/${named}`, message: "", charactersCut: 0 },
+          { name: "blank", file: `/tmp/proof-copy/${named}`, message: "", charactersCut: 0 },
+        ],
+        failuresNotListed: 0,
+        notLoaded: [],
+      },
+    },
+  ]);
+});

@@ -1,7 +1,7 @@
 import { fieldsOf, type Json, type JsonFields } from "../../../../../bay/sdk.ts";
 import type { Slice } from "./slice-form.ts";
 import type { HandedTest } from "./handed-tests.ts";
-import { quotesAny } from "./quoting.ts";
+import { mayQuoteAny } from "./quoting.ts";
 import { listOf, textOf } from "./json-values.ts";
 
 export type FailingCase = {
@@ -60,7 +60,7 @@ function onceEach(reported: readonly Reported[]): readonly Reported[] {
 }
 
 function messageQuotes(message: string, texts: readonly string[]): boolean {
-  return quotesAny(message, texts) || quotesAny(plain(message), texts);
+  return mayQuoteAny(message, texts) || mayQuoteAny(plain(message), texts);
 }
 
 function toldOf(reported: Reported, tests: readonly HandedTest[]): Told {
@@ -116,7 +116,7 @@ export function withoutCases(verdicts: readonly Json[]): readonly Json[] {
 function saidSafely(fields: JsonFields, texts: readonly string[]): JsonFields {
   const said = (key: "detail" | "reason"): JsonFields => {
     const text = fields[key];
-    return typeof text === "string" && quotesAny(text, texts) ? { [key]: keptReason } : {};
+    return typeof text === "string" && mayQuoteAny(text, texts) ? { [key]: keptReason } : {};
   };
   return { ...fields, ...said("detail"), ...said("reason") };
 }

@@ -3,7 +3,7 @@ import { builtOf, type Built } from "./builder-answer.ts";
 import { sliceOf } from "./slice-form.ts";
 import type { Failing, FailingCase } from "./failing.ts";
 import { leaksOf, type Leak } from "./leaks.ts";
-import { quotesAny } from "./quoting.ts";
+import { mayQuoteAny } from "./quoting.ts";
 import { reviewOf, type Condition, type Finding, type Review } from "./review.ts";
 import { listOf, numberOf, textOf, textsOf } from "./json-values.ts";
 
@@ -95,7 +95,7 @@ function remainingOf(value: Json): Remaining {
 
 export function findingsLeft(findings: readonly Finding[], tests: readonly string[]): readonly Remaining[] {
   return findings.map((finding) =>
-    quotesAny(finding.fix, tests) ? keptOf(finding) : { ...keptOf(finding), fix: finding.fix },
+    mayQuoteAny(finding.fix, tests) ? keptOf(finding) : { ...keptOf(finding), fix: finding.fix },
   );
 }
 

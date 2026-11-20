@@ -299,6 +299,17 @@ const cases: readonly Case[] = [
     ),
   },
   {
+    name: "a vague word or a date that moves inside a longer word is not refused",
+    restsOn: "problem rules vague word and date that moves: whole words only",
+    run: async (checker) => {
+      const text = changed(lamp, [
+        [readsTheBrightness, "        when: the person somewhere reads the brightness known\n"],
+      ]);
+      const answer = await checker.check("lamp.yaml", text);
+      assert.equal(answer.answer, "accepted", JSON.stringify(answer));
+    },
+  },
+  {
     name: "a date that moves is refused at its line",
     restsOn: "problem rule date that moves: today, now, yesterday, tomorrow",
     run: refusedAt(

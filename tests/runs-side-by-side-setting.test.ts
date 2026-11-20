@@ -5,7 +5,17 @@ import type { Workflow } from "../bay/generated/workflow.ts";
 import { numberField } from "../bay/json.ts";
 import type { Run } from "../bay/runs/runs.ts";
 import { checkedValue } from "../bay/value-check.ts";
-import { finished, fixtureRefusal, notesFlow, openedRuns, runOf, withFlow, type Script } from "./runs-fixture.ts";
+import {
+  finished,
+  fixtureRefusal,
+  fixtureSystem,
+  notesFlow,
+  openedRuns,
+  runOf,
+  withFlow,
+  type Changes,
+  type Script,
+} from "./runs-fixture.ts";
 
 const flow = { workflow: notesFlow };
 
@@ -112,6 +122,51 @@ test("a reference that resolves to nothing refuses the foreach with the reason i
       "have no most (available: greeting, cap).",
   );
   assert.equal(tally.ran, 0);
+});
+
+test("a setting changed while the run waits is read again when the foreach resumes, started items go on, and a bad one refuses it", async () => {
+  const steps: Workflow["steps"] = [
+    { id: "given", action: "log", input: { items: "$trigger" } },
+    {
+      id: "each",
+      foreach: "$steps.given.output.items",
+      sideBySide: "$settings.cap",
+      steps: [{ id: "write", action: "draft", input: { topic: "$item" } }],
+    },
+  ];
+  const changesWith = (cap: Json): Changes => ({
+    ...withFlow(steps),
+    config: { settings: { notes: { greeting: "hello", cap } } },
+  });
+  const opened = await openedRuns({ changes: changesWith(2) });
+  const started = runOf(await opened.runs.start(flow, ["tea", "coffee", "milk", "juice"]));
+  const waitingKeys = (run: Run): readonly string[] => {
+    assert.ok(run.state.status === "waiting", JSON.stringify(run.state));
+    return [run.state.waiting, ...(run.state.alsoWaiting ?? [])].map((waiting) => waiting.stepKey);
+  };
+  assert.deepEqual(waitingKeys(started), ["each[0].write/0#1", "each[1].write/0#1"]);
+  assert.ok(!started.steps.some((step) => step.key.startsWith("each[2]") || step.key.startsWith("each[3]")));
+  opened.runs.close();
+  const wider = await opened.reopen((await fixtureSystem(changesWith(4))).system);
+  const resumed = runOf(await wider.resume(started.id));
+  assert.deepEqual(waitingKeys(resumed), [
+    "each[0].write/0#1",
+    "each[1].write/0#1",
+    "each[2].write/0#1",
+    "each[3].write/0#1",
+  ]);
+  wider.close();
+  const narrower = await opened.reopen((await fixtureSystem(changesWith(2))).system);
+  assert.deepEqual(waitingKeys(runOf(await narrower.resume(started.id))), waitingKeys(resumed));
+  narrower.close();
+  const broken = await opened.reopen((await fixtureSystem(changesWith(9))).system);
+  const refused = runOf(await broken.resume(started.id));
+  opened.close();
+  assert.equal(
+    undoneWith(refused),
+    "Step each cannot run its items side by side: sideBySide is $settings.cap, which is the value 9; " +
+      "it must be a whole number from 2 to 8.",
+  );
 });
 
 test("bay check refuses a sideBySide reference it can see is wrong before any run", async () => {

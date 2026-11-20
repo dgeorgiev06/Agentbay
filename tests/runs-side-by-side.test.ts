@@ -209,6 +209,27 @@ test("a run waits on the skill steps of two items at once, each with its own key
   close();
 });
 
+test("an item that waits keeps its place: no more items than the cap wait at once, and the next starts as one ends", async () => {
+  const { runs, close } = await openedRuns({ changes: withFlow(draftEach) });
+  const started = runOf(await runs.start(flow, ["tea", "coffee", "milk"]));
+  const keysOf = (run: Run): readonly string[] => waitsOf(run).map((waiting) => waiting.stepKey);
+  assert.deepEqual(keysOf(started), ["each[0].write/0#1", "each[1].write/0#1"]);
+  assert.ok(!started.steps.some((step) => step.key.startsWith("each[2]")));
+  const afterFirst = runOf(
+    await runs.submit(skillTokenOf(waitsOf(started)[0]), answer({ text: "tea is long enough" })),
+  );
+  assert.deepEqual(keysOf(afterFirst), ["each[1].write/0#1", "each[2].write/0#1"]);
+  const second = runOf(await runs.submit(skillTokenOf(waitsOf(started)[1]), answer({ text: "coffee is long enough" })));
+  assert.deepEqual(keysOf(second), ["each[2].write/0#1"]);
+  const renewed = runOf(await runs.reissueTask(started.id, "each[2].write/0#1"));
+  const done = runOf(await runs.submit(skillTokenOf(waitsOf(renewed)[0]), answer({ text: "milk is long enough" })));
+  assert.deepEqual(done.state, {
+    status: "done",
+    output: [{ text: "tea is long enough" }, { text: "coffee is long enough" }, { text: "milk is long enough" }],
+  });
+  close();
+});
+
 test("a new token for one step's task leaves the other item's token working", async () => {
   const { runs, close } = await openedRuns({ changes: withFlow(draftEach) });
   const started = runOf(await runs.start(flow, ["tea", "coffee"]));

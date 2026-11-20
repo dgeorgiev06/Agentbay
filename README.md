@@ -248,13 +248,14 @@ in the order of the items. Without the field the items run one after another, as
 resolves it each time the foreach starts or resumes, before any item runs; a value that is not a whole number from
 2 to 8 fails the step with a sentence that names the step, the reference and the value.
 
-An item's step may wait for a skill, an approval or a time. The run then waits on every such step at once: `bay
-runs <run>` shows the first as `waiting` and `task`, and the others under `alsoWaiting`, each with its own task and
-token. `bay submit` answers the step its token names, and `bay approve` the step it names. `bay runs <run>
---new-token --step <step key>` replaces the token of that one task and leaves the others working. A submit that
-arrives while another call advances the run is recorded and answered as accepted; the run takes it once, when that
-call ends or at the next `bay resume <run>`. A submit the kernel cannot record is refused with its reason, and its
-token still works.
+An item's step may wait for a skill, an approval or a time. A waiting item keeps its place, so no more items than
+`sideBySide` wait at once, and the next item starts when one ends; an item that had started before a resume always
+goes on, even when the value is now lower. The run waits on every such step at once: `bay runs <run>` shows the
+first as `waiting` and `task`, and the others under `alsoWaiting`, each with its own task and token. `bay submit`
+answers the step its token names, and `bay approve` the step it names. `bay runs <run> --new-token --step <step
+key>` replaces the token of that one task and leaves the others working. A submit that arrives while another call
+advances the run is recorded and answered as accepted; the run takes it once, when that call ends or at the next
+`bay resume <run>`. A submit the kernel cannot record is refused with its reason, and its token still works.
 
 When items fail, the others still run to their end or to their wait, and are recorded. The run then waits for the
 owner with one sentence that names every failed item, its position, its key and its reason, each reason cut to 200

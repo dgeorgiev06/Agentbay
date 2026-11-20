@@ -1,7 +1,7 @@
 import type { Json } from "../contracts.ts";
 import type { Waiting } from "./run-state.ts";
 
-export type ItemPhase = "queued" | "running" | "ended";
+export type ItemPhase = "resumed" | "queued" | "running" | "holding" | "ended";
 
 export type ItemEnd =
   | { readonly kind: "done"; readonly output: Json }
@@ -30,10 +30,20 @@ const longestReason = 200;
 
 const rerunHint = "Resume with --rerun to run the failed items again, or stop the run.";
 
+export const notStarted: ItemEnd = { kind: "waiting", waits: [] };
+
+function indexesIn(phases: readonly ItemPhase[], wanted: ItemPhase): readonly number[] {
+  return phases.flatMap((phase, index) => (phase === wanted ? [index] : []));
+}
+
 export function itemsToStart(phases: readonly ItemPhase[], cap: number): readonly number[] {
-  const running = phases.filter((phase) => phase === "running").length;
-  const queued = phases.flatMap((phase, index) => (phase === "queued" ? [index] : []));
-  return queued.slice(0, Math.max(0, cap - running));
+  const resumed = indexesIn(phases, "resumed");
+  const busy = phases.filter((phase) => phase === "running" || phase === "holding").length + resumed.length;
+  return [...resumed, ...indexesIn(phases, "queued").slice(0, Math.max(0, cap - busy))];
+}
+
+export function phaseAfter(end: ItemEnd): ItemPhase {
+  return end.kind === "waiting" ? "holding" : "ended";
 }
 
 export function cutReason(reason: string): string {

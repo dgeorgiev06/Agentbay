@@ -34,18 +34,35 @@ export function keepsOutputPacked(context: Context, requirer: ModeSource, refere
   return actionNamed(context, requirer, reference)?.skillOutput === "kept-packed";
 }
 
+type KeptCallStep = {
+  readonly said: string;
+  readonly passed: string;
+  readonly fix: string;
+};
+
+function keptCallStepProblem(place: ActionPlace, step: CallStep, kept: KeptCallStep): Problem {
+  return problemAt(place.mode, ["actions", place.name, "run", step.index, "call"], {
+    message: `${kept.said}; a call step would pass ${kept.passed} on as text, and ${keptOutputGoesOnlyToScripts}.`,
+    fix: kept.fix,
+  });
+}
+
 function keptCallProblems(context: Context, place: ActionPlace, step: CallStep): readonly Problem[] {
   if (!keepsOutputPacked(context, place.mode, step.call)) {
     return [];
   }
-  return [
-    problemAt(place.mode, ["actions", place.name, "run", step.index, "call"], {
-      message:
-        `${actionLabel(place)} calls ${step.call}, which keeps its skill's output packed; a call step would pass ` +
-        `that output on as text, and ${keptOutputGoesOnlyToScripts}.`,
-      fix: `Call ${step.call} from a script with context.call.`,
-    }),
-  ];
+  const said = `${actionLabel(place)} calls ${step.call}, which keeps its skill's output packed`;
+  const fix = `Call ${step.call} from a script with context.call.`;
+  return [keptCallStepProblem(place, step, { said, passed: "that output", fix })];
+}
+
+function keptAnswerProblems(place: ActionPlace, step: CallStep): readonly Problem[] {
+  if (place.action.calledOutputs !== "kept-packed") {
+    return [];
+  }
+  const said = `${actionLabel(place)} keeps the answers of the actions it calls packed, but its run has a call step`;
+  const fix = `Call ${step.call} from a script with context.call, or leave out calledOutputs.`;
+  return [keptCallStepProblem(place, step, { said, passed: "that answer", fix })];
 }
 
 function keptRunProblems(place: ActionPlace): readonly Problem[] {
@@ -144,11 +161,9 @@ function undoProblems(place: ActionPlace): readonly Problem[] {
 }
 
 export function actionProblems(context: Context, place: ActionPlace): readonly Problem[] {
-  const calls = place.action.run.flatMap((step, index) =>
-    "call" in step ? callProblems(context, place, { call: step.call, index }) : [],
-  );
-  const keptCalls = place.action.run.flatMap((step, index) =>
-    "call" in step ? keptCallProblems(context, place, { call: step.call, index }) : [],
-  );
-  return [...calls, ...keptCalls, ...keptRunProblems(place), ...undoProblems(place)];
+  const callSteps = place.action.run.flatMap((step, index) => ("call" in step ? [{ call: step.call, index }] : []));
+  const calls = callSteps.flatMap((step) => callProblems(context, place, step));
+  const keptCalls = callSteps.flatMap((step) => keptCallProblems(context, place, step));
+  const keptAnswers = callSteps.flatMap((step) => keptAnswerProblems(place, step));
+  return [...calls, ...keptCalls, ...keptAnswers, ...keptRunProblems(place), ...undoProblems(place)];
 }

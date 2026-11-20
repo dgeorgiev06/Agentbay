@@ -23,10 +23,10 @@ import {
   type Submission,
   type Tier,
 } from "../contracts.ts";
-import type { Budget, Step } from "../generated/mode.ts";
+import type { Budget, Keeping, Step } from "../generated/mode.ts";
 import { fieldOf, textField } from "../json.ts";
-import { problemText } from "../outcome.ts";
-import { keepingOf, type SkillOutputKeeping } from "./packed-output.ts";
+import { problemText, type Problem } from "../outcome.ts";
+import { callsKeepingOf, eitherKeeping, keepingOf, withheldReason } from "./packed-output.ts";
 import type { StepRecord } from "./run-store.ts";
 import { skillSchemas, skillTaskOf, startedSkillOf, type SkillAt } from "./skill-steps.ts";
 import type { ScriptDetail, SkillDetail } from "./step-detail.ts";
@@ -58,6 +58,7 @@ type NestedAction = {
   readonly target: ActionTarget;
   readonly input: Json;
   readonly caller: string | undefined;
+  readonly within: Keeping;
   readonly events?: readonly RunEvent[];
 };
 
@@ -72,7 +73,7 @@ type ScriptLeaf = {
   readonly script: string;
   readonly input: Json;
   readonly place: StepPlace;
-  readonly kept: SkillOutputKeeping;
+  readonly kept: Keeping;
   readonly skillInput?: Json;
 };
 
@@ -117,6 +118,28 @@ type Verdict =
 
 function frameLabel(frame: ActionFrame): string {
   return `action ${frame.name} of mode ${frame.mode.manifest.name}`;
+}
+
+function ownKeeping(frame: ActionFrame): Keeping {
+  return eitherKeeping(frame.within, keepingOf(frame.action));
+}
+
+function problemsCounted(problems: readonly Problem[]): string {
+  return problems.length === 1 ? "1 problem" : `${String(problems.length)} problems`;
+}
+
+function mismatchReason(frame: ActionFrame, side: "input" | "output", problems: readonly Problem[]): string {
+  const opening = `The ${side} of ${frameLabel(frame)} does not match its schema`;
+  switch (frame.within) {
+    case "as-text":
+      return `${opening}: ${problemText(problems)}`;
+    case "kept-packed":
+      return `${opening}: ${problemsCounted(problems)}, not shown, since the kernel keeps the ${side} packed.`;
+  }
+}
+
+function handedUp(frame: ActionFrame, what: string, progress: Progress): Progress {
+  return progress.status === "failed" && frame.within === "kept-packed" ? failed(withheldReason(what)) : progress;
 }
 
 function stepOf(step: Step): StepOf {
@@ -306,8 +329,9 @@ function skillWaiting(walk: Walk, frame: ActionFrame, at: SkillAt): Progress {
 
 async function startSkill(walk: Walk, frame: ActionFrame, skill: SkillStep): Promise<Progress> {
   const schemas = await skillSchemas(frame, { skill: skill.skill, last: skill.last });
+  const kept = ownKeeping(frame);
   if (typeof schemas === "string") {
-    return refuse(walk, { key: skill.key, kind: "skill", input: skill.input }, schemas);
+    return refuse(walk, { key: skill.key, kind: "skill", input: skill.input, kept }, schemas);
   }
   const detail: SkillDetail = {
     mode: frame.mode.manifest.name,
@@ -320,7 +344,6 @@ async function startSkill(walk: Walk, frame: ActionFrame, skill: SkillStep): Pro
     earlierSpent: noSpend,
     calledSpent: noSpend,
   };
-  const kept = keepingOf(frame.action);
   const started = await startRecord(walk, { key: skill.key, kind: "skill", input: skill.input, kept, detail });
   return skillWaiting(walk, frame, { runId: walk.writer.runId, key: skill.key, input: started.input, detail });
 }
@@ -349,7 +372,8 @@ async function runSkill(walk: Walk, frame: ActionFrame, skill: SkillStep): Promi
   }
   const started = startedSkillOf(record);
   if (started === undefined) {
-    return refuse(walk, { key: skill.key, kind: "skill", input: record.input }, `Step ${skill.key} is not a skill.`);
+    const start = { key: skill.key, kind: "skill" as const, input: record.input, kept: ownKeeping(frame) };
+    return refuse(walk, start, `Step ${skill.key} is not a skill.`);
   }
   const before = frame.budget.spent;
   const detail = started.detail;
@@ -387,7 +411,7 @@ async function runChecks(walk: Walk, frame: ActionFrame, attempt: Attempt): Prom
   for (const [index, check] of skill.checks.entries()) {
     const key = checkStepKey(skill.key, at.detail.round, index);
     const place = { ...skill.place, stepKey: key };
-    const kept = keepingOf(frame.action);
+    const kept = ownKeeping(frame);
     const input = submission.output;
     const leaf = { key, kind: "check" as const, script: check, input, place, kept, skillInput: at.input };
     const progress = await runScript(walk, frame, leaf);
@@ -458,12 +482,13 @@ export async function runNestedAction(walk: Walk, parent: BudgetFrame, nested: N
   if (record === undefined) {
     const caller = nested.caller === undefined ? {} : { caller: nested.caller };
     const detail = { mode: nested.target.mode.manifest.name, action: nested.target.name, ...caller };
-    const kept = keepingOf(nested.target.action);
+    const kept = eitherKeeping(nested.within, keepingOf(nested.target.action));
     await startRecord(walk, { key: nested.key, kind: nested.kind, input, kept, detail }, nested.events ?? []);
   }
   const budget = childFrame(parent, nested.target.action.budget, walk.extra);
   const caller = record === undefined ? nested.caller : nestedCallerOf(record);
-  const progress = await runActionFrame(walk, { ...nested.target, key: nested.key, budget, caller }, input);
+  const frame = { ...nested.target, key: nested.key, budget, caller, within: nested.within };
+  const progress = await runActionFrame(walk, frame, input);
   return concludeComposite(walk, { key: nested.key, progress: progress, spent: subtractSpend(parent.spent, before) });
 }
 
@@ -477,7 +502,8 @@ async function runCall(walk: Walk, frame: ActionFrame, call: CallStep): Promise<
   if (replay !== undefined) {
     return replay;
   }
-  const start = { key: call.key, kind: "call" as const, input: call.input };
+  const within = callsKeepingOf(frame.action, frame.within);
+  const start = { key: call.key, kind: "call" as const, input: call.input, kept: within };
   const target = nestedTarget(walk, frame.mode, call.call);
   if (typeof target === "string") {
     return refuse(walk, start, target);
@@ -490,7 +516,8 @@ async function runCall(walk: Walk, frame: ActionFrame, call: CallStep): Promise<
     return refuse(walk, start, reason);
   }
   const caller = target.caller;
-  return runNestedAction(walk, frame.budget, { key: call.key, kind: "call", target, input: call.input, caller });
+  const nested = { key: call.key, kind: "call" as const, target, input: call.input, caller, within };
+  return runNestedAction(walk, frame.budget, nested);
 }
 
 type ActionStepAt = {
@@ -499,7 +526,7 @@ type ActionStepAt = {
   readonly input: Json;
 };
 
-function runActionStep(walk: Walk, frame: ActionFrame, at: ActionStepAt): Promise<Progress> {
+async function runActionStep(walk: Walk, frame: ActionFrame, at: ActionStepAt): Promise<Progress> {
   const run = frame.action.run;
   const step = stepOf(at.step);
   const key = actionStepKey(frame.key, at.index);
@@ -510,17 +537,16 @@ function runActionStep(walk: Walk, frame: ActionFrame, at: ActionStepAt): Promis
     stepKey: key,
   };
   switch (step.kind) {
-    case "script":
-      return runScript(walk, frame, {
-        key,
-        kind: "script",
-        script: step.script,
-        input: at.input,
-        place,
-        kept: "as-text",
-      });
-    case "skill":
-      return runSkill(walk, frame, { ...step, key, input: at.input, place, last: at.index === run.length - 1 });
+    case "script": {
+      const leaf = { key, kind: "script" as const, script: step.script, input: at.input, place, kept: frame.within };
+      const what = `The script ${step.script} of ${frameLabel(frame)}`;
+      return handedUp(frame, what, await runScript(walk, frame, leaf));
+    }
+    case "skill": {
+      const skill = { ...step, key, input: at.input, place, last: at.index === run.length - 1 };
+      const what = `The skill ${step.skill} of ${frameLabel(frame)}`;
+      return handedUp(frame, what, await runSkill(walk, frame, skill));
+    }
     case "call":
       return runCall(walk, frame, { key, call: step.call, input: at.input });
   }
@@ -535,13 +561,13 @@ function frameOutput(walk: Walk, frame: ActionFrame, output: Json): Progress {
   if (checked.ok) {
     return done(output);
   }
-  return failed(`The output of ${frameLabel(frame)} does not match its schema: ${problemText(checked.problems)}`);
+  return failed(mismatchReason(frame, "output", checked.problems));
 }
 
 export async function runActionFrame(walk: Walk, frame: ActionFrame, input: Json): Promise<Progress> {
   const checked = frame.input.check(input);
   if (!checked.ok) {
-    return failed(`The input of ${frameLabel(frame)} does not match its schema: ${problemText(checked.problems)}`);
+    return failed(mismatchReason(frame, "input", checked.problems));
   }
   let value = input;
   for (const [index, step] of frame.action.run.entries()) {

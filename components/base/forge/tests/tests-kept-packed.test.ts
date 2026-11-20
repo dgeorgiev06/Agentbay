@@ -1,20 +1,32 @@
 import assert from "node:assert/strict";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { after, before, test } from "node:test";
-import type { Json } from "../../../../bay/sdk.ts";
+import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
 import { packed, unpacked } from "../scripts/lib/kept-tests.ts";
 import { marked, markOf } from "../scripts/lib/mark.ts";
 import {
+  allHeld,
+  askedOf,
+  builderWrites,
+  declared,
   filesHolding,
+  git,
   keptRows,
   kitTemplate,
+  playedTo,
   project,
   provedIn,
   removeAll,
   roundToCard,
   shortHead,
+  shown,
   started,
   textAt,
+  waitingOf,
   type Handed,
+  type Proved,
 } from "./kit-copy.ts";
 
 const testFile = "components/modes/k1/tests/kept.test.ts";
@@ -106,4 +118,163 @@ test("while the builder's step is open, the partition holds the tests packed and
   assert.deepEqual(building.holding, []);
   assert.deepEqual(keptRows(root), []);
   assert.deepEqual(await filesHolding(root, "", [kept.text, other.text]), []);
+});
+
+const quotedFile = "components/modes/k2/tests/quoted.test.ts";
+
+const quotedCode = "components/modes/k2/scripts/quoted.ts";
+
+const quoted: Handed = {
+  path: quotedFile,
+  text: [
+    'import { quotedQuill } from "../scripts/quoted-zx9091.ts";',
+    'const zx9092Sample = "a sample the builder must never be shown";',
+    'test("counts once", () => quotedQuill(zx9092Sample) === 1);',
+    'test("counts twice", () => quotedQuill(zx9092Sample + zx9092Sample) === 2);',
+    "",
+  ].join("\n"),
+};
+
+const quotedLine = 'const zx9092Sample = "a sample the builder must never be shown";';
+
+const quotedRun = "the builder must nev";
+
+const plainMessage = "expected 2 to be 1";
+
+function quotedSlice(): Json {
+  return {
+    name: "K2",
+    kind: "mode",
+    scope: ["components/modes/k2/**"],
+    after: [],
+    done: [
+      {
+        id: "DOD-K2-1",
+        says: "A quill is counted once.",
+        level: "must",
+        proof: { kind: "fails-first", tests: [quotedFile] },
+      },
+    ],
+  };
+}
+
+function quotedProof(verdict: "passed" | "failed"): Proved {
+  const file = `/tmp/proof-copy/${quotedFile}`;
+  const failures = [
+    { name: "counts once", file, message: quotedLine, charactersCut: 0 },
+    { name: "counts twice", file, message: `got ${quotedRun} back`, charactersCut: 0 },
+    { name: "counts thrice", file, message: plainMessage, charactersCut: 0 },
+  ];
+  const cases = { failures, failuresNotListed: 0, notLoaded: [] };
+  const judged = { item: "DOD-K2-1", kind: "fails-first", verdict, detail: "The named tests fail on the head." };
+  return {
+    verdicts: [verdict === "failed" ? { ...judged, cases } : judged],
+    judgement: [],
+    size: [{ path: quotedCode, head: 1 }],
+  };
+}
+
+function runsOf(text: string, length: number): readonly string[] {
+  const characters = Array.from(text);
+  const runs: string[] = [];
+  for (let start = 0; start + length <= characters.length; start += 1) {
+    runs.push(characters.slice(start, start + length).join(""));
+  }
+  return [...new Set(runs)];
+}
+
+function quotedForms(): readonly string[] {
+  const lines = quoted.text.split("\n").filter((line) => line.trim() !== "");
+  const forms = [...lines, ...runsOf(quoted.text, 20)];
+  return forms.flatMap((form) => [form, JSON.stringify(form).slice(1, -1)]);
+}
+
+function tableTexts(root: string): readonly string[] {
+  const database = new DatabaseSync(join(root, ".agentbay/kernel.db"), { readOnly: true });
+  try {
+    const tables = database.prepare("select name from sqlite_master where type = 'table'").all();
+    return tables.flatMap((table) => {
+      const rows = database.prepare(`select * from "${String(table.name)}"`).all();
+      return rows.map((row) => `${String(table.name)}: ${JSON.stringify(row)}`);
+    });
+  } finally {
+    database.close();
+  }
+}
+
+async function agentbayFiles(root: string, at: string): Promise<readonly string[]> {
+  const entries = await readdir(join(root, at), { withFileTypes: true });
+  const found: string[] = [];
+  for (const entry of entries) {
+    const path = `${at}/${entry.name}`;
+    if (entry.isDirectory()) {
+      found.push(...(await agentbayFiles(root, path)));
+    } else if (entry.isFile() && !entry.name.startsWith("forge--kept-tests.db")) {
+      found.push(path);
+    }
+  }
+  return found;
+}
+
+type Found = {
+  readonly rows: readonly string[];
+  readonly files: readonly string[];
+};
+
+async function quotedIn(root: string): Promise<Found> {
+  const forms = quotedForms();
+  const bytes = forms.map((form) => Buffer.from(form, "utf8").toString("latin1"));
+  const rows = tableTexts(root).filter((row) => forms.some((form) => row.includes(form)));
+  const files: string[] = [];
+  for (const path of await agentbayFiles(root, ".agentbay")) {
+    const content = (await readFile(join(root, path))).toString("latin1");
+    if (bytes.some((form) => content.includes(form))) {
+      files.push(path);
+    }
+  }
+  return { rows, files };
+}
+
+const nothingFound: Found = { rows: [], files: [] };
+
+test("after a round whose proof quotes a test, no table of kernel.db and no other file under .agentbay holds a line or a 20-character run of it, and the builder still gets its filtered failing cases", async () => {
+  const root = await project(template);
+  const start = await started(root, {
+    planned: { title: "K2", slice: quotedSlice() },
+    base: shortHead(root),
+    bugs: [],
+  });
+  await declared(root, start, [quotedCode]);
+  await provedIn(root, "K2", quotedProof("failed"));
+  const builderTasks: Json[] = [];
+  const whileBuilding: Found[] = [];
+  await playedTo(root, start.id, {
+    tests: () => Promise.resolve({ tests: [quoted] }),
+    builder: async (given) => {
+      builderTasks.push(given);
+      whileBuilding.push(await quotedIn(root));
+      await builderWrites(root, textAt(fieldsOf(given).input ?? null, "folder"), [quotedCode]);
+      await provedIn(root, "K2", quotedProof(builderTasks.length === 1 ? "failed" : "passed"));
+      return { outcome: "built" };
+    },
+    reviewer: (given) => Promise.resolve(allHeld(given)),
+  });
+  assert.deepEqual(whileBuilding, [nothingFound, nothingFound]);
+  const [, second] = builderTasks;
+  assert.deepEqual(fieldsOf(fieldsOf(second ?? null).input ?? null).failing, {
+    items: ["DOD-K2-1"],
+    cases: [
+      { name: "counts once", file: quotedFile },
+      { name: "counts twice", file: quotedFile },
+      { name: "counts thrice", file: quotedFile, message: plainMessage },
+    ],
+    withheld: 2,
+    notListed: 0,
+    notLoaded: [],
+  });
+  const heads = (await askedOf(root, "K2")).map((each) => textAt(each, "head"));
+  const head = (branch: string): string => git(root, ["rev-parse", branch]).trim();
+  assert.deepEqual(heads, [head("forge/K2-tests-1"), head("forge/K2-tests-2"), head("forge/K2-tests-2")]);
+  waitingOf(await shown(root, start.id), "card");
+  assert.deepEqual(await quotedIn(root), nothingFound);
 });

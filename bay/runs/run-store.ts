@@ -1,6 +1,5 @@
 import type { EventSink, Json, RunEvent, Settled, Spend } from "../contracts.ts";
-import type { Budget } from "../generated/mode.ts";
-import type { SkillOutputKeeping } from "./packed-output.ts";
+import type { Budget, Keeping } from "../generated/mode.ts";
 import type { RunState } from "./run-state.ts";
 import type { RefusedDetail, StepDetail, StepKind } from "./step-detail.ts";
 
@@ -29,7 +28,7 @@ type StepStartFields = {
   readonly key: string;
   readonly input: Json;
   readonly startedAt: string;
-  readonly kept?: SkillOutputKeeping;
+  readonly kept?: Keeping;
 };
 
 type StepEndFields = {
@@ -47,7 +46,7 @@ export type StepRecord =
 export type StoredRun = {
   readonly id: string;
   readonly target: RunTarget;
-  readonly kept?: SkillOutputKeeping;
+  readonly kept?: Keeping;
   readonly input: Json;
   readonly state: StoredState;
   readonly limit: Budget;
@@ -63,7 +62,7 @@ export type RunWithSteps = StoredRun & { readonly steps: readonly StepRecord[] }
 export type NewRun = {
   readonly id: string;
   readonly target: RunTarget;
-  readonly kept?: SkillOutputKeeping;
+  readonly kept?: Keeping;
   readonly input: Json;
   readonly limit: Budget;
   readonly at: string;
@@ -77,7 +76,7 @@ export type Writer = {
 export type StepStart = StepDetail & {
   readonly key: string;
   readonly input: Json;
-  readonly kept?: SkillOutputKeeping;
+  readonly kept?: Keeping;
   readonly at: string;
 };
 
@@ -96,6 +95,7 @@ export type StepRefusal = {
   readonly key: string;
   readonly kind: StepKind;
   readonly input: Json;
+  readonly kept?: Keeping;
   readonly reason: string;
   readonly at: string;
 };

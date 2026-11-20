@@ -1,13 +1,13 @@
 import { join } from "node:path/posix";
 import type { EventSink, Json, RunEvent, Scrubber, ScriptRunner, Spend, Submission } from "../contracts.ts";
-import type { Budget } from "../generated/mode.ts";
+import type { Budget, Keeping } from "../generated/mode.ts";
 import { fieldOf, isRecord, textField, toJson } from "../json.ts";
 import { failedWith, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
 import type { Clock, Folders } from "../ports.ts";
 import type { System } from "../manifests/manifests.ts";
 import { Engine, type AdvancedRun } from "./engine.ts";
 import { hookNoteFor, hookNoteKind, type HookWatch } from "./hook-seen.ts";
-import { keptPackedNote, type SkillOutputKeeping } from "./packed-output.ts";
+import { keptInputNote, keptPackedNote, keptReasonNote } from "./packed-output.ts";
 import {
   kernelDatabaseFile,
   runStatuses,
@@ -44,7 +44,7 @@ type RunStep = {
   readonly startedAt: string;
   readonly input: Json;
   readonly detail: Json;
-  readonly kept?: SkillOutputKeeping;
+  readonly kept?: Keeping;
 } & (
   | { readonly status: "started" }
   | { readonly status: "done"; readonly finishedAt: string; readonly output: Json }
@@ -54,7 +54,7 @@ type RunStep = {
 export type Run = {
   readonly id: string;
   readonly target: { readonly kind: "action" | "workflow"; readonly mode: string; readonly name: string };
-  readonly kept?: SkillOutputKeeping;
+  readonly kept?: Keeping;
   readonly state: RunState<Task>;
   readonly spent: Spend;
   readonly createdAt: string;
@@ -145,12 +145,16 @@ function withoutSubmission(detail: Json): Json {
 }
 
 function keptStepOf(step: RunStep): RunStep {
-  const input = step.kind === "check" ? keptPackedNote : step.input;
-  const detail = withoutSubmission(step.detail);
-  const kept = { input, detail, kept: "kept-packed" as const };
-  return step.status === "done" && step.kind !== "check"
-    ? { ...step, ...kept, output: keptPackedNote }
-    : { ...step, ...kept };
+  const input = step.kind === "check" ? keptPackedNote : keptInputNote;
+  const kept = { input, detail: withoutSubmission(step.detail), kept: "kept-packed" as const };
+  switch (step.status) {
+    case "started":
+      return { ...step, ...kept };
+    case "done":
+      return step.kind === "check" ? { ...step, ...kept } : { ...step, ...kept, output: keptPackedNote };
+    case "failed":
+      return { ...step, ...kept, reason: keptReasonNote };
+  }
 }
 
 function shownStepOf(record: StepRecord): RunStep {

@@ -1,10 +1,9 @@
 import { charge, frameOverrun, noSpend, type BudgetFrame } from "./budget.ts";
 import type { Json, RunEvent, Scrubber, ScriptRunner, Settled, Spend, StepOutcome } from "../contracts.ts";
-import type { Budget } from "../generated/mode.ts";
+import type { Budget, Keeping } from "../generated/mode.ts";
 import { byteSize } from "../json.ts";
 import type { Clock } from "../ports.ts";
 import type { ActionTarget, System } from "../manifests/manifests.ts";
-import type { SkillOutputKeeping } from "./packed-output.ts";
 import { settledOf, type RunStore, type StepRecord, type Writer } from "./run-store.ts";
 import type { Waiting } from "./run-state.ts";
 import type { StepDetail, StepKind } from "./step-detail.ts";
@@ -35,6 +34,7 @@ export type ActionFrame = ActionTarget & {
   readonly key: string;
   readonly budget: BudgetFrame;
   readonly caller: string | undefined;
+  readonly within: Keeping;
 };
 
 type EventKind =
@@ -53,7 +53,7 @@ type EventKind =
 type RecordStart = StepDetail & {
   readonly key: string;
   readonly input: Json;
-  readonly kept?: SkillOutputKeeping;
+  readonly kept?: Keeping;
 };
 
 type RecordEnd = StepOutcome & {
@@ -64,6 +64,7 @@ type RefusedStart = {
   readonly key: string;
   readonly kind: StepKind;
   readonly input: Json;
+  readonly kept?: Keeping;
 };
 
 export function done(output: Json): Settled {

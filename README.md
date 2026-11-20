@@ -207,10 +207,32 @@ restart. Base64 matters too: a block that gzip leaves uncompressed is still neve
 The kernel unpacks the output for the script that called the action, also when it replays that script's finished
 calls, and for the skill's own checks. A round that a check sends back gets the check's feedback, as before, and
 not the earlier output; a check's feedback is shown as written, so a check should not quote the output. `bay runs`
-says the output is kept packed and never prints it, also with `--full`, `--json` and `--events`. Events hold only
-its size. Such an action's run is one skill step, and only a script may call it: `bay check` refuses a call step
-or a workflow step that names it, since either would pass the output on as text. Left out, or set to `as-text`,
-the output is kept as text, as before.
+marks each such step kept packed and never prints its input, its output or its reason, also with `--full`,
+`--json` and `--events`; it prints a check's verdict and feedback. Events hold only sizes. Such an action's run is
+one skill step, and only a script may call it: `bay check` refuses a call step or a workflow step that names it,
+since either would pass the output on as text. Left out, or set to `as-text`, the output is kept as text, as before.
+
+## The answers of called actions kept packed
+
+An action may say `calledOutputs: kept-packed`. The kernel then keeps packed every call made under it: each call
+its script makes, each call those actions' scripts make, at any depth, and each undo of such a call. For each, the
+call's input, output and reason, and every step under it with its input, detail, output and reason, are gzipped
+and in base64 in `.agentbay/kernel.db`, and a refused call's input too. The kernel unpacks them for the script
+that made the call, also when it replays that script's finished calls after a restart, and for skill checks under
+it. `bay runs` marks those steps kept packed as above.
+
+A failure under such an action reaches the calling script without the words of the one that failed. When a script
+or a skill under it fails, its own step keeps the reason, packed, and the step above is told only which script or
+skill failed and that the kernel keeps its reason packed. When a called action's input or answer does not match
+its schema, the reason counts the problems and quotes none of them. A refusal, such as a call whose effects the
+caller does not declare, keeps the kernel's sentence, which quotes nothing of the call.
+
+The marked action's own step, input and output are kept as text, so a workflow and a card can read them; whatever
+its script puts there from an answer is the mode's to keep out. Its run may have no call step: `bay check` refuses
+one, since a call step would pass the answer on as text. Events are not packed: the kernel's own carry sizes,
+command words, hashes and refusal sentences, and no input or output of a call; an event a script emits is kept as
+the script wrote it. A skill's `call_action` starts a run of its own, kept as the action it names says, not packed
+by this field.
 
 Packing is not secrecy. It keeps the text from a search and from anyone who reads the files. It does not stop
 code that can open the database and unpack it, such as a script run as the same user. With the hook, a step's

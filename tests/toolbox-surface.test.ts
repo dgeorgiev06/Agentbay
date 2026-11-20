@@ -284,6 +284,7 @@ const pinnedSurface: readonly string[] = [
   "  readonly ScriptContext.call: (reference: string, input: Json) => Promise<Answer<Json>>",
   "  readonly ScriptContext.schemas: {",
   "    readonly ScriptContext.schemas.check: (schema: string, value: Json) => Promise<Answer<SchemaCheck>>",
+  "    readonly ScriptContext.schemas.checkAgainst: (schema: Json, value: Json) => Promise<Answer<SchemaCheck>>",
   "  }",
   "  readonly ScriptContext.settings: Readonly<Record<string, Json>>",
   "  readonly ScriptContext.now: () => Date",

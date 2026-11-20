@@ -35,6 +35,7 @@ One meaning per word. Briefs, plans, code names and reviews use these words and 
 | **Budget** | A limit on a run: items, dollars, tokens, minutes. | quota |
 | **Toolbox** | `bay/sdk.ts`. The only kernel file mode code may import. | SDK internals, helpers |
 | **Test toolbox** | `tests/test-toolbox.ts`. The only kit file a mode's tests may import besides the toolbox. It opens a project, calls actions, answers skill steps and reads runs, and never hands out the kernel. | mode harness, test helpers |
+| **Given schema** | A JSON Schema a script hands the toolbox as a value, not as a file, and checks a value against with `context.schemas.checkAgainst`, by the kernel's own validator. It may refer only to its own parts, so nothing outside it is read, and it has limits on its size and on how far its references unfold. | inline schema, ad-hoc schema, schema value |
 | **Shared test** | `<name>/tests/shared.ts` beside an interface: what every mode that implements it must do, through the interface's actions only. Each implementing mode runs it from its own tests. | contract test, conformance suite |
 | **Operation** | One thing a script or an agent's tool asks the broker to do, such as `files.read` or `commands.run`. Each has one entry in the broker's table: its request, its result and their guards. | call, request kind, broker method |
 | **Ruling** | What an operation's rule returns: the value it allowed, which is all its handler is given, or the refusal. | permission, verdict |

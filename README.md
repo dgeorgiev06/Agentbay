@@ -263,3 +263,21 @@ item has spent. Minutes are counted per step and added up, so items side by side
 action's effects say it may write, and its mode's grants say where, but which file or row an item writes depends
 on its input, so the manifests cannot tell two items apart. A mode's database waits on its lock, so two items
 that write it both land.
+
+## Checking a value against a schema
+
+A script has two calls in the toolbox for it. `context.schemas.check(file, value)` takes a schema file of the
+mode, or one of an interface the mode implements or requires, written `<interface>@<major>/<file>`.
+`context.schemas.checkAgainst(schema, value)` takes the schema itself as a value, such as one a skill handed in.
+Both use the kernel's own validator: JSON Schema draft 2020-12, with a keyword it does not know ignored, and
+each schema compiled once by its content, at most 256 kept. Both answer `{ passed: true, value }`, or
+`{ passed: false, problems }` with every problem's path and sentence.
+
+`checkAgainst` reads no file and reaches no network. A schema it cannot use is a failed answer with one sentence,
+and the value is not checked: one longer than 65536 characters as JSON (the largest action schema in the kit,
+`proof@1`'s `prove-request.json`, is 15237), nested more than 64 levels deep, one whose `$ref`, `$dynamicRef` or
+`$recursiveRef` points anywhere but its own parts (`#` or `#/...`), one that sets `$id` below its top, one that
+grows past 65536 parts when each reference is followed in place (the kit's largest is 1688), and one the
+validator cannot compile or that sends it round without end. The validator has no `loadSchema`, so a reference it
+cannot find stops the compile; it never fetches. A `pattern` is a regular expression as written, as in a schema
+file: one that backtracks without end stops the script at its own time limit, and nothing else.

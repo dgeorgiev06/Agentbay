@@ -554,6 +554,10 @@ export function contextOver(asking: Asking, start: ScriptStart): ScriptContext {
         const { checkedValue } = await import("../value-check.ts");
         return { ok: true, value: checkedValue(schema, answer.value, value) };
       },
+      checkAgainst: async (schema, value) => {
+        const { checkedAgainst } = await import("../value-check.ts");
+        return checkedAgainst(schema, value);
+      },
     },
     settings: start.settings,
     now: () => new Date(start.now),

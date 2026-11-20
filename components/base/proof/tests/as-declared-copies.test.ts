@@ -88,7 +88,7 @@ function contextOf(asked: Asked, reads: readonly Read[], changed: readonly strin
       asked.calls.push(reference);
       return Promise.resolve({ ok: true, value: callAnswer(reference, input, changed) });
     },
-    schemas: { check: unanswered },
+    schemas: { check: unanswered, checkAgainst: unanswered },
     settings: {},
     now: () => new Date("2026-11-18T10:00:00Z"),
     spend: unanswered,

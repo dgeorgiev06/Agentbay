@@ -1,7 +1,13 @@
 import type { Json } from "./contracts.ts";
 import { isJson } from "./protocol-json.ts";
 import type { FileSystem } from "./ports.ts";
-import type { SchemaFile, SchemaParts, UnfollowedReference } from "./value-check.ts";
+import {
+  partAt,
+  referencesWithin,
+  type SchemaFile,
+  type SchemaParts,
+  type UnfollowedReference,
+} from "./value-check.ts";
 
 export type NameableSchemas = {
   readonly owner: string;
@@ -13,21 +19,6 @@ type JsonText = { readonly read: true; readonly value: Json } | { readonly read:
 type Part = { readonly name: string; readonly value: Json };
 
 const pointerStart = "/";
-
-function isJsonFields(value: Json | undefined): value is { readonly [key: string]: Json } {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isJsonList(value: Json | undefined): value is readonly Json[] {
-  return Array.isArray(value);
-}
-
-function stepInto(value: Json | undefined, step: string): Json | undefined {
-  if (isJsonList(value)) {
-    return /^(0|[1-9][0-9]*)$/.test(step) ? value[Number(step)] : undefined;
-  }
-  return isJsonFields(value) && Object.hasOwn(value, step) ? value[step] : undefined;
-}
 
 function jsonOf(text: string): JsonText {
   try {
@@ -41,29 +32,10 @@ function jsonOf(text: string): JsonText {
 }
 
 function externalReferences(schema: Json): readonly string[] {
-  const found = new Set<string>();
-  const waiting: Json[] = [schema];
-  for (let index = 0; index < waiting.length; index += 1) {
-    const next = waiting[index];
-    if (isJsonList(next)) {
-      waiting.push(...next);
-    } else if (isJsonFields(next)) {
-      const reference = next.$ref;
-      if (typeof reference === "string" && !reference.startsWith("#")) {
-        found.add(reference);
-      }
-      waiting.push(...Object.values(next));
-    }
-  }
-  return [...found];
-}
-
-function partAt(value: Json, pointer: string): Json | undefined {
-  const steps = pointer
-    .slice(pointerStart.length)
-    .split("/")
-    .map((step) => step.replaceAll("~1", "/").replaceAll("~0", "~"));
-  return steps.reduce<Json | undefined>(stepInto, value);
+  const outside = referencesWithin(schema).filter(
+    (reference) => reference.keyword === "$ref" && !reference.target.startsWith("#"),
+  );
+  return [...new Set(outside.map((reference) => reference.target))];
 }
 
 function nameable(schemas: NameableSchemas): string {

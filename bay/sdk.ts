@@ -107,6 +107,7 @@ export type ScriptContext = {
   readonly call: (reference: string, input: Json) => Promise<Answer<Json>>;
   readonly schemas: {
     readonly check: (schema: string, value: Json) => Promise<Answer<SchemaCheck>>;
+    readonly checkAgainst: (schema: Json, value: Json) => Promise<Answer<SchemaCheck>>;
   };
   readonly settings: Readonly<Record<string, Json>>;
   readonly now: () => Date;

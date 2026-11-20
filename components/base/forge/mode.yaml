@@ -29,10 +29,10 @@ actions:
     run:
       - script: scripts/slice.ts
   leftovers:
-    description: When a slice is about to start in the workflow rounds, it finds the branches an earlier run of the same slice left that may hold work, each with its commit, and changes nothing; it asks worktrees.drop-branch with the branch named as into, which keeps it and answers its commit.
+    description: When a slice is about to start in the workflow rounds, it finds the branches an earlier run of the same slice left that may hold work, each with its commit, by asking worktrees.find-branch, and changes nothing.
     input: schemas/leftovers-request.json
     output: schemas/leftovers-response.json
-    effects: [read, write, delete]
+    effects: [read]
     run:
       - script: scripts/leftovers.ts
   begin:

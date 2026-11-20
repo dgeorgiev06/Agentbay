@@ -136,19 +136,26 @@ describe("a cut of forge's own scratch", () => {
 });
 
 describe("what an earlier run left", () => {
-  test("is found by asking to drop each branch with itself as into, which keeps it and answers its commit", async () => {
+  test("is found by asking worktrees to find each branch, which changes nothing and answers its commit", async () => {
     const asked: Asked = [];
     const answering: Answering = (_reference, input) => {
       const branch = branchOf(input);
-      const reason = `The branch ${branch} is the branch work is merged into, named as into, so it is kept.`;
-      return branch === "forge/A1" ? { how: "refused", branch, commit, reason } : { how: "refused", branch, reason };
+      return branch === "forge/A1" ? { how: "found", branch, commit } : { how: "not-there", branch };
     };
     const found = await leftOver(contextOf(asked, answering), ["forge/A1", "forge/A1-tests-1"]);
     assert.deepEqual(found, [{ branch: "forge/A1", commit }]);
     assert.deepEqual(asked, [
-      ["worktrees.drop-branch", { branch: "forge/A1", into: "forge/A1" }],
-      ["worktrees.drop-branch", { branch: "forge/A1-tests-1", into: "forge/A1-tests-1" }],
+      ["worktrees.find-branch", { branch: "forge/A1" }],
+      ["worktrees.find-branch", { branch: "forge/A1-tests-1" }],
     ]);
+  });
+
+  test("that worktrees will not look for ends the run with its reason", async () => {
+    const reason = "The branch forge/wip is not one this mode makes, so the mode does not look at it.";
+    const answering: Answering = (_reference, input) => ({ how: "refused", branch: branchOf(input), reason });
+    await assert.rejects(leftOver(contextOf([], answering), ["forge/A1", "forge/wip"]), {
+      message: `forge could not look for forge/A1, which an earlier run may have left: ${reason}`,
+    });
   });
 
   test("is built over by setting aside and removing a worktree it still has, then dropping it and the work set aside", async () => {

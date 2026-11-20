@@ -37,6 +37,7 @@ export type Card = {
 
 type CardContext = Records & {
   readonly itemNames: ReadonlyMap<string, DeclaredName>;
+  readonly resolveInItem: (reference: string, item: Json) => Outcome<Json>;
   readonly stepId: string;
   readonly quotes: readonly string[];
   readonly eventsOf: (runId: string) => Promise<readonly RunEvent[]>;
@@ -238,7 +239,8 @@ function inItemOf(context: CardContext, foreach: string | undefined, item: numbe
   }
   const key = context.keys.get(foreach);
   const items = (key === undefined ? undefined : context.steps.get(key)?.items) ?? [];
-  const name = itemNameOf(context.itemNames.get(foreach), items[item] ?? null);
+  const read = (reference: string): Outcome<Json> => context.resolveInItem(reference, items[item] ?? null);
+  const name = itemNameOf(context.itemNames.get(foreach), read);
   return { foreach, itemCount: items.length, ...(name === undefined ? {} : { itemName: name }) };
 }
 

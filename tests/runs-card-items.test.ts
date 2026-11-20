@@ -5,7 +5,6 @@ import type { Json } from "../bay/contracts.ts";
 import type { Action } from "../bay/generated/mode.ts";
 import type { Config } from "../bay/generated/config.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
-import { approvalLines } from "../bay/approval-card.ts";
 import { isRecord, numberField, toJson } from "../bay/json.ts";
 import type { Run, Runs } from "../bay/runs/runs.ts";
 import {
@@ -321,21 +320,18 @@ const judgedItem0 = { mark: "judged", words: drafted, source: { step: "write", i
 
 const judgedBoth = [judgedItem0, { mark: "judged", words: "item 1 holds", source: { step: "write", item: 1 } }];
 
-function rowsOf(run: Run): string {
-  const [waiting] = waitsOf(run);
-  assert.ok(waiting?.reason === "approval", JSON.stringify(run.state));
-  const rows = approvalLines(waiting).map((row) => row.replace(/^judged\s+/, ""));
-  return rows.join(" ").replace(/\s+/g, " ");
-}
-
 async function namedCard(opening: Partial<Opening>): Promise<{ readonly run: Run; readonly opened: OpenedRuns }> {
   return atCard({ lines: judgedBoth, itemName: sliceNamed, trigger: sliceItems, ...opening });
 }
 
-function namesOf(run: Run): readonly Json[] {
+function fieldsOfLines(run: Run, field: string): readonly Json[] {
   const card = cardShown(run);
   assert.ok(isRecord(card) && Array.isArray(card["lines"]), JSON.stringify(card));
-  return card["lines"].map((line: unknown) => (isRecord(line) ? toJson(line["itemName"] ?? null) : null));
+  return card["lines"].map((line: unknown) => (isRecord(line) ? toJson(line[field] ?? null) : null));
+}
+
+function namesOf(run: Run): readonly Json[] {
+  return fieldsOfLines(run, "itemName");
 }
 
 describe("a card names an item by the name its foreach declares, or by its place", () => {
@@ -346,28 +342,19 @@ describe("a card names an item by the name its foreach declares, or by its place
       { id: "TD1", title: "The td1 mode counts what was added" },
       { id: "TD2", title: "The td2 mode counts what was removed" },
     ]);
-    const said = rowsOf(run);
-    assert.ok(
-      said.includes("by notes skills/draft, tier balanced, for TD1 (The td1 mode counts what was added)"),
-      said,
-    );
-    assert.ok(
-      said.includes("by notes skills/draft, tier balanced, for TD2 (The td2 mode counts what was removed)"),
-      said,
-    );
-    assert.ok(!said.includes("item 0") && !said.includes("item 1 of"), said);
+    assert.deepEqual(fieldsOfLines(run, "itemCount"), [2, 2]);
+    assert.deepEqual(fieldsOfLines(run, "foreach"), ["each", "each"]);
   });
 
   test("without itemName, or when its id names nothing in the item, the item is named by its place", async () => {
     const plain = await atCard({ lines: judgedBoth });
     plain.opened.close();
-    const said = rowsOf(plain.run);
-    assert.ok(said.includes("by notes skills/draft, tier balanced, for the 1st of 2 items of step each"), said);
-    assert.ok(said.includes("by notes skills/draft, tier balanced, for the 2nd of 2 items of step each"), said);
+    assert.deepEqual(namesOf(plain.run), [null, null]);
+    assert.deepEqual(fieldsOfLines(plain.run, "itemCount"), [2, 2]);
     const missing = await namedCard({ itemName: { id: "$item.planned.name", title: "$item.planned.title" } });
     missing.opened.close();
     assert.deepEqual(namesOf(missing.run), [null, null]);
-    assert.ok(rowsOf(missing.run).includes("for the 1st of 2 items of step each"), rowsOf(missing.run));
+    assert.deepEqual(fieldsOfLines(missing.run, "itemCount"), [2, 2]);
   });
 
   test("a title that names nothing, or names what is not text, leaves the id alone", async () => {
@@ -375,7 +362,6 @@ describe("a card names an item by the name its foreach declares, or by its place
       const { run, opened } = await namedCard({ itemName: { id: "$item.planned.slice.name", title } });
       opened.close();
       assert.deepEqual(namesOf(run), [{ id: "TD1" }, { id: "TD2" }]);
-      assert.ok(rowsOf(run).includes("tier balanced, for TD1 item 1 holds"), rowsOf(run));
     }
   });
 

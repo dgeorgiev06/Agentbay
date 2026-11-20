@@ -142,6 +142,7 @@ features:
       - bay/runs/choices.ts
       - bay/runs/card.ts
       - bay/runs/cited-step.ts
+      - bay/runs/item-name.ts
       - bay/runs/hook-seen.ts
       - bay/runs/packed-output.ts
       - bay/runs/foreach-steps.ts

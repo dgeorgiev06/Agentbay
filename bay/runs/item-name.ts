@@ -1,12 +1,12 @@
 import type { Json } from "../contracts.ts";
 import type { Step as WorkflowStep } from "../generated/workflow.ts";
-import { resolveValue } from "../manifests/references.ts";
+import type { Outcome } from "../outcome.ts";
 
 export type ItemName = { readonly id: string; readonly title?: string };
 
 export type DeclaredName = NonNullable<Extract<WorkflowStep, { readonly foreach: string }>["itemName"]>;
 
-type ItemPlace = { readonly item: number; readonly foreach: string; readonly count?: number };
+type Read = (reference: string) => Outcome<Json>;
 
 const longestId = 40;
 
@@ -36,19 +36,19 @@ function textOf(value: Json): string | undefined {
   return typeof value === "number" && Number.isFinite(value) ? String(value) : undefined;
 }
 
-function namePart(reference: string, item: Json, longest: number): string | undefined {
-  const resolved = resolveValue(reference, { trigger: null, outputs: new Map(), settings: {}, item });
+function namePart(read: Read, reference: string, longest: number): string | undefined {
+  const resolved = read(reference);
   const text = resolved.ok ? textOf(resolved.value) : undefined;
   const bounded = text === undefined ? "" : boundedName(text, longest);
   return bounded === "" ? undefined : bounded;
 }
 
-export function itemNameOf(declared: DeclaredName | undefined, item: Json): ItemName | undefined {
-  const id = declared === undefined ? undefined : namePart(declared.id, item, longestId);
+export function itemNameOf(declared: DeclaredName | undefined, read: Read): ItemName | undefined {
+  const id = declared === undefined ? undefined : namePart(read, declared.id, longestId);
   if (declared === undefined || id === undefined) {
     return undefined;
   }
-  const title = declared.title === undefined ? undefined : namePart(declared.title, item, longestTitle);
+  const title = declared.title === undefined ? undefined : namePart(read, declared.title, longestTitle);
   return title === undefined ? { id } : { id, title };
 }
 
@@ -58,21 +58,4 @@ function isBounded(text: string | undefined, longest: number): boolean {
 
 export function isItemName(name: ItemName): boolean {
   return isBounded(name.id, longestId) && isBounded(name.title, longestTitle);
-}
-
-function ordinal(position: number): string {
-  const tens = position % 100;
-  const suffixes = ["th", "st", "nd", "rd"];
-  const suffix = tens >= 11 && tens <= 13 ? "th" : (suffixes[position % 10] ?? "th");
-  return `${String(position)}${suffix}`;
-}
-
-export function itemPlaceWords(place: ItemPlace): string {
-  const { count } = place;
-  const of = count === undefined ? "item" : `of ${String(count)} ${count === 1 ? "item" : "items"}`;
-  return `the ${ordinal(place.item + 1)} ${of} of step ${place.foreach}`;
-}
-
-export function itemNameWords(name: ItemName): string {
-  return name.title === undefined ? name.id : `${name.id} (${name.title})`;
 }

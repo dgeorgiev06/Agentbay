@@ -163,6 +163,8 @@ async function checkedShown(walk: Walk, scope: WorkflowScope, at: ShownAt): Prom
     keys: scope.keys,
     foreachOf: foreachOfSteps(scope.workflow.workflow.steps),
     itemNames: itemNamesOf(scope.workflow.workflow.steps),
+    resolveInItem: (reference: string, item: Json) =>
+      scope.workflow.resolve(reference, { trigger: null, outputs: new Map(), item }),
     steps: stepsSeen(walk.records),
     events: await store.readEvents(walk.writer.runId),
     eventsOf: (runId: string) => store.readEvents(runId),

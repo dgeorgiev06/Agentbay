@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import type { Json } from "../../../../bay/sdk.ts";
+import { shortHash, type Json } from "../../../../bay/sdk.ts";
 import type { CardLine } from "../scripts/lib/card-lines.ts";
 import { interfaceChanges, interfaceClauses, interfaceWords, pinnedOf } from "../scripts/lib/interface-pins.ts";
 import { drawn, type MergeCardInput } from "../scripts/lib/merge-card.ts";
@@ -77,6 +77,7 @@ describe("interface files pinned by hash", () => {
   test("the same text has the same hash, other text another, and a file not there has none", () => {
     const pinned = pinnedOf(schema, '{ "type": "object" }');
     assert.equal(pinned.path, schema);
+    assert.equal(pinned.hash, shortHash('{ "type": "object" }'));
     assert.match(pinned.hash ?? "", /^[0-9a-f]{16}$/);
     assert.deepEqual(pinnedOf(schema, '{ "type": "object" }'), pinned);
     assert.notEqual(pinnedOf(schema, '{ "type": "array" }').hash, pinned.hash);

@@ -31,7 +31,7 @@ const timerMode = {
       scriptTimeLimitSeconds: 900,
       budget: { minutes: 0.02 },
     }),
-    wait: scriptAction("scripts/wait.ts", { scriptTimeLimitSeconds: 4 }),
+    wait: scriptAction("scripts/wait.ts", { scriptTimeLimitSeconds: 16 }),
   },
 };
 

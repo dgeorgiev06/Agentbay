@@ -4,6 +4,11 @@ import { brokenRules, type Found } from "./rules.ts";
 
 type LineOf = (path: Path) => number | undefined;
 
+type Read = {
+  readonly value: Json;
+  readonly lineOf: LineOf;
+};
+
 type Placed = {
   readonly found: Found;
   readonly line: number | undefined;
@@ -37,11 +42,6 @@ function problemOf({ found, line }: Placed): Json {
 function refused(file: string, problems: readonly Json[]): Json {
   return { answer: "refused", file, problems };
 }
-
-type Read = {
-  readonly value: Json;
-  readonly lineOf: LineOf;
-};
 
 function isList(value: Json | undefined): value is readonly Json[] {
   return Array.isArray(value);

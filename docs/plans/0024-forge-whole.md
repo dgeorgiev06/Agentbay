@@ -184,3 +184,10 @@ DS1 is merged locally (the full check runs with TL1's batch): forge's `design` w
 - **Stopped in QL1:** "duplicated blocks do not rise" needs a duplicate detector as a toolchain check (a new dependency and script); `bay check` printing the practices debt is kernel work.
 - **To settle:** the rounds withhold merge only for `mustPractices`; the design and plan steps withhold approve for every practice they hold.
 - KW1 reported and waits for review. Then WV1.
+
+## After KW1 (20 November, about 08:45 owner's time)
+
+- **KW1 pushed.** The full check ran 2,360 tests under a load of 20 and more (two builders testing): 2,354 passed and six failed, all in two files that hold wall-clock limits, `tests/broker-database.test.ts` (an agent query killed at its time limit, five cases) and `tests/step-time-limits.test.ts` (one case). Both files passed alone twice right after (28 of 28), and TL1 had reported the same two as failing only under heavy load. Not caused by KW1. A slice FL1 is owed: those tests must not depend on the machine being quiet.
+- **KW1:** `foreach` gains `sideBySide: 2..8`; a run may wait on several steps (`waiting` and `alsoWaiting`, a token per task, `bay runs --new-token --step <key>`); when items fail the others finish and the run waits for the owner with every failure named, `resume --rerun` runs only the failed items under new keys, `--stop` fails it; each item draws the budget through its own frame; minutes are summed across items. The coordinator's steps 2 and 3 changed (shown to the owner on 20 November). The coordinator has no instruction yet for a run that waits for the owner at a foreach. A submit while another call advances the run is refused with "try again": two builders work at once but hand in one after the other (KW5: record a submission under a short lock).
+- **The owner agreed to the PM design's recommendations for questions 2 to 5** (recorded in `docs/designs/pm-mode/design.md`).
+- Building: WV1 (forge's wave) and WB1 (worktrees drops a named branch).

@@ -1024,6 +1024,8 @@ What changes in plan 0024: RQ1 becomes "forge requires requirements@1 and reads 
 
 ## 9. Questions only the owner can answer
 
+**Answered.** Question 1 on 19 November: the shared interface `requirements@1` (built as slice RQ1). Questions 2 to 5 on 20 November, in the owner's words "Agree with pm recommendations": a question is asked as an approval; his own words as an answer are not built now; forge may design and plan from a file with open questions; sources at the job are exported files in a folder first.
+
 1. **Where the file's form lives.** In an interface `requirements@1` with a small base mode both modes require, or in forge's folder as design A put it, with the PM mode keeping its own copy of the rules. Recommendation: the interface. One owner for the form (P-12, P-38), and either mode works alone. It changes RQ1 of plan 0024.
 2. **How a question is asked.** As an approval, one run a question, as designed; or by the coordinator in chat with the harness's own choice buttons, recorded with one action call an answer. Recommendation: the approval. The kernel binds the answer to what was shown and records who gave it. In chat the coordinator can still show its choices as buttons.
 3. **Your own words as an answer.** Now they go in through `pm.start` as one more request. A small kernel change would let an approval hand your quoted words to the next step, so `ask` takes them in place. Recommendation: not now. Add it if you find yourself reaching past the answers often.

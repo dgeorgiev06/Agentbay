@@ -17,36 +17,13 @@ slices:
       level: must
       proof:
         kind: checks
-- title: 'The requirements file: outcomes, conditions, what is left out; forge.requirements checks one and names every problem with its line'
-  slice:
-    name: RQ1
-    kind: mode
-    scope:
-    - components/base/forge/**
-    - docs/requirements/**
-    after: []
-    done:
-    - id: DOD-RQ1-1
-      says: forge.requirements accepts docs/requirements/todo.yaml and refuses a file with a condition with no then, two conditions with one id, or an outcome with no condition, each with its line.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/base/forge/tests/requirements.test.ts
-    - id: DOD-RQ1-2
-      says: The kit's checks and its whole test run pass.
-      level: must
-      proof:
-        kind: checks
 - title: 'System design: one design or two written apart, compared, the design card, and the design committed with its schema files'
   slice:
     name: DS1
     kind: mode
     scope:
     - components/base/forge/**
-    after:
-    - slice: RQ1
-      because: A design is made from a requirements file RQ1 defines, in the same folder.
+    after: []
     done:
     - id: DOD-DS1-1
       says: From the todo requirements, the workflow design shows the design card with each line as printed in design A, and approve commits design.yaml and the schema files.

@@ -64,20 +64,35 @@ function recordAt(run: RunWithSteps, key: string): StepRecord | undefined {
   return run.steps.find((step) => step.key === key);
 }
 
-export function waitingSkill(run: RunWithSteps, stepKey: string): Outcome<StartedSkill> {
-  const refused = endedRefusal(run) ?? waitingRefusal(run, { reason: "skill", stepKey });
-  if (refused !== undefined) {
-    return refused;
-  }
+function unansweredSkill(run: RunWithSteps, stepKey: string, recorded: ReadonlySet<string>): Outcome<StartedSkill> {
   const round = skillRoundOf(stepKey);
   const record = startedSkillOf(round === undefined ? undefined : recordAt(run, round.step));
-  if (record !== undefined && record.detail.submission === undefined && record.detail.round === round?.round) {
+  const unanswered = record?.detail.submission === undefined && !recorded.has(stepKey);
+  if (record !== undefined && unanswered && record.detail.round === round?.round) {
     return succeededWith(record);
   }
   return refusal(run.id, {
     message: `Run ${run.id} already has a submission for ${stepKey}; it is applied once.`,
     fix: "Submit once per round, to the step key the waiting run shows.",
   });
+}
+
+export function waitingSkill(run: RunWithSteps, stepKey: string): Outcome<StartedSkill> {
+  const refused = endedRefusal(run) ?? waitingRefusal(run, { reason: "skill", stepKey });
+  return refused ?? unansweredSkill(run, stepKey, new Set());
+}
+
+export function answerableSkill(
+  run: RunWithSteps | undefined,
+  stepKey: string,
+  recorded: ReadonlySet<string>,
+): Outcome<StartedSkill> {
+  if (run === undefined) {
+    return failedWith([{ file: kernelDatabaseFile, path: "", message: "The run of this answer does not exist." }]);
+  }
+  const advancing = run.state.status === "running";
+  const refused = endedRefusal(run) ?? (advancing ? undefined : waitingRefusal(run, { reason: "skill", stepKey }));
+  return refused ?? unansweredSkill(run, stepKey, recorded);
 }
 
 function startedApprovalOf(record: StepRecord | undefined): StartedApproval | undefined {

@@ -25,7 +25,7 @@ export type DatabaseRows = Readonly<Record<string, readonly Row[]>>;
 
 const crashMessage = "simulated crash";
 
-const tables = ["runs", "steps", "events", "task_tokens"];
+const tables = ["runs", "steps", "events", "task_tokens", "answers"];
 
 export function temporaryKernelDb(): KernelDb {
   const folder = mkdtempSync(join(tmpdir(), "agentbay-kernel-db-"));
@@ -72,6 +72,10 @@ export function faultInjector(store: SqliteRunStore, point?: FaultPoint): Faulty
     acquire: (runId, owner, now) => write("acquire", () => store.acquire(runId, owner, now)),
     heartbeat: (writer, now) => write("heartbeat", () => store.heartbeat(writer, now)),
     release: (writer) => write("release", () => store.release(writer)),
+    releaseUnlessAnswered: (writer) => write("releaseUnlessAnswered", () => store.releaseUnlessAnswered(writer)),
+    recordAnswer: (answer, lock, rule) => write("recordAnswer", () => store.recordAnswer(answer, lock, rule)),
+    forgetAnswer: (writer, stepKey, events) => write("forgetAnswer", () => store.forgetAnswer(writer, stepKey, events)),
+    recordedAnswers: (runId) => store.recordedAnswers(runId),
     readRun: (runId) => store.readRun(runId),
     listRuns: (status) => store.listRuns(status),
     readEvents: (runId) => store.readEvents(runId),

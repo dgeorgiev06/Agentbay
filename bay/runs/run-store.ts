@@ -1,5 +1,6 @@
-import type { EventSink, Json, RunEvent, Settled, Spend } from "../contracts.ts";
+import type { EventSink, Json, RunEvent, Settled, Spend, Submission } from "../contracts.ts";
 import type { Budget, Keeping } from "../generated/mode.ts";
+import type { Outcome, Problem } from "../outcome.ts";
 import type { RunState } from "./run-state.ts";
 import type { RefusedDetail, StepDetail, StepKind } from "./step-detail.ts";
 
@@ -120,6 +121,29 @@ export type LockResult =
   | { readonly status: "missing" }
   | { readonly status: "busy" };
 
+export type RecordedAnswer = {
+  readonly runId: string;
+  readonly stepKey: string;
+  readonly submission: Submission;
+  readonly at: string;
+};
+
+export type LockRequest = {
+  readonly owner: string;
+  readonly now: Date;
+};
+
+export type AnswerRule = (
+  run: RunWithSteps | undefined,
+  recorded: ReadonlySet<string>,
+) => Outcome<{ readonly kept?: Keeping }>;
+
+export type Recording =
+  | { readonly status: "refused"; readonly problems: readonly Problem[] }
+  | { readonly status: "taken"; readonly writer: Writer }
+  | { readonly status: "recorded" }
+  | { readonly status: "busy" };
+
 export type RunStore = EventSink & {
   readonly createRun: (run: NewRun, owner: string, events: readonly RunEvent[]) => Promise<Writer>;
   readonly saveStepInput: (writer: Writer, start: StepStart, events: readonly RunEvent[]) => Promise<StepRecord>;
@@ -133,6 +157,10 @@ export type RunStore = EventSink & {
   readonly acquire: (runId: string, owner: string, now: Date) => Promise<LockResult>;
   readonly heartbeat: (writer: Writer, now: Date) => Promise<void>;
   readonly release: (writer: Writer) => Promise<void>;
+  readonly releaseUnlessAnswered: (writer: Writer) => Promise<boolean>;
+  readonly recordAnswer: (answer: RecordedAnswer, lock: LockRequest, rule: AnswerRule) => Promise<Recording>;
+  readonly recordedAnswers: (runId: string) => Promise<readonly RecordedAnswer[]>;
+  readonly forgetAnswer: (writer: Writer, stepKey: string, events: readonly RunEvent[]) => Promise<void>;
 };
 
 export type StoredTaskToken = {

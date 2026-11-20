@@ -11,10 +11,11 @@ import {
   type StoredState,
   type StoredWait,
   type StoredTaskToken,
+  type RecordedAnswer,
 } from "./run-store.ts";
 import { keepings, storedText, unpackedText } from "./packed-output.ts";
 import type { Keeping } from "../generated/mode.ts";
-import { decodedStepDetail, stepKinds } from "./step-detail.ts";
+import { decodedStepDetail, stepKinds, submissionFrom } from "./step-detail.ts";
 
 type Row = Readonly<Record<string, SQLOutputValue>>;
 
@@ -178,6 +179,15 @@ export function eventOf(row: Row): RunEvent {
     kind: textColumn(row, "kind"),
     detail: jsonColumn(row, "detail"),
   };
+}
+
+export function answerOf(row: Row): RecordedAnswer {
+  const stepKey = textColumn(row, "step_key");
+  const submission = submissionFrom(keptJsonColumn(row, "submission", keepingOf(row)));
+  if (submission === undefined) {
+    throw new Error(`kernel.db holds an answer for step ${stepKey} without an output.`);
+  }
+  return { runId: textColumn(row, "run_id"), stepKey, submission, at: textColumn(row, "recorded_at") };
 }
 
 export function taskTokenOf(row: Row): StoredTaskToken {

@@ -72,5 +72,12 @@ export function scrubbedStore(store: RunStore, scrubber: Scrubber): RunStore {
     acquire: (runId, owner, now) => store.acquire(runId, owner, now),
     heartbeat: (writer, now) => store.heartbeat(writer, now),
     release: (writer) => store.release(writer),
+    releaseUnlessAnswered: (writer) => store.releaseUnlessAnswered(writer),
+    recordAnswer: (answer, lock, rule) => {
+      const submission = { ...answer.submission, output: redact(answer.submission.output) };
+      return store.recordAnswer({ ...answer, submission }, lock, rule);
+    },
+    recordedAnswers: (runId) => store.recordedAnswers(runId),
+    forgetAnswer: (writer, stepKey, list) => store.forgetAnswer(writer, stepKey, events(list)),
   };
 }

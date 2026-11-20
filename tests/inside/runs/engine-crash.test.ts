@@ -18,7 +18,7 @@ const threeStepWrites = [
   "heartbeat",
   "saveStepOutput",
   "updateRun",
-  "release",
+  "releaseUnlessAnswered",
 ];
 
 function executionsByStep(runner: FakeRunner): readonly number[] {
@@ -171,7 +171,7 @@ test("a crash right after a submission is saved runs its checks on resume and re
     freshEngine({ store: crashing }).submit(id, "0#1", answer({ text: "long enough text" })),
     /simulated/,
   );
-  assert.deepEqual(crashing.writes, ["acquire", "saveStepDetail"]);
+  assert.deepEqual(crashing.writes, ["recordAnswer", "saveStepDetail"]);
   assert.deepEqual(runner.calls, []);
   clock.advance(11 * 60_000);
   const resumer = freshEngine({ store: reopen() });

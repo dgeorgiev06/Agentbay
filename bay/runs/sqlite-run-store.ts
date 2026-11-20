@@ -5,7 +5,11 @@ import { narrowSideFiles } from "../owner-only.ts";
 import type { Folders } from "../ports.ts";
 import {
   lockStaleMilliseconds,
+  type AnswerRule,
+  type LockRequest,
   type LockResult,
+  type RecordedAnswer,
+  type Recording,
   type NewRun,
   type RunPatch,
   type RunStatusName,
@@ -22,6 +26,7 @@ import {
 import { storedText } from "./packed-output.ts";
 import {
   answered,
+  answerOf,
   eventOf,
   inTransaction,
   integerColumn,
@@ -32,6 +37,7 @@ import {
   stateColumns,
   stepOf,
   storedJson,
+  textColumn,
 } from "./sqlite-rows.ts";
 import { SqliteTaskTokens } from "./sqlite-task-tokens.ts";
 import { migrations } from "./kernel-migrations.ts";
@@ -43,6 +49,15 @@ type SqliteOptions = {
 
 function isStale(heartbeatAt: string, now: Date): boolean {
   return now.getTime() - new Date(heartbeatAt).getTime() > lockStaleMilliseconds;
+}
+
+function busyWhenLocked<T>(busy: T): (error: unknown) => T {
+  return (error) => {
+    if (isLockedError(error)) {
+      return busy;
+    }
+    throw error;
+  };
 }
 
 export class SqliteRunStore implements RunStore {
@@ -199,15 +214,7 @@ export class SqliteRunStore implements RunStore {
       this.#insertEvents(events);
     });
 
-  readonly readRun = (runId: string): Promise<RunWithSteps | undefined> =>
-    this.#read(() => {
-      const row = this.#database.prepare("select * from runs where id = ?").get(runId);
-      if (row === undefined) {
-        return undefined;
-      }
-      const steps = this.#database.prepare("select * from steps where run_id = ? order by rowid").all(runId);
-      return { ...runOf(row), steps: steps.map(stepOf) };
-    });
+  readonly readRun = (runId: string): Promise<RunWithSteps | undefined> => this.#read(() => this.#runWithSteps(runId));
 
   readonly listRuns = (status: RunStatusName): Promise<readonly StoredRun[]> =>
     this.#read(() =>
@@ -225,32 +232,35 @@ export class SqliteRunStore implements RunStore {
     });
 
   readonly acquire = (runId: string, owner: string, now: Date): Promise<LockResult> =>
-    this.#takeLock(runId, owner, now).catch((error: unknown): LockResult => {
-      if (isLockedError(error)) {
-        return { status: "busy" };
-      }
-      throw error;
-    });
+    this.#takeLock(runId, owner, now).catch(busyWhenLocked<LockResult>({ status: "busy" }));
 
   readonly #takeLock = (runId: string, owner: string, now: Date): Promise<LockResult> =>
-    this.#write((): LockResult => {
-      const row = this.#database.prepare("select lock_owner, lock_heartbeat from runs where id = ?").get(runId);
-      if (row === undefined) {
-        return { status: "missing" };
+    this.#write(() => this.#lockFor(runId, { owner, now }));
+
+  readonly recordAnswer = (answer: RecordedAnswer, lock: LockRequest, rule: AnswerRule): Promise<Recording> =>
+    this.#write((): Recording => {
+      const allowed = rule(this.#runWithSteps(answer.runId), this.#answeredKeys(answer.runId));
+      if (!allowed.ok) {
+        return { status: "refused", problems: allowed.problems };
       }
-      const holder = optionalText(row, "lock_owner");
-      const heartbeatAt = optionalText(row, "lock_heartbeat") ?? now.toISOString();
-      if (holder !== undefined && !isStale(heartbeatAt, now)) {
-        return { status: "held", owner: holder, heartbeatAt };
-      }
+      const keeping = keepingGiven(allowed.value);
       this.#database
-        .prepare("update runs set lock_owner = ?, lock_heartbeat = ? where id = ?")
-        .run(owner, now.toISOString(), runId);
-      if (holder !== undefined) {
-        const detail = { previousOwner: holder, heartbeatAt, owner };
-        this.#insertEvents([{ at: now.toISOString(), runId, kind: "lock.taken-over", detail }]);
-      }
-      return { status: "acquired", writer: { runId, owner } };
+        .prepare("insert into answers (run_id, step_key, kept, submission, recorded_at) values (?, ?, ?, ?, ?)")
+        .run(answer.runId, answer.stepKey, keeping, storedJson(answer.submission, keeping), answer.at);
+      const taken = this.#lockFor(answer.runId, lock);
+      return taken.status === "acquired" ? { status: "taken", writer: taken.writer } : { status: "recorded" };
+    }).catch(busyWhenLocked<Recording>({ status: "busy" }));
+
+  readonly recordedAnswers = (runId: string): Promise<readonly RecordedAnswer[]> =>
+    this.#read(() =>
+      this.#database.prepare("select * from answers where run_id = ? order by rowid").all(runId).map(answerOf),
+    );
+
+  readonly forgetAnswer = (writer: Writer, stepKey: string, events: readonly RunEvent[]): Promise<void> =>
+    this.#write(() => {
+      this.#checkOwner(writer);
+      this.#database.prepare("delete from answers where run_id = ? and step_key = ?").run(writer.runId, stepKey);
+      this.#insertEvents(events);
     });
 
   readonly heartbeat = (writer: Writer, now: Date): Promise<void> =>
@@ -260,10 +270,58 @@ export class SqliteRunStore implements RunStore {
 
   readonly release = (writer: Writer): Promise<void> =>
     this.#write(() => {
-      this.#database
-        .prepare("update runs set lock_owner = null, lock_heartbeat = null where id = ? and lock_owner = ?")
-        .run(writer.runId, writer.owner);
+      this.#unlock(writer);
     });
+
+  readonly releaseUnlessAnswered = (writer: Writer): Promise<boolean> =>
+    this.#write(() => {
+      if (this.#answeredKeys(writer.runId).size > 0 && this.#holds(writer)) {
+        return false;
+      }
+      this.#unlock(writer);
+      return true;
+    });
+
+  #unlock(writer: Writer): void {
+    this.#database
+      .prepare("update runs set lock_owner = null, lock_heartbeat = null where id = ? and lock_owner = ?")
+      .run(writer.runId, writer.owner);
+  }
+
+  #lockFor(runId: string, lock: LockRequest): LockResult {
+    const { owner, now } = lock;
+    const row = this.#database.prepare("select lock_owner, lock_heartbeat from runs where id = ?").get(runId);
+    if (row === undefined) {
+      return { status: "missing" };
+    }
+    const holder = optionalText(row, "lock_owner");
+    const heartbeatAt = optionalText(row, "lock_heartbeat") ?? now.toISOString();
+    if (holder !== undefined && !isStale(heartbeatAt, now)) {
+      return { status: "held", owner: holder, heartbeatAt };
+    }
+    this.#database
+      .prepare("update runs set lock_owner = ?, lock_heartbeat = ? where id = ?")
+      .run(owner, now.toISOString(), runId);
+    if (holder !== undefined) {
+      const detail = { previousOwner: holder, heartbeatAt, owner };
+      this.#insertEvents([{ at: now.toISOString(), runId, kind: "lock.taken-over", detail }]);
+    }
+    return { status: "acquired", writer: { runId, owner } };
+  }
+
+  #runWithSteps(runId: string): RunWithSteps | undefined {
+    const row = this.#database.prepare("select * from runs where id = ?").get(runId);
+    if (row === undefined) {
+      return undefined;
+    }
+    const steps = this.#database.prepare("select * from steps where run_id = ? order by rowid").all(runId);
+    return { ...runOf(row), steps: steps.map(stepOf) };
+  }
+
+  #answeredKeys(runId: string): ReadonlySet<string> {
+    const rows = this.#database.prepare("select step_key from answers where run_id = ?").all(runId);
+    return new Set(rows.map((row) => textColumn(row, "step_key")));
+  }
 
   #migrate(): void {
     if (this.#version() >= migrations.length) {
@@ -318,9 +376,17 @@ export class SqliteRunStore implements RunStore {
     this.#database.prepare("update runs set lock_heartbeat = ? where id = ?").run(at, writer.runId);
   }
 
+  #holderOf(runId: string): string | undefined {
+    const row = this.#database.prepare("select lock_owner from runs where id = ?").get(runId);
+    return row === undefined ? undefined : optionalText(row, "lock_owner");
+  }
+
+  #holds(writer: Writer): boolean {
+    return this.#holderOf(writer.runId) === writer.owner;
+  }
+
   #checkOwner(writer: Writer): void {
-    const row = this.#database.prepare("select lock_owner from runs where id = ?").get(writer.runId);
-    const holder = row === undefined ? undefined : optionalText(row, "lock_owner");
+    const holder = this.#holderOf(writer.runId);
     if (holder !== writer.owner) {
       throw new Error(
         `The writer ${writer.owner} no longer holds the lock of run ${writer.runId} ` +

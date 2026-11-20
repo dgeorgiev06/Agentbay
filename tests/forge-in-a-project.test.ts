@@ -140,11 +140,11 @@ const onePlan = {
   ],
 };
 
-test("the kit's own bay check gives 0 errors and 49 warnings beside the owner's own setting: none more for forge leaving the kit, two for the typescript mode's run, one for forge's final proof", () => {
+test("the kit's own bay check gives 0 errors and 50 warnings beside the owner's own setting: none more for forge leaving the kit, two for the typescript mode's run, one for forge's final proof", () => {
   const report = checked(kit);
   const ofTheKit = messages(report).filter((message) => !message.startsWith(withoutTheHook));
   assert.equal(report.errors, 0, errorsOf(report).join("\n"));
-  assert.equal(ofTheKit.length, 49, ofTheKit.join("\n"));
+  assert.equal(ofTheKit.length, 50, ofTheKit.join("\n"));
 });
 
 test("a project that lists only forge and binds a toolchain checks with no error, and forge.waves works out a plan in it", async () => {

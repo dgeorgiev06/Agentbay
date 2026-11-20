@@ -1,25 +1,26 @@
 # git-worktrees
 
-The mode `git-worktrees` implements `worktrees@1`. It is the only mode that runs git. It makes a worktree and branch for each slice, says where a worktree stands, commits a slice's work to its branch, merges a slice's branch, sets a slice's work aside, and makes throwaway copies of commits and applies patches to them.
+The mode `git-worktrees` implements `worktrees@1`. It is the only mode that runs git. It makes a worktree and branch for each slice, says where a worktree stands, commits a slice's work to its branch, merges a slice's branch, sets a slice's work aside, drops a branch it made, and makes throwaway copies of commits and applies patches to them.
 
 ## Actions
 
 | Action | What it does |
 |---|---|
-| `cut` | Makes the branch `forge/<slice>` and a worktree for it at `.forge/worktrees/<slice>`, at a base commit. Refused when the branch exists, when the folder exists and holds files, or when the slice is named `wip`. |
+| `cut` | Makes the branch `forge/<slice>` and a worktree for it at `.forge/worktrees/<slice>`, at a base commit. Refused when the branch exists, with the commit it points at and that the caller may drop it with `drop-branch` or cut the slice under another name; refused too when the folder exists and holds files, or when the slice is named `wip`. A leftover branch is never reused or moved. |
 | `status` | Gives a worktree's head, the commits since a base with their subjects, whether it is clean, and its changed and untracked paths. |
 | `changed` | Gives each path that differs between two commits: added, modified, deleted, or renamed and from where. |
 | `copy` | Makes a copy of a commit's files at `.forge/copies/<name>`. The folder is the top of a repository of its own that holds the commit's files as one commit, and it is clean. It has links to paths git ignores in the project, such as `node_modules`, and lists them in its own `.git/info/exclude`, so they are present and ignored. Nothing done inside the copy changes the project's repository. |
 | `overlay` | Puts named paths into a copy as they are at a commit. A path absent there is removed. The change is one more commit of the copy's repository, so the copy stays clean. Never a worktree. |
-| `remove` | Removes a copy, or a clean worktree. With `branchAfter` `deleted`, the default, the worktree goes with its branch, only when the branch is merged into a named branch and into the branch the project has checked out. With `branchAfter` `kept`, merged or not, the worktree goes and its branch stays at its commit, which the answer gives; `into` is not given, and a worktree whose head is a commit its branch does not hold is refused, so that commit is not lost. Anything else is refused with a sentence. A folder the mode made that no longer exists is forgotten, and a worktree's branch is kept. |
+| `remove` | Removes a copy, or a clean worktree. With `branchAfter` `deleted`, the default, the worktree goes with its branch, only when the branch is merged into a named branch and into the branch the project has checked out, and the worktree's head is a commit its branch holds. With `branchAfter` `kept`, merged or not, the worktree goes and its branch stays at its commit, which the answer gives; `into` is not given, and, as with `deleted`, a worktree whose head is a commit its branch does not hold is refused, so that commit is not lost. Anything else is refused with a sentence. A folder the mode made that no longer exists is forgotten, and a worktree's branch is kept. |
 | `merge` | Merges a clean slice's branch into a named branch with a merge commit, always made in a worktree of the mode's own at `.forge/targets/<branch>` and removed after. A branch checked out nowhere is checked out there and moves with the merge: the answer's `landed` is `branch-not-checked-out`. A branch the project's own folder has checked out is merged there on a detached head at the branch's commit, with `merge-uncommitted` and then `commit-staged` given the message `Merge branch '<slice's branch>' into <branch>`, the one git writes on a branch; then the folder is fast-forwarded to the merge commit, only when the folder is clean and the branch has not moved: `landed` is `checked-out-branch-fast-forwarded`. Otherwise it is refused with a sentence that says which stood in the way, and nothing changes anywhere. A conflict is undone and refused with the conflicting paths. A branch already merged is answered as such, with no commit. |
 | `set-aside` | Commits a worktree's changed and untracked files to a new branch `forge/wip/<slice>/<n>`, with `n` the first number no branch has, and puts the worktree back at its head with no changes. Ignored files stay. With nothing changed it does nothing and says so. |
 | `commit` | Commits a worktree's changed and untracked files to its own branch `forge/<slice>`, with the message the caller gives, and the files stay in the worktree, which is then clean. Ignored files stay out of the commit and in the worktree. A link is committed as a link; git never follows it. With nothing changed it makes no commit and gives the branch's head. Refused when the worktree's head is not its branch's head. |
 | `apply` | Applies a patch to a copy, all of it or nothing, and gives the paths it names. The change is one more commit of the copy's repository, so the copy stays clean. Never a worktree. |
+| `drop-branch` | Deletes a branch the mode made, `forge/<slice>` or `forge/wip/<slice>/<n>`, merged or not, and answers `dropped` with the commit it pointed at, so its work can be found again (`git branch <name> <commit>` brings it back until git collects it). A branch that does not exist is the answer `not-there`, so dropping twice is safe. It answers `refused` with the commit and a sentence, and changes nothing, for a name of another shape under `forge/`, the branch named as `into`, the branch the project's own folder has checked out, and a branch a worktree of the mode still has: remove that worktree first, with `branchAfter` `kept`. A branch outside `forge/` is refused by the schema before any run. A branch checked out in a worktree the mode did not make is refused by git, and the failure quotes it. |
 
 ## What it refuses
 
-- A slice or copy name that is not letters, digits and dashes; a commit with `..` or a leading dash; a path that is absolute, has `..`, or starts with a dash. The interface's schemas hold these rules, so the kernel refuses such a request before any step runs.
+- A slice or copy name that is not letters, digits and dashes; a branch to drop that is not `forge/` and such names split by single slashes; a commit with `..` or a leading dash; a path that is absolute, has `..`, or starts with a dash. The interface's schemas hold these rules, so the kernel refuses such a request before any step runs.
 - A folder it did not make. Each folder it makes is recorded in its database; `status`, `overlay`, `remove`, `merge`, `set-aside`, `commit` and `apply` look the folder up there, and say so when the folder is recorded but no longer exists.
 - A copy that is no longer the top of a repository of its own, such as one whose `.git` was removed or now points at another repository. `overlay` and `apply` check this before git changes anything in it, so a tool run in the copy cannot make the mode write to the project's repository.
 - A repository whose own configuration names a filter or a merge driver, and a copy whose own configuration names one. One named in `.git/info/attributes` would run its command, and the mode cannot switch it off by name.
@@ -65,7 +66,7 @@ Each listed command says the effects it can have with any arguments a script add
 |---|---|---|
 | `status`, `changed` | read | They run only commands that read. |
 | `cut` | read, write, delete | It runs `switch-branch`. |
-| `remove`, `merge`, `set-aside`, `commit`, `apply` | read, write, delete | They remove worktrees, branches, files or rows of the mode's database. |
+| `remove`, `merge`, `set-aside`, `commit`, `apply`, `drop-branch` | read, write, delete | They remove worktrees, branches, files or rows of the mode's database. |
 | `copy`, `overlay` | read, write, network, spend, delete | They run `restore-paths`. |
 
 | Command | Effects | Why |
@@ -75,7 +76,7 @@ Each listed command says the effects it can have with any arguments a script add
 | `make-repository` | read, write | It makes a repository in a folder, or in a folder a script names after its words. On a repository that exists it changes nothing but writes its configuration again. |
 | `switch-branch`, `merge-branch`, `merge-uncommitted`, `abort-merge`, `apply-patch` | read, write, delete | They can remove files from a worktree or a copy. |
 | `fast-forward` | read, write, delete | It moves the checked-out branch and can remove files from the project's own folder. |
-| `remove-worktree`, `delete-branch` | read, write, delete | They remove a worktree or a branch. |
+| `remove-worktree`, `delete-branch`, `force-delete-branch` | read, write, delete | They remove a worktree or a branch; `force-delete-branch` (`branch -D`) deletes a branch merged or not. |
 | `stage-everything`, `stage-paths`, `forget-paths`, `commit-staged` | read, write, delete | They can remove entries from the index. |
 | `restore-paths` | read, write, network, spend, delete | A script can add an option after the commit. `--staged` writes the project's index, and `--recurse-submodules` runs git in each submodule, where a filter named in the submodule's own configuration can run any program. |
 

@@ -1026,6 +1026,7 @@ const cases: readonly Case[] = [
       const merged = await cut(world, "merged");
       await world.output("remove", { folder: merged, branchAfter: "kept" });
       await world.makeBranch("forge/wip/feature/1", head);
+      await cut(world, "busy");
       const before = await ownersCheckout(world);
       const dropped: readonly (readonly [string, string])[] = [
         ["forge/feature", head],

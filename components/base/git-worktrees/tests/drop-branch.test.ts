@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { rm } from "node:fs/promises";
+import { join } from "node:path";
 import { test } from "node:test";
 import { commitFiles, git, openRepositoryProject, refsAndWorktrees } from "./repository.ts";
 import type { ModeProject } from "../../../../tests/test-toolbox.ts";
@@ -112,6 +114,15 @@ test("a branch checked out in a worktree the mode did not make is left to git, w
     const reason = await project.failure("git-worktrees.drop-branch", { branch });
     assert.match(reason, /^git branch failed: error: cannot delete branch 'forge\/planter' /);
     assert.equal(refsAndWorktrees(project), before);
+    assert.equal(git(project, ".", ["rev-parse", branch]).trim(), head);
+  });
+});
+
+test("a branch whose worktree folder was deleted by hand is left to git, which still lists the worktree and keeps the branch", async () => {
+  await withPlanter(async (project, head) => {
+    await rm(join(project.root, folder), { recursive: true, force: true });
+    const reason = await project.failure("git-worktrees.drop-branch", { branch });
+    assert.match(reason, /^git branch failed: error: cannot delete branch 'forge\/planter' /);
     assert.equal(git(project, ".", ["rev-parse", branch]).trim(), head);
   });
 });

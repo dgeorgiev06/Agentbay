@@ -54,14 +54,6 @@ async function refuseUnlessRemovable(context: ScriptContext, worktree: Worktree)
   }
 }
 
-async function removeWithBranch(context: ScriptContext, worktree: Worktree): Promise<Json> {
-  await refuseUnlessRemovable(context, worktree);
-  await gitSucceeded(context, ".", ["remove-worktree", worktree.folder]);
-  await forgetFolder(context, worktree.folder);
-  await gitSucceeded(context, ".", ["delete-branch", worktree.branch]);
-  return { folder: worktree.folder, kind: "worktree", branch: worktree.branch, branchAfter: "deleted" };
-}
-
 async function refuseUnlessHeldByBranch(context: ScriptContext, slice: Slice, commit: string): Promise<void> {
   const head = await commitOf(context, slice.folder, "HEAD");
   if (!(await isMerged(context, head, commit))) {
@@ -70,6 +62,15 @@ async function refuseUnlessHeldByBranch(context: ScriptContext, slice: Slice, co
         "the worktree and its branch are kept.",
     );
   }
+}
+
+async function removeWithBranch(context: ScriptContext, worktree: Worktree): Promise<Json> {
+  await refuseUnlessRemovable(context, worktree);
+  await refuseUnlessHeldByBranch(context, worktree, await commitOf(context, ".", `refs/heads/${worktree.branch}`));
+  await gitSucceeded(context, ".", ["remove-worktree", worktree.folder]);
+  await forgetFolder(context, worktree.folder);
+  await gitSucceeded(context, ".", ["delete-branch", worktree.branch]);
+  return { folder: worktree.folder, kind: "worktree", branch: worktree.branch, branchAfter: "deleted" };
 }
 
 async function removeKeepingBranch(context: ScriptContext, slice: Slice): Promise<Json> {

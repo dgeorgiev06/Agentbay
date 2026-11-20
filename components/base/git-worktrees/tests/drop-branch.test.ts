@@ -7,7 +7,9 @@ const folder = ".forge/worktrees/planter";
 
 const branch = "forge/planter";
 
-async function withPlanter(work: (project: ModeProject, head: string) => Promise<void>): Promise<void> {
+type Repository = ModeProject & { readonly base: string };
+
+async function withPlanter(work: (project: Repository, head: string) => Promise<void>): Promise<void> {
   const project = await openRepositoryProject();
   try {
     await project.output("git-worktrees.cut", { slice: "planter", base: "main" });

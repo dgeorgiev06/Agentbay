@@ -35,6 +35,23 @@ export async function madeFolder(context: ScriptContext, folder: string): Promis
   return row.kind === "copy" ? { kind: "copy" } : undefined;
 }
 
+export async function liveWorktreeOf(context: ScriptContext, branch: string): Promise<string | undefined> {
+  const answer = await context.db.query(
+    "select folder from folders where kind = 'worktree' and branch = ? order by folder limit 100",
+    [branch],
+  );
+  if (!answer.ok) {
+    return fail(answer.message);
+  }
+  for (const row of answer.value) {
+    const folder = row.folder;
+    if (typeof folder === "string" && (await folderExists(context, folder))) {
+      return folder;
+    }
+  }
+  return undefined;
+}
+
 export async function folderExists(context: ScriptContext, folder: string): Promise<boolean> {
   const listed = await gitSucceeded(context, ".", ["untracked-paths", folder]);
   return listed === `${folder}/\0`;

@@ -30,6 +30,7 @@ const subcommands = {
   "checked-out-branch": "symbolic-ref",
   "merge-uncommitted": "merge",
   "fast-forward": "merge",
+  "force-delete-branch": "branch",
 } as const;
 
 export type GitCommand = keyof typeof subcommands;
@@ -155,9 +156,18 @@ export async function isMerged(context: ScriptContext, branch: string, into: str
   return ended.exitCode === 0;
 }
 
-export async function branchExists(context: ScriptContext, branch: string): Promise<boolean> {
+export async function branchHead(context: ScriptContext, branch: string): Promise<string | undefined> {
   const ended = await git(context, ".", ["commit-of", `refs/heads/${branch}`]);
-  return ended.exitCode === 0;
+  return ended.exitCode === 0 ? ended.stdout.trim() : undefined;
+}
+
+export async function branchExists(context: ScriptContext, branch: string): Promise<boolean> {
+  return (await branchHead(context, branch)) !== undefined;
+}
+
+export async function checkedOutInProject(context: ScriptContext): Promise<string | undefined> {
+  const ended = await git(context, ".", ["checked-out-branch", "HEAD"]);
+  return ended.exitCode === 0 ? ended.stdout.trim() : undefined;
 }
 
 const repositoryScopes: readonly string[] = ["local", "worktree"];

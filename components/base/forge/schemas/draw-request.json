@@ -138,6 +138,30 @@
       "minimum": 0,
       "maximum": 50,
       "description": "How many of the bugs the planter wrote. Left out, none."
+    },
+    "pinned": {
+      "type": "array",
+      "maxItems": 200,
+      "description": "In the workflow rounds, a hash of each interface file at the base, as the step pin recorded it; the card compares them with the hashes at the last head.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "The interface file, relative to the project."
+          },
+          "hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{16}$",
+            "description": "The toolbox's short hash of the file's whole text; left out when the file is not there."
+          }
+        }
+      }
     }
   }
 }

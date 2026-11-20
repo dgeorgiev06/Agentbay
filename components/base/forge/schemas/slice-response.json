@@ -9,6 +9,10 @@
     "slice": {
       "$ref": "proof@1/prove-request.json#/$defs/slice"
     },
+    "proved": {
+      "$ref": "proof@1/prove-request.json#/$defs/slice",
+      "description": "In the workflow rounds, the slice as the final proof judges it and the merge card shows it: the slice whole, with a checks item that forge adds when the plan lists none."
+    },
     "base": {
       "$ref": "proof@1/prove-request.json#/$defs/commit"
     },
@@ -85,8 +89,16 @@
           "additionalProperties": false,
           "description": "In the workflow rounds only: the reason for each go-ahead choice the start approval withholds, one full sentence.",
           "properties": {
-            "build": { "type": "string", "minLength": 1, "maxLength": 200 },
-            "build-without-interface": { "type": "string", "minLength": 1, "maxLength": 200 }
+            "build": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "build-without-interface": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
           }
         }
       }
@@ -97,8 +109,12 @@
       "required": ["build", "build-without-interface"],
       "description": "In the workflow rounds only: which go-ahead choice the start approval offers. build when the slice names interface files, build-without-interface when it names none; never both.",
       "properties": {
-        "build": { "type": "boolean" },
-        "build-without-interface": { "type": "boolean" }
+        "build": {
+          "type": "boolean"
+        },
+        "build-without-interface": {
+          "type": "boolean"
+        }
       }
     }
   }

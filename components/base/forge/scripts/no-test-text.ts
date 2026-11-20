@@ -10,9 +10,9 @@ function namesOf(value: Json | undefined): readonly string[] {
   return listed.map((entry: Json) => fieldsOf(entry).name).filter((name) => typeof name === "string");
 }
 
-function idsOf(value: Json | undefined): readonly string[] {
+function fieldOfEach(value: Json | undefined, key: "id" | "path"): readonly string[] {
   const listed = Array.isArray(value) ? value : [];
-  return listed.map((entry: Json) => fieldsOf(entry).id).filter((id) => typeof id === "string");
+  return listed.map((entry: Json) => fieldsOf(entry)[key]).filter((field) => typeof field === "string");
 }
 
 export const run = defineScript((input, context) => {
@@ -21,7 +21,8 @@ export const run = defineScript((input, context) => {
     conditions: sliceOf(asked.slice).done.map((item) => item.id),
     tests: handedTestsOf(context.skillInput ?? null),
     failing: namesOf(asked.failing),
-    practices: idsOf(asked.practices),
+    practices: fieldOfEach(asked.practices, "id"),
+    code: fieldOfEach(asked.code, "path"),
   });
   return checkAnswer(refused);
 });

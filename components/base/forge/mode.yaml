@@ -35,6 +35,13 @@ actions:
     effects: [read]
     run:
       - script: scripts/begin.ts
+  pin:
+    description: When a slice's worktree has been cut at the base and before anyone works in it, a hash of each interface file's content is recorded, for the merge card to compare with the same files at the last head.
+    input: schemas/pin-request.json
+    output: schemas/pin-response.json
+    effects: [read]
+    run:
+      - script: scripts/pin.ts
   declare:
     description: When a builder must state which files and action names it will change, before its first edit.
     input: schemas/declare-request.json

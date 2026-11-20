@@ -26,6 +26,7 @@ function roundsChoices(result: Drawn): readonly PrintedChoice[] {
 
 const roundSkills = {
   "review-1": "forge skills/review, tier deep",
+  "review-2": "forge skills/review, tier deep",
   "review-3": "forge skills/review, tier deep",
   "round-1": "forge skills/write-tests, tier balanced; forge skills/build-without-tests, tier balanced",
   "round-3": "forge skills/build-without-tests, tier balanced",
@@ -93,6 +94,19 @@ const td1Size = [
   { path: "components/modes/todo/tests/todo.test.ts", head: 90 },
 ];
 
+const td1Pins = {
+  base: [
+    { path: "components/base/interfaces/todo/add-request.json", hash: "3f2a9c41d07be655" },
+    { path: "components/base/interfaces/todo.yaml", hash: "90c1e7ab22d4f310" },
+  ],
+  head: [
+    { path: "components/base/interfaces/todo/add-request.json", hash: "3f2a9c41d07be655" },
+    { path: "components/base/interfaces/todo.yaml", hash: "90c1e7ab22d4f310" },
+  ],
+};
+
+const td1Practices = { tally: { held: 61, notHeld: 0, doesNotApply: 4 }, notHeld: [], checks: 12 };
+
 const td1Merge: MergeCardInput = {
   slice: td1,
   proof: { verdicts: td1Passed, size: td1Size },
@@ -106,8 +120,15 @@ const td1Merge: MergeCardInput = {
     count: 1,
     most: 3,
     ended: "no-findings",
-    judged: { step: "review-1", round: 1, sentences: ["DOD-TD1-2 held by 3 cases", "no finding remains"] },
+    judged: {
+      step: "review-1",
+      round: 1,
+      sentences: ["DOD-TD1-2 held by 3 cases", "no finding remains"],
+      practices: td1Practices,
+    },
   },
+  mustPractices: ["P-12", "P-52", "TS-17", "TS-21", "TS-25"],
+  pins: td1Pins,
 };
 
 const td1Start = `Build slice TD1?
@@ -214,6 +235,18 @@ const notOffered = (reason: string): string => `Not available:
              why: Discarding comes with
              slice WD1.`;
 
+function td1PracticesIn(round: number): string {
+  return `  practices answered by the reviewer in
+    round ${String(round)}: 65; 61 held, 0 not held, 4 do
+    not apply; a check holds 12 more`;
+}
+
+const td1InterfacesSame = `  interface files: 2 unchanged since the
+    base, by hash`;
+
+const td1NotJudged = `  practices: not judged, since the rounds
+    ended with no review`;
+
 const td1AllPassed = `Merge TD1 into integration?
   Merge is offered: every must item that
     proof judged passed.
@@ -221,7 +254,9 @@ ${td1Item1Passed}
 ${td1Item2Passed}
 ${td1Item3}
 ${td1AddedPassed}
+${td1PracticesIn(1)}
 ${td1Work}
+${td1InterfacesSame}
   rounds: 1 of at most 3; the reviewer had
     no findings
   the reviewer, in round 1, before the final
@@ -240,7 +275,7 @@ Not available:
   discard    Stop; the worktrees go
              why: Discarding comes with
              slice WD1.
-checked: 0 ran, 12 computed, 2 judged`;
+checked: 0 ran, 14 computed, 2 judged`;
 
 const td1ChecksFailed = `Merge TD1 into integration?
   Merge is not offered: 1 must item failed.
@@ -259,7 +294,19 @@ const td1ChecksFailed = `Merge TD1 into integration?
 ${td1Item2Passed}
 ${td1Item3}
 ${td1AddedPassed}
+  practices answered by the reviewer in
+    round 3: 65; 60 held, 1 not held, 4 do
+    not apply; a check holds 12 more
+judged   P-05, not held: Model the domain in
+judged     types: a closed set is a union
+judged     with one shape per case, so a...
+judged     In components/modes/todo/scripts/
+judged     add.ts: A todo's status is a free
+judged     string, so a done todo with no
+judged     date can be written.
+judged    by forge skills/review, tier deep
 ${td1Work.replace("TD1-tests-1", "TD1-tests-3")}
+${td1InterfacesSame}
   rounds: 3 of at most 3; no more may run
   the reviewer, in round 3, before the final
     proof:
@@ -278,7 +325,7 @@ Unmarked lines were worked out by script.
 You can:
   keep  Stop; the branches stay
 ${notOffered("why: 1 must item failed.")}
-checked: 0 ran, 17 computed, 3 judged`;
+checked: 0 ran, 19 computed, 4 judged`;
 
 const td1Stopped = `Merge TD1 into integration?
   Merge is not offered: the builder stopped;
@@ -288,8 +335,10 @@ ${td1Item1NotKnown}
 ${td1Item2NotKnown}
 ${td1Item3}
 ${td1AddedNotKnown}
+${td1NotJudged}
   what changed is not known; the work and
     the tests are on forge/TD1-tests-1
+${td1InterfacesSame}
   rounds: 1 of at most 3; the builder
     stopped
 judged   the builder stopped, saying the
@@ -304,7 +353,7 @@ You can:
 ${notOffered(`why: The builder stopped; 2
              must items, scope and declared
              are not known.`)}
-checked: 0 ran, 15 computed, 1 judged`;
+checked: 0 ran, 17 computed, 1 judged`;
 
 const td1Leaked = `Merge TD1 into integration?
   Merge is not offered: the builder's work
@@ -327,8 +376,10 @@ const td1Leaked = `Merge TD1 into integration?
     refused by the action's schema.
   why: proof gave no verdict
 ${td1Item3}
+${td1NotJudged}
   what changed is not known; the work and
     the tests are on forge/TD1-tests-1
+${td1InterfacesSame}
   rounds: 1 of at most 3; a leak ended them
 All lines worked out by script.
 You can:
@@ -336,7 +387,7 @@ You can:
 ${notOffered(`why: The builder's work holds
              text from the tests; 2 must
              items are not known.`)}
-checked: 0 ran, 10 computed, 0 judged`;
+checked: 0 ran, 12 computed, 0 judged`;
 
 const td1Bugs: Slice = {
   ...td1,
@@ -366,7 +417,9 @@ ${td1Item3}
   why: an injected bug survived
   proof's reason: A bug survived: x.
 ${td1AddedPassed}
+${td1PracticesIn(1)}
 ${td1Work}
+${td1InterfacesSame}
   the planter wrote 3 bugs
   bug survived: the list keeps a done todo,
     in components/modes/todo/scripts/list.ts
@@ -381,7 +434,7 @@ Unmarked lines were worked out by script.
 You can:
   keep  Stop; the branches stay
 ${notOffered("why: 1 must item failed.")}
-checked: 0 ran, 17 computed, 2 judged`;
+checked: 0 ran, 19 computed, 2 judged`;
 
 const casesFailed: Verdict = {
   item: "DOD-TD1-1",
@@ -418,6 +471,18 @@ const td1Failed: MergeCardInput = {
         "1 finding remains: 1 for the builder, 0 for the test writer",
         "for the builder, P-05: lists only the open todos",
       ],
+      practices: {
+        tally: { held: 60, notHeld: 1, doesNotApply: 4 },
+        notHeld: [
+          {
+            id: "P-05",
+            says: "Model the domain in types: a closed set is a union with one shape per case, so a state that cannot happen cannot be written.",
+            path: "components/modes/todo/scripts/add.ts",
+            sentence: "A todo's status is a free string, so a done todo with no date can be written.",
+          },
+        ],
+        checks: 12,
+      },
     },
   },
 };
@@ -506,7 +571,49 @@ const trialInput: MergeCardInput = {
         "for the test writer, Q3, lists only the open todos: Assert the order, not only the count.",
         "for the test writer, Q5, an id is a whole number: kept from the card: it quotes a test",
       ],
+      practices: td1Practices,
     },
+  },
+};
+
+const td1MustNotHeld: MergeCardInput = {
+  ...td1Merge,
+  rounds: {
+    count: 2,
+    most: 3,
+    ended: "no-findings",
+    judged: {
+      step: "review-2",
+      round: 2,
+      sentences: ["DOD-TD1-2 held by 3 cases", "no finding remains"],
+      practices: {
+        tally: { held: 59, notHeld: 2, doesNotApply: 4 },
+        notHeld: [
+          {
+            id: "P-12",
+            says: "The same code or rule lives in one place (ADR 11).",
+            path: "components/modes/todo/scripts/list.ts",
+            sentence: "The rule that a todo is open is written again here and in add.ts.",
+          },
+          {
+            id: "P-48",
+            says: "A query names its columns and carries a limit.",
+            path: "components/modes/todo/scripts/list.ts",
+          },
+        ],
+        checks: 12,
+      },
+    },
+  },
+  builtAt: "round-2",
+  work: "forge/TD1-tests-2",
+  pins: {
+    base: [...td1Pins.base, { path: "components/base/interfaces/todo/list-request.json" }],
+    head: [
+      { path: "components/base/interfaces/todo/add-request.json", hash: "77e0b2c9a1f3d468" },
+      { path: "components/base/interfaces/todo.yaml", hash: "90c1e7ab22d4f310" },
+      { path: "components/base/interfaces/todo/list-request.json", hash: "c4d5e6f708192a3b" },
+    ],
   },
 };
 
@@ -535,7 +642,9 @@ const trialCard = `Merge TD1 into integration?
   its message: database is locked
 ${td1Item3}
 ${td1AddedPassed}
+${td1PracticesIn(3)}
 ${td1Work.replace("TD1-tests-1", "TD1-tests-3")}
+${td1InterfacesSame}
   rounds: 3 of at most 3; no more may run
   the reviewer, in round 3, before the final
     proof:
@@ -559,7 +668,7 @@ You can:
   keep  Stop; the branches stay
 ${notOffered(`why: 1 must item failed; 1 must
              item is not known.`)}
-checked: 0 ran, 16 computed, 6 judged`;
+checked: 0 ran, 18 computed, 6 judged`;
 
 const startChoicesPrinted: readonly PrintedChoice[] = [
   { name: "build", does: "Cut the worktree and start round 1", withheld: "The slice names no interface files." },
@@ -580,6 +689,65 @@ Not available:
          why: The slice names no interface
          files.
 checked: 0 ran, 13 computed, 0 judged`;
+
+const td1MustCard = `Merge TD1 into integration?
+  Merge is not offered: the reviewer
+    answered P-12 not held, and the project
+    marks it must; the interface file
+    components/base/interfaces/todo/
+    add-request.json changed during the
+    rounds; the interface file
+    components/base/interfaces/todo/
+    list-request.json appeared during the
+    rounds.
+${td1Item1Passed}
+${td1Item2Passed}
+${td1Item3}
+${td1AddedPassed}
+  practices answered by the reviewer in
+    round 2: 65; 59 held, 2 not held, 4 do
+    not apply; a check holds 12 more
+judged   P-12, must, not held: The same code
+judged     or rule lives in one place (ADR
+judged     11). In
+judged     components/modes/todo/scripts/
+judged     list.ts: The rule that a todo is
+judged     open is written again here and in
+judged     add.ts.
+judged   P-48, not held: A query names its
+judged     columns and carries a limit. In
+judged     components/modes/todo/scripts/
+judged     list.ts: kept from the card: it
+judged     quotes a test
+judged    by forge skills/review, tier deep
+${td1Work.replace("TD1-tests-1", "TD1-tests-2")}
+  interface file changed during the rounds:
+    components/base/interfaces/todo/
+    add-request.json
+  interface file appeared during the rounds:
+    components/base/interfaces/todo/
+    list-request.json
+  rounds: 2 of at most 3; the reviewer had
+    no findings
+  the reviewer, in round 2, before the final
+    proof:
+judged   DOD-TD1-2 held by 3 cases
+judged   no finding remains
+judged    by forge skills/review, tier deep
+Unmarked lines were worked out by script.
+You can:
+  keep  Stop; the branches stay
+${notOffered(`why: The reviewer answered P-12
+             not held, and the project marks
+             it must; the interface file
+             components/base/interfaces/todo
+             /add-request.json changed
+             during the rounds; the
+             interface file
+             components/base/interfaces/todo
+             /list-request.json appeared
+             during the rounds.`)}
+checked: 0 ran, 15 computed, 4 judged`;
 
 const pinned: readonly { readonly name: string; readonly text: () => string; readonly expected: string }[] = [
   {
@@ -628,6 +796,11 @@ const pinned: readonly { readonly name: string; readonly text: () => string; rea
   { name: "merge, a leak", text: () => printedMerge(td1LeakedInput), expected: td1Leaked },
   { name: "merge, a planted bug survived", text: () => printedMerge(td1BugsInput), expected: td1BugSurvived },
   { name: "merge, the shape of the first live run", text: () => printedMerge(trialInput), expected: trialCard },
+  {
+    name: "merge, a must practice not held and an interface file changed",
+    text: () => printedMerge(td1MustNotHeld),
+    expected: td1MustCard,
+  },
 ];
 
 describe("the cards for the todo mode's first slice, as the kernel prints them", () => {

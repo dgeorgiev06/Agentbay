@@ -5,6 +5,8 @@ import type { Failing, FailingCase } from "./failing.ts";
 import { leaksOf, type Leak } from "./leaks.ts";
 import { mayQuoteAny } from "./quoting.ts";
 import { reviewOf, type Condition, type Finding, type Review } from "./review.ts";
+import { judgedPracticesOf, type JudgedPractices } from "./reviewer-practices.ts";
+import { pinsOf, type Pinned } from "./interface-pins.ts";
 import { listOf, numberOf, textOf, textsOf } from "./json-values.ts";
 
 export const lastRound = 3;
@@ -35,6 +37,8 @@ export type RoundsState = {
   readonly conditions: readonly Condition[];
   readonly remaining: readonly Remaining[];
   readonly leaks: readonly Leak[];
+  readonly practices?: JudgedPractices;
+  readonly pinnedAtHead?: readonly Pinned[];
   readonly builtAt?: string;
   readonly reviewedAt?: string;
 };
@@ -55,7 +59,12 @@ export type ReviewPlan = "pass-on" | "leaked" | "stopped" | "failing" | "review"
 
 export type Reviewed =
   | { readonly plan: "leaked" | "stopped" | "failing" }
-  | { readonly plan: "review"; readonly review: Review; readonly remaining: readonly Remaining[] };
+  | {
+      readonly plan: "review";
+      readonly review: Review;
+      readonly remaining: readonly Remaining[];
+      readonly practices: JudgedPractices;
+    };
 
 function workOf(value: Json | undefined): Work {
   const fields = fieldsOf(value ?? null);
@@ -112,6 +121,7 @@ export function roundsStateOf(value: Json | undefined): RoundsState | undefined 
     return undefined;
   }
   const fields = fieldsOf(value);
+  const practices = judgedPracticesOf(fields.practices);
   return {
     round: numberOf(fields.round),
     stage: fields.stage === "reviewed" ? "reviewed" : "proved",
@@ -131,6 +141,8 @@ export function roundsStateOf(value: Json | undefined): RoundsState | undefined 
     conditions: reviewOf({ conditions: fields.conditions ?? [] }).conditions,
     remaining: listOf(fields.remaining).map(remainingOf),
     leaks: leaksOf(fields.leaks),
+    ...(practices === undefined ? {} : { practices }),
+    ...(fields.pinnedAtHead === undefined ? {} : { pinnedAtHead: pinsOf(fields.pinnedAtHead) }),
     ...optionalText(fields, "builtAt"),
     ...optionalText(fields, "reviewedAt"),
   };
@@ -173,7 +185,7 @@ function afterReview(
   reviewed: Extract<Reviewed, { readonly plan: "review" }>,
   at: string,
 ): RoundsState {
-  const { review, remaining } = reviewed;
+  const { review, remaining, practices } = reviewed;
   const done = state.round >= lastRound || review.findings.length === 0;
   const toBuilder = review.findings.filter((finding) => finding.to === "builder");
   return {
@@ -183,6 +195,7 @@ function afterReview(
     toTests: done ? 0 : review.findings.length - toBuilder.length,
     conditions: review.conditions,
     remaining: done ? remaining : [],
+    practices,
     reviewedAt: at,
   };
 }

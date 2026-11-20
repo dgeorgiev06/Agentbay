@@ -1,12 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Review",
-  "description": "The reviewer's answer: for each condition, held by which cases or not held and why; and its findings, each for the test writer or the builder.",
+  "description": "The reviewer's answer: for each condition, held by which cases or not held and why; its findings, each for the test writer or the builder; and one answer for each practice it was given.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "conditions",
-    "findings"
+    "findings",
+    "practices"
   ],
   "properties": {
     "conditions": {
@@ -24,6 +25,14 @@
         "$ref": "#/$defs/finding"
       },
       "description": "The findings, none when there is nothing to correct."
+    },
+    "practices": {
+      "type": "array",
+      "maxItems": 300,
+      "items": {
+        "$ref": "#/$defs/practice"
+      },
+      "description": "One answer for each practice given, by id."
     }
   },
   "$defs": {
@@ -130,6 +139,44 @@
           }
         }
       ]
+    },
+    "practice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "answer",
+        "sentence"
+      ],
+      "description": "The reviewer's answer on one practice: held, not held with the place, or does not apply.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Z]{1,4}-[0-9]{1,3}$",
+          "description": "The practice's id, such as P-12."
+        },
+        "answer": {
+          "enum": [
+            "held",
+            "not-held",
+            "does-not-apply"
+          ],
+          "description": "Whether the round's tests and code hold the practice."
+        },
+        "sentence": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "\\S",
+          "description": "Why, in one sentence; for not-held, what is wrong at the path. About the builder's code it shares no run of 20 characters with the tests."
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000,
+          "description": "For not-held, the file that breaks the practice: one the builder changed, or a test."
+        }
+      }
     }
   }
 }

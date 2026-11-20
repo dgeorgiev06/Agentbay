@@ -1,11 +1,13 @@
 import { counted, safeText } from "./card-lines.ts";
 import type { Condition } from "./review.ts";
+import type { JudgedPractices } from "./reviewer-practices.ts";
 import { lastRound, type Remaining, type RoundsState } from "./rounds.ts";
 
 type JudgedLines = {
   readonly step: string;
   readonly round: number;
   readonly sentences: readonly string[];
+  readonly practices?: JudgedPractices;
 };
 
 export type RoundsEnded = "leak" | "stopped" | "no-findings" | "last-round";
@@ -19,7 +21,7 @@ export type RoundsOnCard = {
 
 const findingsNamed = 3;
 
-const keptFix = "kept from the card: it quotes a test";
+export const keptFromCard = "kept from the card: it quotes a test";
 
 const reviewStep = /^review-(\d)$/;
 
@@ -30,7 +32,7 @@ function conditionSentence(condition: Condition): string {
 }
 
 function findingSentence(finding: Remaining): string {
-  const fix = finding.fix === undefined ? keptFix : safeText(finding.fix);
+  const fix = finding.fix === undefined ? keptFromCard : safeText(finding.fix);
   return finding.to === "builder"
     ? `for the builder, ${finding.question}: ${fix}`
     : `for the test writer, ${finding.question}, ${safeText(finding.case)}: ${fix}`;
@@ -65,5 +67,6 @@ export function roundsOnCard(state: RoundsState): RoundsOnCard {
   }
   const sentences = [...state.conditions.map(conditionSentence), ...remainingSentences(state.remaining)];
   const round = Number(reviewStep.exec(state.reviewedAt)?.[1] ?? state.round);
-  return { ...count, judged: { step: state.reviewedAt, round, sentences } };
+  const practices = state.practices === undefined ? {} : { practices: state.practices };
+  return { ...count, judged: { step: state.reviewedAt, round, sentences, ...practices } };
 }

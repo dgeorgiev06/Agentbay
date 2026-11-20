@@ -17,6 +17,7 @@ import {
   kitTemplate,
   listOf,
   playedTo,
+  practicesAnswered,
   project,
   provedIn,
   removeAll,
@@ -261,6 +262,9 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "  DOD-A1-1, must, passed: A quill that was",
       "    added is counted.",
       "  DOD-A1-2, must, passed: The checks pass.",
+      "  practices answered by the reviewer in",
+      "    round 2: 65; 65 held, 0 not held, 0 do",
+      "    not apply; a check holds 12 more",
       "  1 file changed; the work and the tests are",
       "    on forge/A1-tests-2",
       "  size in lines: components/ +1",
@@ -283,7 +287,7 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "  discard    Stop; the worktrees go",
       "             why: Discarding comes with",
       "             slice WD1.",
-      "checked: 0 ran, 7 computed, 3 judged",
+      "checked: 0 ran, 8 computed, 3 judged",
     ]);
     await decided(root, card, { step: "card", choice: "merge" });
     assert.deepEqual(branches(root), [
@@ -301,28 +305,32 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
     assert.deepEqual(await filesHolding(root, ".agentbay", lines), []);
   });
 
-  test("a slice still failing after round 3 reaches the card with merge withheld, and the reviewer's verdicts are judged lines", async () => {
+  test("a slice still failing after round 3, whose builder changed an interface file, reaches the card with merge withheld, and the reviewer's verdicts are judged lines", async () => {
     const root = await project(template);
     const name = "B1";
     const tests = [testsOf(name, 1)];
     const lines = testLines(tests);
+    const agreed = "components/base/interfaces/proof.yaml";
+    const slice = fieldsOf(sliceOf(name));
     const start = await started(root, {
-      planned: { title: "B1", slice: sliceOf(name) },
+      planned: { title: "B1", slice: { ...slice, scope: [...listOf(slice.scope), agreed] } },
       base: shortHead(root),
       bugs: [],
+      interface: [agreed],
     });
-    await declared(root, start, [codeOf(name)]);
+    await declared(root, start, [codeOf(name), agreed]);
     await provedIn(root, name, failed(name));
     const whileBuilding: string[][] = [];
     const asked = await playedTo(root, start.id, {
       tests: () => Promise.resolve({ tests }),
       builder: async (given) => {
         whileBuilding.push([...(await filesHolding(root, "", lines))]);
-        await builderWrites(root, folderOf(given), [codeOf(name)]);
+        await builderWrites(root, folderOf(given), [codeOf(name), agreed]);
         return { outcome: "built" };
       },
-      reviewer: () =>
+      reviewer: (given) =>
         Promise.resolve({
+          practices: [...practicesAnswered(given)],
           conditions: [
             { item: "DOD-B1-1", held: false, why: "The count is off by one for every quill." },
             { item: "DOD-B1-2", held: true, cases: [caseName(name)] },
@@ -346,11 +354,14 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       name: "merge",
       status: "withheld",
       does: "Merge into the integration branch",
-      reason: "1 must item failed.",
+      reason: `1 must item failed; the interface file ${agreed} changed during the rounds.`,
     });
     assert.deepEqual(await printedCard(root, start.id), [
       "Merge B1 into integration?",
-      "  Merge is not offered: 1 must item failed.",
+      "  Merge is not offered: 1 must item failed;",
+      "    the interface file",
+      "    components/base/interfaces/proof.yaml",
+      "    changed during the rounds.",
       "  DOD-B1-1, must, failed: A quill that was",
       "    added is counted.",
       "  why: the named tests fail on the head",
@@ -362,9 +373,14 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "  failing: b1 quill that was added is",
       "    counted twice",
       "  DOD-B1-2, must, passed: The checks pass.",
+      "  practices answered by the reviewer in",
+      "    round 3: 65; 65 held, 0 not held, 0 do",
+      "    not apply; a check holds 12 more",
       "  1 file changed; the work and the tests are",
       "    on forge/B1-tests-3",
       "  size in lines: components/ +1",
+      "  interface file changed during the rounds:",
+      "    components/base/interfaces/proof.yaml",
       "  rounds: 3 of at most 3; no more may run",
       "  the reviewer, in round 3, before the final",
       "    proof:",
@@ -385,14 +401,18 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "Not available:",
       "  merge      Merge into the integration",
       "             branch",
-      "             why: 1 must item failed.",
+      "             why: 1 must item failed; the",
+      "             interface file",
+      "             components/base/interfaces/proo",
+      "             f.yaml changed during the",
+      "             rounds.",
       "  send-back  A round after the card",
       "             why: No round runs after the",
       "             card.",
       "  discard    Stop; the worktrees go",
       "             why: Discarding comes with",
       "             slice WD1.",
-      "checked: 0 ran, 12 computed, 5 judged",
+      "checked: 0 ran, 14 computed, 5 judged",
     ]);
     const kernel = await readFile(join(root, ".agentbay/kernel.db"));
     assert.ok(!kernel.toString("latin1").includes(alphabet));
@@ -411,7 +431,7 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
     assert.deepEqual(await filesHolding(root, "", lines), []);
   });
 
-  test("a finding for the test writer changes the tests in rounds 2 and 3; the test writer never reads the builder's code, the builder never the tests", async () => {
+  test("a finding for the test writer changes the tests in rounds 2 and 3; the test writer never reads the builder's code, the builder never the tests; a must practice the last review holds not held withholds merge", async () => {
     const root = await project(template);
     const name = "C1";
     const versions = [testsOf(name, 1), testsOf(name, 2), testsOf(name, 3)];
@@ -429,6 +449,7 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
     const writerTasks: Json[] = [];
     const builderTasks: Json[] = [];
     const quotingFix = `Assert "${alphabet}" against a literal count.`;
+    const twiceWritten = "The count rule is written twice.";
     const reviews = [
       [
         { to: "test-writer", case: caseName(name), question: "Q3", fix: quotingFix },
@@ -458,7 +479,12 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       },
       reviewer: (given) => {
         const findings = reviews.shift() ?? [];
-        return Promise.resolve({ ...fieldsOf(allHeld(given)), findings });
+        const notHeld = findings.length > 0 ? [] : [{ id: "P-12", path: codeOf(name), sentence: twiceWritten }];
+        return Promise.resolve({
+          ...fieldsOf(allHeld(given)),
+          findings,
+          practices: [...practicesAnswered(given, notHeld)],
+        });
       },
     });
     assert.deepEqual(stepsOf(asked), [
@@ -493,8 +519,26 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
     assert.equal(git(root, ["show", `${head}:${testPath(name)}`]), versions[2]?.text);
     assert.equal(rev(root, `${head}^`), rev(root, "forge/C1-2"));
     const card = waitingOf(await shown(root, start.id), "card");
-    assert.equal(listOf(card.choices).map((choice) => textAt(choice, "status"))[0], "offered");
+    assert.deepEqual(listOf(card.choices)[0], {
+      name: "merge",
+      status: "withheld",
+      does: "Merge into the integration branch",
+      reason: "The reviewer answered P-12 not held, and the project marks it must.",
+    });
     const printed = await printedCard(root, start.id);
+    const practices = printed.indexOf("  practices answered by the reviewer in");
+    assert.deepEqual(printed.slice(practices, practices + 10), [
+      "  practices answered by the reviewer in",
+      "    round 3: 65; 64 held, 1 not held, 0 do",
+      "    not apply; a check holds 12 more",
+      "judged   P-12, must, not held: The same code",
+      "judged     or rule lives in one place (ADR",
+      "judged     11). In",
+      "judged     components/modes/c1/scripts/",
+      "judged     quill.ts: The count rule is",
+      "judged     written twice.",
+      "judged    by forge skills/review, tier deep",
+    ]);
     const decided = printed.indexOf("judged   the builder decided: The count is");
     assert.deepEqual(printed.slice(decided, decided + 4), [
       "judged   the builder decided: The count is",
@@ -509,17 +553,20 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
   });
 });
 
-test("the tests' text and the builder's code are in no file a later step could read as text: the kernel keeps the reviewer's task packed", async () => {
+test("the tests' text and the builder's code are in no file a later step could read as text: the kernel keeps the reviewer's task packed; forge adds a checks item the plan does not list", async () => {
   const root = await project(template);
   const name = "E1";
   const tests = [testsOf(name, 1)];
+  const planned = fieldsOf(sliceOf(name));
   const start = await started(root, {
-    planned: { title: "E1", slice: sliceOf(name) },
+    planned: { title: "E1", slice: { ...planned, done: listOf(planned.done).slice(0, 1) } },
     base: shortHead(root),
     bugs: [],
   });
   await declared(root, start, [codeOf(name)]);
-  await provedIn(root, name, passed(name));
+  const [failsFirst] = passed(name).verdicts;
+  const checks = { item: "checks", kind: "checks", verdict: "passed", detail: "It held." };
+  await provedIn(root, name, { ...passed(name), verdicts: [failsFirst ?? null, checks] });
   let atReview: readonly string[] = [];
   await playedTo(root, start.id, {
     tests: () => Promise.resolve({ tests }),
@@ -535,4 +582,18 @@ test("the tests' text and the builder's code are in no file a later step could r
   assert.deepEqual(atReview, []);
   const kernel = await readFile(join(root, ".agentbay/kernel.db"));
   assert.ok(!kernel.toString("latin1").includes(alphabet));
+  const proofs = (await askedOf(root, name)).map((each) =>
+    listOf(fieldsOf(fieldsOf(each).slice ?? null).done).map((item) => textAt(item, "id")),
+  );
+  assert.deepEqual(proofs, [["DOD-E1-1"], ["DOD-E1-1", "checks"]]);
+  const printed = await printedCard(root, start.id);
+  const added = printed.indexOf("  checks, must, passed: Added by forge, as");
+  assert.deepEqual(printed.slice(added, added + 6), [
+    "  checks, must, passed: Added by forge, as",
+    "    the plan lists no checks item: the",
+    "    toolchain's checks, such as types, lint,",
+    "    format and dead code, and its whole test",
+    "    run pass.",
+    "  practices answered by the reviewer in",
+  ]);
 });

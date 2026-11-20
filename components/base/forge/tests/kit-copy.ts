@@ -396,11 +396,28 @@ export function caseNamesIn(task: Json): readonly string[] {
   return names.map((found) => found[1] ?? "");
 }
 
+export type NotHeldAnswer = {
+  readonly id: string;
+  readonly path: string;
+  readonly sentence: string;
+};
+
+export function practicesAnswered(task: Json, notHeld: readonly NotHeldAnswer[] = []): readonly Json[] {
+  const given = listOf(fieldsOf(fieldsOf(task).input ?? null).practices).map((practice) => textAt(practice, "id"));
+  return given.map((id) => {
+    const breaking = notHeld.find((answer) => answer.id === id);
+    return breaking === undefined
+      ? { id, answer: "held", sentence: "The round's code and tests hold it." }
+      : { ...breaking, answer: "not-held" };
+  });
+}
+
 export function allHeld(task: Json): Json {
   const slice = fieldsOf(fieldsOf(task).input ?? null).slice ?? null;
   const [first = ""] = caseNamesIn(task);
   const items = listOf(fieldsOf(slice).done).map((item) => textAt(item, "id"));
-  return { conditions: items.map((item) => ({ item, held: true, cases: [first] })), findings: [] };
+  const conditions = items.map((item) => ({ item, held: true, cases: [first] }));
+  return { conditions, findings: [], practices: [...practicesAnswered(task)] };
 }
 
 export type RoundPlan = {

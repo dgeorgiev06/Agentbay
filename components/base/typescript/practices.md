@@ -355,7 +355,7 @@ failedWith([unplacedProblem("Invalid plan.")]);
 
 ## TS-24 A try holds only the call that may throw
 
-Held by: review. Source: Google TypeScript style guide (keep try blocks focused; empty catch blocks); PEP 8.
+Held by: linter (`no-empty`) for an empty catch; review. Source: Google TypeScript style guide (keep try blocks focused; empty catch blocks); PEP 8.
 
 Where throwing is allowed, the `try` wraps the one call that may throw, so a bug in the lines around it is not caught by accident. A `catch` is never empty.
 

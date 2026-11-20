@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import { after, describe, test } from "node:test";
 import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
-import { caseNamesOf, isOneSentence, refusedReview, type Reviewing } from "../scripts/lib/review.ts";
+import { caseNamesOf, refusedReview, type Reviewing } from "../scripts/lib/review.ts";
+import { isOneSentence } from "../scripts/lib/review-sentences.ts";
 import {
   builderWrites,
   declared,
   filesHolding,
   kitTemplate,
   playedTo,
+  practicesAnswered,
   project,
   provedIn,
   removeAll,
@@ -36,7 +38,16 @@ const reviewing: Reviewing = {
   tests: [{ path: testPath, text: testText }],
   failing: ["a quill that was added is counted, round two"],
   practices: ["P-05", "TS-18"],
+  code: ["components/modes/v1/scripts/quill.ts"],
 };
+
+const codePath = "components/modes/v1/scripts/quill.ts";
+
+function answered(id: string, answer = "held", place: Readonly<Record<string, string>> = {}): Json {
+  return { id, answer, sentence: "The quill's count is a whole number.", ...place };
+}
+
+const bothHeld: readonly Json[] = [answered("P-05"), answered("TS-18")];
 
 const heldBoth: readonly Json[] = [
   { item: "DOD-V1-1", held: true, cases: ["a quill that was added is counted"] },
@@ -48,7 +59,11 @@ function forBuilder(fix: string, caseName = "a quill that was added is counted")
 }
 
 function refused(findings: readonly Json[], conditions: readonly Json[] = heldBoth): readonly string[] {
-  return refusedReview({ conditions: [...conditions], findings: [...findings] }, reviewing);
+  return refusedReview({ conditions: [...conditions], findings: [...findings], practices: [...bothHeld] }, reviewing);
+}
+
+function refusedPractices(practices: readonly Json[]): readonly string[] {
+  return refusedReview({ conditions: [...heldBoth], findings: [], practices: [...practices] }, reviewing);
 }
 
 describe("the review's check, as a pure function", () => {
@@ -103,8 +118,9 @@ describe("the review's check, as a pure function", () => {
     assert.deepEqual(refused([], conditions), [
       "The verdict on DOD-V1-1 has the field because; it has item, held, and cases or why.",
     ]);
-    assert.deepEqual(refusedReview({ conditions: [...heldBoth], findings: [], summary: "all good" }, reviewing), [
-      "The review has the field summary; it has conditions and findings only.",
+    const summed = { conditions: [...heldBoth], findings: [], practices: [...bothHeld], summary: "all good" };
+    assert.deepEqual(refusedReview(summed, reviewing), [
+      "The review has the field summary; it has conditions, findings and practices only.",
     ]);
   });
 
@@ -160,6 +176,53 @@ describe("the review's check, as a pure function", () => {
     ]);
   });
 
+  test("a review answers every practice it was given, once, and none it was not given", () => {
+    assert.deepEqual(refusedPractices(bothHeld), []);
+    assert.deepEqual(refusedPractices([answered("P-05")]), [
+      "The review leaves out the practice TS-18; answer every practice held by review, " +
+        "each held, not-held or does-not-apply, with its sentence.",
+    ]);
+    assert.deepEqual(refusedPractices([...bothHeld, answered("P-05", "does-not-apply"), answered("P-01")]), [
+      "The review answers P-01, which is not a practice held by review; answer only P-05 and TS-18.",
+      "The review answers P-05 more than once; answer each practice once.",
+    ]);
+  });
+
+  test("a practice not held names a file the builder changed or a test, and says what is wrong in one sentence", () => {
+    const notHeld = (place: Readonly<Record<string, string>>): readonly string[] =>
+      refusedPractices([answered("P-05", "not-held", place), answered("TS-18", "does-not-apply")]);
+    assert.deepEqual(notHeld({ path: codePath }), []);
+    assert.deepEqual(notHeld({ path: testPath }), []);
+    assert.deepEqual(notHeld({}), [
+      "The review answers P-05 not held and names no path; give in path the file that breaks it.",
+    ]);
+    assert.deepEqual(notHeld({ path: "bay/sdk.ts" }), [
+      "The review answers P-05 not held in bay/sdk.ts, which is neither a file the builder changed nor a test; " +
+        "name one of those.",
+    ]);
+    assert.deepEqual(notHeld({ path: codePath, sentence: "The count is a string. It should be a number." }), [
+      "The review's sentence on P-05 is not one sentence of at most 200 characters.",
+    ]);
+  });
+
+  test("a practice the builder's code does not hold is said without a run of 20 characters from a test", () => {
+    const quoting = { sentence: 'It returns quillCount("first quill of the morning") as text.' };
+    const feedback = refusedPractices([
+      answered("P-05", "not-held", { ...quoting, path: codePath }),
+      answered("TS-18"),
+    ]);
+    assert.deepEqual(feedback, [
+      "The review's sentence on P-05, about the builder's code, shares a run of 20 or more characters with the " +
+        "tests: say it in your own words; the builder never reads a line of a test.",
+    ]);
+    assert.ok(!feedback.join(" ").includes("first quill"));
+    assert.deepEqual(
+      refusedPractices([answered("P-05", "not-held", { ...quoting, path: testPath }), answered("TS-18")]),
+      [],
+    );
+    assert.deepEqual(refusedPractices([answered("P-05", "held", quoting), answered("TS-18")]), []);
+  });
+
   test("case names are read from calls of test, it and describe, in any quotes", () => {
     assert.deepEqual(caseNamesOf(testText), ["a quill that was added is counted", "an empty quill is refused"]);
     assert.deepEqual(caseNamesOf("describe(`a ${mark} group`, () => {});"), ["a ${mark} group"]);
@@ -177,7 +240,7 @@ after(async () => {
   await removeAll();
 });
 
-test("in a run, a finding for the builder that quotes a test goes back to the reviewer with feedback that quotes nothing", async () => {
+test("in a run, a review that leaves out a practice, or whose finding for the builder quotes a test, goes back to the reviewer with feedback that quotes nothing", async () => {
   const root = await project(await kitTemplate());
   const slice = {
     name: "V2",
@@ -217,18 +280,22 @@ test("in a run, a finding for the builder that quotes a test goes back to the re
     ["write-tests", "build-without-tests"],
   );
   const conditions = [{ item: "DOD-V2-1", held: true, cases: ["a quill that was added is counted"] }];
+  const practices = practicesAnswered(await task(root, start.id));
   const quoting = forBuilder(`Count "${quote}" once.`);
-  const sentBack = await submitted(root, start.id, { conditions, findings: [quoting] });
+  const leftOut = practices.filter((practice) => textAt(practice, "id") !== "TS-27");
+  const sentBack = await submitted(root, start.id, { conditions, findings: [quoting], practices: [...leftOut] });
   const waiting = fieldsOf(sentBack).waiting ?? null;
   assert.equal(textAt(waiting, "stepKey"), "review-1/0.call1/0#2", JSON.stringify(sentBack));
   const feedback = fieldsOf(fieldsOf(sentBack).task ?? null).feedback;
   assert.deepEqual(feedback, [
     "Finding 1, for the builder, shares a run of 20 or more characters with the tests: " +
-      "say it in your own words; the builder never reads a line of a test.",
+      "say it in your own words; the builder never reads a line of a test. " +
+      "The review leaves out the practice TS-27; answer every practice held by review, " +
+      "each held, not-held or does-not-apply, with its sentence.",
   ]);
   assert.deepEqual(await filesHolding(root, ".agentbay", [quote]), []);
   const own = forBuilder("Count each quill once, through the count action.");
-  const taken = await submitted(root, start.id, { conditions, findings: [own] });
+  const taken = await submitted(root, start.id, { conditions, findings: [own], practices: [...practices] });
   assert.equal(textAt(fieldsOf(taken).waiting ?? null, "stepKey"), "round-2/0.call1/0#1");
   const builderTask = JSON.stringify(await task(root, start.id));
   assert.ok(builderTask.includes("Count each quill once, through the count action."));

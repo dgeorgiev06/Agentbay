@@ -1,14 +1,18 @@
 import type { BugsOnCard } from "./bug-card.ts";
 import type { Built, Missing } from "./builder-answer.ts";
 import { computed, counted, grouped, joined, judged, type Card, type CardLine } from "./card-lines.ts";
+import { interfaceChanges, interfaceWords, type Pins } from "./interface-pins.ts";
 import { verdictLines, type CaseMessages } from "./item-lines.ts";
 import type { Leak } from "./leaks.ts";
 import { answerWords, mergeReason, withheldReasons, type WithheldChoice } from "./merge-choices.ts";
+import { mustNotHeld, reviewedPracticeLines } from "./practices-block.ts";
 import type { Proved, Sized } from "./proof-answer.ts";
 import type { RoundsEnded, RoundsOnCard } from "./round-card.ts";
 import type { Slice } from "./slice-form.ts";
 
 type Kept = "set-aside" | "with-tests";
+
+const noPins: Pins = { base: [], head: [] };
 
 export type MergeCardInput = {
   readonly slice: Slice;
@@ -22,6 +26,8 @@ export type MergeCardInput = {
   readonly rounds?: RoundsOnCard;
   readonly bugs?: BugsOnCard;
   readonly leaks?: readonly Leak[];
+  readonly mustPractices?: readonly string[];
+  readonly pins?: Pins;
 };
 
 export type Drawn = {
@@ -130,12 +136,18 @@ function leakWords(leak: Leak): string {
 }
 
 function drawnLines(input: MergeCardInput, reason: string | undefined): readonly CardLine[] {
-  const { slice, proof, work, kept } = input;
-  const drawnWords = [changedWords(proof.size, work, kept), ...sizeWords(proof.size), ...watchedWords(proof.size)];
+  const { slice, proof, work, kept, pins = noPins } = input;
+  const drawnWords = [
+    changedWords(proof.size, work, kept),
+    ...sizeWords(proof.size),
+    ...watchedWords(proof.size),
+    ...interfaceWords(pins),
+  ];
   return [
     computed("draw", answerWords(reason)),
     ...(input.leaks ?? []).map((leak) => computed("draw", leakWords(leak))),
     ...verdictLines(slice, proof.verdicts, input.caseMessages),
+    ...reviewedPracticeLines(input.rounds, input.mustPractices ?? []),
     ...[...drawnWords, ...bugWords(input.bugs)].map((said) => computed("draw", said)),
     ...roundLines(input.rounds),
     ...builderLines(input.built, input.builtAt),
@@ -148,6 +160,8 @@ export function drawn(input: MergeCardInput): Drawn {
     verdicts: input.proof.verdicts,
     built: input.built,
     leaked: (input.leaks ?? []).length > 0,
+    mustNotHeld: mustNotHeld(input.rounds, input.mustPractices ?? []),
+    interfaceChanges: interfaceChanges(input.pins ?? noPins),
   });
   return {
     card: {

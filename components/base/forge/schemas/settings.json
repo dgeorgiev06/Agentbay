@@ -27,6 +27,16 @@
         "maxLength": 1000
       },
       "description": "The practices files a builder reads before it writes, relative to the project, such as framework/practices.md and components/base/typescript/practices.md."
+    },
+    "mustPractices": {
+      "type": "array",
+      "maxItems": 300,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z]{1,4}-[0-9]{1,3}$"
+      },
+      "description": "The ids of the practices the workflow rounds treats as must, such as P-12. While the reviewer's last answer says one of them is not held, the merge card withholds merge, naming it; keep stays. Left out, none: a practice not held is then shown on the card and withholds nothing."
     }
   }
 }

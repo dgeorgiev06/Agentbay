@@ -1,13 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ReviewRoundRequest",
-  "description": "What a round's review works from: the slice, the test files the builder may not change, the practices files, and where the rounds stand.",
+  "description": "What a round's review works from: the slice, the test files the builder may not change, the practices files, the interface files to hash at the round's head, and where the rounds stand.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "slice",
     "fixed",
     "practices",
+    "interface",
     "state"
   ],
   "properties": {
@@ -31,6 +32,15 @@
         "$ref": "proof@1/prove-request.json#/$defs/path"
       },
       "description": "The practices files, relative to the project, from forge's settings."
+    },
+    "interface": {
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "The interface files the slice builds against, whose hashes at the round's head the merge card compares with the base."
     },
     "state": {
       "type": "object",

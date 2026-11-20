@@ -1,4 +1,4 @@
-type ComputedBy = "slice" | "start" | "prove" | "draw";
+export type ComputedBy = "slice" | "start" | "prove" | "draw";
 
 export type CardLine =
   | {

@@ -7,18 +7,24 @@ import { afterRoundOf, type AfterRound } from "./lib/rounds.ts";
 import { textOf, textsOf } from "./lib/json-values.ts";
 
 type Asked = AfterRound & {
+  readonly cutAs: string;
   readonly interface: readonly string[];
   readonly owner: readonly Bug[];
 };
 
 function askedOf(input: Json): Asked {
   const fields = fieldsOf(input);
-  return { ...afterRoundOf(fields, "bugs"), interface: textsOf(fields.interface), owner: bugsOf(fields.bugs) };
+  return {
+    ...afterRoundOf(fields, "bugs"),
+    cutAs: textOf(fields.cutAs),
+    interface: textsOf(fields.interface),
+    owner: bugsOf(fields.bugs),
+  };
 }
 
 async function plantedBugs(context: ScriptContext, asked: Asked): Promise<readonly Bug[]> {
   const { base, builder } = asked.state;
-  const cut = await answerOf(context, "worktrees.cut", { slice: `${asked.name}-planter`, base: builder.commit });
+  const cut = await answerOf(context, "worktrees.cut", { slice: `${asked.cutAs}-planter`, base: builder.commit });
   const folder = textOf(cut.folder);
   const code = await codeAt(context, { base, commit: builder.commit, folder, fixed: asked.fixed });
   const answer = await answerOf(context, "plant", {

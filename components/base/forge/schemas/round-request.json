@@ -7,6 +7,7 @@
   "required": [
     "round",
     "slice",
+    "cutAs",
     "interface",
     "fixed",
     "cut",
@@ -23,6 +24,10 @@
     },
     "slice": {
       "$ref": "proof@1/prove-request.json#/$defs/slice"
+    },
+    "cutAs": {
+      "$ref": "proof@1/prove-request.json#/$defs/sliceName",
+      "description": "The name the slice's worktrees are cut under: the slice's name in the workflow rounds, and in a wave the name forge gave the slice's attempt. Each worktree of the round is named after it."
     },
     "interface": {
       "type": "array",

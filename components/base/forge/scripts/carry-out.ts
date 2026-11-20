@@ -1,5 +1,5 @@
 import { defineScript, fail, fieldsOf, type Json, type ScriptContext } from "../../../../bay/sdk.ts";
-import { answerOf } from "./lib/called.ts";
+import { headMerged } from "./lib/merge-head.ts";
 
 type Request = {
   readonly choice: "merge" | "send-back" | "keep" | "discard";
@@ -33,9 +33,8 @@ function requestOf(input: Json): Request {
 }
 
 async function merged(context: ScriptContext, request: Request): Promise<Json> {
-  const cut = await answerOf(context, "worktrees.cut", { slice: `${request.name}-merge`, base: request.head });
-  const merge = await answerOf(context, "worktrees.merge", { folder: cut.folder ?? null, into: request.into });
-  return { choice: "merge", merged: merge.commit ?? null, into: request.into };
+  const { commit } = await headMerged(context, { cutAs: request.name, head: request.head, into: request.into });
+  return { choice: "merge", merged: commit, into: request.into };
 }
 
 export const run = defineScript(async (input, context) => {

@@ -9,6 +9,7 @@ import { textOf } from "./json-values.ts";
 
 export type AfterBuild = {
   readonly slice: Slice;
+  readonly cutAs: string;
   readonly round: number;
   readonly base: string;
   readonly commit: string;
@@ -30,7 +31,7 @@ async function filesAtBase(
   asked: AfterBuild,
   paths: readonly string[],
 ): Promise<readonly HandedTest[]> {
-  const name = `${asked.slice.name}-base-${String(asked.round)}`;
+  const name = `${asked.cutAs}-base-${String(asked.round)}`;
   const folder = textOf((await answerOf(context, "worktrees.cut", { slice: name, base: asked.base })).folder);
   const files = await Promise.all(paths.map((path) => readable(context, folder, path)));
   await answerOf(context, "worktrees.remove", { folder, into: asked.base });

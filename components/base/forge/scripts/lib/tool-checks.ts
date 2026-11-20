@@ -13,6 +13,11 @@ function freeId(done: readonly Json[]): string {
   return done.some((item) => fieldsOf(item).id === "checks") ? "forge-checks" : "checks";
 }
 
+export function withoutChecks(slice: Json): Json {
+  const fields = fieldsOf(slice);
+  return { ...fields, done: listOf(fields.done).filter((item) => !isChecks(item)) };
+}
+
 export function withToolChecks(slice: Json): Json {
   const fields = fieldsOf(slice);
   const done = listOf(fields.done);

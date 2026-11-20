@@ -11,6 +11,7 @@ import {
   keptRows,
   kitTemplate,
   listOf,
+  onlyWhenRecapturing,
   printedCard,
   project,
   removeAll,
@@ -114,34 +115,38 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     assert.deepEqual(keptRows(root), []);
   });
 
-  test("two slices that pass alone but fail the checks combined are each proved alone, the breaker is named, and keep leaves nothing on disk", async () => {
-    const root = await project(template);
-    await planOnInto(root, ["CA", "CB"]);
-    await provedAs(root, "CA", ownPassed("CA"));
-    await provedAs(root, "CB", ownPassed("CB"));
-    await provedAs(root, "wave-1.checks", checksFailed("checks", "store lists every table"));
-    await provedAs(root, "CA.checks", checksPassed("DOD-CA-2"));
-    await provedAs(root, "CB.checks", checksFailed("DOD-CB-2", "store lists every table"));
-    const start = await waveStarted(root);
-    await decided(root, start, { step: "start", choice: "build" });
-    const played = await playedSideBySide(root, start.id, wavePlayers(root));
-    assert.equal(played.mostAtOnce, 2);
-    const card = cardOf(await shown(root, start.id));
-    assert.equal(textAt(listOf(card.choices)[0] ?? null, "status"), "withheld");
-    const printed = flowing(await printedCard(root, card.id));
-    assert.ok(printed.includes("Merge is not offered: the wave's checks failed on the slices combined."), printed);
-    assert.ok(printed.includes("CA proved alone with the checks: DOD-CA-2, must, passed"), printed);
-    assert.ok(printed.includes("CB fails the checks alone, so its work breaks the suite"), printed);
-    assert.ok(printed.includes("on forge/wave-1, with CA, CB merged in plan order"), printed);
-    assert.equal((await askedOf(root, "wave-1")).length, 1);
-    assert.deepEqual(kindsAsked((await askedOf(root, "CA")).slice(-1)), ["checks"]);
-    const kept = runOf(await decided(root, card, { step: "card", choice: "keep" }));
-    const stay = ["forge/CA", "forge/CA-tests-1", "forge/CB", "forge/CB-tests-1", "forge/wave-1"];
-    assert.deepEqual(fieldsOf(fieldsOf(kept).output ?? null).kept, stay);
-    assert.deepEqual(branches(root), stay);
-    assert.deepEqual(worktrees(root), []);
-    assert.deepEqual(keptRows(root), []);
-  });
+  test(
+    "two slices that pass alone but fail the checks combined are each proved alone, the breaker is named, and keep leaves nothing on disk",
+    onlyWhenRecapturing,
+    async () => {
+      const root = await project(template);
+      await planOnInto(root, ["CA", "CB"]);
+      await provedAs(root, "CA", ownPassed("CA"));
+      await provedAs(root, "CB", ownPassed("CB"));
+      await provedAs(root, "wave-1.checks", checksFailed("checks", "store lists every table"));
+      await provedAs(root, "CA.checks", checksPassed("DOD-CA-2"));
+      await provedAs(root, "CB.checks", checksFailed("DOD-CB-2", "store lists every table"));
+      const start = await waveStarted(root);
+      await decided(root, start, { step: "start", choice: "build" });
+      const played = await playedSideBySide(root, start.id, wavePlayers(root));
+      assert.equal(played.mostAtOnce, 2);
+      const card = cardOf(await shown(root, start.id));
+      assert.equal(textAt(listOf(card.choices)[0] ?? null, "status"), "withheld");
+      const printed = flowing(await printedCard(root, card.id));
+      assert.ok(printed.includes("Merge is not offered: the wave's checks failed on the slices combined."), printed);
+      assert.ok(printed.includes("CA proved alone with the checks: DOD-CA-2, must, passed"), printed);
+      assert.ok(printed.includes("CB fails the checks alone, so its work breaks the suite"), printed);
+      assert.ok(printed.includes("on forge/wave-1, with CA, CB merged in plan order"), printed);
+      assert.equal((await askedOf(root, "wave-1")).length, 1);
+      assert.deepEqual(kindsAsked((await askedOf(root, "CA")).slice(-1)), ["checks"]);
+      const kept = runOf(await decided(root, card, { step: "card", choice: "keep" }));
+      const stay = ["forge/CA", "forge/CA-tests-1", "forge/CB", "forge/CB-tests-1", "forge/wave-1"];
+      assert.deepEqual(fieldsOf(fieldsOf(kept).output ?? null).kept, stay);
+      assert.deepEqual(branches(root), stay);
+      assert.deepEqual(worktrees(root), []);
+      assert.deepEqual(keptRows(root), []);
+    },
+  );
 
   test("a wave whose only slice fails its own proof joins nothing, asks proof for no checks, and withholds merge", async () => {
     const root = await project(template);

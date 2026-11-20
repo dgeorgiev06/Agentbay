@@ -3,6 +3,7 @@ import { cp, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
+import { recapturing } from "./kit-copy.ts";
 
 type Capture = {
   readonly into: string;
@@ -31,10 +32,18 @@ const sources: readonly Source[] = [
     capture: { before: "draw" },
   },
   {
+    file: "given-r7-failed.json",
+    test: "one-round.test.ts",
+    name: "7. a must item that failed withholds merge",
+    anchor: "const words = wordsOf(card);",
+    run: "start.id",
+    capture: { before: "draw" },
+  },
+  {
     file: "given-p2-stopped.json",
     test: "planter.test.ts",
     name: "a builder that stopped gets no planter",
-    anchor: "const printed = await printedCard(root, runId);",
+    anchor: 'const card = waitingOf(await shown(root, runId), "card");',
     run: "runId",
     capture: { before: "bugs" },
   },
@@ -64,6 +73,12 @@ const largestRun = 64 * 1024 * 1024;
 
 function run(folder: string, command: string, words: readonly string[]): string {
   return execFileSync(command, words, { cwd: folder, encoding: "utf8", maxBuffer: largestRun });
+}
+
+function ranCase(folder: string, test: string, name: string): void {
+  const env = { ...process.env, [recapturing]: "1" };
+  const words = ["--test", `--test-name-pattern=${name}`, test];
+  execFileSync(process.execPath, words, { cwd: folder, env, encoding: "utf8", maxBuffer: largestRun });
 }
 
 function jsonValue(value: unknown): Json {
@@ -132,7 +147,7 @@ async function recaptured(copy: string, source: Source): Promise<void> {
   const test = join(copy, "components/base/forge/tests", source.test);
   const into = join(import.meta.dirname, source.file);
   await writeFile(test, withCapture(await readFile(test, "utf8"), source, into), "utf8");
-  run(copy, process.execPath, ["--test", `--test-name-pattern=${source.name}`, test]);
+  ranCase(copy, test, source.name);
 }
 
 async function recapturedAll(wanted: readonly string[]): Promise<void> {

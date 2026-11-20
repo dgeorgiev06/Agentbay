@@ -297,7 +297,7 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
     assert.deepEqual(await filesHolding(root, ".agentbay", lines), []);
   });
 
-  test("a slice still failing after round 3, whose builder changed an interface file, reaches the card with merge withheld, and the reviewer's verdicts are judged lines", async () => {
+  test("a slice still failing after round 3, whose builder changed an interface file, reaches the card with no test in the kernel's record, and keep leaves both branches and no test on disk", async () => {
     const root = await project(template);
     const name = "B1";
     const tests = [testsOf(name, 1)];
@@ -342,71 +342,6 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
     ]);
     assert.deepEqual(whileBuilding, [[], [], []]);
     const card = waitingOf(await shown(root, start.id), "card");
-    assert.deepEqual(listOf(card.choices)[0], {
-      name: "merge",
-      status: "withheld",
-      does: "Merge into the integration branch",
-      reason: `1 must item failed; the interface file ${agreed} changed during the rounds.`,
-    });
-    assert.deepEqual(await printedCard(root, start.id), [
-      "Merge B1 into integration?",
-      "  Merge is not offered: 1 must item failed;",
-      "    the interface file",
-      "    components/base/interfaces/proof.yaml",
-      "    changed during the rounds.",
-      "  DOD-B1-1, must, failed: A quill that was",
-      "    added is counted.",
-      "  why: the named tests fail on the head",
-      "  proof's reason: The named tests fail on",
-      "    the head.",
-      "  failing: b1 quill that was added is",
-      "    counted",
-      `  its message: ${nineteen}`,
-      "  failing: b1 quill that was added is",
-      "    counted twice",
-      "  DOD-B1-2, must, passed: The checks pass.",
-      "  practices answered by the reviewer in",
-      "    round 3: 65; 65 held, 0 not held, 0 do",
-      "    not apply; a check holds 12 more",
-      "  1 file changed; the work and the tests are",
-      "    on forge/B1-tests-3, the builder's work",
-      "    alone on forge/B1-3",
-      "  size in lines: components/ +1",
-      "  interface file changed during the rounds:",
-      "    components/base/interfaces/proof.yaml",
-      "  rounds: 3 of at most 3; no more may run",
-      "  the reviewer, in round 3, before the final",
-      "    proof:",
-      "judged   DOD-B1-1 not held: The count is off",
-      "judged     by one for every quill.",
-      "judged   DOD-B1-2 held by 1 case",
-      "judged   2 findings remain: 1 for the",
-      "judged     builder, 1 for the test writer",
-      "judged   for the builder, condition: Count",
-      "judged     each quill once.",
-      "judged   for the test writer, Q3, b1 quill",
-      "judged     that was added is counted: kept",
-      "judged     from the card: it quotes a test",
-      "judged    by forge skills/review, tier deep",
-      "Unmarked lines were worked out by script.",
-      "You can:",
-      "  keep  Stop; the branches stay",
-      "Not available:",
-      "  merge      Merge into the integration",
-      "             branch",
-      "             why: 1 must item failed; the",
-      "             interface file",
-      "             components/base/interfaces/proo",
-      "             f.yaml changed during the",
-      "             rounds.",
-      "  send-back  A round after the card",
-      "             why: No round runs after the",
-      "             card.",
-      "  discard    Stop; the worktrees go",
-      "             why: Discarding comes with",
-      "             slice WD1.",
-      "checked: 0 ran, 14 computed, 5 judged",
-    ]);
     const kernel = await readFile(join(root, ".agentbay/kernel.db"));
     assert.ok(!kernel.toString("latin1").includes(alphabet));
     const kept = runOf(await decided(root, card, { step: "card", choice: "keep" }));

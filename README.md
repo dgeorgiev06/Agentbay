@@ -314,6 +314,7 @@ workflow or an output schema changes, they no longer start, and the refusal name
 components/base/forge/tests/recapture.ts [given-<name>.json ...]` makes them again: in a copy of the kit, it runs
 the whole end-to-end case each file comes from, writes the outputs of the steps before the one the test runs from,
 with the commits the test makes again by branch, and formats the files. `recapture.ts` lists, for each file, its
-case and the step its test runs from. With no file named it makes all three, in
-about two and a half minutes; the test that reads a file may then need its expected card changed to what the whole case
-now expects.
+case and the step its test runs from. A case that only remakes a file, since the test that reads the file holds every
+one of its assertions, runs only when `FORGE_RECAPTURE` is set, as `recapture.ts` sets it; the everyday suite skips
+it. With no file named it makes all four, in about four minutes. The whole cases do not check the cards
+their files lead to, so the test that reads a file may then need its expected card changed to the one it now prints.

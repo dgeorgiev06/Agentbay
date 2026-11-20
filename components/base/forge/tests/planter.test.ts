@@ -276,16 +276,9 @@ describe(
         owner,
         { ...fieldsOf(owner), name: `${caughtName} (2)` },
       ]);
-      const printed = await printedCard(root, runId);
-      assert.ok(!printed.some((line) => line.includes("planter")));
+      const card = waitingOf(await shown(root, runId), "card");
       assert.deepEqual(keptRows(root), []);
-      assert.equal(
-        textAt(
-          runOf(await decided(root, waitingOf(await shown(root, runId), "card"), { step: "card", choice: "keep" })),
-          "status",
-        ),
-        "done",
-      );
+      assert.equal(textAt(runOf(await decided(root, card, { step: "card", choice: "keep" })), "status"), "done");
       assert.deepEqual(branches(root), ["forge/P2", "forge/P2-tests-1"]);
       assert.deepEqual(worktrees(root), []);
     });

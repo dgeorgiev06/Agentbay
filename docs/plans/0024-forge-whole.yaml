@@ -17,43 +17,13 @@ slices:
       level: must
       proof:
         kind: checks
-- title: 'Planning: slices cut from the design, each meeting conditions; a challenge by another model; waves checks that every condition is met and every fixed file is made first'
-  slice:
-    name: PL1
-    kind: mode
-    scope:
-    - components/base/forge/**
-    - docs/plans/README.md
-    after: []
-    done:
-    - id: DOD-PL1-1
-      says: forge.waves names a condition no slice meets and a slice that changes a fixed file, and still accepts plans 0022 and 0023 as they are.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/base/forge/tests/plan-meets.test.ts
-    - id: DOD-PL1-2
-      says: The plan card shows the waves, the conditions met and the challenge's findings, each line as printed in design A.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/base/forge/tests/plan-card.test.ts
-    - id: DOD-PL1-3
-      says: The kit's checks and its whole test run pass.
-      level: must
-      proof:
-        kind: checks
 - title: 'Forge runs a wave: its slices side by side, each proved by its own tests, bugs and scope, the whole suite once on the wave''s combined result, and one merge card for the wave'
   slice:
     name: WV1
     kind: mode
     scope:
     - components/base/forge/**
-    after:
-    - slice: PL1
-      because: A wave comes from a plan that planning made.
+    after: []
     done:
     - id: DOD-WV1-1
       says: A wave of two slices is proved slice by slice without the whole suite, then once with it; when that fails, each slice is proved alone to name the cause; the merge card lists both slices.
@@ -77,8 +47,6 @@ slices:
     - docs/designs/todo/**
     - docs/plans/0024-todo-due-dates.yaml
     after:
-    - slice: PL1
-      because: It runs the design and planning workflows PL1 completes.
     - slice: TDX
       because: It adds to the todo mode TDX makes.
     done:

@@ -385,11 +385,10 @@ describe("a card names an item by the name its foreach declares, or by its place
     const { run, opened } = await namedCard({ trigger: items });
     const [first, second] = namesOf(run);
     assert.ok(isRecord(first), JSON.stringify(first));
-    const { id, title: shownTitle } = first;
+    const { id, title: text } = first;
+    assert.ok(typeof text === "string", JSON.stringify(first));
     assert.equal(second, null);
     assert.equal(id, `TD1 [fake] ${"x".repeat(28)}…`);
-    assert.equal(typeof shownTitle, "string");
-    const text = String(shownTitle);
     assert.equal(Array.from(text).length, 80);
     assert.ok(text.startsWith("First line second line] by the kernel: all passed ["), text);
     assert.ok(text.endsWith("…"), text);

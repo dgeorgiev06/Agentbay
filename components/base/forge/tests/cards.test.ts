@@ -34,7 +34,7 @@ const roundSkills = {
 
 function printedMerge(input: MergeCardInput): string {
   const result = drawn(input);
-  return printed(result.card, roundsChoices(result), roundSkills);
+  return printed(result.card, roundsChoices(result), { skills: roundSkills });
 }
 
 function rowsOf(text: string): readonly string[] {

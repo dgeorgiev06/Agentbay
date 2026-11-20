@@ -110,7 +110,7 @@ async function expectedCard(root: string, expected: Expected): Promise<string> {
     { name: "approve", does: "Commit the plan" },
     { name: "stop", does: "Stop; nothing is committed" },
   ];
-  return printed(drawn.card, choices, skills);
+  return printed(drawn.card, choices, { skills });
 }
 
 function actions(asked: readonly Asked[]): readonly string[] {

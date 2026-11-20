@@ -41,6 +41,8 @@ function hanging(words: string, first: string, rest: string): readonly string[] 
 
 type Skills = Readonly<Record<string, string>>;
 
+type By = { readonly skills?: Skills; readonly items?: readonly string[] };
+
 function itemOf(line: CardLine): number | undefined {
   return line.mark === "judged" ? line.source.item : undefined;
 }
@@ -106,12 +108,11 @@ function countedRow(lines: readonly CardLine[]): string {
 export function printed(
   card: { readonly title: string; readonly lines: readonly CardLine[] },
   choices: readonly PrintedChoice[] = [],
-  skills: Skills = {},
-  items: readonly string[] = [],
+  by: By = {},
 ): string {
   return [
     ...hanging(card.title, "", "  "),
-    ...lineRows(card.lines, skills, items),
+    ...lineRows(card.lines, by.skills ?? {}, by.items ?? []),
     footRow(card.lines),
     ...choiceGroup(
       "You can:",

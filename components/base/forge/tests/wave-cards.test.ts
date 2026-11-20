@@ -172,8 +172,10 @@ describe("the wave's merge card", () => {
         { name: "merge", does: "Merge the combined head into the integration branch" },
         { name: "keep", does: "Stop; every slice's branches stay" },
       ],
-      waveSkills,
-      ["TD1 (The td1 mode counts what was added)", "TD2 (The td2 mode counts what was added)"],
+      {
+        skills: waveSkills,
+        items: ["TD1 (The td1 mode counts what was added)", "TD2 (The td2 mode counts what was added)"],
+      },
     );
     assert.equal(
       text,

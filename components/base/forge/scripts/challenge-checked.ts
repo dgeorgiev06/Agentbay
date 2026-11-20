@@ -1,6 +1,7 @@
 import { defineScript, fieldsOf, type Json, type ScriptContext } from "../../../../bay/sdk.ts";
 import { challengeOf, refusedChallenge, type Challenge } from "./lib/challenge-answer.ts";
 import { checkAnswer } from "./lib/check-answer.ts";
+import { checkedExamples } from "./lib/design-examples.ts";
 import { designOf } from "./lib/design-form.ts";
 import { designProblems } from "./lib/design-rules.ts";
 import { askedPractices } from "./lib/practice-answers.ts";
@@ -19,12 +20,15 @@ async function mergedProblems(context: ScriptContext, asked: Json, challenge: Ch
     return shape.value.problems.map((problem) => `at ${problem.path || "its top"}, ${problem.message}`);
   }
   const requirements = requirementsOf(fieldsOf(asked).requirements ?? null);
-  return designProblems({
+  const design = designOf(challenge.design);
+  const problems = designProblems({
     job: requirements.job,
     file: textOf(fieldsOf(asked).file),
     conditions: conditionsOf(requirements),
-    design: designOf(challenge.design),
+    design,
   });
+  const examples = await checkedExamples(context, design);
+  return [...problems, ...examples.problems];
 }
 
 export const run = defineScript(async (input, context) => {

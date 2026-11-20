@@ -14,6 +14,7 @@ export type DesignCardInput = {
   readonly because: string;
   readonly design: Design;
   readonly problems: readonly string[];
+  readonly refusedSchemas: number;
   readonly practices: readonly PracticeAnswer[];
   readonly differences: readonly string[];
 };
@@ -87,18 +88,29 @@ function coverageWords(input: DesignCardInput): string {
     : `coverage: no action serves ${missed.join(", ")}`;
 }
 
+function examplesWords(input: DesignCardInput): string {
+  const examples = actionsOf(input.design).flatMap((action) => action.examples);
+  const refusals = examples.filter((example) => "refusal" in example.told).length;
+  const notChecked = [
+    ...(refusals === 0 ? [] : [`the input of the ${counted(refusals, "refusal")}`]),
+    ...(input.refusedSchemas === 0
+      ? []
+      : [`against the ${counted(input.refusedSchemas, "schema")} the kernel refused`]),
+  ];
+  const counts = `examples: ${String(examples.length)}`;
+  if (notChecked.length === 0) {
+    return `${counts}, each checked against its action's schemas`;
+  }
+  return `${counts}, checked against their actions' schemas, but not ${joined(notChecked)}`;
+}
+
 function checkLines(input: DesignCardInput): readonly CardLine[] {
-  const examples = actionsOf(input.design).flatMap((action) => action.examples).length;
   const found = input.problems.length === 0 ? "no problem" : counted(input.problems.length, "problem");
   return [
     computed("draw", coverageWords(input)),
     computed("draw", `checked by script: ${String(ruleCount)} rules of the design, ${found}`),
     ...input.problems.map((problem) => computed("draw", `problem: ${problem}`)),
-    computed(
-      "draw",
-      `examples: ${String(examples)}, not checked against their schemas, since the toolbox checks a value only ` +
-        "against a schema file",
-    ),
+    computed("draw", examplesWords(input)),
   ];
 }
 

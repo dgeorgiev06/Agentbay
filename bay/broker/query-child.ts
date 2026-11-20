@@ -5,6 +5,7 @@ type QueryOrder = {
   readonly sql: string;
   readonly rows: number;
   readonly resultBytes: number;
+  readonly lockWaitMilliseconds: number;
 };
 
 type QueryReply =
@@ -20,7 +21,8 @@ function isOrder(value: unknown): value is QueryOrder {
     typeof order.file === "string" &&
     typeof order.sql === "string" &&
     typeof order.rows === "number" &&
-    typeof order.resultBytes === "number"
+    typeof order.resultBytes === "number" &&
+    typeof order.lockWaitMilliseconds === "number"
   );
 }
 
@@ -32,7 +34,7 @@ function cell(value: SQLOutputValue): unknown {
 }
 
 function runOrder(order: QueryOrder): QueryReply {
-  const database = new DatabaseSync(order.file, { readOnly: true });
+  const database = new DatabaseSync(order.file, { readOnly: true, timeout: order.lockWaitMilliseconds });
   database.exec("pragma query_only = on");
   const wrapped = `select * from (\n${order.sql}\n)`;
   const statement = database.prepare(wrapped);

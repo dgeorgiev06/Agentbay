@@ -25,6 +25,13 @@ const keeper = {
       effects: ["read", "write"],
       run: [{ script: "scripts/keep.ts" }],
     },
+    prepare: {
+      description: "When a test needs a run that only migrates a database partition.",
+      input: "schemas/anything.json",
+      output: "schemas/anything.json",
+      effects: ["read", "write"],
+      run: [{ script: "scripts/prepare.ts" }],
+    },
   },
 };
 
@@ -43,6 +50,16 @@ const keepScript = [
   "",
 ].join("\n");
 
+const prepareScript = [
+  'import { defineScript, fail } from "agentbay/sdk";',
+  "",
+  "export const run = defineScript(async (_input, context) => {",
+  '  const migrated = await context.db.partition("notes").migrate();',
+  "  return migrated.ok ? { migrated: migrated.value } : fail(migrated.message);",
+  "});",
+  "",
+].join("\n");
+
 async function projectWithKeeper(): Promise<Project> {
   const project = await makeProject();
   const folder = "components/modes/keeper";
@@ -50,6 +67,7 @@ async function projectWithKeeper(): Promise<Project> {
   await project.write(`${folder}/schemas/anything.json`, '{ "type": "object" }\n');
   await project.write(`${folder}/migrations/0001-kept.sql`, "create table kept (text text not null);\n");
   await project.write(`${folder}/scripts/keep.ts`, keepScript);
+  await project.write(`${folder}/scripts/prepare.ts`, prepareScript);
   return project;
 }
 
@@ -74,8 +92,8 @@ function assertOwnerOnly(entries: readonly Entry[]): void {
   }
 }
 
-async function kept(kernel: Kernel): Promise<void> {
-  const run = await kernel.runs.start({ action: "keeper.keep" }, {});
+async function kept(kernel: Kernel, action = "keeper.keep"): Promise<void> {
+  const run = await kernel.runs.start({ action }, {});
   assert.ok(run.ok && run.value.state.status === "done", JSON.stringify(run));
 }
 
@@ -113,6 +131,29 @@ test("a folder or database file left wider than owner-only is narrowed when the 
   try {
     await kept(kernel);
     assertOwnerOnly(await entriesOf(project.root));
+  } finally {
+    kernel.close();
+    await project.remove();
+  }
+});
+
+test("a database file and its side files left wider than owner-only are narrowed by a run that only migrates", async () => {
+  const project = await projectWithKeeper();
+  const first = await openKernel(project);
+  await kept(first);
+  first.close();
+  for (const entry of await entriesOf(project.root)) {
+    await chmod(join(project.root, entry.path), entry.path.includes(".db") ? 0o644 : 0o755);
+  }
+  const kernel = await openKernel(project);
+  try {
+    await kept(kernel, "keeper.prepare");
+    const partition = (await entriesOf(project.root)).filter((entry) => entry.path.includes("keeper--notes.db"));
+    assert.ok(
+      partition.some((entry) => entry.path.endsWith("-wal")),
+      JSON.stringify(partition),
+    );
+    assertOwnerOnly(partition);
   } finally {
     kernel.close();
     await project.remove();

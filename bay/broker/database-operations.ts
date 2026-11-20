@@ -11,6 +11,7 @@ import {
   refused,
 } from "../answers.ts";
 import type { Json } from "../contracts.ts";
+import { databaseLockWaitMilliseconds } from "../database-lock.ts";
 import type { DatabaseResult, Migration } from "./database.ts";
 import { isInsideOrEqual, shownPath } from "../layout.ts";
 import { type OperationName, type Reading, shapes } from "./operations.ts";
@@ -50,6 +51,7 @@ type LateRefusals = {
   readonly writesOnReadOnly: RefusalWording;
   readonly severalStatements: RefusalWording;
   readonly missing: string;
+  readonly busy: string;
 };
 
 type MigrationPlan = {
@@ -109,8 +111,16 @@ function missingDatabase(asking: Asking): string {
   return `The mode ${asking.grants.mode} has no database yet; run its migrations first.`;
 }
 
-function lateRefusals(keyword: string, asking: Asking): LateRefusals {
+function busyDatabase(shownFile: string, held: string, reference: string): string {
+  return (
+    `The database ${shownFile} stayed locked by another connection for ${String(databaseLockWaitMilliseconds)} ms, ` +
+    `the longest the broker waits, so ${held} did not run. Run the action ${reference} again.`
+  );
+}
+
+function lateRefusals(keyword: string, file: string, asking: Asking): LateRefusals {
   const { action } = asking.at;
+  const held = keyword === "migrate" ? "its migrations" : "the statement";
   return {
     writesOnReadOnly: {
       resource: "db",
@@ -125,6 +135,7 @@ function lateRefusals(keyword: string, asking: Asking): LateRefusals {
       change: "Send each statement in its own call.",
     },
     missing: missingDatabase(asking),
+    busy: busyDatabase(shownPath(asking.layout, file), held, `${asking.grants.mode}.${action}`),
   };
 }
 
@@ -140,7 +151,7 @@ function migrationPlan(file: string, asking: Asking): Ruling<MigrationPlan> {
     });
   }
   const shownFolder = shownPath(asking.layout, folder);
-  return allowedWith({ file, folder, shownFolder, late: lateRefusals("migrate", asking) });
+  return allowedWith({ file, folder, shownFolder, late: lateRefusals("migrate", file, asking) });
 }
 
 function migrationFirst(partition: string | undefined, asking: Asking): Ruling<MigrationPlan | undefined> {
@@ -178,7 +189,7 @@ function statementRule(
     sql: request.sql,
     parameters: request.parameters,
     migrateFirst: migrateFirst.value,
-    late: lateRefusals(keyword, asking),
+    late: lateRefusals(keyword, file.value, asking),
   });
 }
 
@@ -198,6 +209,8 @@ function databaseAnswer<T>(
       return refused(late.writesOnReadOnly);
     case "several-statements":
       return refused(late.severalStatements);
+    case "busy":
+      return failed(late.busy);
     case "error":
       return failed(`The statement failed: ${result.message}`);
   }

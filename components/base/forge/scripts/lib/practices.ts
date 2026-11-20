@@ -81,10 +81,6 @@ export function reviewersPractices(text: string): readonly Practice[] {
   return practicesHeldBy(text, reviewersWords);
 }
 
-export function plannedPractices(text: string): readonly Practice[] {
-  return practicesHeldBy(text, plannedWords);
-}
-
 export function checksPractices(text: string): readonly Practice[] {
   const reviewers = reviewersPractices(text).map((practice) => practice.id);
   return practicesHeldBy(text, checkWords).filter((practice) => !reviewers.includes(practice.id));

@@ -83,11 +83,10 @@ function toolchainRunOf(value: Json, asked: Asked): CommandRun {
   }
 }
 
-async function bayRun(step: ProofStep, folder: string, words: readonly string[]): Promise<CommandRun> {
-  const seconds = step.secondsLeft(1);
-  if (seconds < 1) {
-    return notKnown(noTimeLeftSentence(step.limits, "run"));
-  }
+type Place = { readonly folder: string; readonly seconds: number };
+
+async function bayRun(step: ProofStep, place: Place, words: readonly string[]): Promise<CommandRun> {
+  const { folder, seconds } = place;
   const answer = await step.context.commands.run({
     name: bay,
     arguments: words,
@@ -104,13 +103,10 @@ async function bayRun(step: ProofStep, folder: string, words: readonly string[])
 
 async function toolchainRun(
   step: ProofStep,
-  folder: string,
+  place: Place,
   command: { readonly name: string; readonly arguments: readonly string[] },
 ): Promise<CommandRun> {
-  const seconds = step.secondsLeft(1);
-  if (seconds < 1) {
-    return notKnown(noTimeLeftSentence(step.limits, "run"));
-  }
+  const { folder, seconds } = place;
   const asked = { folder, name: command.name, arguments: command.arguments, timeLimitSeconds: seconds };
   const answer = await step.called("toolchain.run", asked);
   if (!answer.ok) {
@@ -122,12 +118,16 @@ async function toolchainRun(
   return toolchainRunOf(answer.value, { seconds, limits: step.limits });
 }
 
-function commandRun(step: ProofStep, folder: string, command: Command): Promise<CommandRun> {
+async function commandRun(step: ProofStep, folder: string, command: Command): Promise<CommandRun> {
+  const seconds = step.secondsLeft(1);
+  if (seconds < 1) {
+    return notKnown(noTimeLeftSentence(step.limits, "run"));
+  }
   switch (command.through) {
     case "bay":
-      return bayRun(step, folder, command.words);
+      return bayRun(step, { folder, seconds }, command.words);
     case "toolchain":
-      return toolchainRun(step, folder, command);
+      return toolchainRun(step, { folder, seconds }, command);
   }
 }
 

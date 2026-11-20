@@ -3,7 +3,7 @@ import { conditionsOf, type Outcome, type Requirements } from "./requirements-fo
 
 export type DesignPath = "light" | "full";
 
-export const designTier = "deep";
+const designTier = "deep";
 
 const stances: Readonly<Record<"first" | "second", string>> = {
   first: "Use the fewest modules and actions that serve every condition.",

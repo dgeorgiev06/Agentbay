@@ -7,7 +7,7 @@ import { designCard, type DesignCardInput } from "../scripts/lib/design-card.ts"
 import { differences } from "../scripts/lib/design-compare.ts";
 import { designOf } from "../scripts/lib/design-form.ts";
 import { listOf } from "../scripts/lib/json-values.ts";
-import { designTier, pathCard } from "../scripts/lib/path-card.ts";
+import { pathCard } from "../scripts/lib/path-card.ts";
 import { conditionsOf, requirementsOf, type Requirements } from "../scripts/lib/requirements-form.ts";
 import { printed } from "./printed-card.ts";
 import { todoDesign, todoHides } from "./todo-design.ts";
@@ -163,11 +163,10 @@ function renamed(design: Json): Json {
 
 describe("the design's first card and the design card, for the todo mode", () => {
   test("the first card shows the outcomes, the count of conditions and what each path costs, as printed", async () => {
-    assert.equal(designTier, "deep");
     assert.equal(printed(pathCard(file, await todoRequirements()), pathChoices), firstCard);
   });
 
-  test("the mode's designer and challenger run at the tier the first card names", async () => {
+  test("the mode's designer and challenger run at tier deep, which the first card names", async () => {
     const read = readYaml(await readFile(new URL("../mode.yaml", import.meta.url), "utf8"));
     assert.ok(read.ok);
     const actions = fieldsOf(fieldsOf(read.value).actions ?? null);
@@ -175,7 +174,7 @@ describe("the design's first card and the design card, for the todo mode", () =>
       const [first = null] = listOf(fieldsOf(actions[name] ?? null).run);
       return fieldsOf(first).tier ?? null;
     };
-    assert.deepEqual([tierOf("design"), tierOf("challenge")], [designTier, designTier]);
+    assert.deepEqual([tierOf("design"), tierOf("challenge")], ["deep", "deep"]);
   });
 
   test("the design card on the light path, every practice held, offers approve, line by line", async () => {

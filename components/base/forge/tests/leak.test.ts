@@ -215,11 +215,19 @@ function holding(texts: readonly string[], within: string): readonly string[] {
   return texts.filter((text) => within.includes(text) || within.includes(JSON.stringify(text).slice(1, -1)));
 }
 
-async function assertNothingLeft(root: string, name: string, ran: Ran): Promise<void> {
+type Left = {
+  readonly name: string;
+  readonly ran: Ran;
+  readonly tests?: { readonly branch: string; readonly text: string };
+};
+
+async function assertNothingLeft(root: string, left: Left): Promise<void> {
+  const { name, ran } = left;
+  const tests = left.tests ?? { branch: `forge/${name}-tests-1`, text: testsOf(name).text };
   assert.deepEqual(worktrees(root), []);
   assert.deepEqual(keptRows(root), []);
-  assert.deepEqual(branches(root), [`forge/${name}`, `forge/${name}-tests-1`]);
-  assert.equal(git(root, ["show", `forge/${name}-tests-1:${testPath(name)}`]), testsOf(name).text);
+  assert.deepEqual(branches(root), [`forge/${name}`, tests.branch]);
+  assert.equal(git(root, ["show", `${tests.branch}:${testPath(name)}`]), tests.text);
   assert.deepEqual(await filesHolding(root, "", [ran.mark]), []);
 }
 
@@ -270,7 +278,7 @@ describe(
         ],
       );
       await decided(root, card, { step: "card", choice: "keep" });
-      await assertNothingLeft(root, name, ran);
+      await assertNothingLeft(root, { name, ran });
     });
 
     test("a build that holds the mark planted in the kept tests ends the rounds, and the mark is nowhere but in its own branch", async () => {
@@ -302,7 +310,7 @@ describe(
       assert.equal(textAt(listOf(card.choices)[0] ?? null, "reason"), "The builder's work holds text from the tests.");
       assert.ok(git(root, ["show", `forge/${name}:${codeOf(name)}`]).includes(ran.mark));
       await decided(root, card, { step: "card", choice: "keep" });
-      await assertNothingLeft(root, name, ran);
+      await assertNothingLeft(root, { name, ran });
     });
 
     test("a build that shares only imports, a path, a name and a condition's sentence goes on to review, the planter and a merge on offer, and no later task holds the mark", async () => {
@@ -369,7 +377,7 @@ describe(
       const card = waitingOf(await shown(root, ran.runId), "card");
       assert.equal(textAt(listOf(card.choices)[0] ?? null, "status"), "offered");
       await decided(root, card, { step: "card", choice: "keep" });
-      await assertNothingLeft(root, name, ran);
+      await assertNothingLeft(root, { name, ran, tests: { branch: `forge/${name}-tests-2`, text: amended.text } });
     });
   },
 );

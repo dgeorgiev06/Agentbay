@@ -1,0 +1,456 @@
+{
+  "input": {
+    "checked": {
+      "answer": "accepted",
+      "file": "docs/requirements/todo.yaml",
+      "requirements": {
+        "job": "todo",
+        "version": 1,
+        "title": "A todo list kept by agentbay",
+        "for": "The owner, who keeps short tasks beside his work.",
+        "asked": [
+          {
+            "by": "owner",
+            "on": "2026-11-18",
+            "words": "A todo mode. Add and list, done and remove. Then due dates."
+          }
+        ],
+        "constraints": [
+          "It is a mode of the kit, under components/modes/todo.",
+          "It uses no network."
+        ],
+        "outcomes": [
+          {
+            "id": "O1",
+            "says": "A person adds a todo and sees it among the open ones.",
+            "from": [
+              "asked 1"
+            ],
+            "conditions": [
+              {
+                "id": "O1-C1",
+                "path": "works",
+                "given": "no todos",
+                "when": "the person adds \"buy milk\", then lists the open todos",
+                "then": "1 todo is listed, with id 1, text \"buy milk\" and status \"open\""
+              },
+              {
+                "id": "O1-C2",
+                "path": "works",
+                "given": "the todos \"buy milk\" and \"call the bank\" were added in that order",
+                "when": "the person lists the open todos",
+                "then": "the list is \"buy milk\" first and \"call the bank\" second"
+              },
+              {
+                "id": "O1-C3",
+                "path": "works",
+                "given": "no todos",
+                "when": "the person lists the open todos",
+                "then": "0 todos are listed"
+              },
+              {
+                "id": "O1-C4",
+                "path": "works",
+                "given": "no todos",
+                "when": "the person adds a text of exactly 500 characters",
+                "then": "the open list shows that text whole, all 500 characters"
+              },
+              {
+                "id": "O1-C5",
+                "path": "refused",
+                "given": "the todo \"buy milk\" was added",
+                "when": "the person adds a todo with the text \"\"",
+                "then": "it is refused with a sentence that contains \"text is empty\"",
+                "after": "the open list shows only \"buy milk\""
+              },
+              {
+                "id": "O1-C6",
+                "path": "refused",
+                "given": "the todo \"buy milk\" was added",
+                "when": "the person adds a todo with the text \"   \", three spaces",
+                "then": "it is refused with a sentence that contains \"text is empty\"",
+                "after": "the open list shows only \"buy milk\""
+              },
+              {
+                "id": "O1-C7",
+                "path": "refused",
+                "given": "the todo \"buy milk\" was added",
+                "when": "the person adds a text of 501 characters",
+                "then": "it is refused with a sentence that contains \"at most 500\"",
+                "after": "the open list shows only \"buy milk\""
+              }
+            ]
+          },
+          {
+            "id": "O2",
+            "says": "A person marks a todo done, or removes it.",
+            "from": [
+              "asked 1"
+            ],
+            "conditions": [
+              {
+                "id": "O2-C1",
+                "path": "works",
+                "given": "the open todos 1 \"buy milk\" and 2 \"call the bank\"",
+                "when": "the person marks 1 done, then lists the open todos",
+                "then": "only \"call the bank\" is listed"
+              },
+              {
+                "id": "O2-C2",
+                "path": "works",
+                "given": "todo 1 \"buy milk\" was marked done",
+                "when": "the person lists all todos",
+                "then": "the todo \"buy milk\" is listed with status \"done\""
+              },
+              {
+                "id": "O2-C3",
+                "path": "works",
+                "given": "the todos 1 \"buy milk\" and 2 \"call the bank\"",
+                "when": "the person removes 2, then lists all todos",
+                "then": "only \"buy milk\" is listed"
+              },
+              {
+                "id": "O2-C4",
+                "path": "works",
+                "given": "the todos 1 and 2, and 2 was removed",
+                "when": "the person adds \"post the letter\"",
+                "then": "it gets id 3, not 2"
+              },
+              {
+                "id": "O2-C5",
+                "path": "refused",
+                "given": "the todo 1 \"buy milk\" and no other",
+                "when": "the person marks 99 done, or removes 99",
+                "then": "it is refused with a sentence that contains \"No todo has the id 99\"",
+                "after": "all todos still list only \"buy milk\", open"
+              },
+              {
+                "id": "O2-C6",
+                "path": "refused",
+                "given": "todo 1 \"buy milk\" was marked done",
+                "when": "the person marks 1 done again",
+                "then": "it is refused with a sentence that contains \"already done\"",
+                "after": "all todos still list \"buy milk\" once, with status \"done\""
+              }
+            ]
+          }
+        ],
+        "judged": [
+          "Every sentence a person reads from the mode says what to do next."
+        ],
+        "leftOut": [
+          "Editing a todo's text.",
+          "A time of day on a due date.",
+          "Reminders.",
+          "Due dates and overdue todos, asked for next, once add, list, done and remove work.",
+          "Sharing a list with another person or project."
+        ],
+        "open": [],
+        "decided": [
+          {
+            "question": "What happens when a todo already done is marked done again?",
+            "answer": "It is refused, and the sentence says it is already done",
+            "by": "owner",
+            "on": "2026-11-18",
+            "run": "none, written by hand from the PM mode design"
+          },
+          {
+            "question": "Is the id of a removed todo given to a new one?",
+            "answer": "No, ids are never reused",
+            "by": "owner",
+            "on": "2026-11-18",
+            "run": "none, written by hand from the PM mode design"
+          },
+          {
+            "question": "How long may a todo's text be?",
+            "answer": "500 characters",
+            "by": "owner",
+            "on": "2026-11-18",
+            "run": "none, written by hand from the PM mode design"
+          }
+        ],
+        "signed": {
+          "by": "owner",
+          "on": "2026-11-18",
+          "run": "none, written by hand from the PM mode design"
+        },
+        "changes": [
+          {
+            "version": 1,
+            "on": "2026-11-18",
+            "added": [
+              "O1-C1",
+              "O1-C2",
+              "O1-C3",
+              "O1-C4",
+              "O1-C5",
+              "O1-C6",
+              "O1-C7",
+              "O2-C1",
+              "O2-C2",
+              "O2-C3",
+              "O2-C4",
+              "O2-C5",
+              "O2-C6"
+            ],
+            "changed": [],
+            "removed": []
+          }
+        ]
+      }
+    }
+  },
+  "output": {
+    "file": "docs/requirements/todo.yaml",
+    "job": "todo",
+    "requirements": {
+      "job": "todo",
+      "version": 1,
+      "title": "A todo list kept by agentbay",
+      "for": "The owner, who keeps short tasks beside his work.",
+      "asked": [
+        {
+          "by": "owner",
+          "on": "2026-11-18",
+          "words": "A todo mode. Add and list, done and remove. Then due dates."
+        }
+      ],
+      "constraints": [
+        "It is a mode of the kit, under components/modes/todo.",
+        "It uses no network."
+      ],
+      "outcomes": [
+        {
+          "id": "O1",
+          "says": "A person adds a todo and sees it among the open ones.",
+          "from": [
+            "asked 1"
+          ],
+          "conditions": [
+            {
+              "id": "O1-C1",
+              "path": "works",
+              "given": "no todos",
+              "when": "the person adds \"buy milk\", then lists the open todos",
+              "then": "1 todo is listed, with id 1, text \"buy milk\" and status \"open\""
+            },
+            {
+              "id": "O1-C2",
+              "path": "works",
+              "given": "the todos \"buy milk\" and \"call the bank\" were added in that order",
+              "when": "the person lists the open todos",
+              "then": "the list is \"buy milk\" first and \"call the bank\" second"
+            },
+            {
+              "id": "O1-C3",
+              "path": "works",
+              "given": "no todos",
+              "when": "the person lists the open todos",
+              "then": "0 todos are listed"
+            },
+            {
+              "id": "O1-C4",
+              "path": "works",
+              "given": "no todos",
+              "when": "the person adds a text of exactly 500 characters",
+              "then": "the open list shows that text whole, all 500 characters"
+            },
+            {
+              "id": "O1-C5",
+              "path": "refused",
+              "given": "the todo \"buy milk\" was added",
+              "when": "the person adds a todo with the text \"\"",
+              "then": "it is refused with a sentence that contains \"text is empty\"",
+              "after": "the open list shows only \"buy milk\""
+            },
+            {
+              "id": "O1-C6",
+              "path": "refused",
+              "given": "the todo \"buy milk\" was added",
+              "when": "the person adds a todo with the text \"   \", three spaces",
+              "then": "it is refused with a sentence that contains \"text is empty\"",
+              "after": "the open list shows only \"buy milk\""
+            },
+            {
+              "id": "O1-C7",
+              "path": "refused",
+              "given": "the todo \"buy milk\" was added",
+              "when": "the person adds a text of 501 characters",
+              "then": "it is refused with a sentence that contains \"at most 500\"",
+              "after": "the open list shows only \"buy milk\""
+            }
+          ]
+        },
+        {
+          "id": "O2",
+          "says": "A person marks a todo done, or removes it.",
+          "from": [
+            "asked 1"
+          ],
+          "conditions": [
+            {
+              "id": "O2-C1",
+              "path": "works",
+              "given": "the open todos 1 \"buy milk\" and 2 \"call the bank\"",
+              "when": "the person marks 1 done, then lists the open todos",
+              "then": "only \"call the bank\" is listed"
+            },
+            {
+              "id": "O2-C2",
+              "path": "works",
+              "given": "todo 1 \"buy milk\" was marked done",
+              "when": "the person lists all todos",
+              "then": "the todo \"buy milk\" is listed with status \"done\""
+            },
+            {
+              "id": "O2-C3",
+              "path": "works",
+              "given": "the todos 1 \"buy milk\" and 2 \"call the bank\"",
+              "when": "the person removes 2, then lists all todos",
+              "then": "only \"buy milk\" is listed"
+            },
+            {
+              "id": "O2-C4",
+              "path": "works",
+              "given": "the todos 1 and 2, and 2 was removed",
+              "when": "the person adds \"post the letter\"",
+              "then": "it gets id 3, not 2"
+            },
+            {
+              "id": "O2-C5",
+              "path": "refused",
+              "given": "the todo 1 \"buy milk\" and no other",
+              "when": "the person marks 99 done, or removes 99",
+              "then": "it is refused with a sentence that contains \"No todo has the id 99\"",
+              "after": "all todos still list only \"buy milk\", open"
+            },
+            {
+              "id": "O2-C6",
+              "path": "refused",
+              "given": "todo 1 \"buy milk\" was marked done",
+              "when": "the person marks 1 done again",
+              "then": "it is refused with a sentence that contains \"already done\"",
+              "after": "all todos still list \"buy milk\" once, with status \"done\""
+            }
+          ]
+        }
+      ],
+      "judged": [
+        "Every sentence a person reads from the mode says what to do next."
+      ],
+      "leftOut": [
+        "Editing a todo's text.",
+        "A time of day on a due date.",
+        "Reminders.",
+        "Due dates and overdue todos, asked for next, once add, list, done and remove work.",
+        "Sharing a list with another person or project."
+      ],
+      "open": [],
+      "decided": [
+        {
+          "question": "What happens when a todo already done is marked done again?",
+          "answer": "It is refused, and the sentence says it is already done",
+          "by": "owner",
+          "on": "2026-11-18",
+          "run": "none, written by hand from the PM mode design"
+        },
+        {
+          "question": "Is the id of a removed todo given to a new one?",
+          "answer": "No, ids are never reused",
+          "by": "owner",
+          "on": "2026-11-18",
+          "run": "none, written by hand from the PM mode design"
+        },
+        {
+          "question": "How long may a todo's text be?",
+          "answer": "500 characters",
+          "by": "owner",
+          "on": "2026-11-18",
+          "run": "none, written by hand from the PM mode design"
+        }
+      ],
+      "signed": {
+        "by": "owner",
+        "on": "2026-11-18",
+        "run": "none, written by hand from the PM mode design"
+      },
+      "changes": [
+        {
+          "version": 1,
+          "on": "2026-11-18",
+          "added": [
+            "O1-C1",
+            "O1-C2",
+            "O1-C3",
+            "O1-C4",
+            "O1-C5",
+            "O1-C6",
+            "O1-C7",
+            "O2-C1",
+            "O2-C2",
+            "O2-C3",
+            "O2-C4",
+            "O2-C5",
+            "O2-C6"
+          ],
+          "changed": [],
+          "removed": []
+        }
+      ]
+    },
+    "card": {
+      "title": "Which path for the design of todo?",
+      "lines": [
+        {
+          "mark": "computed",
+          "words": "requirements: docs/requirements/todo.yaml, version 1, signed by owner",
+          "source": {
+            "step": "start"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "O1, 7 conditions: A person adds a todo and sees it among the open ones.",
+          "source": {
+            "step": "start"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "O2, 6 conditions: A person marks a todo done, or removes it.",
+          "source": {
+            "step": "start"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "in all: 2 outcomes, 13 conditions; 5 left out on purpose",
+          "source": {
+            "step": "start"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "light: one designer, then a challenger who answers the practices held by design: 2 calls at tier deep, up to 6 when checks send them back",
+          "source": {
+            "step": "start"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "full: two designers who write apart, then a challenger who compares the two and chooses: 3 calls at tier deep, up to 9 when checks send them back",
+          "source": {
+            "step": "start"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "either path writes each action's request and response as schema files",
+          "source": {
+            "step": "start"
+          }
+        }
+      ]
+    }
+  }
+}

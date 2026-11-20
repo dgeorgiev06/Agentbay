@@ -1,0 +1,698 @@
+{
+  "input": {
+    "file": "docs/requirements/todo.yaml",
+    "requirements": {
+      "job": "todo",
+      "version": 1,
+      "title": "A todo list kept by agentbay",
+      "for": "The owner, who keeps short tasks beside his work.",
+      "asked": [
+        {
+          "by": "owner",
+          "on": "2026-11-18",
+          "words": "A todo mode. Add and list, done and remove. Then due dates."
+        }
+      ],
+      "constraints": [
+        "It is a mode of the kit, under components/modes/todo.",
+        "It uses no network."
+      ],
+      "outcomes": [
+        {
+          "id": "O1",
+          "says": "A person adds a todo and sees it among the open ones.",
+          "from": [
+            "asked 1"
+          ],
+          "conditions": [
+            {
+              "id": "O1-C1",
+              "path": "works",
+              "given": "no todos",
+              "when": "the person adds \"buy milk\", then lists the open todos",
+              "then": "1 todo is listed, with id 1, text \"buy milk\" and status \"open\""
+            },
+            {
+              "id": "O1-C2",
+              "path": "works",
+              "given": "the todos \"buy milk\" and \"call the bank\" were added in that order",
+              "when": "the person lists the open todos",
+              "then": "the list is \"buy milk\" first and \"call the bank\" second"
+            },
+            {
+              "id": "O1-C3",
+              "path": "works",
+              "given": "no todos",
+              "when": "the person lists the open todos",
+              "then": "0 todos are listed"
+            },
+            {
+              "id": "O1-C4",
+              "path": "works",
+              "given": "no todos",
+              "when": "the person adds a text of exactly 500 characters",
+              "then": "the open list shows that text whole, all 500 characters"
+            },
+            {
+              "id": "O1-C5",
+              "path": "refused",
+              "given": "the todo \"buy milk\" was added",
+              "when": "the person adds a todo with the text \"\"",
+              "then": "it is refused with a sentence that contains \"text is empty\"",
+              "after": "the open list shows only \"buy milk\""
+            },
+            {
+              "id": "O1-C6",
+              "path": "refused",
+              "given": "the todo \"buy milk\" was added",
+              "when": "the person adds a todo with the text \"   \", three spaces",
+              "then": "it is refused with a sentence that contains \"text is empty\"",
+              "after": "the open list shows only \"buy milk\""
+            },
+            {
+              "id": "O1-C7",
+              "path": "refused",
+              "given": "the todo \"buy milk\" was added",
+              "when": "the person adds a text of 501 characters",
+              "then": "it is refused with a sentence that contains \"at most 500\"",
+              "after": "the open list shows only \"buy milk\""
+            }
+          ]
+        },
+        {
+          "id": "O2",
+          "says": "A person marks a todo done, or removes it.",
+          "from": [
+            "asked 1"
+          ],
+          "conditions": [
+            {
+              "id": "O2-C1",
+              "path": "works",
+              "given": "the open todos 1 \"buy milk\" and 2 \"call the bank\"",
+              "when": "the person marks 1 done, then lists the open todos",
+              "then": "only \"call the bank\" is listed"
+            },
+            {
+              "id": "O2-C2",
+              "path": "works",
+              "given": "todo 1 \"buy milk\" was marked done",
+              "when": "the person lists all todos",
+              "then": "the todo \"buy milk\" is listed with status \"done\""
+            },
+            {
+              "id": "O2-C3",
+              "path": "works",
+              "given": "the todos 1 \"buy milk\" and 2 \"call the bank\"",
+              "when": "the person removes 2, then lists all todos",
+              "then": "only \"buy milk\" is listed"
+            },
+            {
+              "id": "O2-C4",
+              "path": "works",
+              "given": "the todos 1 and 2, and 2 was removed",
+              "when": "the person adds \"post the letter\"",
+              "then": "it gets id 3, not 2"
+            },
+            {
+              "id": "O2-C5",
+              "path": "refused",
+              "given": "the todo 1 \"buy milk\" and no other",
+              "when": "the person marks 99 done, or removes 99",
+              "then": "it is refused with a sentence that contains \"No todo has the id 99\"",
+              "after": "all todos still list only \"buy milk\", open"
+            },
+            {
+              "id": "O2-C6",
+              "path": "refused",
+              "given": "todo 1 \"buy milk\" was marked done",
+              "when": "the person marks 1 done again",
+              "then": "it is refused with a sentence that contains \"already done\"",
+              "after": "all todos still list \"buy milk\" once, with status \"done\""
+            }
+          ]
+        }
+      ],
+      "judged": [
+        "Every sentence a person reads from the mode says what to do next."
+      ],
+      "leftOut": [
+        "Editing a todo's text.",
+        "A time of day on a due date.",
+        "Reminders.",
+        "Due dates and overdue todos, asked for next, once add, list, done and remove work.",
+        "Sharing a list with another person or project."
+      ],
+      "open": [],
+      "decided": [
+        {
+          "question": "What happens when a todo already done is marked done again?",
+          "answer": "It is refused, and the sentence says it is already done",
+          "by": "owner",
+          "on": "2026-11-18",
+          "run": "none, written by hand from the PM mode design"
+        },
+        {
+          "question": "Is the id of a removed todo given to a new one?",
+          "answer": "No, ids are never reused",
+          "by": "owner",
+          "on": "2026-11-18",
+          "run": "none, written by hand from the PM mode design"
+        },
+        {
+          "question": "How long may a todo's text be?",
+          "answer": "500 characters",
+          "by": "owner",
+          "on": "2026-11-18",
+          "run": "none, written by hand from the PM mode design"
+        }
+      ],
+      "signed": {
+        "by": "owner",
+        "on": "2026-11-18",
+        "run": "none, written by hand from the PM mode design"
+      },
+      "changes": [
+        {
+          "version": 1,
+          "on": "2026-11-18",
+          "added": [
+            "O1-C1",
+            "O1-C2",
+            "O1-C3",
+            "O1-C4",
+            "O1-C5",
+            "O1-C6",
+            "O1-C7",
+            "O2-C1",
+            "O2-C2",
+            "O2-C3",
+            "O2-C4",
+            "O2-C5",
+            "O2-C6"
+          ],
+          "changed": [],
+          "removed": []
+        }
+      ]
+    },
+    "challenged": {
+      "path": "light",
+      "chosen": "first",
+      "because": "It serves every condition with four actions on one table.",
+      "design": {
+        "modules": [
+          {
+            "name": "todo",
+            "hides": "How todos are kept, numbered and never given a removed id again.",
+            "implements": [
+              "todo"
+            ],
+            "owns": {
+              "tables": [
+                "todos"
+              ]
+            }
+          }
+        ],
+        "interfaces": [
+          {
+            "name": "todo",
+            "actions": [
+              {
+                "name": "add",
+                "request": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "text"
+                  ],
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "maxLength": 500
+                    }
+                  }
+                },
+                "response": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "id",
+                    "text",
+                    "status"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "text": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "status": {
+                      "enum": [
+                        "open",
+                        "done"
+                      ]
+                    }
+                  }
+                },
+                "serves": [
+                  "O1-C1",
+                  "O1-C4",
+                  "O1-C5",
+                  "O1-C6",
+                  "O1-C7",
+                  "O2-C4"
+                ],
+                "examples": [
+                  {
+                    "input": {
+                      "text": "buy milk"
+                    },
+                    "answer": {
+                      "id": 1,
+                      "text": "buy milk",
+                      "status": "open"
+                    }
+                  },
+                  {
+                    "earlier": [
+                      {
+                        "action": "add",
+                        "input": {
+                          "text": "buy milk"
+                        }
+                      }
+                    ],
+                    "input": {
+                      "text": ""
+                    },
+                    "refusal": "The text is empty; give the todo a text of 1 to 500 characters."
+                  },
+                  {
+                    "earlier": [
+                      {
+                        "action": "add",
+                        "input": {
+                          "text": "buy milk"
+                        }
+                      },
+                      {
+                        "action": "add",
+                        "input": {
+                          "text": "call the bank"
+                        }
+                      },
+                      {
+                        "action": "remove",
+                        "input": {
+                          "id": 2
+                        }
+                      }
+                    ],
+                    "input": {
+                      "text": "post the letter"
+                    },
+                    "answer": {
+                      "id": 3,
+                      "text": "post the letter",
+                      "status": "open"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "list",
+                "request": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "open",
+                        "all"
+                      ]
+                    }
+                  }
+                },
+                "response": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "todos"
+                  ],
+                  "properties": {
+                    "todos": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "add-response.json"
+                      }
+                    }
+                  }
+                },
+                "serves": [
+                  "O1-C1",
+                  "O1-C2",
+                  "O1-C3",
+                  "O2-C1",
+                  "O2-C2",
+                  "O2-C3"
+                ],
+                "examples": [
+                  {
+                    "input": {},
+                    "answer": {
+                      "todos": []
+                    }
+                  },
+                  {
+                    "earlier": [
+                      {
+                        "action": "add",
+                        "input": {
+                          "text": "buy milk"
+                        }
+                      },
+                      {
+                        "action": "add",
+                        "input": {
+                          "text": "call the bank"
+                        }
+                      }
+                    ],
+                    "input": {
+                      "status": "open"
+                    },
+                    "answer": {
+                      "todos": [
+                        {
+                          "id": 1,
+                          "text": "buy milk",
+                          "status": "open"
+                        },
+                        {
+                          "id": 2,
+                          "text": "call the bank",
+                          "status": "open"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "done",
+                "request": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "id"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  }
+                },
+                "response": {
+                  "$ref": "add-response.json"
+                },
+                "serves": [
+                  "O2-C1",
+                  "O2-C2",
+                  "O2-C5",
+                  "O2-C6"
+                ],
+                "examples": [
+                  {
+                    "earlier": [
+                      {
+                        "action": "add",
+                        "input": {
+                          "text": "buy milk"
+                        }
+                      }
+                    ],
+                    "input": {
+                      "id": 1
+                    },
+                    "answer": {
+                      "id": 1,
+                      "text": "buy milk",
+                      "status": "done"
+                    }
+                  },
+                  {
+                    "earlier": [
+                      {
+                        "action": "add",
+                        "input": {
+                          "text": "buy milk"
+                        }
+                      },
+                      {
+                        "action": "done",
+                        "input": {
+                          "id": 1
+                        }
+                      }
+                    ],
+                    "input": {
+                      "id": 1
+                    },
+                    "refusal": "Todo 1 is already done, so it is not marked again."
+                  },
+                  {
+                    "earlier": [
+                      {
+                        "action": "add",
+                        "input": {
+                          "text": "buy milk"
+                        }
+                      }
+                    ],
+                    "input": {
+                      "id": 99
+                    },
+                    "refusal": "No todo has the id 99, so nothing is marked done or removed."
+                  }
+                ]
+              },
+              {
+                "name": "remove",
+                "request": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "id"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  }
+                },
+                "response": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "removed"
+                  ],
+                  "properties": {
+                    "removed": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  }
+                },
+                "serves": [
+                  "O2-C3",
+                  "O2-C5"
+                ],
+                "examples": [
+                  {
+                    "earlier": [
+                      {
+                        "action": "add",
+                        "input": {
+                          "text": "buy milk"
+                        }
+                      },
+                      {
+                        "action": "add",
+                        "input": {
+                          "text": "call the bank"
+                        }
+                      }
+                    ],
+                    "input": {
+                      "id": 2
+                    },
+                    "answer": {
+                      "removed": 2
+                    }
+                  },
+                  {
+                    "earlier": [
+                      {
+                        "action": "add",
+                        "input": {
+                          "text": "buy milk"
+                        }
+                      }
+                    ],
+                    "input": {
+                      "id": 99
+                    },
+                    "refusal": "No todo has the id 99, so nothing is marked done or removed."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "practices": [
+        {
+          "id": "P-52",
+          "answer": "held",
+          "sentence": "The add rules are pure functions over the stored todos."
+        },
+        {
+          "id": "P-32",
+          "answer": "does-not-apply",
+          "sentence": "The mode has no skill step."
+        },
+        {
+          "id": "P-35",
+          "answer": "held",
+          "sentence": "The one module names its interface before anything else."
+        }
+      ],
+      "differences": [],
+      "folder": ".forge/worktrees/todo-design"
+    }
+  },
+  "output": {
+    "card": {
+      "title": "Commit the design of todo?",
+      "lines": [
+        {
+          "mark": "computed",
+          "words": "the one design, on the light path; approve is offered",
+          "source": {
+            "step": "draw"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "requirements: docs/requirements/todo.yaml: 2 outcomes, 13 conditions",
+          "source": {
+            "step": "draw"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "module todo: implements todo; owns the table todos",
+          "source": {
+            "step": "draw"
+          }
+        },
+        {
+          "mark": "judged",
+          "words": "todo hides: How todos are kept, numbered and never given a removed id again.",
+          "source": {
+            "step": "designs"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "interface todo: 4 actions, 8 schema files",
+          "source": {
+            "step": "draw"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "add: serves O1-C1, O1-C4, O1-C5, O1-C6, O1-C7, O2-C4; 3 examples",
+          "source": {
+            "step": "draw"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "list: serves O1-C1, O1-C2, O1-C3, O2-C1, O2-C2, O2-C3; 2 examples",
+          "source": {
+            "step": "draw"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "done: serves O2-C1, O2-C2, O2-C5, O2-C6; 3 examples",
+          "source": {
+            "step": "draw"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "remove: serves O2-C3, O2-C5; 2 examples",
+          "source": {
+            "step": "draw"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "coverage: every condition is served by an action: yes",
+          "source": {
+            "step": "draw"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "checked by script: 13 rules of the design, no problem",
+          "source": {
+            "step": "draw"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "examples: 10, not checked against their schemas, since the toolbox checks a value only against a schema file",
+          "source": {
+            "step": "draw"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "practices held by the script's rules: P-35, P-36, P-38 and P-42",
+          "source": {
+            "step": "draw"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "practices answered by the challenger: 3; 2 held, 0 not held, 1 do not apply",
+          "source": {
+            "step": "draw"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "one design was written, so none was compared",
+          "source": {
+            "step": "draw"
+          }
+        }
+      ],
+      "withheld": {}
+    },
+    "offered": {
+      "approve": true
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DesignsResponse",
+  "description": "The path taken and the designs written; a stop is never an answer, since it ends the run.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "path",
+    "designs"
+  ],
+  "properties": {
+    "path": {
+      "enum": [
+        "light",
+        "full"
+      ],
+      "description": "light: one designer. full: two designers who wrote apart."
+    },
+    "designs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "description": "A design, as schemas/design.json gives it."
+      },
+      "description": "The design, or the first and the second written apart, in that order."
+    }
+  }
+}

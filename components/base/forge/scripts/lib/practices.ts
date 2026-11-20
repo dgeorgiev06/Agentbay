@@ -15,6 +15,8 @@ const heldByLine = /^Held by:\s*(.*?)(?:\.\s+Source:.*)?$/;
 
 const reviewersWords = ["review", "planned check", "check planned"];
 
+const designWords = ["design"];
+
 function cellsOf(line: string): readonly string[] {
   return line
     .trim()
@@ -48,19 +50,27 @@ function headedRow(lines: readonly string[], at: number): Row | undefined {
   return { id: found[1] ?? "", says: (found[2] ?? "").trim(), heldBy: held?.[1] ?? "" };
 }
 
-function isTheReviewers(heldBy: string): boolean {
+function isHeldBy(heldBy: string, holders: readonly string[]): boolean {
   const parts = heldBy
     .replace(/\([^()]*\)/g, "")
     .split(/[;,]/)
     .map((part) => part.trim().toLowerCase());
-  return parts.some((part) => reviewersWords.some((words) => part.startsWith(words)));
+  return parts.some((part) => holders.some((words) => part.startsWith(words)));
 }
 
-export function reviewersPractices(text: string): readonly Practice[] {
+function practicesHeldBy(text: string, holders: readonly string[]): readonly Practice[] {
   const lines = text.split("\n");
   const rows = lines.map((line, at) => tableRow(line) ?? headedRow(lines, at));
   return rows
     .filter((row) => row !== undefined)
-    .filter((row) => isTheReviewers(row.heldBy))
+    .filter((row) => isHeldBy(row.heldBy, holders))
     .map((row) => ({ id: row.id, says: row.says }));
+}
+
+export function reviewersPractices(text: string): readonly Practice[] {
+  return practicesHeldBy(text, reviewersWords);
+}
+
+export function designPractices(text: string): readonly Practice[] {
+  return practicesHeldBy(text, designWords);
 }

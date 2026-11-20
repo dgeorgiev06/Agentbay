@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CommitDesignResponse",
+  "description": "The commit that holds the design, the merge into the branch, and the design's files, in the form the workflow rounds takes as interface.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "commit",
+    "merged",
+    "into",
+    "design",
+    "interface"
+  ],
+  "properties": {
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+      "description": "The commit that holds design.yaml and the schema files."
+    },
+    "merged": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+      "description": "The merge commit on the branch into."
+    },
+    "into": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The branch the design is committed into: the setting into."
+    },
+    "design": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+      "maxLength": 1000,
+      "description": "The design file, docs/designs/<job>/design.yaml."
+    },
+    "interface": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 3000,
+      "items": {
+        "type": "string",
+        "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+        "maxLength": 1000
+      },
+      "description": "design.yaml and every schema file, relative to the project: the files later slices build against."
+    }
+  }
+}

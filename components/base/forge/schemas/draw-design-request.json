@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DrawDesignRequest",
+  "description": "The requirements and the challenge step's answer.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "file",
+    "requirements",
+    "challenged"
+  ],
+  "properties": {
+    "file": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+      "maxLength": 1000,
+      "description": "The requirements file, relative to the project, as requirements.check named it."
+    },
+    "requirements": {
+      "$ref": "requirements@1/check-response.json#/$defs/requirements",
+      "description": "The requirements file whole, as requirements.check accepted it."
+    },
+    "challenged": {
+      "type": "object",
+      "description": "The challenge step's answer, as challenge-designs-response.json gives it."
+    }
+  }
+}

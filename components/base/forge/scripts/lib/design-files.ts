@@ -1,0 +1,106 @@
+import type { Json } from "../../../../../bay/sdk.ts";
+import type { Action, Design, Example, Interface, Module } from "./design-form.ts";
+
+export type Side = "request" | "response";
+
+export type Written = {
+  readonly path: string;
+  readonly text: string;
+};
+
+export type Designed = {
+  readonly job: string;
+  readonly file: string;
+  readonly version: number;
+  readonly design: Design;
+};
+
+export function designFolder(job: string): string {
+  return `docs/designs/${job}`;
+}
+
+export function designPath(job: string): string {
+  return `${designFolder(job)}/design.yaml`;
+}
+
+export function schemaPath(
+  job: string,
+  at: { readonly interface: string; readonly action: string },
+  side: Side,
+): string {
+  return `${designFolder(job)}/schemas/${at.interface}/${at.action}-${side}.json`;
+}
+
+function textOfJson(value: Json): string {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+function exampleDocument(example: Example): Json {
+  const earlier = example.earlier.length === 0 ? {} : { earlier: example.earlier.map((call) => ({ ...call })) };
+  return { ...earlier, input: example.input, ...example.told };
+}
+
+function actionDocument(job: string, at: Interface, action: Action): Json {
+  const place = { interface: at.name, action: action.name };
+  const because = action.because === undefined ? {} : { because: action.because };
+  return {
+    name: action.name,
+    request: schemaPath(job, place, "request"),
+    response: schemaPath(job, place, "response"),
+    serves: [...action.serves],
+    ...because,
+    examples: action.examples.map(exampleDocument),
+  };
+}
+
+function moduleDocument(module: Module): Json {
+  return {
+    name: module.name,
+    hides: module.hides,
+    implements: [...module.implements],
+    owns: { tables: [...module.tables], files: [...module.files] },
+  };
+}
+
+function designDocument(designed: Designed): Json {
+  const { job, design } = designed;
+  return {
+    job,
+    requirements: { file: designed.file, version: designed.version },
+    modules: design.modules.map(moduleDocument),
+    interfaces: design.interfaces.map((each) => ({
+      name: each.name,
+      actions: each.actions.map((action) => actionDocument(job, each, action)),
+    })),
+  };
+}
+
+type SchemaAt = {
+  readonly path: string;
+  readonly schema: Json;
+};
+
+function schemasOf(job: string, design: Design): readonly SchemaAt[] {
+  return design.interfaces.flatMap((each) =>
+    each.actions.flatMap((action) => {
+      const place = { interface: each.name, action: action.name };
+      return [
+        { path: schemaPath(job, place, "request"), schema: action.request },
+        { path: schemaPath(job, place, "response"), schema: action.response },
+      ];
+    }),
+  );
+}
+
+export function designPaths(job: string, design: Design): readonly string[] {
+  return [designPath(job), ...schemasOf(job, design).map((each) => each.path)];
+}
+
+export function designFiles(designed: Designed): readonly Written[] {
+  const design = { path: designPath(designed.job), text: textOfJson(designDocument(designed)) };
+  const schemas = schemasOf(designed.job, designed.design).map((each) => ({
+    path: each.path,
+    text: textOfJson(each.schema),
+  }));
+  return [design, ...schemas];
+}

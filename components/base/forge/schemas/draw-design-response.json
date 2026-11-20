@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DrawDesignResponse",
+  "description": "The design card and whether approve is offered, with the reason on the card when it is not.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "card",
+    "offered"
+  ],
+  "properties": {
+    "card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "lines"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400
+        },
+        "lines": {
+          "type": "array",
+          "maxItems": 2000,
+          "items": {
+            "type": "object"
+          },
+          "description": "One line for each thing the card says, wrapped by the kernel to 44 columns."
+        },
+        "withheld": {
+          "type": "object",
+          "description": "The reason for each choice that is not offered."
+        }
+      },
+      "description": "The design card."
+    },
+    "offered": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approve"
+      ],
+      "properties": {
+        "approve": {
+          "type": "boolean",
+          "description": "Offered when the design check found no problem and no practice held by design was answered not held."
+        }
+      }
+    }
+  }
+}

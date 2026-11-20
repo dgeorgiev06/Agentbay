@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DesignStartRequest",
+  "description": "What requirements.check answered for the requirements file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "checked"
+  ],
+  "properties": {
+    "checked": {
+      "$ref": "requirements@1/check-response.json",
+      "description": "requirements.check's answer: accepted with the requirements, or refused with every problem."
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DesignRequest",
+  "description": "What a designer is given: the requirements and a stance. Never another design.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "file",
+    "requirements",
+    "stance"
+  ],
+  "properties": {
+    "file": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+      "maxLength": 1000,
+      "description": "The requirements file, relative to the project, as requirements.check named it."
+    },
+    "requirements": {
+      "$ref": "requirements@1/check-response.json#/$defs/requirements",
+      "description": "The requirements file whole, as requirements.check accepted it."
+    },
+    "stance": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "The constraint this designer works under, set by script."
+    }
+  }
+}

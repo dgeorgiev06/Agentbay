@@ -127,3 +127,12 @@ Causes found:
 - **A long step outlives the coordinator's turn here:** the final proof died once with the turn and was run again with `bay resume --rerun`.
 
 The owner then asked for the missing pipeline to be built (requirements, design, planning, waves) and chose the shared interface `requirements@1` for the requirements file's form. RQ1 and KP2 (called answers kept packed) are building.
+
+## Quality held at every step (ADR 28, 19 November, late)
+
+The owner: "Ensure code quality and readability and modularity grounded in best practices as we discussed. Engrave this goal into the pipeline." ADR 28 says how each step holds it. For the briefs:
+
+- **DS1** builds ADR 28 point 2: the design names modules, what each hides and each interface first; a script refuses a module with no interface, an interface nobody implements, a table with two owners; the challenger answers each design-held practice by id; the design card shows it.
+- **PL1** builds point 3: every slice names its interface files and keeps to one module where it can; `forge.waves` refuses a slice with no interface (this is also the trial's finding) or a scope across modules with no reason; the challenger answers each plan-held practice by id.
+- **QL1 (new, after the stage-0 forge fixes):** `bay check` names every practice whose holder is planned and the list only shrinks; proof holds types, lint, format, dead code and "the count of duplicated blocks does not rise" on every slice whether or not its plan lists them; the reviewer answers every review-held practice by id and a script sends back a review that leaves one out; the merge card gets one practices block and withholds merge while a must practice is not held.
+- Every builder's brief keeps: no comments, readable code, small pure functions, deep modules with small interfaces, delete what is unused, no duplicated blocks, and a file that grows past a few hundred lines is split by what it hides (cards.ts, about 700 lines, is due).

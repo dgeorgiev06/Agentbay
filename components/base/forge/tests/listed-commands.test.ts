@@ -30,7 +30,7 @@ test("bay check on the kit warns once for forge's long step, the final proof, an
   assert.deepEqual(warningsOf(manifest), [
     [
       "warning",
-      120,
+      127,
       "Action final-proof of mode forge declares scriptTimeLimitSeconds: 1800, so each of its script steps may run " +
         "unattended for 1800 seconds, longer than the kernel's 480.",
     ],

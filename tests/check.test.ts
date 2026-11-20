@@ -79,10 +79,13 @@ test("an action whose script steps may run longer than eight minutes is a warnin
       "Keep the longer limit only if a step needs it, such as one that runs a whole test suite.",
     ],
   ]);
-  assert.deepEqual((await longStepsWith(7200)).map(([, , message]) => message), [
-    "Action add of mode notes declares scriptTimeLimitSeconds: 7200, so each of its script steps may run " +
-      "unattended for 7200 seconds, longer than the kernel's 480.",
-  ]);
+  assert.deepEqual(
+    (await longStepsWith(7200)).map(([, , message]) => message),
+    [
+      "Action add of mode notes declares scriptTimeLimitSeconds: 7200, so each of its script steps may run " +
+        "unattended for 7200 seconds, longer than the kernel's 480.",
+    ],
+  );
   assert.deepEqual(await longStepsWith(480), []);
 });
 

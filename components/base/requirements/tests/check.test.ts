@@ -87,12 +87,12 @@ const sameInBoth: readonly Expected[] = [
   [
     15,
     "date that moves",
-    'O1-C1\'s given says "yesterday", a date that moves. Give the date itself, such as the date is 2026-11-21.',
+    'O1-C1\'s given says "yesterday" outside a quoted value, a date that moves. Give the date itself, such as the date is 2026-11-21.',
   ],
   [
     16,
     "vague word",
-    'O1-C1\'s when holds "quickly", which a person cannot check. Say what a person sees, with its value.',
+    'O1-C1\'s when holds "quickly" outside a quoted value, which a person cannot check. Say what a person sees, with its value; a word inside double quotes is a value and may stay.',
   ],
   [17, "no literal in then", `O1-C1's ${noLiteral}`],
   [18, "no literal in after", noAfter],
@@ -125,7 +125,7 @@ const recommendedTwo: Expected = [
 const nowIsMoving: Expected = [
   33,
   "date that moves",
-  'O2-C2\'s given says "now", a date that moves. Give the date itself, such as the date is 2026-11-21.',
+  'O2-C2\'s given says "now" outside a quoted value, a date that moves. Give the date itself, such as the date is 2026-11-21.',
 ];
 
 const unmatched = "changes do not match the version";
@@ -256,4 +256,34 @@ test("whole words only: a vague word or a moving date inside another word is not
   );
   const answer = fieldsOf(await checked("todo.yaml", text));
   assert.equal(answer.answer, "accepted", JSON.stringify(answer));
+});
+
+test("a vague word or a moving date inside a quoted value is the owner's data and is accepted", async () => {
+  const text = (await readFile(kitTodo, "utf8")).replace(
+    'when: the person adds "buy milk", then lists the open todos',
+    'when: the person adds "buy some milk now", then lists the open todos',
+  );
+  const answer = fieldsOf(await checked("todo.yaml", text));
+  assert.equal(answer.answer, "accepted", JSON.stringify(answer));
+});
+
+test("the same words outside the quotes are refused, each with its line and the word quoted", async () => {
+  const text = (await readFile(kitTodo, "utf8")).replace(
+    'when: the person adds "buy milk", then lists the open todos',
+    'when: the person adds some text "buy milk" now, then lists the open todos',
+  );
+  assert.deepEqual(problemsOf(await checked("todo.yaml", text)), [
+    [
+      20,
+      "vague word",
+      'O1-C1\'s when holds "some" outside a quoted value, which a person cannot check. ' +
+        "Say what a person sees, with its value; a word inside double quotes is a value and may stay.",
+    ],
+    [
+      20,
+      "date that moves",
+      'O1-C1\'s when says "now" outside a quoted value, a date that moves. ' +
+        "Give the date itself, such as the date is 2026-11-21.",
+    ],
+  ]);
 });

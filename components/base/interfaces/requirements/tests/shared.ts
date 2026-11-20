@@ -310,6 +310,24 @@ const cases: readonly Case[] = [
     },
   },
   {
+    name: "a vague word and a date that moves inside a quoted value are accepted, and outside it refused at the line",
+    restsOn: "problem rules vague word and date that moves: a value in double quotes is the owner's data",
+    run: async (checker) => {
+      const inside = changed(lamp, [[thenOfFirst, '        then: the lamp shows "some light now"\n']]);
+      const accepted = await checker.check("lamp.yaml", inside);
+      assert.equal(accepted.answer, "accepted", JSON.stringify(accepted));
+      const outside = changed(lamp, [[thenOfFirst, '        then: the lamp shows some light "on" now\n']]);
+      const problems = await problemsOf(checker, "lamp.yaml", outside);
+      assert.deepEqual(
+        shown(problems),
+        shown([
+          { rule: "vague word", line: 17 },
+          { rule: "date that moves", line: 17 },
+        ]),
+      );
+    },
+  },
+  {
     name: "a date that moves is refused at its line",
     restsOn: "problem rule date that moves: today, now, yesterday, tomorrow",
     run: refusedAt(

@@ -30,6 +30,7 @@ const wrongVariants: readonly WrongVariant[] = [
   "checks the rules only when the form passes",
   "takes no noRefusal",
   "matches a word inside a longer word",
+  "looks inside quoted values",
 ];
 
 let copy: string;
@@ -89,7 +90,7 @@ test("bay check accepts a made-up requirements mode beside the kit's own, both i
 test("a made-up requirements mode passes every case of requirements@1's shared test", () => {
   assert.deepEqual(failedTests(checklistTested.output), []);
   assert.equal(checklistTested.status, 0, checklistTested.output);
-  assert.match(checklistTested.output, /^# pass 23$/m);
+  assert.match(checklistTested.output, /^# pass 24$/m);
 });
 
 for (const variant of wrongVariants) {

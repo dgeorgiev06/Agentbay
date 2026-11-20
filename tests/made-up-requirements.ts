@@ -11,7 +11,8 @@ export type ChecklistVariant =
   | "counts lines from 0"
   | "checks the rules only when the form passes"
   | "takes no noRefusal"
-  | "matches a word inside a longer word";
+  | "matches a word inside a longer word"
+  | "looks inside quoted values";
 
 type Flip = {
   readonly file: string;
@@ -30,6 +31,8 @@ export const casesCaughtByEachVariant: Readonly<
     "a file with problems of the form and of the rules is refused with every problem at once, each with its line",
   "takes no noRefusal": "a sound file is accepted, and its outcomes and conditions come back as data, each with its id",
   "matches a word inside a longer word": "a vague word or a date that moves inside a longer word is not refused",
+  "looks inside quoted values":
+    "a vague word and a date that moves inside a quoted value are accepted, and outside it refused at the line",
 };
 
 const baseMode = join(kit, "components", "base", "requirements");
@@ -72,6 +75,11 @@ const flips: Readonly<Record<ChecklistVariant, Flip | undefined>> = {
     file: "scripts/lib/rules.ts",
     from: "(?<![\\\\p{L}\\\\p{N}])${escaped}(?![\\\\p{L}\\\\p{N}])",
     to: "${escaped}",
+  },
+  "looks inside quoted values": {
+    file: "scripts/lib/rules.ts",
+    from: 'return text.replace(quotedValue, " ");',
+    to: "return text;",
   },
 };
 

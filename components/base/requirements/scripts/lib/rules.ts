@@ -40,6 +40,8 @@ type Named = {
 
 const literal = /"[^"]*"|\d/;
 
+const quotedValue = /"[^"]*"/g;
+
 const changeLists = ["added", "changed", "removed"] as const;
 
 function listed(texts: readonly string[]): string {
@@ -54,6 +56,10 @@ function quoted(words: readonly string[]): string {
 function wordPattern(word: string): RegExp {
   const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "iu");
+}
+
+function ownWording(text: string): string {
+  return text.replace(quotedValue, " ");
 }
 
 function wordsIn(text: string, words: readonly string[]): readonly string[] {
@@ -95,8 +101,9 @@ function wordProblems(condition: Condition): readonly Found[] {
   return checkedTexts(condition).flatMap((text): readonly Found[] => {
     const at = [...condition.at, text.field];
     const label = `${labelOf(condition)}'s ${text.field}`;
-    const vague = wordsIn(text.text, vagueWords);
-    const moving = wordsIn(text.text, movingDateWords);
+    const wording = ownWording(text.text);
+    const vague = wordsIn(wording, vagueWords);
+    const moving = wordsIn(wording, movingDateWords);
     const vagueFound: readonly Found[] =
       vague.length === 0
         ? []
@@ -104,7 +111,9 @@ function wordProblems(condition: Condition): readonly Found[] {
             {
               rule: "vague word",
               at,
-              sentence: `${label} holds ${quoted(vague)}, which a person cannot check. Say what a person sees, with its value.`,
+              sentence:
+                `${label} holds ${quoted(vague)} outside a quoted value, which a person cannot check. ` +
+                "Say what a person sees, with its value; a word inside double quotes is a value and may stay.",
             },
           ];
     const movingFound: readonly Found[] =
@@ -114,7 +123,9 @@ function wordProblems(condition: Condition): readonly Found[] {
             {
               rule: "date that moves",
               at,
-              sentence: `${label} says ${quoted(moving)}, a date that moves. Give the date itself, such as the date is 2026-11-21.`,
+              sentence:
+                `${label} says ${quoted(moving)} outside a quoted value, a date that moves. ` +
+                "Give the date itself, such as the date is 2026-11-21.",
             },
           ];
     return [...vagueFound, ...movingFound];

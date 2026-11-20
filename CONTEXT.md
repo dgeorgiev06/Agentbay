@@ -75,6 +75,9 @@ One meaning per word. Briefs, plans, code names and reviews use these words and 
 | **Adapter (harness)** | The code in `adapters/<harness>/` that fits one harness to the kernel. | plugin, integration |
 | **Tier** | `fast`, `balanced` or `deep`. A skill names a tier; the project config maps tiers to models. | model |
 | **Effort** | How hard a tier's model works on a step: `low`, `medium`, `high`, `xhigh` or `max`. The config's `tiers` sets it with the model; a tier without one runs at the harness's own effort. | reasoning level, thinking budget |
+| **Role** (proposed, `docs/designs/roles/design.md`) | One of a closed set the kit owns: builder, test writer, reviewer, planter, designer, challenger, planner. Each has a tier, a ceiling and standing rules. A skill step names a role in place of a tier, and the card names it. It decides no step's reads: who may see what is the step's, in its workflow. | persona, agent type, profile |
+| **Ceiling** (of a role, proposed) | The tools and roots a role's agents never get, whatever the step's grants and effects give. It only takes away. | permission, tool profile, sandbox |
+| **Standing rules** (of a role, proposed) | The sentences every agent of a role is given in its agent file, said once for the role instead of in each skill. Text only: the ceiling is what is enforced. | system prompt, persona |
 | **Feature** | A deep module of the kernel: a folder with one entry file. Only the entry file is imported from outside. Listed in `framework/features.yaml`. | module (ambiguous), layer |
 | **Entry file** | The one file of a feature that others may import. Its exports are the feature's interface. | index, barrel |
 | **Seam** | A place where behaviour can be swapped without editing the code around it. | hook, extension point |

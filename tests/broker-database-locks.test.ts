@@ -25,6 +25,8 @@ const unnamedFile = join(".agentbay", "data", "todo.db");
 
 const releaseAfterMilliseconds = 1000;
 
+const releaseAfterAllHaveStartedMilliseconds = 2500;
+
 const todo = {
   name: "todo",
   version: "1.0.0",
@@ -159,11 +161,11 @@ function lockedFile(file: string, lock: "exclusive" | "immediate", wal: boolean)
   return holder;
 }
 
-function releasedSoon(holder: DatabaseSync): void {
+function releasedSoon(holder: DatabaseSync, milliseconds = releaseAfterMilliseconds): void {
   setTimeout(() => {
     holder.exec("commit");
     holder.close();
-  }, releaseAfterMilliseconds);
+  }, milliseconds);
 }
 
 const callsAtOnce = [0, 1, 2, 3, 4, 5];
@@ -216,12 +218,18 @@ test("writes at the same moment after the first use all land, also while the tes
   });
 });
 
-test("a migration on first use waits while another connection is writing, then runs once", async () => {
+test("a first migration that several actions meet while the database is being written runs once", async () => {
   await withTodo(async ({ project, kernel }) => {
     const file = join(project.root, unnamedFile);
-    releasedSoon(lockedFile(file, "immediate", true));
-    await done(kernel, "todo.add", { call: 0 });
-    assert.deepEqual(counts(file), { todos: 1, migrations: 1 });
+    ownerOnlyFile(file);
+    const holder = new DatabaseSync(file);
+    holder.exec("pragma journal_mode = wal");
+    holder.exec("create table _migrations (name text primary key, applied_at text not null)");
+    holder.exec("begin immediate");
+    releasedSoon(holder, releaseAfterAllHaveStartedMilliseconds);
+    const runs = callsAtOnce.map((call) => ended(kernel, "todo.add", { call }));
+    assert.deepEqual(await Promise.all(runs), allDone);
+    assert.deepEqual(counts(file), { todos: callsAtOnce.length, migrations: 1 });
   });
 });
 

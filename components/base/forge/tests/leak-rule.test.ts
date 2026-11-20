@@ -134,6 +134,19 @@ describe("the shared-text rule", () => {
     assert.deepEqual(sharedText({ ...compared([code]), phrases }), []);
   });
 
+  test("a design's worked example, an exact refusal both sides were given, is not caught when the design is an interface file", () => {
+    const refusal = "No todo has the id 99, so nothing is marked done or removed.";
+    const line = `    "${refusal}",`;
+    const both = [testText, `test("a todo 99 is refused", () => {\n  assert.equal(\n${line}\n  );\n});\n`].join("\n");
+    const code = file(codePath, ["return refused(", line, ");"]);
+    const designFile = "docs/designs/todo/design.yaml";
+    const example = { examples: [{ earlier: [], input: { id: 99 }, refusal }] };
+    const design = { path: designFile, text: JSON.stringify({ interfaces: [{ name: "todo", actions: [example] }] }) };
+    const asked: Compared = { ...compared([code]), tests: [both], interface: [interfacePath, designFile] };
+    assert.deepEqual(sharedText(asked), [{ path: codePath, lines: 1 }]);
+    assert.deepEqual(sharedText({ ...asked, base: [design] }), []);
+  });
+
   test("the phrases are the conditions' sentences and the paths, lower case, none shorter than ten characters", () => {
     assert.deepEqual(phrasesOf(slice, [codePath, "a/b.ts"]), [
       "a quill is counted once, even when the ink is dry and the moon is full",

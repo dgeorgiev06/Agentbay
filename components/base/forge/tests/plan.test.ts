@@ -38,6 +38,8 @@ const skills = {
 
 const finding = "TD2's item 2 names no refusal; add the refused id 99 to its sentence.";
 
+const left = "TD2's title is longer than the card shows.";
+
 let template: string;
 
 before(async () => {
@@ -170,7 +172,7 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
     assert.deepEqual(worktrees(root), []);
   });
 
-  test("a challenge with a finding runs the planner's second round and a second challenge, which the card cites", async () => {
+  test("a challenge with a finding runs the planner's second round and a second challenge, whose finding left the card cites", async () => {
     const root = await designed();
     const run = await startedPlan(root);
     const tasks: Json[] = [];
@@ -183,7 +185,7 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
         Promise.resolve(fieldsOf(fieldsOf(task).input ?? null).answering === undefined ? todoPlan : answered),
       planChallenger: (task) => {
         tasks.push(task);
-        return Promise.resolve(answers(task, tasks.length === 1 ? [finding] : []));
+        return Promise.resolve(answers(task, tasks.length === 1 ? [finding] : [left]));
       },
     });
     assert.deepEqual(actions(asked), [
@@ -198,13 +200,18 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
     const card = waitingOf(await shown(root, textAt(run, "id")), "card");
     const expected = {
       plan: answered,
-      challenge: answers(tasks[1] ?? null, []),
+      challenge: answers(tasks[1] ?? null, [left]),
       challenger: "challenge-2",
       answer: { kind: "answered", changes: ["TD2's title"] },
     } as const;
     assert.deepEqual(
       await printedCard(root, card.id, "Commit the plan"),
       (await expectedCard(root, expected)).split("\n"),
+    );
+    const judged = listOf(fieldsOf(card.card).lines).filter((line) => textAt(line, "mark") === "judged");
+    assert.deepEqual(
+      judged.map((line) => textAt(fieldsOf(line).source ?? null, "step")),
+      ["challenge-2"],
     );
     const stopped = runOf(await decided(root, card, { step: "card", choice: "stop" }));
     assert.equal(textAt(stopped, "reason"), "The owner chose stop on the plan card, so nothing is committed.");

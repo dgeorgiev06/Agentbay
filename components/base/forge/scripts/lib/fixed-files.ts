@@ -28,8 +28,7 @@ function fixedOf(slice: PlannedSlice): readonly Fixed[] {
 }
 
 function changedBy(slice: PlannedSlice): readonly string[] {
-  const named = slice.scope.filter((pattern) => !pattern.includes("*"));
-  return [...new Set([...named, ...slice.tests])];
+  return [...slice.scope, ...slice.tests];
 }
 
 function sentenceFor(slice: PlannedSlice, fixed: Fixed, comesAfter: ComesAfter): string {

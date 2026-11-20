@@ -39,9 +39,9 @@ function hanging(words: string, first: string, rest: string): readonly string[] 
   return rows.map((row, index) => `${index === 0 ? first : rest}${row}`);
 }
 
-export type Skills = Readonly<Record<string, string>>;
+type Skills = Readonly<Record<string, string>>;
 
-export const itemsOf = "slices";
+const itemsOf = "slices";
 
 function itemOf(line: CardLine): number | undefined {
   return line.mark === "judged" ? line.source.item : undefined;

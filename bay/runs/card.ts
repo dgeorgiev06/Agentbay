@@ -232,24 +232,34 @@ function placeOf(context: CardContext, source: StepSource): Placed | string {
   return source.item === undefined ? plainPlace(context, source.step) : itemPlace(context, source.step, source.item);
 }
 
+function notFinished(named: string): string {
+  return `cites ${named}, which has not finished in this run before the approval.`;
+}
+
+function recordProblem(named: string, record: StepSeen | undefined): string | undefined {
+  if (record === undefined || record.status !== "done") {
+    return notFinished(named);
+  }
+  return record.kind === "action"
+    ? undefined
+    : `cites ${named}, which is a ${record.kind} step; a line cites an action step.`;
+}
+
 function citedStep(context: CardContext, source: StepSource): Cited | string {
   const placed = placeOf(context, source);
   if (typeof placed === "string") {
     return placed;
   }
   const { named, key, given } = placed;
-  const inItem = placed.foreach === undefined ? {} : { foreach: placed.foreach };
-  const record = key === undefined ? undefined : context.steps.get(key);
-  if (key !== undefined && record === undefined && given) {
-    return { id: source.step, named, key, ...inItem, skills: [], calledRuns: [], given };
+  if (key === undefined) {
+    return notFinished(named);
   }
-  if (key === undefined || record === undefined || record.status !== "done") {
-    return `cites ${named}, which has not finished in this run before the approval.`;
+  const record = context.steps.get(key);
+  const cited = { id: source.step, named, key, ...(placed.foreach === undefined ? {} : { foreach: placed.foreach }) };
+  if (record === undefined && given) {
+    return { ...cited, skills: [], calledRuns: [], given };
   }
-  if (record.kind !== "action") {
-    return `cites ${named}, which is a ${record.kind} step; a line cites an action step.`;
-  }
-  return { id: source.step, named, key, ...inItem, ...skillsUnder(context.steps, key), given };
+  return recordProblem(named, record) ?? { ...cited, ...skillsUnder(context.steps, key), given };
 }
 
 function skillsUnder(steps: CardContext["steps"], key: string): Pick<Cited, "skills" | "calledRuns"> {

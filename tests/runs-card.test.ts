@@ -67,13 +67,13 @@ const carderMode = {
       run: [{ script: "scripts/pass.ts" }],
     },
   },
-  workflows: ["workflows/computed.yaml", "workflows/judged.yaml", "workflows/forged.yaml"],
+  workflows: ["workflows/computed.yaml", "workflows/judged.yaml", "workflows/forged.yaml", "workflows/items.yaml"],
 };
 
 type CardLine = {
   readonly mark: "computed" | "judged";
   readonly words: string;
-  readonly source: { readonly step: string };
+  readonly source: { readonly step: string; readonly item?: number };
 };
 
 const inScope: CardLine = { mark: "computed", words: "in scope: 11 of 11 paths", source: { step: "draw" } };
@@ -116,6 +116,19 @@ const workflows: Readonly<Record<string, object>> = {
     name: "forged",
     steps: [reviewStep, drawStep([{ ...judgedLine, mark: "computed" }]), cardStep(["review"])],
   },
+  items: {
+    name: "items",
+    steps: [
+      { id: "list", action: "draw", input: { items: [{ slice: "first" }, { slice: "second" }] } },
+      { id: "each", foreach: "$steps.list.output.items", steps: [reviewStep] },
+      drawStep([
+        { ...judgedLine, source: { step: "review", item: 0 } },
+        { ...judgedLine, words: "and each case is named", source: { step: "review", item: 0 } },
+        { ...judgedLine, words: "the second holds too", source: { step: "review", item: 1 } },
+      ]),
+      cardStep(["review"]),
+    ],
+  },
 };
 
 async function carderProject(): Promise<Project> {
@@ -147,12 +160,15 @@ async function stoppedAt(project: Project, workflow: string): Promise<Stopped> {
   const called = await bay(["call", "--workflow", `carder:workflows/${workflow}.yaml`, ...root, "--json"]);
   const started = runOf(called.json);
   const runId = textField(started, "id") ?? "";
-  const token = textField(fieldOf(started, "task") ?? null, "token");
-  if (token === undefined) {
-    return { runId, run: started };
+  let run = started;
+  for (;;) {
+    const token = textField(fieldOf(run, "task") ?? null, "token");
+    if (token === undefined) {
+      return { runId, run };
+    }
+    await bay(["submit", '{"verdict":"sound"}', "--token", token, ...root, "--json"]);
+    run = runOf((await bay(["runs", runId, "--new-token", ...root, "--json"])).json);
   }
-  const submitted = await bay(["submit", '{"verdict":"sound"}', "--token", token, ...root, "--json"]);
-  return { runId, run: runOf(submitted.json) };
 }
 
 async function withCarder(body: (project: Project) => Promise<void>): Promise<void> {
@@ -249,6 +265,30 @@ test("a judged line keeps its mark at the start of each row, with its skill and 
       rows.filter((row) => Array.from(row).length > 44),
       [],
     );
+  });
+});
+
+test("a judged line from a step in an item names its skill and its item on the row under it", async () => {
+  await withCarder(async (project) => {
+    const rows = await printedCard(project, "items");
+    assert.deepEqual(rows, [
+      "Merge TR2?",
+      "judged   the tests assert what each item",
+      "judged     says",
+      "judged   and each case is named",
+      "judged    by carder skills/review, tier",
+      "judged      deep, in item 0 of each",
+      "judged   the second holds too",
+      "judged    by carder skills/review, tier",
+      "judged      deep, in item 1 of each",
+      "You can:",
+      "  keep  Stop; the slice stays as it is",
+      "Not available:",
+      "  merge  Merge the slice",
+      "         why: No test ran.",
+      "checked: 0 ran, 0 computed, 3 judged",
+      hashRow(rows),
+    ]);
   });
 });
 

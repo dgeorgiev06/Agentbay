@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { approvalLines } from "../bay/approval-card.ts";
 import type { Json } from "../bay/contracts.ts";
 import type { Action } from "../bay/generated/mode.ts";
 import type { Config } from "../bay/generated/config.ts";
@@ -289,40 +288,6 @@ describe("a card on an approval after a foreach", () => {
       lines: [{ ...lines[0], skills: [], foreach: "each" }],
       counted: { ran: 0, computed: 0, judged: 1 },
     });
-  });
-});
-
-describe("what the owner reads of a line from an item", () => {
-  test("its skill and its item share the row under it, within the card's width", () => {
-    const line = { mark: "judged" as const, words: drafted, source: { step: "write", item: 1 } };
-    const rows = approvalLines({
-      reason: "approval",
-      stepKey: "card",
-      question: "Merge this wave?",
-      hash: "0123456789abcdef",
-      content: null,
-      card: {
-        title: "Merge wave 1?",
-        lines: [
-          { ...line, skills: [draftSkill], foreach: "each" },
-          { ...line, words: "and holds", skills: [draftSkill], foreach: "each" },
-          { ...line, source: { step: "write", item: 0 }, words: "item 0 holds", skills: [draftSkill], foreach: "each" },
-        ],
-        counted: { ran: 0, computed: 0, judged: 3 },
-      },
-    });
-    assert.deepEqual(rows.slice(0, -1), [
-      "Merge wave 1?",
-      "judged   the tests assert what each item",
-      "judged     says",
-      "judged   and holds",
-      "judged    by notes skills/draft, tier",
-      "judged      balanced, in item 1 of each",
-      "judged   item 0 holds",
-      "judged    by notes skills/draft, tier",
-      "judged      balanced, in item 0 of each",
-      "checked: 0 ran, 0 computed, 3 judged",
-    ]);
   });
 });
 

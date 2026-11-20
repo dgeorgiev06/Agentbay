@@ -56,6 +56,10 @@ export function ownProofReason(parts: SettledParts): string | undefined {
   });
 }
 
+function builtAtOf(state: RoundsState | undefined): string {
+  return state?.builtAt ?? firstRound;
+}
+
 function stateOf(value: Json | undefined): RoundsState | undefined {
   return roundsStateOf(value ?? null);
 }
@@ -78,7 +82,7 @@ export function settledOf(value: Json): Settled {
     rounds: state === undefined ? { count: 0, most: 0, ended: "last-round" } : roundsOnCard(state),
     leaks: state?.leaks ?? [],
     built: builtOf(fields.built),
-    builtAt: state?.builtAt ?? firstRound,
+    builtAt: builtAtOf(state),
     pins: { base: pinsOf(fields.pinned), head: state?.pinnedAtHead ?? [] },
     bugs: bugsOnCard(bugsOf(fields.bugs), proof.verdicts, numberOf(fields.planted)),
     stayed: stayedOf(fields.stayed),

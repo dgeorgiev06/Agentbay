@@ -328,6 +328,8 @@ export type Players = {
   readonly planter?: Played;
   readonly designer?: Played;
   readonly challenger?: Played;
+  readonly planner?: Played;
+  readonly planChallenger?: Played;
 };
 
 export type Asked = {
@@ -354,6 +356,10 @@ function playerOf(players: Players, action: string): Played | undefined {
       return players.designer;
     case "challenge":
       return players.challenger;
+    case "plan":
+      return players.planner;
+    case "challenge-plan":
+      return players.planChallenger;
     default:
       throw new Error(`No player answers the action ${action}.`);
   }

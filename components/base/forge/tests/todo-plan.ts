@@ -16,13 +16,13 @@ const one = ["O1-C1", "O1-C2", "O1-C3", "O1-C4", "O1-C5", "O1-C6", "O1-C7"];
 
 const two = ["O2-C1", "O2-C2", "O2-C3", "O2-C4", "O2-C5", "O2-C6"];
 
-export const tdOneTitle = "A todo mode that adds a todo and lists the open ones";
+const tdOneTitle = "A todo mode that adds a todo and lists the open ones";
 
-export const tdTwoTitle = "The todo mode marks a todo done and removes one";
+const tdTwoTitle = "The todo mode marks a todo done and removes one";
 
-export const oneAfterAnother = "Both slices write the one mode's folder, and the second adds to what the first makes.";
+const oneAfterAnother = "Both slices write the one mode's folder, and the second adds to what the first makes.";
 
-export const tdTwoAfter = "It adds two actions to the mode TD1 makes.";
+const tdTwoAfter = "It adds two actions to the mode TD1 makes.";
 
 function checksItem(name: string): Json {
   return {

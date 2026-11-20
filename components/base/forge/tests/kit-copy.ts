@@ -30,6 +30,13 @@ type Ran = {
 
 export const into = "integration";
 
+export const recapturing = "FORGE_RECAPTURE";
+
+export const onlyWhenRecapturing = {
+  skip:
+    process.env[recapturing] === undefined ? `runs only when ${recapturing} is set, as recapture.ts sets it` : false,
+};
+
 const kit = fileURLToPath(new URL("../../../..", import.meta.url));
 
 const standIn = "components/modes/proof-stand-in";

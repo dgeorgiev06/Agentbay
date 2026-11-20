@@ -1,4 +1,5 @@
 import { defineScript, fieldsOf } from "../../../../bay/sdk.ts";
+import { stayedOf, withStayedLines } from "./lib/branch-endings.ts";
 import { challengeOf } from "./lib/challenge-answer.ts";
 import { designCard } from "./lib/design-card.ts";
 import { checkedExamples } from "./lib/design-examples.ts";
@@ -16,7 +17,7 @@ export const run = defineScript(async (input, context) => {
   const design = designOf(challenged.design ?? null);
   const problems = designProblems({ job: requirements.job, file, conditions: conditionsOf(requirements), design });
   const examples = await checkedExamples(context, design);
-  return designCard({
+  const drawn = designCard({
     file,
     requirements,
     path: challenged.path === "full" ? "full" : "light",
@@ -28,4 +29,5 @@ export const run = defineScript(async (input, context) => {
     practices: challenge.practices,
     differences: textsOf(challenged.differences),
   });
+  return withStayedLines(drawn, stayedOf(challenged.stayed));
 });

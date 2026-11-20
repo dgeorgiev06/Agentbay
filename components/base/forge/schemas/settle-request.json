@@ -4,7 +4,7 @@
   "description": "What one slice's item of a wave made: the request, the step slice's answer, the name its worktrees were cut under, the pins at the base, where the rounds ended, the bugs and its own proof.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["request", "slice", "cutAs", "pinned", "rounds", "bugs", "proof"],
+  "required": ["request", "slice", "pinned", "rounds", "bugs", "proof"],
   "properties": {
     "request": {
       "type": "object",
@@ -13,9 +13,6 @@
     "slice": {
       "type": "object",
       "description": "The step slice's answer for the slice."
-    },
-    "cutAs": {
-      "$ref": "proof@1/prove-request.json#/$defs/sliceName"
     },
     "pinned": {
       "type": "array",

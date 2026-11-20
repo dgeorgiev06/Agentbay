@@ -98,6 +98,16 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 200
+            },
+            "build-over": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "build-over-without-interface": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
             }
           }
         }
@@ -106,13 +116,19 @@
     "offered": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["build", "build-without-interface"],
-      "description": "In the workflow rounds only: which go-ahead choice the start approval offers. build when the slice names interface files, build-without-interface when it names none; never both.",
+      "required": ["build", "build-without-interface", "build-over", "build-over-without-interface"],
+      "description": "In the workflow rounds only: which go-ahead choice the start approval offers, exactly one: build or build-without-interface as the slice names interface files or none, build-over or build-over-without-interface the same when an earlier run left branches of the slice.",
       "properties": {
         "build": {
           "type": "boolean"
         },
         "build-without-interface": {
+          "type": "boolean"
+        },
+        "build-over": {
+          "type": "boolean"
+        },
+        "build-over-without-interface": {
           "type": "boolean"
         }
       }

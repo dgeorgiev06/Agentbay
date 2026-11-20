@@ -16,6 +16,7 @@ import {
   removeAll,
   runOf,
   shown,
+  actionOutputs,
   textAt,
   waitingOf,
   worktrees,
@@ -97,7 +98,8 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     assert.ok(said.includes("Merge is offered for 2 of 3 slices: each passed its own proof"), said);
     assert.ok(said.includes("left out: TD2, as its own proof did not pass."), said);
     assert.ok(said.includes("TD2 is left out: 1 must item failed. Its branches stay"), said);
-    assert.ok(said.includes("TD10 is in the combined head; the work and the tests are on forge/TD10-again-2"), said);
+    const td10 = "the work and the tests are on forge/TD10-tests-1, the builder's work alone on forge/TD10";
+    assert.ok(said.includes(`TD10 is in the combined head; ${td10}`), said);
     assert.deepEqual(kindsAsked(await askedOf(root, "wave-1")), ["checks"]);
     assert.equal((await askedOf(root, "wave-1")).length, 1);
     for (const name of ["TD1", "TD10", "TD2"]) {
@@ -107,7 +109,7 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     assert.equal(textAt(await shown(root, start.id), "status"), "done");
     const merged = git(root, ["ls-tree", "-r", "--name-only", into]);
     assert.ok(merged.includes(codeOf("TD1")) && merged.includes(codeOf("TD10")) && !merged.includes(codeOf("TD2")));
-    assert.ok(branches(root).includes("forge/TD10-again-2-tests-1"), branches(root).join(" "));
+    assert.deepEqual(branches(root), ["forge/TD2", "forge/TD2-tests-1"]);
     assert.deepEqual(worktrees(root), []);
     assert.deepEqual(keptRows(root), []);
   });
@@ -134,7 +136,9 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     assert.equal((await askedOf(root, "wave-1")).length, 1);
     assert.deepEqual(kindsAsked((await askedOf(root, "CA")).slice(-1)), ["checks"]);
     const kept = runOf(await decided(root, card, { step: "card", choice: "keep" }));
-    assert.deepEqual(fieldsOf(fieldsOf(kept).output ?? null).kept, ["forge/CA-tests-1", "forge/CB-tests-1"]);
+    const stay = ["forge/CA", "forge/CA-tests-1", "forge/CB", "forge/CB-tests-1", "forge/wave-1"];
+    assert.deepEqual(fieldsOf(fieldsOf(kept).output ?? null).kept, stay);
+    assert.deepEqual(branches(root), stay);
     assert.deepEqual(worktrees(root), []);
     assert.deepEqual(keptRows(root), []);
   });
@@ -151,6 +155,7 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     assert.ok(printed.includes("Merge is not offered: no slice passed its own proof; left out: NA"), printed);
     assert.ok(printed.includes("no combined head: no slice passed its own proof"), printed);
     await decided(root, card, { step: "card", choice: "keep" });
+    assert.deepEqual(branches(root), ["forge/NA-3", "forge/NA-tests-3"]);
     assert.deepEqual(worktrees(root), []);
     assert.deepEqual(keptRows(root), []);
   });
@@ -165,5 +170,17 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     const stopped = runOf(await bay(root, ["resume", start.id, "--stop"]));
     assert.ok(["undone", "failed"].includes(textAt(stopped, "status")), JSON.stringify(stopped));
     assert.deepEqual(keptRows(root), []);
+    assert.deepEqual(branches(root), ["forge/SA", "forge/SA-tests-1"]);
+    const left = branches(root).map((branch) => ({ branch, commit: git(root, ["rev-parse", branch]).trim() }));
+    const again = await waveStarted(root);
+    const said = flowing(await printedCard(root, again.id, "Build wave"));
+    const short = left.map((each) => each.commit.slice(0, 7));
+    assert.ok(said.includes(`an earlier run left forge/SA at ${short[0] ?? ""}`), said);
+    assert.ok(said.includes(`an earlier run left forge/SA-tests-1 at ${short[1] ?? ""}`), said);
+    assert.ok(said.includes("why: An earlier run left branches of this wave; build over them or stop."), said);
+    await decided(root, again, { step: "start", choice: "build-over" });
+    assert.deepEqual(await actionOutputs(root, again.id, "wave-begin"), [{ choice: "build-over", slices: ["SA"] }]);
+    assert.deepEqual(await actionOutputs(root, again.id, "attempt"), [{ dropped: left }]);
+    assert.deepEqual(branches(root), ["forge/SA"]);
   });
 });

@@ -2,11 +2,16 @@ name: rounds
 trigger: { manual: true }
 budget: { minutes: 180 }
 steps:
+  - id: look
+    action: leftovers
+    input:
+      request: $trigger
   - id: slice
     action: slice
     input:
       request: $trigger
       planter: true
+      leftovers: $steps.look.output.leftovers
   - id: start
     approval: Build this slice?
     show: $steps.slice.output.card
@@ -14,11 +19,19 @@ steps:
       build: { does: Cut the worktree and start round 1, when: $steps.slice.output.offered.build }
       build-without-interface:
         { does: Go ahead with no agreed interface, when: $steps.slice.output.offered.build-without-interface }
+      build-over: { does: "Drop the earlier run's branches, then build", when: $steps.slice.output.offered.build-over }
+      build-over-without-interface:
+        {
+          does: "Drop the earlier run's branches, then go ahead with no agreed interface",
+          when: $steps.slice.output.offered.build-over-without-interface,
+        }
       stop: { does: Stop; nothing is cut }
   - id: begin
     action: begin
     input:
       choice: $steps.start.output.choice
+      leftovers: $steps.look.output.leftovers
+      into: $settings.into
   - id: cut
     action: worktrees.cut
     input:
@@ -39,7 +52,6 @@ steps:
   - id: round-1
     action: round
     input:
-      cutAs: $steps.slice.output.slice.name
       round: 1
       slice: $steps.slice.output.slice
       interface: $steps.slice.output.interface
@@ -59,7 +71,6 @@ steps:
   - id: round-2
     action: round
     input:
-      cutAs: $steps.slice.output.slice.name
       round: 2
       slice: $steps.slice.output.slice
       interface: $steps.slice.output.interface
@@ -79,7 +90,6 @@ steps:
   - id: round-3
     action: round
     input:
-      cutAs: $steps.slice.output.slice.name
       round: 3
       slice: $steps.slice.output.slice
       interface: $steps.slice.output.interface
@@ -100,7 +110,6 @@ steps:
     action: bugs
     input:
       slice: $steps.slice.output.slice
-      cutAs: $steps.slice.output.slice.name
       interface: $steps.slice.output.interface
       fixed: $steps.slice.output.fixed
       bugs: $steps.slice.output.bugs
@@ -127,6 +136,7 @@ steps:
       pinned: $steps.pin.output.pinned
       bugs: $steps.bugs.output.bugs
       planted: $steps.bugs.output.planted
+      stayed: $steps.bugs.output.stayed
   - id: card
     approval: Merge this slice?
     show: $steps.draw.output.card
@@ -141,7 +151,7 @@ steps:
     input:
       choice: $steps.card.output.choice
       name: $steps.slice.output.slice.name
-      branch: $steps.cut.output.branch
+      branch: $steps.review-3.output.builder.branch
       work: $steps.review-3.output.branch
       head: $steps.review-3.output.head
       into: $settings.into

@@ -29,8 +29,16 @@
             "step": "wave"
           }
         }
-      ]
+      ],
+      "withheld": {
+        "build-over": "No earlier run left a branch of this wave."
+      }
     },
+    "offered": {
+      "build": true,
+      "build-over": false
+    },
+    "leftovers": [],
     "slices": ["ONE"],
     "batches": [
       [

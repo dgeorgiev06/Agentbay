@@ -11,6 +11,7 @@ import { requirementsOf, type Requirements } from "../scripts/lib/requirements-f
 import {
   assertTheMainCheckoutIsUntouched,
   bay,
+  branches,
   decided,
   git,
   into,
@@ -149,7 +150,20 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     assert.ok(kept.ok);
     assert.deepEqual(fieldsOf(kept.value).requirements, { file, version: 1 });
     assert.deepEqual(worktrees(root), []);
+    assert.deepEqual(branches(root), []);
     assertTheMainCheckoutIsUntouched(root);
+    const second = waitingOf(await startedDesign(root), "path");
+    await decided(root, second, { step: "path", choice: "light" });
+    await playedTo(root, second.id, {
+      designer: () => Promise.resolve(todoDesign),
+      challenger: (task) => Promise.resolve(allHeld(task)),
+    });
+    const secondCard = waitingOf(await shown(root, second.id), "card");
+    const again = runOf(await decided(root, secondCard, { step: "card", choice: "approve" }));
+    assert.equal(textAt(again, "status"), "done", JSON.stringify(again));
+    assert.equal(textAt(fieldsOf(again).output ?? null, "merged"), git(root, ["rev-parse", into]).trim());
+    assert.deepEqual(worktrees(root), []);
+    assert.deepEqual(branches(root), []);
   });
 
   test("a refused requirements file stops the run with every problem and its line, and nothing is designed", async () => {
@@ -187,6 +201,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     assert.equal(textAt(run, "status"), "failed", JSON.stringify(run));
     assert.match(textAt(run, "reason"), /failed its checks in round 3, the last round: The condition O2-C4/);
     assert.deepEqual(worktrees(root), []);
+    assert.deepEqual(branches(root), []);
   });
 
   test("a design whose worked example breaks its action's schema goes back to its designer with the sentence", async () => {

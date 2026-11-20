@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorktreesLeftRequest",
+  "description": "Nothing: the folder looked in is always .forge/worktrees.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {}
+}

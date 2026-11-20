@@ -27,6 +27,7 @@ import {
   shortHead,
   shown,
   started,
+  actionOutputs,
   submitted,
   task,
   textAt,
@@ -41,6 +42,21 @@ const noNames = { gained: [], lost: [], changed: [] };
 const sendBackWithheld = "No round runs after the card.";
 
 const discardWithheld = "Discarding comes with slice WD1.";
+
+const noBuildOver = [
+  {
+    name: "build-over",
+    status: "withheld",
+    does: "Drop the earlier run's branches, then build",
+    reason: "No earlier run left a branch of this slice.",
+  },
+  {
+    name: "build-over-without-interface",
+    status: "withheld",
+    does: "Drop the earlier run's branches, then go ahead with no agreed interface",
+    reason: "No earlier run left a branch of this slice.",
+  },
+];
 
 let template: string;
 
@@ -152,6 +168,7 @@ describe(
           does: "Go ahead with no agreed interface",
           reason: "The slice names its interface files.",
         },
+        ...noBuildOver,
         { name: "stop", status: "offered", does: "Stop; nothing is cut" },
       ]);
       const card = await roundToCard(root, start, { name: "R1", files, tests, built: { outcome: "built" } });
@@ -162,7 +179,8 @@ describe(
         { name: "discard", status: "withheld", does: "Stop; the worktrees go", reason: discardWithheld },
       ]);
       assert.equal(wordsOf(card)[0], "Merge is offered: every must item that proof judged passed.");
-      assert.ok(wordsOf(card).includes("2 files changed; the work and the tests are on forge/R1-tests-1"));
+      const where = "the work and the tests are on forge/R1-tests-1, the builder's work alone on forge/R1";
+      assert.ok(wordsOf(card).includes(`2 files changed; ${where}`));
       const head = rev(root, "forge/R1-tests-1");
       const whole = slice("R1", [testPath("R1", "quill.test.ts")]);
       const proved = {
@@ -183,8 +201,8 @@ describe(
       const done = runOf(await decided(root, card, { step: "card", choice: "merge" }));
       assert.deepEqual(fieldsOf(done).output, { choice: "merge", merged: rev(root, into), into });
       assert.equal(git(root, ["show", `${into}:${testPath("R1", "quill.test.ts")}`]), tests[0]?.text);
-      assert.deepEqual(branches(root), ["forge/R1", "forge/R1-merge", "forge/R1-tests-1"]);
-      assert.deepEqual(worktrees(root), [".forge/worktrees/R1-merge"]);
+      assert.deepEqual(branches(root), []);
+      assert.deepEqual(worktrees(root), []);
       assert.deepEqual(keptRows(root), []);
       assertTheMainCheckoutIsUntouched(root);
     });
@@ -268,6 +286,51 @@ describe(
       assert.deepEqual(keptRows(root), []);
       assert.equal(rev(root, into), rev(root, "main"));
       assertTheMainCheckoutIsUntouched(root);
+      const left = [rev(root, "forge/R4"), rev(root, "forge/R4-tests-1")];
+      const again = await started(root, trigger(root, "R4", [testPath("R4", "quill.test.ts")]));
+      const printed = await printedCard(root, again.id, "Build slice");
+      assert.deepEqual(printed.slice(printed.indexOf("  bugs: none will be planted") + 1), [
+        `  an earlier run left forge/R4 at ${left[0]?.slice(0, 7) ?? ""}`,
+        "  an earlier run left forge/R4-tests-1 at",
+        `    ${left[1]?.slice(0, 7) ?? ""}`,
+        "  building over drops them and gives each",
+        "    commit in full, so their work can be",
+        "    found again",
+        "All lines worked out by script.",
+        "You can:",
+        "  build-over  Drop the earlier run's",
+        "              branches, then build",
+        "  stop        Stop; nothing is cut",
+        "Not available:",
+        "  build             Cut the worktree and",
+        "                    start round 1",
+        "                    why: An earlier run left",
+        "                    branches of this slice;",
+        "                    build over them or stop.",
+        "  build-without-interface",
+        "                    Go ahead with no agreed",
+        "                    interface",
+        "                    why: An earlier run left",
+        "                    branches of this slice;",
+        "                    build over them or stop.",
+        "  build-over-without-interface",
+        "                    Drop the earlier run's",
+        "                    branches, then go ahead",
+        "                    with no agreed interface",
+        "                    why: The slice names its",
+        "                    interface files.",
+        "checked: 0 ran, 13 computed, 0 judged",
+      ]);
+      assert.deepEqual(branches(root), ["forge/R4", "forge/R4-tests-1"]);
+      const building = runOf(await decided(root, again, { step: "start", choice: "build-over" }));
+      assert.equal(stepOf(building), "declare/0#1");
+      const dropped = [
+        { branch: "forge/R4", commit: left[0] },
+        { branch: "forge/R4-tests-1", commit: left[1] },
+      ];
+      assert.deepEqual(await actionOutputs(root, again.id, "begin"), [{ choice: "build-over", dropped }]);
+      assert.deepEqual(branches(root), ["forge/R4"]);
+      assert.equal(rev(root, "forge/R4"), rev(root, "main"));
     });
 
     test("5. a slice that names no interface files: the start card says so, offers going ahead without one or stopping, and stop leaves nothing", async () => {
@@ -287,6 +350,7 @@ describe(
           reason: "The slice names no interface files.",
         },
         { name: "build-without-interface", status: "offered", does: "Go ahead with no agreed interface" },
+        ...noBuildOver,
         { name: "stop", status: "offered", does: "Stop; nothing is cut" },
       ]);
       const printed = await printedCard(root, start.id, "Build slice");
@@ -297,14 +361,26 @@ describe(
         "                    interface",
         "  stop              Stop; nothing is cut",
         "Not available:",
-        "  build  Cut the worktree and start round 1",
-        "         why: The slice names no interface",
-        "         files.",
+        "  build             Cut the worktree and",
+        "                    start round 1",
+        "                    why: The slice names no",
+        "                    interface files.",
+        "  build-over        Drop the earlier run's",
+        "                    branches, then build",
+        "                    why: No earlier run left",
+        "                    a branch of this slice.",
+        "  build-over-without-interface",
+        "                    Drop the earlier run's",
+        "                    branches, then go ahead",
+        "                    with no agreed interface",
+        "                    why: No earlier run left",
+        "                    a branch of this slice.",
         "checked: 0 ran, 11 computed, 0 judged",
       ]);
       const stopped = runOf(await decided(root, start, { step: "start", choice: "stop" }));
-      assert.equal(textAt(stopped, "status"), "failed");
-      assert.match(JSON.stringify(stopped), /The owner chose stop on the start card, so nothing is cut\./);
+      assert.equal(textAt(stopped, "status"), "undone");
+      assert.equal(textAt(stopped, "reason"), "The owner chose stop on the start card, so nothing is cut.");
+      assert.deepEqual(fieldsOf(fieldsOf(stopped).undo ?? null).undone, []);
       assert.deepEqual(branches(root), []);
       assert.deepEqual(worktrees(root), []);
       assert.deepEqual(keptRows(root), []);
@@ -369,6 +445,30 @@ describe(
         does: "Merge into the integration branch",
         reason: "1 must item failed.",
       });
+    });
+
+    test("9. a run that fails leaves its branch, and the next start card names it and drops nothing on stop", async () => {
+      const root = await project(template);
+      const named = testPath("R9", "quill.test.ts");
+      const start = await started(root, trigger(root, "R9", [named]));
+      await begun(root, start);
+      await submitted(root, start.id, { files: [codeOf("R9")], names: noNames });
+      const outside = { path: "bay/quill.test.ts", text: handed("R9", "quill.test.ts").text };
+      for (let tries = 0; tries < 3; tries += 1) {
+        await submitted(root, start.id, { tests: [outside] });
+      }
+      assert.ok(["failed", "undone"].includes(textAt(await shown(root, start.id), "status")));
+      assert.deepEqual(branches(root), ["forge/R9"]);
+      const left = rev(root, "forge/R9");
+      const again = await started(root, trigger(root, "R9", [named]));
+      assert.ok(
+        wordsOf(again).includes(`an earlier run left forge/R9 at ${left.slice(0, 7)}`),
+        wordsOf(again).join("\n"),
+      );
+      const stopped = runOf(await decided(root, again, { step: "start", choice: "stop" }));
+      assert.equal(textAt(stopped, "reason"), "The owner chose stop on the start card, so nothing is cut.");
+      assert.deepEqual(branches(root), ["forge/R9"]);
+      assert.equal(rev(root, "forge/R9"), left);
     });
 
     test("8. the test writer's and the reviewer's agents have no tool that writes, and the builder's none that runs a command", async () => {

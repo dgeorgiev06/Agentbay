@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LeftoversRequest",
+  "description": "The owner's request for a slice, as the workflow rounds was started with it; only the slice's name is read.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["request"],
+  "properties": {
+    "request": {
+      "type": "object",
+      "required": ["planned"],
+      "description": "The request the workflow rounds was started with, as slice-request.json describes it.",
+      "properties": {
+        "planned": {
+          "type": "object",
+          "required": ["slice"],
+          "properties": {
+            "slice": {
+              "type": "object",
+              "required": ["name"],
+              "properties": {
+                "name": {
+                  "$ref": "proof@1/prove-request.json#/$defs/sliceName"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

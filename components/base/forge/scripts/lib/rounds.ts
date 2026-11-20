@@ -1,4 +1,5 @@
 import { fail, fieldsOf, type Json, type JsonFields } from "../../../../../bay/sdk.ts";
+import { stayedOf, type Stayed } from "./branch-endings.ts";
 import { builtOf, type Built } from "./builder-answer.ts";
 import { sliceOf } from "./slice-form.ts";
 import type { Failing, FailingCase } from "./failing.ts";
@@ -41,6 +42,7 @@ export type RoundsState = {
   readonly pinnedAtHead?: readonly Pinned[];
   readonly builtAt?: string;
   readonly reviewedAt?: string;
+  readonly stayed?: readonly Stayed[];
 };
 
 export type AfterRound = {
@@ -116,13 +118,17 @@ function optionalText(
   return typeof value === "string" ? { [key]: value } : {};
 }
 
+export function withStayed(state: RoundsState, stayed: readonly Stayed[]): RoundsState {
+  return stayed.length === 0 ? state : { ...state, stayed };
+}
+
 export function roundsStateOf(value: Json | undefined): RoundsState | undefined {
   if (value === undefined || value === null) {
     return undefined;
   }
   const fields = fieldsOf(value);
   const practices = judgedPracticesOf(fields.practices);
-  return {
+  const state: RoundsState = {
     round: numberOf(fields.round),
     stage: fields.stage === "reviewed" ? "reviewed" : "proved",
     done: fields.done === true,
@@ -146,6 +152,7 @@ export function roundsStateOf(value: Json | undefined): RoundsState | undefined 
     ...optionalText(fields, "builtAt"),
     ...optionalText(fields, "reviewedAt"),
   };
+  return withStayed(state, stayedOf(fields.stayed));
 }
 
 function isFailing(failing: Failing): boolean {

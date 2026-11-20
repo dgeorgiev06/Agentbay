@@ -1471,6 +1471,22 @@ describe("the merge card", () => {
     assert.ok(words.includes("1 file changed; the work and the tests are on forge/S1-tests"));
   });
 
+  test("the rounds' card names the builder's last branch beside the tests branch, and each branch that stayed with why", () => {
+    const reason = "The project's own folder has the branch forge/S1-tests-1 checked out, so it is kept.";
+    const rounds = { ...smallMerge([]), work: "forge/S1-tests-2", builder: "forge/S1-2", kept: "with-tests" as const };
+    const lines = drawn({ ...rounds, stayed: [{ branch: "forge/S1-tests-1", reason }] }).card.lines;
+    const words = wordsOf(lines);
+    const where = "the work and the tests are on forge/S1-tests-2, the builder's work alone on forge/S1-2";
+    assert.ok(words.includes(`1 file changed; ${where}`), words.join("\n"));
+    const stayed = lines.find((line) => line.words.startsWith("forge/S1-tests-1 stayed:"));
+    assert.deepEqual(stayed, {
+      mark: "computed",
+      words: `forge/S1-tests-1 stayed: ${reason}`,
+      source: { step: "draw" },
+    });
+    assert.ok(wordsOf(drawn(rounds).card.lines).every((said) => !said.includes("stayed")));
+  });
+
   test("with no leak found the card has no line of leaks, and no sentence says there was none", () => {
     for (const input of [td1Merge, td1Failed, td1StoppedInput, td1BugsInput]) {
       const words = wordsOf(drawn(input).card.lines).join(" ");

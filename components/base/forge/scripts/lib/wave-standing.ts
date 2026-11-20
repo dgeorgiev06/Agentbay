@@ -1,4 +1,5 @@
 import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
+import { stayedOf, type Stayed } from "./branch-endings.ts";
 import { bugsOnCard, type BugsOnCard } from "./bug-card.ts";
 import { builtOf, type Built } from "./builder-answer.ts";
 import { interfaceChanges, pinsOf, type Pins } from "./interface-pins.ts";
@@ -16,10 +17,10 @@ import type { Leak } from "./leaks.ts";
 export type Settled = {
   readonly name: string;
   readonly title: string;
-  readonly cutAs: string;
   readonly base: string;
   readonly head: string;
   readonly work: string;
+  readonly builder: string;
   readonly own: Slice;
   readonly checks: Slice;
   readonly proof: Proved;
@@ -28,6 +29,7 @@ export type Settled = {
   readonly built: Built;
   readonly pins: Pins;
   readonly bugs: BugsOnCard;
+  readonly stayed: readonly Stayed[];
   readonly reason?: string;
 };
 
@@ -63,10 +65,10 @@ export function settledOf(value: Json): Settled {
   return {
     name: textOf(fields.name),
     title: textOf(fields.title),
-    cutAs: textOf(fields.cutAs),
     base: textOf(fields.base),
     head: textOf(fields.head),
     work: textOf(fields.work),
+    builder: textOf(fields.builder),
     own: sliceOf(withoutChecks(fields.slice ?? null)),
     checks: sliceOf(onlyChecks(fields.slice ?? null)),
     proof,
@@ -75,6 +77,7 @@ export function settledOf(value: Json): Settled {
     built: builtOf(fields.built),
     pins: { base: pinsOf(fields.pinned), head: state?.pinnedAtHead ?? [] },
     bugs: bugsOnCard(bugsOf(fields.bugs), proof.verdicts, numberOf(fields.planted)),
+    stayed: stayedOf(fields.stayed),
     ...(typeof reason === "string" ? { reason } : {}),
   };
 }

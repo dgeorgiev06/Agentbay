@@ -30,7 +30,6 @@
         }
       ]
     },
-    "cutAs": "TD1",
     "interface": ["components/modes/todo/schemas/list-response.json"],
     "fixed": ["components/modes/todo/tests/todo.test.ts"],
     "bugs": [
@@ -114,6 +113,7 @@
         "tests": ["components/modes/todo/tests/todo.test.ts"]
       }
     ],
-    "planted": 1
+    "planted": 1,
+    "stayed": []
   }
 }

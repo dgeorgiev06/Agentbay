@@ -4,13 +4,7 @@
   "description": "What the merge card is drawn from: the slice, proof's answer, how the builder ended, the branch the work is on and how it got there, and the branch a merge goes into.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "slice",
-    "proof",
-    "built",
-    "work",
-    "into"
-  ],
+  "required": ["slice", "proof", "built", "work", "into"],
   "properties": {
     "slice": {
       "$ref": "proof@1/prove-request.json#/$defs/slice"
@@ -24,9 +18,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "outcome"
-          ],
+          "required": ["outcome"],
           "description": "The builder wrote the slice.",
           "properties": {
             "outcome": {
@@ -48,10 +40,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "outcome",
-            "missing"
-          ],
+          "required": ["outcome", "missing"],
           "description": "The builder stopped, since the slice needs a capability that is not there.",
           "properties": {
             "outcome": {
@@ -71,19 +60,11 @@
             "missing": {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "lacks",
-                "name"
-              ],
+              "required": ["lacks", "name"],
               "description": "What is missing: where it would live, and its name. No sentence: the card shows the name as the builder's judgement.",
               "properties": {
                 "lacks": {
-                  "enum": [
-                    "kernel",
-                    "toolbox",
-                    "test-toolbox",
-                    "interface"
-                  ],
+                  "enum": ["kernel", "toolbox", "test-toolbox", "interface"],
                   "description": "Where the missing capability would live."
                 },
                 "name": {
@@ -111,10 +92,7 @@
       "description": "The branch a merge goes into, from forge's settings."
     },
     "kept": {
-      "enum": [
-        "set-aside",
-        "with-tests"
-      ],
+      "enum": ["set-aside", "with-tests"],
       "description": "How the work came to be on its branch: set aside by itself, or committed with the tests a test writer handed in. Left out, set aside."
     },
     "caseMessages": {
@@ -146,9 +124,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "path"
-        ],
+        "required": ["path"],
         "properties": {
           "path": {
             "type": "string",
@@ -159,6 +135,28 @@
             "type": "string",
             "pattern": "^[0-9a-f]{16}$",
             "description": "The toolbox's short hash of the file's whole text; left out when the file is not there."
+          }
+        }
+      }
+    },
+    "stayed": {
+      "type": "array",
+      "maxItems": 100,
+      "description": "The planter's branch, when worktrees kept it, as bugs answered; each is a line of the card.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["branch", "reason"],
+        "properties": {
+          "branch": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "The branch that stayed."
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "worktrees.drop-branch's sentence: why the branch was kept and what would let it go."
           }
         }
       }

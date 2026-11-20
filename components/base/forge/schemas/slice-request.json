@@ -10,10 +10,7 @@
     {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "request",
-        "planter"
-      ],
+      "required": ["request", "planter"],
       "properties": {
         "request": {
           "$ref": "#/$defs/request"
@@ -21,6 +18,28 @@
         "planter": {
           "const": true,
           "description": "A planter writes bugs after the last round when an item asks for bugs caught."
+        },
+        "leftovers": {
+          "type": "array",
+          "maxItems": 400,
+          "description": "Each branch an earlier run left that may hold work, with the commit it points at; empty when there is none.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["branch", "commit"],
+            "properties": {
+              "branch": {
+                "type": "string",
+                "maxLength": 100,
+                "description": "The branch an earlier run left."
+              },
+              "commit": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+                "description": "The commit it points at, in full."
+              }
+            }
+          }
         }
       }
     }
@@ -30,19 +49,12 @@
       "description": "The slice the owner asks forge to build: a planned slice from a plan, the commit to cut it from, the bugs to inject, written by whoever plans or reviews it, and the interface files it builds against.",
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "planned",
-        "base",
-        "bugs"
-      ],
+      "required": ["planned", "base", "bugs"],
       "properties": {
         "planned": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "title",
-            "slice"
-          ],
+          "required": ["title", "slice"],
           "description": "One slice of a plan, in the form of a plan's slice: its title and the slice as proof@1 judges it.",
           "properties": {
             "title": {

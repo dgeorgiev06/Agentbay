@@ -7,7 +7,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["choice", "merged", "into"],
-      "description": "The commit proof judged was merged.",
+      "description": "The commit proof judged was merged, and the slice's branches were dropped.",
       "properties": {
         "choice": {
           "const": "merge"
@@ -20,6 +20,28 @@
         "into": {
           "type": "string",
           "maxLength": 255
+        },
+        "stayed": {
+          "type": "array",
+          "maxItems": 100,
+          "description": "A branch forge asked to drop and worktrees kept, with the reason it gave; left out when every drop went through.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["branch", "reason"],
+            "properties": {
+              "branch": {
+                "type": "string",
+                "maxLength": 100,
+                "description": "The branch that stayed."
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 2000,
+                "description": "worktrees.drop-branch's sentence: why the branch was kept and what would let it go."
+              }
+            }
+          }
         }
       }
     },
@@ -27,7 +49,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["choice", "kept"],
-      "description": "Nothing was done; the branches stay.",
+      "description": "Nothing was merged; the two branches the card names stay.",
       "properties": {
         "choice": {
           "const": "keep"
@@ -39,7 +61,7 @@
             "type": "string",
             "maxLength": 300
           },
-          "description": "The branches that stay: the slice's and the work's."
+          "description": "The branches that stay: the builder's last branch and the branch the work and the tests are on."
         }
       }
     }

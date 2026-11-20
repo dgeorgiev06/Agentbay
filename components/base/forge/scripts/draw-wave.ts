@@ -1,4 +1,5 @@
 import { defineScript, fieldsOf, type Json } from "../../../../bay/sdk.ts";
+import { stayedOf, withStayedLines } from "./lib/branch-endings.ts";
 import { listOf, numberOf, textOf, textsOf } from "./lib/json-values.ts";
 import { provedOf } from "./lib/proof-answer.ts";
 import { sliceOf } from "./lib/slice-form.ts";
@@ -39,5 +40,5 @@ export const run = defineScript((input, context) => {
     alone: aloneOf(flat(proving.whenFailed), flat(fields.alone)),
     must: textsOf(context.settings.mustPractices),
   });
-  return Promise.resolve(drawn);
+  return Promise.resolve(withStayedLines(drawn, stayedOf(combined.stayed)));
 });

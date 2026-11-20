@@ -1,14 +1,42 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "BeginRequest",
-  "description": "The choice the owner took on the start card of the workflow rounds.",
+  "description": "The choice the owner took on the start card of the workflow rounds, the branches an earlier run left, and the integration branch.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["choice"],
+  "required": ["choice", "leftovers", "into"],
   "properties": {
     "choice": {
-      "enum": ["build", "build-without-interface", "stop"],
-      "description": "build or build-without-interface goes on to cut the slice's worktree; stop ends the run before anything is cut."
+      "enum": ["build", "build-without-interface", "build-over", "build-over-without-interface", "stop"],
+      "description": "build or build-without-interface goes on to cut the slice's worktree; build-over or build-over-without-interface drops the earlier run's branches first; stop ends the run before anything is cut."
+    },
+    "leftovers": {
+      "type": "array",
+      "maxItems": 400,
+      "description": "Each branch an earlier run left that may hold work, with the commit it points at; empty when there is none.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["branch", "commit"],
+        "properties": {
+          "branch": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "The branch an earlier run left."
+          },
+          "commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+            "description": "The commit it points at, in full."
+          }
+        }
+      }
+    },
+    "into": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The integration branch, named as into on every drop so it is never dropped."
     }
   }
 }

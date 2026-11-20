@@ -28,10 +28,10 @@ function settled(name: string, proof: Proved, reason?: string): Settled {
   const shown = {
     name,
     title: `The ${name.toLowerCase()} mode counts what was added`,
-    cutAs: name,
     base: head,
     head,
     work: `forge/${name}-tests-1`,
+    builder: `forge/${name}`,
     own: own(name),
     checks: checksOf(name),
     proof: provedOf(proof),
@@ -53,6 +53,7 @@ function settled(name: string, proof: Proved, reason?: string): Settled {
       head: [{ path: "a.json", hash: "0123456789abcdef" }],
     },
     bugs: { planted: 0, survived: [] },
+    stayed: [],
   };
   return reason === undefined ? shown : { ...shown, reason };
 }
@@ -92,6 +93,7 @@ describe("the wave's start card", () => {
       into: "integration",
       slices: plan.slices,
       sideBySide: 2,
+      leftovers: [],
     });
     assert.equal(
       printed(card, [
@@ -128,7 +130,15 @@ describe("the wave's start card", () => {
 
   test("a wave with more slices than the setting says which batches run one after another", () => {
     const plan = planOf({ title: "A wave", slices: ["A1", "A2", "A3"].map(plannedSlice) });
-    const start = { plan: "p.yaml", wave: 1, waves: 1, base: "875d936", into: "integration", sideBySide: 2 };
+    const start = {
+      plan: "p.yaml",
+      wave: 1,
+      waves: 1,
+      base: "875d936",
+      into: "integration",
+      sideBySide: 2,
+      leftovers: [],
+    };
     const words = waveStartCard({ ...start, slices: plan.slices }).lines.map((line) => line.words);
     assert.ok(words.includes("in 2 batches, each after the one before: A1 and A2; then A3"), words.join("\n"));
     assert.ok(waveStartCard({ ...start, slices: plan.slices }).lines.every((line) => line.source.step === "wave"));
@@ -153,7 +163,8 @@ describe("the wave's merge card", () => {
         "    out: TD2, as its own proof did not pass.",
         "  TD1: The td1 mode counts what was added",
         "  TD1 is in the combined head; the work and",
-        "    the tests are on forge/TD1-tests-1",
+        "    the tests are on forge/TD1-tests-1, the",
+        "    builder's work alone on forge/TD1",
         "  DOD-TD1-1, must, passed: What was added is",
         "    counted.",
         "  scope, must, passed: Every changed path is",
@@ -170,7 +181,8 @@ describe("the wave's merge card", () => {
         "  TD2: The td2 mode counts what was added",
         "  TD2 is left out: 1 must item failed. Its",
         "    branches stay; the work and the tests",
-        "    are on forge/TD2-tests-1",
+        "    are on forge/TD2-tests-1, the builder's",
+        "    work alone on forge/TD2",
         "  DOD-TD2-1, must, failed: What was added is",
         "    counted.",
         "  why: the named tests fail on the head",
@@ -224,12 +236,14 @@ describe("the wave's merge card", () => {
     const words = waveDrawn({ ...oneFailing, slices: three }).card.lines.map((line) => line.words);
     assert.ok(
       words.includes(
-        "TD1 is left out: 1 must item failed. Its branches stay; the work and the tests are on forge/TD1-tests-1",
+        "TD1 is left out: 1 must item failed. Its branches stay; the work and the tests are on forge/TD1-tests-1, " +
+          "the builder's work alone on forge/TD1",
       ),
     );
     assert.ok(
       words.includes(
-        "TD2 is left out: the builder stopped. Its branches stay; the work and the tests are on forge/TD2-tests-1",
+        "TD2 is left out: the builder stopped. Its branches stay; the work and the tests are on forge/TD2-tests-1, " +
+          "the builder's work alone on forge/TD2",
       ),
     );
   });

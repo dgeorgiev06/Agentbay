@@ -13,6 +13,7 @@ import { practiceAnswersOf } from "../scripts/lib/practice-answers.ts";
 import {
   assertTheMainCheckoutIsUntouched,
   bay,
+  branches,
   decided,
   git,
   into,
@@ -162,6 +163,8 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
     assert.deepEqual(fieldsOf(fieldsOf(sliced).output ?? null).offered, {
       build: true,
       "build-without-interface": false,
+      "build-over": false,
+      "build-over-without-interface": false,
     });
     const text = git(root, ["show", `${into}:docs/plans/0025-todo.yaml`]);
     await writtenIn(root, [...todoDesignFiles(), { path: "docs/plans/0025-todo.yaml", text }]);
@@ -170,6 +173,18 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
     );
     assert.deepEqual(fieldsOf(fieldsOf(waves).output ?? null).problems, []);
     assert.deepEqual(worktrees(root), []);
+    assert.deepEqual(branches(root), []);
+    const second = await startedPlan(root);
+    await playedTo(root, textAt(second, "id"), {
+      planner: () => Promise.resolve(todoPlan),
+      planChallenger: (task) => Promise.resolve(answers(task, [])),
+    });
+    const secondCard = waitingOf(await shown(root, textAt(second, "id")), "card");
+    const again = runOf(await decided(root, secondCard, { step: "card", choice: "approve" }));
+    assert.equal(textAt(again, "status"), "done", JSON.stringify(again));
+    assert.equal(textAt(fieldsOf(again).output ?? null, "plan"), "docs/plans/0026-todo.yaml");
+    assert.deepEqual(worktrees(root), []);
+    assert.deepEqual(branches(root), []);
   });
 
   test("a challenge that leaves out a practice is sent back; one with a finding runs the planner's second round and a second challenge, whose finding left the card cites", async () => {
@@ -224,6 +239,7 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
     const stopped = runOf(await decided(root, card, { step: "card", choice: "stop" }));
     assert.equal(textAt(stopped, "reason"), "The owner chose stop on the plan card, so nothing is committed.");
     assert.equal(git(root, ["ls-tree", "--name-only", into, "docs/plans/0025-todo.yaml"]), "");
+    assert.deepEqual(branches(root), []);
     assertTheMainCheckoutIsUntouched(root);
   });
 
@@ -249,6 +265,7 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
       /failed its checks in round 3, the last round: No slice meets the condition O2-C4/,
     );
     assert.deepEqual(worktrees(root), []);
+    assert.deepEqual(branches(root), []);
   });
 
   test("a refused requirements file stops the run with every problem and its line, and no plan is written", async () => {

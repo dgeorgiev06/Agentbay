@@ -10,6 +10,7 @@ import {
   allHeld,
   bay,
   askedOf,
+  branches,
   builderWrites,
   declared,
   filesHolding,
@@ -277,7 +278,9 @@ test("after a round whose proof quotes a test, no table of kernel.db and no othe
   });
   const heads = (await askedOf(root, "K2")).map((each) => textAt(each, "head"));
   const head = (branch: string): string => git(root, ["rev-parse", branch]).trim();
-  assert.deepEqual(heads, [head("forge/K2-tests-1"), head("forge/K2-tests-2"), head("forge/K2-tests-2")]);
+  assert.deepEqual(heads.slice(1), [head("forge/K2-tests-2"), head("forge/K2-tests-2")]);
+  assert.notEqual(heads[0], heads[1]);
+  assert.deepEqual(branches(root), ["forge/K2-2", "forge/K2-tests-2"]);
   waitingOf(await shown(root, start.id), "card");
   assert.deepEqual(await quotedIn(root), nothingFound);
 });

@@ -7,7 +7,7 @@
   "required": ["choice", "slices"],
   "properties": {
     "choice": {
-      "const": "build"
+      "enum": ["build", "build-over"]
     },
     "slices": {
       "type": "array",

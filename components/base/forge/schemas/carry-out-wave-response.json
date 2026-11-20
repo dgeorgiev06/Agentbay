@@ -7,7 +7,7 @@
     {
       "type": "object",
       "additionalProperties": false,
-      "required": ["choice", "merged", "into", "slices"],
+      "required": ["choice", "merged", "into", "slices", "kept"],
       "properties": {
         "choice": {
           "const": "merge"
@@ -27,8 +27,40 @@
           "items": {
             "$ref": "proof@1/prove-request.json#/$defs/sliceName"
           }
+        },
+        "kept": {
+          "type": "array",
+          "maxItems": 201,
+          "items": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "description": "The branches that stay: those of each slice left out of the combined head."
+        },
+        "stayed": {
+          "type": "array",
+          "maxItems": 100,
+          "description": "A branch forge asked to drop and worktrees kept, with the reason it gave; left out when every drop went through.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["branch", "reason"],
+            "properties": {
+              "branch": {
+                "type": "string",
+                "maxLength": 100,
+                "description": "The branch that stayed."
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 2000,
+                "description": "worktrees.drop-branch's sentence: why the branch was kept and what would let it go."
+              }
+            }
+          }
         }
-      }
+      },
+      "description": ""
     },
     {
       "type": "object",
@@ -40,11 +72,33 @@
         },
         "kept": {
           "type": "array",
-          "maxItems": 50,
+          "maxItems": 201,
           "items": {
             "type": "string",
-            "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
-            "maxLength": 255
+            "maxLength": 300
+          },
+          "description": "The branches that stay: each slice's last builder branch and tests branch, and the combined branch when the card names it."
+        },
+        "stayed": {
+          "type": "array",
+          "maxItems": 100,
+          "description": "A branch forge asked to drop and worktrees kept, with the reason it gave; left out when every drop went through.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["branch", "reason"],
+            "properties": {
+              "branch": {
+                "type": "string",
+                "maxLength": 100,
+                "description": "The branch that stayed."
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 2000,
+                "description": "worktrees.drop-branch's sentence: why the branch was kept and what would let it go."
+              }
+            }
           }
         }
       }

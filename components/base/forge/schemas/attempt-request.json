@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AttemptRequest",
+  "description": "The slice whose item of a wave starts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["slice"],
+  "properties": {
+    "slice": {
+      "$ref": "proof@1/prove-request.json#/$defs/sliceName"
+    }
+  }
+}

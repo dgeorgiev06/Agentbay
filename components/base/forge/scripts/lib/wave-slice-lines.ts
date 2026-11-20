@@ -1,13 +1,15 @@
+import { stayedLines } from "./branch-endings.ts";
 import { computed, joined, type CardLine } from "./card-lines.ts";
 import { interfaceWords } from "./interface-pins.ts";
 import { verdictLines } from "./item-lines.ts";
+import { whereWords } from "./merge-card.ts";
 import { practicesTallyWords } from "./practices-block.ts";
 import type { RoundsOnCard } from "./round-card.ts";
 import { bugWords, leakWords, roundsRanWords } from "./slice-words.ts";
 import type { Settled } from "./wave-standing.ts";
 
 function placeWords(settled: Settled, merged: readonly string[]): string {
-  const where = `the work and the tests are on ${settled.work}`;
+  const where = whereWords(settled.work, settled.builder);
   if (settled.reason !== undefined) {
     return `${settled.name} is left out: ${settled.reason} Its branches stay; ${where}`;
   }
@@ -41,5 +43,6 @@ export function sliceLines(settled: Settled, at: { merged: readonly string[]; mu
     ...opening.map((words) => computed("draw", words)),
     ...verdictLines(settled.own, settled.proof.verdicts, { messages: "filtered", provedBy: "draw" }),
     ...after.map((words) => computed("draw", words)),
+    ...stayedLines(settled.stayed),
   ];
 }

@@ -1,4 +1,5 @@
 import { defineScript, fail, fieldsOf } from "../../../../bay/sdk.ts";
+import { branchesSaid } from "./lib/branch-endings.ts";
 import { committedInto } from "./lib/commit-files.ts";
 import { designFiles, designPath } from "./lib/design-files.ts";
 import { designOf } from "./lib/design-form.ts";
@@ -18,7 +19,7 @@ export const run = defineScript(async (input, context) => {
   const files = designFiles({ job, file, version, design: designOf(fields.design ?? null) });
   const message = `${job}: the design, approved on the design card`;
   const slice = `${job}-design`;
-  const { commit, merged } = await committedInto(context, {
+  const { commit, merged, dropped, stayed } = await committedInto(context, {
     slice,
     into,
     files: () => Promise.resolve(files),
@@ -30,5 +31,6 @@ export const run = defineScript(async (input, context) => {
     into,
     design: designPath(job),
     interface: files.map((each) => each.path),
+    ...branchesSaid(dropped, stayed),
   };
 });

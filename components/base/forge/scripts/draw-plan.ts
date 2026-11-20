@@ -1,4 +1,5 @@
 import { defineScript, fieldsOf } from "../../../../bay/sdk.ts";
+import { stayedOf, withStayedLines } from "./lib/branch-endings.ts";
 import { textOf, textsOf } from "./lib/json-values.ts";
 import { planCard, type PlannerAnswer } from "./lib/plan-card.ts";
 import { planChanges } from "./lib/plan-changes.ts";
@@ -22,7 +23,7 @@ export const run = defineScript(async (input, context) => {
   const challenge = fieldsOf(challenged.challenge ?? null);
   const answer: PlannerAnswer =
     again.answered === true ? { kind: "answered", changes: planChanges(first, final) } : { kind: "not asked" };
-  return planCard({
+  const drawn = planCard({
     job: textOf(fieldsOf(start).job),
     into: textOf(fields.into),
     design: sources.design,
@@ -34,4 +35,5 @@ export const run = defineScript(async (input, context) => {
     challenger: challenged.challenged === true ? "challenge-2" : "challenge-1",
     answer,
   });
+  return withStayedLines(drawn, stayedOf(fieldsOf(start).stayed));
 });

@@ -7,8 +7,8 @@
   "required": ["choice", "slices"],
   "properties": {
     "choice": {
-      "enum": ["build", "stop"],
-      "description": "build goes on to build the slices; stop ends the run before anything is cut."
+      "enum": ["build", "build-over", "stop"],
+      "description": "build goes on to build the slices; build-over does too, and each slice's attempt and the step combine drop the branches an earlier run left; stop ends the run before anything is cut."
     },
     "slices": {
       "type": "array",

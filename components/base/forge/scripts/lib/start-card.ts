@@ -1,4 +1,5 @@
-import { computed, counted, joined, type Card } from "./card-lines.ts";
+import type { Dropped } from "./branch-endings.ts";
+import { computed, counted, joined, shortCommit, type Card } from "./card-lines.ts";
 import type { Item, Proof, Slice } from "./slice-form.ts";
 
 export type Planter = "runs" | "none";
@@ -12,6 +13,7 @@ export type StartCardInput = {
   readonly bugs: readonly string[];
   readonly planter: Planter;
   readonly interface: InterfaceFiles;
+  readonly leftovers?: readonly Dropped[];
 };
 
 const heldSaid: Readonly<Record<Proof["kind"], string>> = {
@@ -95,6 +97,14 @@ function bugsWords(input: StartCardInput): readonly string[] {
     : [`bugs: none named, so ${joined(asking)} will not be known`];
 }
 
+export function leftoverWords(leftovers: readonly Dropped[]): readonly string[] {
+  if (leftovers.length === 0) {
+    return [];
+  }
+  const each = leftovers.map((left) => `an earlier run left ${left.branch} at ${shortCommit(left.commit)}`);
+  return [...each, "building over drops them and gives each commit in full, so their work can be found again"];
+}
+
 export function startCard(input: StartCardInput): Card {
   const { slice, title, base } = input;
   const afters = slice.after.map((after) => `after ${after.slice}: ${after.because}`);
@@ -106,6 +116,7 @@ export function startCard(input: StartCardInput): Card {
     ...(afters.length === 0 ? ["after no other slice"] : afters),
     ...slice.done.flatMap(itemWords),
     ...bugsWords(input),
+    ...leftoverWords(input.leftovers ?? []),
   ];
   return { title: `Build slice ${slice.name}?`, lines: words.map((said) => computed("slice", said)) };
 }

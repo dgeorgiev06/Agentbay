@@ -4,28 +4,14 @@
   "description": "The design chosen, the challenger's answers, and where two designs differed.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "path",
-    "chosen",
-    "because",
-    "design",
-    "practices",
-    "differences"
-  ],
+  "required": ["path", "chosen", "because", "design", "practices", "differences"],
   "properties": {
     "path": {
-      "enum": [
-        "light",
-        "full"
-      ],
+      "enum": ["light", "full"],
       "description": "light: one designer. full: two designers who wrote apart."
     },
     "chosen": {
-      "enum": [
-        "first",
-        "second",
-        "merged"
-      ],
+      "enum": ["first", "second", "merged"],
       "description": "The design chosen: first or second as written, or merged, given in design."
     },
     "because": {
@@ -43,11 +29,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "id",
-          "answer",
-          "sentence"
-        ],
+        "required": ["id", "answer", "sentence"],
         "properties": {
           "id": {
             "type": "string",
@@ -55,11 +37,7 @@
             "description": "The practice's id, such as P-35."
           },
           "answer": {
-            "enum": [
-              "held",
-              "not-held",
-              "does-not-apply"
-            ],
+            "enum": ["held", "not-held", "does-not-apply"],
             "description": "Whether the design holds the practice."
           },
           "sentence": {
@@ -81,6 +59,28 @@
         "maxLength": 500
       },
       "description": "Where the two designs differ, one line each, worked out by script; empty with one design."
+    },
+    "stayed": {
+      "type": "array",
+      "maxItems": 100,
+      "description": "A branch forge asked to drop and worktrees kept, with the reason it gave; left out when every drop went through.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["branch", "reason"],
+        "properties": {
+          "branch": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "The branch that stayed."
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "worktrees.drop-branch's sentence: why the branch was kept and what would let it go."
+          }
+        }
+      }
     }
   }
 }

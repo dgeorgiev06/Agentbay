@@ -1,8 +1,10 @@
 import { defineScript, fieldsOf, type Json, type ScriptContext } from "../../../../bay/sdk.ts";
+import { branchesAfter } from "./lib/branch-endings.ts";
 import { answerOf } from "./lib/called.ts";
 import { codeAt, readIn } from "./lib/code.ts";
 import { keepFindings, keptTests } from "./lib/kept-tests.ts";
 import { pinnedFiles } from "./lib/pinned-files.ts";
+import { intoOf, settled } from "./lib/drops.ts";
 import { checksPractices, reviewersPractices, type Practice } from "./lib/practices.ts";
 import { reviewOf } from "./lib/review.ts";
 import { judgedPractices } from "./lib/reviewer-practices.ts";
@@ -11,9 +13,11 @@ import {
   findingsLeft,
   reviewPlan,
   reviewedState,
+  withStayed,
   type AfterRound,
   type Reviewed,
   type ReviewPlan,
+  type RoundsState,
 } from "./lib/rounds.ts";
 import { textsOf } from "./lib/json-values.ts";
 
@@ -82,6 +86,16 @@ async function reviewedOrNot(
   return { plan };
 }
 
+async function endedRounds(context: ScriptContext, asked: Asked, next: RoundsState): Promise<RoundsState> {
+  if (!next.done) {
+    return next;
+  }
+  const work = { builder: next.builder.branch, head: next.branch };
+  const ending = { kind: "rounds ended", name: asked.name, round: next.round, work } as const;
+  const drops = await settled(context, branchesAfter(ending), intoOf(context));
+  return withStayed(next, [...(next.stayed ?? []), ...drops.stayed]);
+}
+
 export const run = defineScript(async (input, context) => {
   const asked = askedOf(input);
   const plan = reviewPlan(asked.state);
@@ -90,5 +104,6 @@ export const run = defineScript(async (input, context) => {
   }
   const pinnedAtHead = await pinnedFiles(context, asked.state.folder ?? "", asked.interface);
   const reviewed = await reviewedOrNot(context, asked, plan);
-  return { ...reviewedState(asked.state, reviewed, `review-${String(asked.state.round)}`), pinnedAtHead };
+  const next = { ...reviewedState(asked.state, reviewed, `review-${String(asked.state.round)}`), pinnedAtHead };
+  return endedRounds(context, asked, next);
 });

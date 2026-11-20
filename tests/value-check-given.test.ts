@@ -5,7 +5,8 @@ import { mock, test } from "node:test";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import type { Json } from "../bay/contracts.ts";
 import { isJson } from "../bay/protocol-json.ts";
-import { checkedAgainst, checkedValue } from "../bay/value-check.ts";
+import { checkedAgainst } from "../bay/given-schema.ts";
+import { checkedValue } from "../bay/value-check.ts";
 
 const kitRoot = join(import.meta.dirname, "..");
 

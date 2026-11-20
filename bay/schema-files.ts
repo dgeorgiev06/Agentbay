@@ -1,13 +1,8 @@
 import type { Json } from "./contracts.ts";
 import { isJson } from "./protocol-json.ts";
 import type { FileSystem } from "./ports.ts";
-import {
-  partAt,
-  referencesWithin,
-  type SchemaFile,
-  type SchemaParts,
-  type UnfollowedReference,
-} from "./value-check.ts";
+import { partAt, referencesWithin } from "./given-schema.ts";
+import type { SchemaFile, SchemaParts, UnfollowedReference } from "./value-check.ts";
 
 export type NameableSchemas = {
   readonly owner: string;

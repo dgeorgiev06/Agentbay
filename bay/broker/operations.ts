@@ -555,7 +555,7 @@ export function contextOver(asking: Asking, start: ScriptStart): ScriptContext {
         return { ok: true, value: checkedValue(schema, answer.value, value) };
       },
       checkAgainst: async (schema, value) => {
-        const { checkedAgainst } = await import("../value-check.ts");
+        const { checkedAgainst } = await import("../given-schema.ts");
         return checkedAgainst(schema, value);
       },
     },

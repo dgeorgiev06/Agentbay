@@ -155,6 +155,8 @@ features:
       - bay/runs/side-by-side-steps.ts
       - bay/runs/draw-turns.ts
       - bay/runs/issued-tasks.ts
+      - bay/runs/workflow-part.ts
+      - bay/runs/given-steps.ts
     may_import:
       - vocabulary
       - manifests

@@ -6,7 +6,8 @@ import type { Waiting } from "./run-state.ts";
 import { shownChoices } from "./choices.ts";
 import { approvalContentOf } from "./scrubbed-store.ts";
 import { skillTaskOf, startedSkillOf } from "./skill-steps.ts";
-import { skillRoundOf } from "./step-key.ts";
+import { skillRoundOf, workflowStepKey } from "./step-key.ts";
+import { untilIn, untilQuestion } from "./workflow-part.ts";
 
 type WaitingContext = {
   readonly system: System;
@@ -79,10 +80,17 @@ const ownerQuestion =
   "The step started and did not finish, and its action has effects other than read, so running it again could " +
   "repeat them. Resume with --rerun to run it again.";
 
-function ownerWaiting(run: RunWithSteps, stepKey: string): Waiting {
-  const record = recordOf(run, stepKey);
-  const asked = record?.kind === "foreach" ? record.detail?.question : undefined;
-  return { reason: "owner", stepKey, question: asked ?? ownerQuestion };
+function askedQuestion(stored: Stored, stepKey: string): string | undefined {
+  const until = untilIn(stored.events);
+  if (until !== undefined && workflowStepKey("", until) === stepKey) {
+    return untilQuestion(until);
+  }
+  const record = recordOf(stored.run, stepKey);
+  return record?.kind === "foreach" ? record.detail?.question : undefined;
+}
+
+function ownerWaiting(stored: Stored, stepKey: string): Waiting {
+  return { reason: "owner", stepKey, question: askedQuestion(stored, stepKey) ?? ownerQuestion };
 }
 
 function waitingOf(context: WaitingContext, stored: Stored, wait: StoredWait): Waiting | undefined {
@@ -96,7 +104,7 @@ function waitingOf(context: WaitingContext, stored: Stored, wait: StoredWait): W
     case "budget":
       return budgetWaiting(stored.events, wait.stepKey);
     case "owner":
-      return ownerWaiting(stored.run, wait.stepKey);
+      return ownerWaiting(stored, wait.stepKey);
   }
 }
 

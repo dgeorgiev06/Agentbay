@@ -25,6 +25,7 @@ export type Walk = {
   readonly rerunUnfinished: boolean;
   readonly stopReason: string | undefined;
   readonly extra: Budget;
+  readonly until: string | undefined;
   readonly phase: "main" | "undo";
 };
 

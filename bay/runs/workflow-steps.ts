@@ -10,6 +10,7 @@ import { approvalContentOf, type ApprovalContent } from "./scrubbed-store.ts";
 import type { ApprovalDetail, ApprovalVerdict } from "./step-detail.ts";
 import { runForeach } from "./foreach-steps.ts";
 import { workflowStepKey } from "./step-key.ts";
+import { untilQuestion } from "./workflow-part.ts";
 import {
   changeDetail,
   done,
@@ -279,6 +280,10 @@ async function runWorkflowStep(walk: Walk, scope: WorkflowScope, at: StepAt<Work
   return replayed(scope.budget, record) ?? runUnsettledStep(walk, scope, { ...at, record });
 }
 
+function stopsAfter(walk: Walk, scope: WorkflowScope, step: WorkflowStep): boolean {
+  return scope.within === "" && walk.phase === "main" && walk.until === step.id;
+}
+
 export async function runWorkflowSteps(walk: Walk, scope: WorkflowScope, list: StepList): Promise<Progress> {
   let previous = list.start;
   for (const step of list.steps) {
@@ -290,6 +295,9 @@ export async function runWorkflowSteps(walk: Walk, scope: WorkflowScope, list: S
     scope.outputs.set(step.id, progress.output);
     scope.keys.set(step.id, key);
     previous = progress.output;
+    if (stopsAfter(walk, scope, step)) {
+      return waiting({ reason: "owner", stepKey: key, question: untilQuestion(step.id) });
+    }
   }
   return done(previous);
 }

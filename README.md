@@ -281,3 +281,27 @@ grows past 65536 parts when each reference is followed in place (the kit's large
 validator cannot compile or that sends it round without end. The validator has no `loadSchema`, so a reference it
 cannot find stops the compile; it never fetches. A `pattern` is a regular expression as written, as in a schema
 file: one that backtracks without end stops the script at its own time limit, and nothing else.
+
+## Testing a part of a workflow
+
+A mode's test can run one part of a workflow alone. `project.runWorkflowPart(mode, path, { input, given, until })`,
+from the test toolbox, starts the workflow with `given`, the outputs of its first steps by id, and runs from the
+first step not given. Each given output is checked against the output schema of its step's action, and one that
+breaks it refuses the start with the schema's sentence, so a test cannot give an output the action could not
+have answered. A `foreach` is given one output for each of its items, each checked against the schema of the
+action that ends its steps. An approval is given as `{ "choice": "<name>" }` with a choice it offers for the
+steps given before it, or as `{ "verdict": "approve" }` when it has no choices. `until` names a step after the
+given ones: the run stops once it is done, records its output, and starts nothing after it.
+
+Given steps are the steps from the first up to where the walk begins, each at the top of the workflow. A wait
+cannot be given, and neither can what a step does to the world: a worktree it cuts, a branch it commits, rows it
+writes. A later step that needs such a thing finds it missing, so the test makes it itself, as forge's tests make
+a slice's branches before they give its rounds, or gives fewer steps and lets that one run. A card's line marked
+judged may cite a given step; it names no skill, since none ran. A line marked ran cannot cite one, since no
+command ran there.
+
+A run started this way says so. `bay runs <run> --json` shows its target with `part`, the given steps and
+`until`; `--events` shows a `step.given` event for each given step; and a run stopped by `until` waits for its
+owner with a question that says a test stopped it there. Resuming it stops there again. `bay` itself has no way
+to start one: a test that drives `bay` in a process of its own runs `node tests/start-part.ts <mode>:<path>
+'<trigger json>' '<part json>'` in its project, which works only in a folder under the temporary folder.

@@ -56,6 +56,7 @@ test("the test toolbox exports these names and no others", async () => {
     "ProjectOptions",
     "Run",
     "TestProject",
+    "WorkflowPart",
     "openModeProject",
   ]);
   assert.deepEqual(text.match(/^export\b(?! (?:async function|function|type|const) \w+)/gm), null);
@@ -82,10 +83,12 @@ test("a project opened with the modes of a project beside the kit offers these o
       "root",
       "run",
       "runWorkflow",
+      "runWorkflowPart",
       "runs",
       "setTime",
       "show",
       "untrustedSentence",
+      "workflowPartRefusal",
     ]);
     assert.deepEqual(await project.output("greeter.fetch", { name: "Ada" }), { greeting: "Hello, Ada" });
   });

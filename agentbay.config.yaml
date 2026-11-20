@@ -17,6 +17,8 @@ tiers:
 settings:
   proof:
     links: [node_modules]
+    stepSeconds: 3600
+    longestCallSeconds: 2400
     noRise:
       - name: debt
         pattern: "rule:"

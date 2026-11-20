@@ -4,11 +4,11 @@
   "description": "The wave worked out from the plan at the head of into: its name, its base, the start card, its slices, and their slice requests in batches of at most the setting sideBySide.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["name", "plan", "wave", "into", "base", "card", "slices", "batches"],
+  "required": ["name", "plan", "wave", "into", "base", "card", "slices", "batches", "offered", "leftovers"],
   "properties": {
     "name": {
       "$ref": "proof@1/prove-request.json#/$defs/sliceName",
-      "description": "The name the wave's worktrees are cut under, such as wave-1."
+      "description": "The wave's name, wave-<number>, which its combined branch and scratch worktrees are named after."
     },
     "plan": {
       "$ref": "proof@1/prove-request.json#/$defs/path"
@@ -73,6 +73,23 @@
               }
             }
           }
+        },
+        "withheld": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The reason for the go-ahead the start approval withholds, one full sentence.",
+          "properties": {
+            "build": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "build-over": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
         }
       }
     },
@@ -94,6 +111,42 @@
         "items": {
           "type": "object",
           "description": "A slice request, in the form the workflow rounds takes."
+        }
+      }
+    },
+    "offered": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["build", "build-over"],
+      "description": "Which go-ahead the start approval offers: build-over when an earlier run left branches of the wave, build otherwise.",
+      "properties": {
+        "build": {
+          "type": "boolean"
+        },
+        "build-over": {
+          "type": "boolean"
+        }
+      }
+    },
+    "leftovers": {
+      "type": "array",
+      "maxItems": 400,
+      "description": "Each branch an earlier run of the wave left that may hold work, the slices' and the combined branch, with its commit; empty when there is none.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["branch", "commit"],
+        "properties": {
+          "branch": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "The branch an earlier run left."
+          },
+          "commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+            "description": "The commit it points at, in full."
+          }
         }
       }
     }

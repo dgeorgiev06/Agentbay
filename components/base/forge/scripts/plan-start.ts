@@ -1,4 +1,5 @@
 import { defineScript, fail, fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
+import { branchesSaid } from "./lib/branch-endings.ts";
 import { whileOnBranch } from "./lib/branch-files.ts";
 import { answerOf } from "./lib/called.ts";
 import { designSummaryOf, type DesignSummary } from "./lib/design-summary.ts";
@@ -44,14 +45,16 @@ export const run = defineScript(async (input, context) => {
     branch: into,
     paths: [design, ...textsOf(fields.practices)],
   };
-  const read = await whileOnBranch(context, onBranch, ([first, ...rest]): Promise<Read> => {
+  const onIt = await whileOnBranch(context, onBranch, ([first, ...rest]): Promise<Read> => {
     const practices = rest.flatMap((file) => planPractices(file.text));
     return Promise.resolve({ text: first?.text ?? "", practices });
   });
+  const read = onIt.made;
   const document = documentOf(design, read.text);
   const summary = summaryOf(design, document);
   const checked = await answerOf(context, "requirements.check", { file: summary.requirements });
   const { file, requirements } = acceptedOrStopped(checked, "plan");
   const practices = read.practices.map((practice) => ({ ...practice }));
-  return { design, document, file, requirements, job: summary.job, practices };
+  const said = branchesSaid([], onIt.stayed);
+  return { design, document, file, requirements, job: summary.job, practices, ...said };
 });

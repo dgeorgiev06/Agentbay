@@ -3,19 +3,22 @@ import { answerOf } from "./lib/called.ts";
 import { builtOf, type Built } from "./lib/builder-answer.ts";
 import type { Leak } from "./lib/leaks.ts";
 import { sliceOf } from "./lib/slice-form.ts";
+import type { Stayed } from "./lib/branch-endings.ts";
+import { intoOf } from "./lib/drops.ts";
 import { failingOf, safeVerdicts, withoutCases } from "./lib/failing.ts";
-import { handedTestsOf, type HandedTest } from "./lib/handed-tests.ts";
-import { keepTests, keptFindings, keptMark, keptTests } from "./lib/kept-tests.ts";
+import type { HandedTest } from "./lib/handed-tests.ts";
+import { keepTests, keptMark, keptTests } from "./lib/kept-tests.ts";
 import { leaksAfterBuild } from "./lib/leak-check.ts";
 import { newMark } from "./lib/mark.ts";
-import { roundPlan, roundsStateOf, type RoundPlan, type RoundsState, type Work } from "./lib/rounds.ts";
+import { newTests } from "./lib/round-writer.ts";
+import { roundPlan, roundsStateOf, withStayed, type RoundPlan, type RoundsState, type Work } from "./lib/rounds.ts";
 import { withoutChecks } from "./lib/tool-checks.ts";
 import { listOf, textOf, textsOf } from "./lib/json-values.ts";
 
 type Round = {
   readonly number: number;
   readonly name: string;
-  readonly cutAs: string;
+  readonly into: string;
   readonly slice: Json;
   readonly interface: Json;
   readonly fixed: Json;
@@ -35,14 +38,14 @@ type Committed = Work & {
   readonly folder: string;
 };
 
-function roundOf(input: Json): Round {
+function roundOf(input: Json, into: string): Round {
   const fields = fieldsOf(input);
   const slice = fields.slice ?? null;
   const cut = fieldsOf(fields.cut ?? null);
   return {
     number: typeof fields.round === "number" ? fields.round : 1,
     name: sliceOf(slice).name,
-    cutAs: textOf(fields.cutAs),
+    into,
     slice,
     interface: fields.interface ?? [],
     fixed: fields.fixed ?? [],
@@ -73,31 +76,11 @@ async function committed(context: ScriptContext, folder: string, message: string
   return { folder, branch: textOf(answer.branch), commit: textOf(answer.commit) };
 }
 
-async function testsAsked(context: ScriptContext, round: Round, folder: string): Promise<readonly HandedTest[]> {
-  const asked = { slice: round.slice, interface: round.interface, folder, practices: round.practices };
-  if (round.number === 1) {
-    return handedTestsOf(await answerOf(context, "write-tests", asked));
-  }
-  const earlier = await keptTests(context, round.name);
-  const findings = await keptFindings(context, round.name);
-  return handedTestsOf(await answerOf(context, "write-tests", { ...asked, earlier: [...earlier], findings }));
-}
-
-async function newTests(context: ScriptContext, round: Round): Promise<readonly HandedTest[]> {
-  if (round.number === 1) {
-    return testsAsked(context, round, round.cut.folder);
-  }
-  const writer = await cutAt(context, `${round.cutAs}-writer-${String(round.number)}`, round.cut.commit);
-  const tests = await testsAsked(context, round, writer.folder);
-  await removed(context, { folder: writer.folder, into: round.cut.commit });
-  return tests;
-}
-
 async function builderFolder(context: ScriptContext, round: Round, before: RoundsState | undefined): Promise<string> {
   if (before === undefined) {
     return round.cut.folder;
   }
-  const cut = await cutAt(context, `${round.cutAs}-${String(round.number)}`, before.builder.commit);
+  const cut = await cutAt(context, `${round.name}-${String(round.number)}`, before.builder.commit);
   return cut.folder;
 }
 
@@ -132,17 +115,18 @@ type Made = {
 
 type Head = Committed & {
   readonly leaks: readonly Leak[];
+  readonly stayed: readonly Stayed[];
 };
 
 async function leaksIn(
   context: ScriptContext,
   round: Round,
   made: Made & { readonly folder: string },
-): Promise<readonly Leak[]> {
+): Promise<Pick<Head, "leaks" | "stayed">> {
   return leaksAfterBuild(context, {
     slice: sliceOf(round.slice),
-    cutAs: round.cutAs,
     round: round.number,
+    into: round.into,
     base: round.cut.commit,
     commit: made.building.builder.commit,
     folder: made.folder,
@@ -156,11 +140,11 @@ async function leaksIn(
 
 async function headOf(context: ScriptContext, round: Round, made: Made): Promise<Head> {
   const { building, tests } = made;
-  const folder = await cutAt(context, `${round.cutAs}-tests-${String(round.number)}`, building.builder.commit);
-  const leaks = await leaksIn(context, round, { ...made, folder: folder.folder });
+  const folder = await cutAt(context, `${round.name}-tests-${String(round.number)}`, building.builder.commit);
+  const checked = await leaksIn(context, round, { ...made, folder: folder.folder });
   await testsWritten(context, folder.folder, tests);
   const head = await committed(context, folder.folder, `${round.name}: the tests the test writer handed in`);
-  return { ...head, leaks };
+  return { ...head, ...checked };
 }
 
 async function proved(
@@ -199,17 +183,25 @@ function lastReviewOf(before: RoundsState | undefined): Pick<RoundsState, "pract
   return before?.reviewedAt === undefined ? practices : { ...practices, reviewedAt: before.reviewedAt };
 }
 
-async function ranRound(context: ScriptContext, round: Round, plan: RoundPlan): Promise<RoundsState> {
-  if (plan.writeTests) {
-    const tests = await newTests(context, round);
-    await keepTests(context, { slice: round.name, tests, mark: await runMark(context, round) });
+async function written(context: ScriptContext, round: Round, plan: RoundPlan): Promise<readonly Stayed[]> {
+  if (!plan.writeTests) {
+    return [];
   }
+  const { number, name, slice, practices } = round;
+  const writing = { number, name, slice, interface: round.interface, practices, into: round.into };
+  const { tests, stayed } = await newTests(context, { ...writing, base: round.cut.commit, folder: round.cut.folder });
+  await keepTests(context, { slice: round.name, tests, mark: await runMark(context, round) });
+  return stayed;
+}
+
+async function ranRound(context: ScriptContext, round: Round, plan: RoundPlan): Promise<RoundsState> {
+  const writerStayed = await written(context, round, plan);
   const building = await buildingOf(context, round, plan);
   const tests = await keptTests(context, round.name);
   const paths = tests.map((test) => test.path);
   const head = await headOf(context, round, { building, tests });
   const verdicts = await proved(context, round, { ...head, tests: paths });
-  return {
+  const state: RoundsState = {
     round: round.number,
     stage: "proved",
     done: false,
@@ -229,10 +221,11 @@ async function ranRound(context: ScriptContext, round: Round, plan: RoundPlan): 
     leaks: head.leaks,
     ...lastReviewOf(round.before),
   };
+  return withStayed(state, [...(round.before?.stayed ?? []), ...writerStayed, ...head.stayed]);
 }
 
 export const run = defineScript(async (input, context) => {
-  const round = roundOf(input);
+  const round = roundOf(input, intoOf(context));
   const plan = roundPlan(round.before);
   if (plan === undefined) {
     return round.before ?? null;

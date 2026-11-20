@@ -1,8 +1,21 @@
 {
   "input": {
-    "choice": "build-without-interface"
+    "choice": "build-over-without-interface",
+    "leftovers": [
+      {
+        "branch": "forge/ONE-tests-1",
+        "commit": "9e41c2a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6"
+      }
+    ],
+    "into": "integration"
   },
   "output": {
-    "choice": "build-without-interface"
+    "choice": "build-over-without-interface",
+    "dropped": [
+      {
+        "branch": "forge/ONE-tests-1",
+        "commit": "9e41c2a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6"
+      }
+    ]
   }
 }

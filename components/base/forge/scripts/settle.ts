@@ -1,4 +1,5 @@
 import { defineScript, fail, fieldsOf, type JsonFields } from "../../../../bay/sdk.ts";
+import { stayedOf, type Stayed } from "./lib/branch-endings.ts";
 import { pinsOf } from "./lib/interface-pins.ts";
 import { textOf, textsOf } from "./lib/json-values.ts";
 import { provedOf } from "./lib/proof-answer.ts";
@@ -23,6 +24,10 @@ function titleOf(fields: JsonFields): string {
   return textOf(fieldsOf(fieldsOf(fields.request ?? null).planned ?? null).title);
 }
 
+function stayedIn(state: RoundsState, bugs: JsonFields): readonly Stayed[] {
+  return [...(state.stayed ?? []), ...stayedOf(bugs.stayed)];
+}
+
 export const run = defineScript((input, context) => {
   const fields = fieldsOf(input);
   const started = fieldsOf(fields.slice ?? null);
@@ -32,16 +37,17 @@ export const run = defineScript((input, context) => {
   return Promise.resolve({
     name: sliceOf(slice).name,
     title: titleOf(fields),
-    cutAs: textOf(fields.cutAs),
     base: textOf(started.base),
     head: state.head,
     work: state.branch,
+    builder: state.builder.branch,
     slice,
     proof: fields.proof ?? null,
     rounds: fields.rounds ?? null,
     pinned: fields.pinned ?? [],
     bugs: bugs.bugs ?? [],
     planted: bugs.planted ?? 0,
+    stayed: [...stayedIn(state, bugs)],
     declared: state.declared,
     built: state.built,
     reason: reasonOf(fields, state, textsOf(context.settings.mustPractices)),

@@ -7,10 +7,10 @@
   "required": [
     "name",
     "title",
-    "cutAs",
     "base",
     "head",
     "work",
+    "builder",
     "slice",
     "proof",
     "rounds",
@@ -19,7 +19,8 @@
     "planted",
     "declared",
     "built",
-    "reason"
+    "reason",
+    "stayed"
   ],
   "properties": {
     "name": {
@@ -28,9 +29,6 @@
     "title": {
       "type": "string",
       "maxLength": 300
-    },
-    "cutAs": {
-      "$ref": "proof@1/prove-request.json#/$defs/sliceName"
     },
     "base": {
       "type": "string",
@@ -45,6 +43,11 @@
       "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
       "maxLength": 255,
       "description": "The branch that holds the slice's last work and tests."
+    },
+    "builder": {
+      "type": "string",
+      "maxLength": 300,
+      "description": "The builder's last branch, which holds the builder's work alone."
     },
     "slice": {
       "$ref": "proof@1/prove-request.json#/$defs/slice"
@@ -86,6 +89,28 @@
       "type": ["string", "null"],
       "maxLength": 4000,
       "description": "Why the slice's own proof did not pass, in the merge card's words; null when it passed."
+    },
+    "stayed": {
+      "type": "array",
+      "maxItems": 100,
+      "description": "The slice's branches worktrees kept when the rounds or the planter asked to drop them, with the reasons it gave.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["branch", "reason"],
+        "properties": {
+          "branch": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "The branch that stayed."
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "worktrees.drop-branch's sentence: why the branch was kept and what would let it go."
+          }
+        }
+      }
     }
   }
 }

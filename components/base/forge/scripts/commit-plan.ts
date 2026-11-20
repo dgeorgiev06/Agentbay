@@ -1,4 +1,5 @@
 import { defineScript, fail, fieldsOf, type Json, type ScriptContext } from "../../../../bay/sdk.ts";
+import { branchesSaid } from "./lib/branch-endings.ts";
 import { committedInto, type Written } from "./lib/commit-files.ts";
 import { textOf } from "./lib/json-values.ts";
 import { planDocument, planFile, plansIn, type Named } from "./lib/plan-file.ts";
@@ -36,11 +37,8 @@ export const run = defineScript(async (input, context) => {
   const named = { requirements: given.file, design: given.design };
   const message = `${job}: the plan, approved on the plan card`;
   const files = filed(context, { ...named, job, plan });
-  const {
-    commit,
-    merged,
-    files: written,
-  } = await committedInto(context, { slice: `${job}-plan`, into, files, message });
+  const done = await committedInto(context, { slice: `${job}-plan`, into, files, message });
+  const { commit, merged, files: written } = done;
   const document = planDocument(plan, named);
   const [first] = workOut(planOf(document), [], sourcesGiven(given)).waves;
   return {
@@ -49,5 +47,6 @@ export const run = defineScript(async (input, context) => {
     into,
     plan: written[0]?.path ?? "",
     wave: [...sliceRequests(document, first?.slices ?? [], commit)],
+    ...branchesSaid(done.dropped, done.stayed),
   };
 });

@@ -28,11 +28,18 @@ actions:
     effects: [read]
     run:
       - script: scripts/slice.ts
+  leftovers:
+    description: When a slice is about to start in the workflow rounds, it finds the branches an earlier run of the same slice left that may hold work, each with its commit, and changes nothing; it asks worktrees.drop-branch with the branch named as into, which keeps it and answers its commit.
+    input: schemas/leftovers-request.json
+    output: schemas/leftovers-response.json
+    effects: [read, write, delete]
+    run:
+      - script: scripts/leftovers.ts
   begin:
-    description: When the owner has answered the start card of the workflow rounds, the run goes on to cut the slice on a go-ahead and ends on stop.
+    description: When the owner has answered the start card of the workflow rounds, the run goes on to cut the slice on a go-ahead and ends on stop; building over an earlier run's branches drops them first and answers each commit.
     input: schemas/begin-request.json
     output: schemas/begin-response.json
-    effects: [read]
+    effects: [read, write, delete]
     run:
       - script: scripts/begin.ts
   pin:
@@ -135,22 +142,15 @@ actions:
     run:
       - script: scripts/draw.ts
   carry-out:
-    description: When the owner has chosen on the merge card and the choice is to be done.
+    description: When the owner has chosen on the merge card and the choice is to be done; a merge drops the slice's branches once its work is in the integration branch, and keep leaves the two branches the card names.
     input: schemas/carry-out-request.json
     output: schemas/carry-out-response.json
     effects: [read, write, delete]
     run:
       - script: scripts/carry-out.ts
-  fresh-name:
-    description: When a run is to cut worktrees under a name, it gives the name wanted the first time and the name with -again- and a count every later time, so a rerun or a later run never meets the branches an earlier one left.
-    input: schemas/fresh-name-request.json
-    output: schemas/fresh-name-response.json
-    effects: [read, write]
-    run:
-      - script: scripts/fresh-name.ts
   attempt:
-    description: When a slice's item of a wave starts, or starts again after the owner chose a rerun, it gives the name to cut the slice's worktrees under, new for each attempt, and sets aside and removes the worktrees an earlier attempt left, keeping their branches.
-    input: schemas/fresh-name-request.json
+    description: When a slice's item of a wave starts, or starts again after the owner chose a rerun, it sets aside and removes the worktrees an earlier attempt left and drops the slice's branches, answering each commit, so the slice is cut under its own name.
+    input: schemas/attempt-request.json
     output: schemas/attempt-response.json
     effects: [read, write, delete]
     run:
@@ -163,17 +163,17 @@ actions:
     run:
       - script: scripts/read-on-branch.ts
   wave:
-    description: When the owner asks for a wave of a committed plan, it reads the plan at the head of the integration branch, works out its waves as forge.waves does, refuses with every reason a wave that cannot be built, and draws the wave's start card and its slice requests in batches.
+    description: When the owner asks for a wave of a committed plan, it reads the plan at the head of the integration branch, works out its waves as forge.waves does, refuses with every reason a wave that cannot be built, finds the branches an earlier run of the wave left, and draws the wave's start card and its slice requests in batches.
     input: schemas/wave-request.json
     output: schemas/wave-response.json
     effects: [read, write, delete]
     run:
       - script: scripts/wave.ts
   wave-begin:
-    description: When the owner has answered the wave's start card, the run goes on to build the slices on build and ends on stop; if the run fails later, the kernel undoes it by forgetting every slice's kept tests.
+    description: When the owner has answered the wave's start card, the run goes on to build the slices on build, drops an earlier run's branches first and answers each commit on build-over, and ends on stop; if the run fails later, the kernel undoes it by forgetting every slice's kept tests.
     input: schemas/wave-begin-request.json
     output: schemas/wave-begin-response.json
-    effects: [read]
+    effects: [read, write, delete]
     undo: forget-wave
     run:
       - script: scripts/wave-begin.ts
@@ -224,7 +224,7 @@ actions:
     run:
       - script: scripts/draw-wave.ts
   carry-out-wave:
-    description: When the owner has chosen on the wave's merge card, it merges the combined head into the integration branch on merge and keeps every branch on keep, and forgets every slice's kept tests either way.
+    description: When the owner has chosen on the wave's merge card, it merges the combined head into the integration branch on merge, keeping only the branches of the slices left out, and on keep keeps the branches the card names, dropping the rest; it forgets every slice's kept tests either way.
     input: schemas/carry-out-wave-request.json
     output: schemas/carry-out-wave-response.json
     effects: [read, write, delete]

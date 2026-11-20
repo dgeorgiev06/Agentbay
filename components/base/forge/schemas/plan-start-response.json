@@ -49,6 +49,28 @@
         }
       },
       "description": "The practices held by a plan, from the practices files on the integration branch, each its id and its words."
+    },
+    "stayed": {
+      "type": "array",
+      "maxItems": 100,
+      "description": "A branch forge asked to drop and worktrees kept, with the reason it gave; left out when every drop went through.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["branch", "reason"],
+        "properties": {
+          "branch": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "The branch that stayed."
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "worktrees.drop-branch's sentence: why the branch was kept and what would let it go."
+          }
+        }
+      }
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",

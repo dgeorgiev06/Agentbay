@@ -1,5 +1,6 @@
 import type { ScriptContext } from "../../../../../bay/sdk.ts";
 import { answerOf } from "./called.ts";
+import { cutAfresh } from "./drops.ts";
 import { textOf } from "./json-values.ts";
 
 export type ToMerge = {
@@ -8,14 +9,9 @@ export type ToMerge = {
   readonly into: string;
 };
 
-export type HeadMerged = {
-  readonly folder: string;
-  readonly commit: string;
-};
-
-export async function headMerged(context: ScriptContext, asked: ToMerge): Promise<HeadMerged> {
-  const cut = await answerOf(context, "worktrees.cut", { slice: `${asked.cutAs}-merge`, base: asked.head });
-  const folder = textOf(cut.folder);
-  const merge = await answerOf(context, "worktrees.merge", { folder, into: asked.into });
-  return { folder, commit: textOf(merge.commit) };
+export async function headMerged(context: ScriptContext, asked: ToMerge): Promise<string> {
+  const cut = await cutAfresh(context, { slice: `${asked.cutAs}-merge`, base: asked.head }, asked.into);
+  const merge = await answerOf(context, "worktrees.merge", { folder: cut.folder, into: asked.into });
+  await answerOf(context, "worktrees.remove", { folder: cut.folder, branchAfter: "kept" });
+  return textOf(merge.commit);
 }

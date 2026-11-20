@@ -1,14 +1,27 @@
-import { defineScript, fieldsOf } from "../../../../bay/sdk.ts";
+import { defineScript, fieldsOf, type Json } from "../../../../bay/sdk.ts";
 import { bugsOnCard } from "./lib/bug-card.ts";
 import { builtOf } from "./lib/builder-answer.ts";
 import { pinsOf } from "./lib/interface-pins.ts";
 import { textsOf } from "./lib/json-values.ts";
-import { drawn } from "./lib/merge-card.ts";
+import { drawn, type MergeCardInput } from "./lib/merge-card.ts";
 import { provedOf } from "./lib/proof-answer.ts";
 import { sliceOf } from "./lib/slice-form.ts";
 import { bugsOf } from "./lib/planting.ts";
 import { roundsOnCard } from "./lib/round-card.ts";
-import { roundsStateOf } from "./lib/rounds.ts";
+import { roundsStateOf, type RoundsState } from "./lib/rounds.ts";
+import { stayedOf } from "./lib/branch-endings.ts";
+
+function roundsParts(rounds: RoundsState | undefined, pinned: Json | undefined): Partial<MergeCardInput> {
+  if (rounds === undefined) {
+    return {};
+  }
+  return {
+    rounds: roundsOnCard(rounds),
+    leaks: rounds.leaks,
+    builder: rounds.builder.branch,
+    pins: { base: pinsOf(pinned), head: rounds.pinnedAtHead ?? [] },
+  };
+}
 
 export const run = defineScript((input, context) => {
   const fields = fieldsOf(input);
@@ -29,8 +42,8 @@ export const run = defineScript((input, context) => {
     kept: fields.kept === "with-tests" ? "with-tests" : "set-aside",
     caseMessages: fields.caseMessages === "filtered" ? "filtered" : "unfiltered",
     into: branch("into"),
-    ...(rounds === undefined ? {} : { rounds: roundsOnCard(rounds), leaks: rounds.leaks }),
-    ...(rounds === undefined ? {} : { pins: { base: pinsOf(fields.pinned), head: rounds.pinnedAtHead ?? [] } }),
+    ...roundsParts(rounds, fields.pinned),
+    stayed: [...(rounds?.stayed ?? []), ...stayedOf(fields.stayed)],
     mustPractices: textsOf(context.settings.mustPractices),
     ...bugs,
   });

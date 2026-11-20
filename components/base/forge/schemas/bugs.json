@@ -4,7 +4,7 @@
   "description": "The bugs handed to proof, the owner's first and then the planter's, each name used once; and how many the planter wrote, none when it did not run.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["bugs", "planted"],
+  "required": ["bugs", "planted", "stayed"],
   "properties": {
     "bugs": {
       "type": "array",
@@ -18,6 +18,28 @@
       "minimum": 0,
       "maximum": 50,
       "description": "How many bugs the planter wrote: none when the slice has no bugs-caught item or the builder stopped."
+    },
+    "stayed": {
+      "type": "array",
+      "maxItems": 100,
+      "description": "The planter's branch, when worktrees kept it, with the reason it gave; empty when it was dropped or no planter ran.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["branch", "reason"],
+        "properties": {
+          "branch": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "The branch that stayed."
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "worktrees.drop-branch's sentence: why the branch was kept and what would let it go."
+          }
+        }
+      }
     }
   }
 }

@@ -104,7 +104,6 @@
         ]
       }
     },
-    "cutAs": "ONE",
     "pinned": [
       {
         "path": "schemas/one-request.json",
@@ -214,10 +213,10 @@
   "output": {
     "name": "ONE",
     "title": "One is counted once",
-    "cutAs": "ONE",
     "base": "875d936a1b2c3d4e5f60718293a4b5c6d7e8f901",
     "head": "9e41c2a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6",
     "work": "forge/ONE-tests-1",
+    "builder": "forge/ONE",
     "slice": {
       "name": "ONE",
       "kind": "mode",
@@ -362,6 +361,7 @@
     "built": {
       "outcome": "built"
     },
-    "reason": "1 must item failed."
+    "reason": "1 must item failed.",
+    "stayed": []
   }
 }

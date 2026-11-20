@@ -1,7 +1,9 @@
 {
   "input": {
     "choice": "build",
-    "slices": ["ONE"]
+    "slices": ["ONE"],
+    "leftovers": [],
+    "into": "integration"
   },
   "output": {
     "choice": "build",

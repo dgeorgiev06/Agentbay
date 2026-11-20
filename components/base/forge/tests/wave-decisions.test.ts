@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
 import { listOf } from "../scripts/lib/json-values.ts";
-import { givenOf, leftBy } from "../scripts/lib/names-given.ts";
 import { planOf } from "../scripts/lib/plan-form.ts";
 import { workOut } from "../scripts/lib/plan-waves.ts";
 import { batchesOf, sideBySideOf } from "../scripts/lib/wave-batches.ts";
@@ -122,19 +121,6 @@ describe("how many builders at once, and what a slice costs", () => {
 
   test("a slice's rounds ask the models at most 27 times: declare, plant and three each of tests and review three times over, and three builds", () => {
     assert.equal(modelCallsOfASlice(), 27);
-  });
-});
-
-describe("each attempt of a slice cuts under its own name", () => {
-  test("the first attempt has the slice's name; a later one adds -again- and its count, and earlier names are known", () => {
-    assert.deepEqual(givenOf("TD1", 1), { name: "TD1", earlier: [] });
-    assert.deepEqual(givenOf("TD1", 3), { name: "TD1-again-3", earlier: ["TD1", "TD1-again-2"] });
-  });
-
-  test("the folders an earlier attempt left are its name and its name with a dash, never another slice's", () => {
-    const folders = ["TD1", "TD1-tests-1", "TD10", "TD10-tests-1", "TD1-again-2-2", "wave-1-plan"];
-    assert.deepEqual(leftBy(["TD1"], folders), ["TD1", "TD1-tests-1", "TD1-again-2-2"]);
-    assert.deepEqual(leftBy([], folders), []);
   });
 });
 

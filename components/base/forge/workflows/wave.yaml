@@ -11,13 +11,20 @@ steps:
     approval: Build this wave?
     show: $steps.wave.output.card
     choices:
-      build: { does: Build the wave's slices side by side }
+      build: { does: Build the wave's slices side by side, when: $steps.wave.output.offered.build }
+      build-over:
+        {
+          does: "Drop the earlier run's branches, then build the slices side by side",
+          when: $steps.wave.output.offered.build-over,
+        }
       stop: { does: Stop; nothing is cut }
   - id: begin
     action: wave-begin
     input:
       choice: $steps.start.output.choice
       slices: $steps.wave.output.slices
+      leftovers: $steps.wave.output.leftovers
+      into: $settings.into
   - id: batches
     foreach: $steps.wave.output.batches
     steps:
@@ -33,11 +40,11 @@ steps:
           - id: lane
             action: attempt
             input:
-              wanted: $steps.slice.output.slice.name
+              slice: $steps.slice.output.slice.name
           - id: cut
             action: worktrees.cut
             input:
-              slice: $steps.lane.output.name
+              slice: $steps.slice.output.slice.name
               base: $steps.slice.output.base
           - id: pin
             action: pin
@@ -54,7 +61,6 @@ steps:
           - id: round-1
             action: round
             input:
-              cutAs: $steps.lane.output.name
               round: 1
               slice: $steps.slice.output.slice
               interface: $steps.slice.output.interface
@@ -74,7 +80,6 @@ steps:
           - id: round-2
             action: round
             input:
-              cutAs: $steps.lane.output.name
               round: 2
               slice: $steps.slice.output.slice
               interface: $steps.slice.output.interface
@@ -94,7 +99,6 @@ steps:
           - id: round-3
             action: round
             input:
-              cutAs: $steps.lane.output.name
               round: 3
               slice: $steps.slice.output.slice
               interface: $steps.slice.output.interface
@@ -115,7 +119,6 @@ steps:
             action: bugs
             input:
               slice: $steps.slice.output.slice
-              cutAs: $steps.lane.output.name
               interface: $steps.slice.output.interface
               fixed: $steps.slice.output.fixed
               bugs: $steps.slice.output.bugs
@@ -133,7 +136,6 @@ steps:
             input:
               request: $item
               slice: $steps.slice.output
-              cutAs: $steps.lane.output.name
               pinned: $steps.pin.output.pinned
               rounds: $steps.review-3.output
               bugs: $steps.bugs.output

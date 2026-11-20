@@ -1,4 +1,5 @@
 import { defineScript, fieldsOf, type Json } from "../../../../bay/sdk.ts";
+import { branchesSaid } from "./lib/branch-endings.ts";
 import { answerOf } from "./lib/called.ts";
 import { challengeOf, type Challenge } from "./lib/challenge-answer.ts";
 import { whileOnBranch } from "./lib/branch-files.ts";
@@ -55,7 +56,7 @@ export const run = defineScript(async (input, context) => {
   const requirements = requirementsOf(asked.requirements);
   const compared = differencesOf(asked, requirements);
   const onBranch = { slice: `${requirements.job}-practices`, branch: asked.into, paths: asked.practices };
-  const answer = await whileOnBranch(context, onBranch, (files) =>
+  const read = await whileOnBranch(context, onBranch, (files) =>
     answerOf(context, "challenge", {
       file: asked.file,
       requirements: asked.requirements,
@@ -64,7 +65,7 @@ export const run = defineScript(async (input, context) => {
       practices: files.flatMap((file) => designPractices(file.text)).map((practice) => ({ ...practice })),
     }),
   );
-  const challenge = challengeOf(answer);
+  const challenge = challengeOf(read.made);
   return {
     path: asked.path,
     chosen: challenge.chosen,
@@ -72,5 +73,6 @@ export const run = defineScript(async (input, context) => {
     design: chosenDesign(asked, challenge),
     practices: challenge.practices.map((practice) => ({ ...practice })),
     differences: [...compared],
+    ...branchesSaid([], read.stayed),
   };
 });

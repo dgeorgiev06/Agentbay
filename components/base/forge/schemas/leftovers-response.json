@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LeftoversResponse",
+  "description": "The branches an earlier run of the slice left that may hold work: forge/<slice>, forge/<slice>-<n> and forge/<slice>-tests-<n> for each round, each with its commit. Nothing was changed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["leftovers"],
+  "properties": {
+    "leftovers": {
+      "type": "array",
+      "maxItems": 400,
+      "description": "Each branch an earlier run left that may hold work, with the commit it points at; empty when there is none.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["branch", "commit"],
+        "properties": {
+          "branch": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "The branch an earlier run left."
+          },
+          "commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+            "description": "The commit it points at, in full."
+          }
+        }
+      }
+    }
+  }
+}

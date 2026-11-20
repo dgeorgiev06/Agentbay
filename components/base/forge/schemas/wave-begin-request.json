@@ -4,11 +4,11 @@
   "description": "The choice the owner took on the wave's start card, and the wave's slices.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["choice", "slices"],
+  "required": ["choice", "slices", "leftovers", "into"],
   "properties": {
     "choice": {
-      "enum": ["build", "stop"],
-      "description": "build goes on to build the slices; stop ends the run before anything is cut."
+      "enum": ["build", "build-over", "stop"],
+      "description": "build goes on to build the slices; build-over drops the branches an earlier run left first; stop ends the run before anything is cut."
     },
     "slices": {
       "type": "array",
@@ -17,6 +17,34 @@
         "$ref": "proof@1/prove-request.json#/$defs/sliceName"
       },
       "description": "The wave's slices, whose kept tests are forgotten if the run fails after this step."
+    },
+    "leftovers": {
+      "type": "array",
+      "maxItems": 400,
+      "description": "Each branch an earlier run of the wave left, as the step wave found it.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["branch", "commit"],
+        "properties": {
+          "branch": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "The branch an earlier run left."
+          },
+          "commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+            "description": "The commit it points at, in full."
+          }
+        }
+      }
+    },
+    "into": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The integration branch, named as into on every drop so it is never dropped."
     }
   }
 }

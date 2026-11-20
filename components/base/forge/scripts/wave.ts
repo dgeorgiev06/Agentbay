@@ -1,4 +1,5 @@
 import { defineScript, fail, fieldsOf, type JsonFields, type ScriptContext } from "../../../../bay/sdk.ts";
+import { branchOf, roundsBranches, type Dropped } from "./lib/branch-endings.ts";
 import { answerOf } from "./lib/called.ts";
 import { shortCommit } from "./lib/card-lines.ts";
 import type { DesignSummary } from "./lib/design-summary.ts";
@@ -6,6 +7,9 @@ import { listOf, numberOf, textOf } from "./lib/json-values.ts";
 import { workOut } from "./lib/plan-waves.ts";
 import { readSources } from "./lib/plan-sources.ts";
 import { planOfText, readFeatures } from "./lib/reading.ts";
+import { leftOver } from "./lib/drops.ts";
+import { lastRound } from "./lib/rounds.ts";
+import { waveChoices } from "./lib/start-choices.ts";
 import { testsToLookFor, waveOf, type PlanFound, type WaveAsked } from "./lib/wave-plan.ts";
 import { batchesOf, sideBySideOf } from "./lib/wave-batches.ts";
 import { waveStartCard } from "./lib/wave-start-card.ts";
@@ -66,9 +70,18 @@ async function testsRead(context: ScriptContext, found: Found, at: ToRead & { re
   return paths.length === 0 ? { commit: at.base, texts: new Map() } : readOnBranch(context, { ...at, paths });
 }
 
+function leftByEarlierRuns(
+  context: ScriptContext,
+  name: string,
+  slices: readonly string[],
+): Promise<readonly Dropped[]> {
+  const branches = slices.flatMap((slice) => roundsBranches(slice, lastRound));
+  return leftOver(context, [branchOf(name), ...branches]);
+}
+
 export const run = defineScript(async (input, context) => {
   const asked = askedOf(fieldsOf(input));
-  const name = textOf((await answerOf(context, "fresh-name", { wanted: `wave-${String(asked.wave)}` })).name);
+  const name = `wave-${String(asked.wave)}`;
   const read = await readOnBranch(context, { cutAs: `${name}-plan`, base: asked.into, paths: [asked.plan] });
   const found = await planFound(context, asked, read);
   const base = read.commit;
@@ -79,14 +92,23 @@ export const run = defineScript(async (input, context) => {
   }
   const sideBySide = sideBySideOf(context.settings.sideBySide);
   const design = found.design === undefined ? {} : { design: found.design };
+  const leftovers = await leftByEarlierRuns(
+    context,
+    name,
+    wave.slices.map((slice) => slice.name),
+  );
   const shown = { ...asked, waves: wave.waves, base: shortCommit(base), slices: wave.slices, sideBySide, ...design };
+  const choices = waveChoices(leftovers);
+  const card = waveStartCard({ ...shown, leftovers });
   return {
     name,
     plan: asked.plan,
     wave: asked.wave,
     into: asked.into,
     base,
-    card: waveStartCard(shown),
+    card: { ...card, withheld: choices.withheld },
+    offered: choices.offered,
+    leftovers: leftovers.map((left) => ({ ...left })),
     slices: wave.slices.map((slice) => slice.name),
     batches: batchesOf(wave.requests, sideBySide).map((batch) => [...batch]),
   };

@@ -1,3 +1,4 @@
+import { stayedLines, type Stayed } from "./branch-endings.ts";
 import type { BugsOnCard } from "./bug-card.ts";
 import type { Built, Missing } from "./builder-answer.ts";
 import { computed, counted, grouped, judged, type Card, type CardLine } from "./card-lines.ts";
@@ -21,6 +22,7 @@ export type MergeCardInput = {
   readonly built: Built;
   readonly builtAt: string;
   readonly work: string;
+  readonly builder?: string;
   readonly kept: Kept;
   readonly caseMessages: CaseMessages;
   readonly into: string;
@@ -29,6 +31,7 @@ export type MergeCardInput = {
   readonly leaks?: readonly Leak[];
   readonly mustPractices?: readonly string[];
   readonly pins?: Pins;
+  readonly stayed?: readonly Stayed[];
 };
 
 export type Drawn = {
@@ -52,9 +55,15 @@ const watchedPaths: readonly { readonly matches: RegExp; readonly says: string }
   { matches: /^schemas\//, says: "kit schema changed" },
 ];
 
-function changedWords(size: readonly Sized[], work: string, kept: Kept): string {
+export function whereWords(work: string, builder: string | undefined): string {
+  const where = `the work and the tests are on ${work}`;
+  return builder === undefined || builder === "" ? where : `${where}, the builder's work alone on ${builder}`;
+}
+
+function changedWords(size: readonly Sized[], input: MergeCardInput): string {
+  const { work, kept } = input;
   const changed = size.length === 0 ? "what changed is not known" : `${counted(size.length, "file")} changed`;
-  const where = kept === "set-aside" ? `the work is set aside on ${work}` : `the work and the tests are on ${work}`;
+  const where = kept === "set-aside" ? `the work is set aside on ${work}` : whereWords(work, input.builder);
   return `${changed}; ${where}`;
 }
 
@@ -111,9 +120,9 @@ function builderLines(built: Built, step: string): readonly CardLine[] {
 }
 
 function drawnLines(input: MergeCardInput, reason: string | undefined): readonly CardLine[] {
-  const { slice, proof, work, kept, pins = noPins } = input;
+  const { slice, proof, pins = noPins } = input;
   const drawnWords = [
-    changedWords(proof.size, work, kept),
+    changedWords(proof.size, input),
     ...sizeWords(proof.size),
     ...watchedWords(proof.size),
     ...interfaceWords(pins),
@@ -124,6 +133,7 @@ function drawnLines(input: MergeCardInput, reason: string | undefined): readonly
     ...verdictLines(slice, proof.verdicts, { messages: input.caseMessages, provedBy: "prove" }),
     ...reviewedPracticeLines(input.rounds, input.mustPractices ?? []),
     ...[...drawnWords, ...bugWords(input.bugs)].map((said) => computed("draw", said)),
+    ...stayedLines(input.stayed ?? []),
     ...roundLines(input.rounds),
     ...builderLines(input.built, input.builtAt),
   ];

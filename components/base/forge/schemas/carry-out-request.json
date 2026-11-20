@@ -17,13 +17,13 @@
       "type": "string",
       "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
       "maxLength": 255,
-      "description": "The slice's branch, as worktrees.cut made it."
+      "description": "The builder's last branch: in the workflow rounds the one review-3 names, in one-slice the one worktrees.cut made."
     },
     "work": {
       "type": "string",
       "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
       "maxLength": 255,
-      "description": "The branch set-aside committed the work to."
+      "description": "The branch the work and the tests are on: the last tests branch in the workflow rounds, the branch set-aside made in one-slice."
     },
     "head": {
       "type": "string",
@@ -35,6 +35,12 @@
       "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
       "maxLength": 255,
       "description": "The branch a merge goes into."
+    },
+    "folder": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*(/\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+      "maxLength": 1000,
+      "description": "In one-slice, the slice's worktree, which a merge removes before its branch is dropped. Left out in the workflow rounds, whose worktrees are removed already."
     }
   }
 }

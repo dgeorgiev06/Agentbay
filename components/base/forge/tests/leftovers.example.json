@@ -1,0 +1,35 @@
+{
+  "input": {
+    "request": {
+      "planned": {
+        "title": "One is counted once",
+        "slice": {
+          "name": "ONE",
+          "kind": "mode",
+          "scope": ["src/**"],
+          "after": [],
+          "done": [
+            {
+              "id": "DOD-ONE-1",
+              "says": "The checks pass.",
+              "level": "must",
+              "proof": {
+                "kind": "checks"
+              }
+            }
+          ]
+        }
+      },
+      "base": "main",
+      "bugs": []
+    }
+  },
+  "output": {
+    "leftovers": [
+      {
+        "branch": "forge/ONE",
+        "commit": "1c9a4e0b7d2f3a5c6e8b9d0f1a2b3c4d5e6f7a8b"
+      }
+    ]
+  }
+}

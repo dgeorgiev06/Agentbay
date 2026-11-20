@@ -1,16 +1,16 @@
 import type { Json, ScriptContext } from "../../../../../bay/sdk.ts";
-import { answerOf } from "./called.ts";
+import type { Stayed } from "./branch-endings.ts";
+import { cutAfresh, removedThenDropped } from "./drops.ts";
 import type { Leak } from "./leaks.ts";
 import type { Slice } from "./slice-form.ts";
 import { codeAt } from "./code.ts";
 import type { HandedTest } from "./handed-tests.ts";
 import { leaksFound, phrasesOf, sharedText, type Compared, type SharedText } from "./leaks.ts";
-import { textOf } from "./json-values.ts";
 
 export type AfterBuild = {
   readonly slice: Slice;
-  readonly cutAs: string;
   readonly round: number;
+  readonly into: string;
   readonly base: string;
   readonly commit: string;
   readonly folder: string;
@@ -26,32 +26,40 @@ async function readable(context: ScriptContext, folder: string, path: string): P
   return read.ok ? [{ path, text: read.value }] : [];
 }
 
-async function filesAtBase(
-  context: ScriptContext,
-  asked: AfterBuild,
-  paths: readonly string[],
-): Promise<readonly HandedTest[]> {
-  const name = `${asked.cutAs}-base-${String(asked.round)}`;
-  const folder = textOf((await answerOf(context, "worktrees.cut", { slice: name, base: asked.base })).folder);
-  const files = await Promise.all(paths.map((path) => readable(context, folder, path)));
-  await answerOf(context, "worktrees.remove", { folder, into: asked.base });
-  return files.flat();
+export type Checked = {
+  readonly leaks: readonly Leak[];
+  readonly stayed: readonly Stayed[];
+};
+
+type AtBase = {
+  readonly files: readonly HandedTest[];
+  readonly stayed: readonly Stayed[];
+};
+
+type Shared = {
+  readonly shared: readonly SharedText[];
+  readonly stayed: readonly Stayed[];
+};
+
+async function filesAtBase(context: ScriptContext, asked: AfterBuild, paths: readonly string[]): Promise<AtBase> {
+  const toCut = { slice: `${asked.slice.name}-base-${String(asked.round)}`, base: asked.base };
+  const cut = await cutAfresh(context, toCut, asked.into);
+  const files = await Promise.all(paths.map((path) => readable(context, cut.folder, path)));
+  const drops = await removedThenDropped(context, cut, asked.into);
+  return { files: files.flat(), stayed: drops.stayed };
 }
 
-async function sharedSinceBase(
-  context: ScriptContext,
-  asked: AfterBuild,
-  compared: Compared,
-): Promise<readonly SharedText[]> {
+async function sharedSinceBase(context: ScriptContext, asked: AfterBuild, compared: Compared): Promise<Shared> {
   const unexcused = sharedText(compared);
   if (unexcused.length === 0) {
-    return unexcused;
+    return { shared: unexcused, stayed: [] };
   }
   const paths = [...asked.interface, ...unexcused.map((file) => file.path)];
-  return sharedText({ ...compared, base: await filesAtBase(context, asked, paths) });
+  const atBase = await filesAtBase(context, asked, paths);
+  return { shared: sharedText({ ...compared, base: atBase.files }), stayed: atBase.stayed };
 }
 
-export async function leaksAfterBuild(context: ScriptContext, asked: AfterBuild): Promise<readonly Leak[]> {
+export async function leaksAfterBuild(context: ScriptContext, asked: AfterBuild): Promise<Checked> {
   const { base, commit, folder, fixed } = asked;
   const code = await codeAt(context, { base, commit, folder, fixed });
   const paths = [...code.map((file) => file.path), ...fixed, ...asked.interface];
@@ -62,6 +70,6 @@ export async function leaksAfterBuild(context: ScriptContext, asked: AfterBuild)
     interface: asked.interface,
     base: [],
   };
-  const shared = await sharedSinceBase(context, asked, compared);
-  return leaksFound({ shared, code, mark: asked.mark, answer: asked.answer });
+  const { shared, stayed } = await sharedSinceBase(context, asked, compared);
+  return { leaks: leaksFound({ shared, code, mark: asked.mark, answer: asked.answer }), stayed };
 }

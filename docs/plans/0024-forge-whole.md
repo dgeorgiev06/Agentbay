@@ -176,3 +176,11 @@ DS1 is merged locally (the full check runs with TL1's batch): forge's `design` w
 - **PL1:** forge's `plan` workflow (planner balanced, challenger deep, second round only on findings), new plan fields `requirements`, `design`, `meets`, `interface`, `crossesModulesBecause`, rules for a plan cut from a design, plan card, the plan committed as the next free number with wave one's slice requests in the output. Shared with the design step: reading requirements and stopping on refused, practice answers and their check, reading files on a branch, committing through worktrees. Open: `forge.waves` reads the design from the project's folder while the workflow reads it from `into`; branches `forge/<job>-plan-reading` and `forge/<job>-plan` stay, so a second plan run for the same job fails at the cut until WB1; the design's requirements version is not compared with the file's.
 - Reviewer's bugs: DS1 two of three caught, the third closed with tests; TL1 four of four; PL1 three of three.
 - Next: forge lane QL1, then WV1 (needs KW1). Kernel lane SV1, KW1, WB1 (now blocking second runs of design and plan for one job), KW4, KW2, KW3.
+
+## After QL1 (20 November, about 07:25 owner's time)
+
+- **Pushed:** PL1 and QL1 (full check 2,332 of 2,332).
+- **QL1:** the reviewer answers each practice it holds by id (65 for the kit's two files) and a script sends back a review that leaves one out; the merge card's practices block; `settings.forge.mustPractices` (the kit sets P-12, P-52, TS-17, TS-21, TS-25, for the owner to confirm; he asked on 20 November which and why, and was shown eight more to consider, P-44 first); forge adds a `checks` item when a plan lists none; interface files pinned by hash in a step `pin` after the cut and compared at the card, a file not compared withholds merge; `framework/practices-debt.yaml` with nine practices held only by a planned check, held by a test; the linter's `no-empty` on.
+- **Stopped in QL1:** "duplicated blocks do not rise" needs a duplicate detector as a toolchain check (a new dependency and script); `bay check` printing the practices debt is kernel work.
+- **To settle:** the rounds withhold merge only for `mustPractices`; the design and plan steps withhold approve for every practice they hold.
+- KW1 reported and waits for review. Then WV1.

@@ -33,7 +33,7 @@ function notHeldShown(practice: NotHeldPractice, must: readonly string[]): NotHe
   return must.includes(practice.id) ? { ...shown, level: "must" } : shown;
 }
 
-export function practicesTallyWords(rounds: RoundsOnCard): string {
+function practicesTallyWords(rounds: RoundsOnCard): string {
   const practices = judgedOf(rounds);
   if (rounds.judged === undefined || practices === undefined) {
     return notJudged;

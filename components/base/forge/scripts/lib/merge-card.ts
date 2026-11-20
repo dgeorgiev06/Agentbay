@@ -96,7 +96,7 @@ function watchedWords(size: readonly Sized[]): readonly string[] {
   });
 }
 
-function roundLines(rounds: RoundsOnCard | undefined): readonly CardLine[] {
+export function roundLines(rounds: RoundsOnCard | undefined): readonly CardLine[] {
   if (rounds === undefined) {
     return [];
   }
@@ -110,7 +110,7 @@ function roundLines(rounds: RoundsOnCard | undefined): readonly CardLine[] {
   return [computed("draw", ran), computed("draw", when), ...sentences];
 }
 
-function builderLines(built: Built, step: string): readonly CardLine[] {
+export function builderLines(built: Built, step: string): readonly CardLine[] {
   const stopped =
     built.outcome === "stopped"
       ? [`the builder stopped, saying ${lacksSaid[built.missing.lacks]} lacks ${built.missing.name}`]

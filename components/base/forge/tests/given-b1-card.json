@@ -1,0 +1,734 @@
+{
+  "slice": {
+    "slice": {
+      "name": "B1",
+      "kind": "mode",
+      "scope": ["components/modes/b1/**", "components/base/interfaces/proof.yaml"],
+      "after": [],
+      "done": [
+        {
+          "id": "DOD-B1-1",
+          "says": "A quill that was added is counted.",
+          "level": "must",
+          "proof": {
+            "kind": "fails-first",
+            "tests": ["components/modes/b1/tests/quill.test.ts"]
+          }
+        },
+        {
+          "id": "DOD-B1-2",
+          "says": "The checks pass.",
+          "level": "must",
+          "proof": {
+            "kind": "checks"
+          }
+        }
+      ]
+    },
+    "base": "1c19f6d",
+    "bugs": [],
+    "interface": ["components/base/interfaces/proof.yaml"],
+    "fixed": ["components/modes/b1/tests/quill.test.ts"],
+    "card": {
+      "title": "Build slice B1?",
+      "lines": [
+        {
+          "mark": "computed",
+          "words": "B1",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "kind mode; base 1c19f6d",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "scope: components/modes/b1/** and 1 more path",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "after no other slice",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "DOD-B1-1, must: A quill that was added is counted.",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "held by: a test fails first",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "tests: components/modes/b1/tests/quill.test.ts",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "DOD-B1-2, must: The checks pass.",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "held by: checks",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "bugs: none will be planted",
+          "source": {
+            "step": "slice"
+          }
+        }
+      ],
+      "withheld": {
+        "build-without-interface": "The slice names its interface files."
+      }
+    },
+    "offered": {
+      "build": true,
+      "build-without-interface": false
+    },
+    "proved": {
+      "name": "B1",
+      "kind": "mode",
+      "scope": ["components/modes/b1/**", "components/base/interfaces/proof.yaml"],
+      "after": [],
+      "done": [
+        {
+          "id": "DOD-B1-1",
+          "says": "A quill that was added is counted.",
+          "level": "must",
+          "proof": {
+            "kind": "fails-first",
+            "tests": ["components/modes/b1/tests/quill.test.ts"]
+          }
+        },
+        {
+          "id": "DOD-B1-2",
+          "says": "The checks pass.",
+          "level": "must",
+          "proof": {
+            "kind": "checks"
+          }
+        }
+      ]
+    }
+  },
+  "start": {
+    "choice": "build",
+    "content": {
+      "title": "Build slice B1?",
+      "lines": [
+        {
+          "mark": "computed",
+          "words": "B1",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "kind mode; base 1c19f6d",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "scope: components/modes/b1/** and 1 more path",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "after no other slice",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "DOD-B1-1, must: A quill that was added is counted.",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "held by: a test fails first",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "tests: components/modes/b1/tests/quill.test.ts",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "DOD-B1-2, must: The checks pass.",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "held by: checks",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "bugs: none will be planted",
+          "source": {
+            "step": "slice"
+          }
+        }
+      ],
+      "withheld": {
+        "build-without-interface": "The slice names its interface files."
+      }
+    }
+  },
+  "begin": {
+    "choice": "build"
+  },
+  "cut": {
+    "folder": ".forge/worktrees/B1",
+    "branch": "forge/B1",
+    "commit": "1c19f6d4ff4b657f2bbfb977b94be26a843ad21a"
+  },
+  "pin": {
+    "pinned": [
+      {
+        "path": "components/base/interfaces/proof.yaml",
+        "hash": "dc9833d498410bd4"
+      }
+    ]
+  },
+  "declare": {
+    "files": ["components/modes/b1/scripts/quill.ts", "components/base/interfaces/proof.yaml"],
+    "names": {
+      "gained": [],
+      "lost": [],
+      "changed": []
+    }
+  },
+  "round-1": {
+    "round": 1,
+    "stage": "proved",
+    "done": false,
+    "base": "1c19f6d4ff4b657f2bbfb977b94be26a843ad21a",
+    "built": {
+      "outcome": "built"
+    },
+    "builder": {
+      "branch": "forge/B1",
+      "commit": "9b13f2507d544de4a094f44c3ec1eb5d5aac4d0e"
+    },
+    "builtAt": "round-1",
+    "head": "05986eda7e80e8d4ff3f0f7a9df068d3365f51f9",
+    "branch": "forge/B1-tests-1",
+    "folder": ".forge/worktrees/B1-tests-1",
+    "declared": {
+      "files": [
+        "components/modes/b1/scripts/quill.ts",
+        "components/base/interfaces/proof.yaml",
+        "components/modes/b1/tests/quill.test.ts"
+      ],
+      "names": {
+        "gained": [],
+        "lost": [],
+        "changed": []
+      }
+    },
+    "tests": ["components/modes/b1/tests/quill.test.ts"],
+    "verdicts": [
+      {
+        "item": "DOD-B1-1",
+        "kind": "fails-first",
+        "verdict": "failed",
+        "detail": "The named tests fail on the head."
+      },
+      {
+        "item": "DOD-B1-2",
+        "kind": "checks",
+        "verdict": "passed",
+        "detail": "It held."
+      }
+    ],
+    "failing": {
+      "items": ["DOD-B1-1"],
+      "cases": [
+        {
+          "name": "b1 quill that was added is counted",
+          "file": "components/modes/b1/tests/quill.test.ts",
+          "message": "got ABCDEFGHIJKLMNOPQRS!"
+        },
+        {
+          "name": "b1 quill that was added is counted twice",
+          "file": "components/modes/b1/tests/quill.test.ts"
+        }
+      ],
+      "withheld": 1,
+      "notListed": 0,
+      "notLoaded": []
+    },
+    "toBuilder": [],
+    "toTests": 0,
+    "conditions": [],
+    "remaining": [],
+    "leaks": []
+  },
+  "review-1": {
+    "round": 1,
+    "stage": "reviewed",
+    "done": false,
+    "base": "1c19f6d4ff4b657f2bbfb977b94be26a843ad21a",
+    "built": {
+      "outcome": "built"
+    },
+    "builder": {
+      "branch": "forge/B1",
+      "commit": "9b13f2507d544de4a094f44c3ec1eb5d5aac4d0e"
+    },
+    "head": "05986eda7e80e8d4ff3f0f7a9df068d3365f51f9",
+    "branch": "forge/B1-tests-1",
+    "declared": {
+      "files": [
+        "components/modes/b1/scripts/quill.ts",
+        "components/base/interfaces/proof.yaml",
+        "components/modes/b1/tests/quill.test.ts"
+      ],
+      "names": {
+        "gained": [],
+        "lost": [],
+        "changed": []
+      }
+    },
+    "tests": ["components/modes/b1/tests/quill.test.ts"],
+    "verdicts": [
+      {
+        "item": "DOD-B1-1",
+        "kind": "fails-first",
+        "verdict": "failed",
+        "detail": "The named tests fail on the head."
+      },
+      {
+        "item": "DOD-B1-2",
+        "kind": "checks",
+        "verdict": "passed",
+        "detail": "It held."
+      }
+    ],
+    "failing": {
+      "items": ["DOD-B1-1"],
+      "cases": [
+        {
+          "name": "b1 quill that was added is counted",
+          "file": "components/modes/b1/tests/quill.test.ts",
+          "message": "got ABCDEFGHIJKLMNOPQRS!"
+        },
+        {
+          "name": "b1 quill that was added is counted twice",
+          "file": "components/modes/b1/tests/quill.test.ts"
+        }
+      ],
+      "withheld": 1,
+      "notListed": 0,
+      "notLoaded": []
+    },
+    "toBuilder": [],
+    "toTests": 0,
+    "conditions": [],
+    "remaining": [],
+    "leaks": [],
+    "builtAt": "round-1",
+    "pinnedAtHead": [
+      {
+        "path": "components/base/interfaces/proof.yaml",
+        "hash": "b16f0362db7a97e1"
+      }
+    ]
+  },
+  "round-2": {
+    "round": 2,
+    "stage": "proved",
+    "done": false,
+    "base": "1c19f6d4ff4b657f2bbfb977b94be26a843ad21a",
+    "built": {
+      "outcome": "built"
+    },
+    "builder": {
+      "branch": "forge/B1-2",
+      "commit": "f9ee2d31364d54d61adc0ef2348cf2c16cd516f9"
+    },
+    "builtAt": "round-2",
+    "head": "762dcc5ae5f30b7e033440c6d79b202fc4756cb0",
+    "branch": "forge/B1-tests-2",
+    "folder": ".forge/worktrees/B1-tests-2",
+    "declared": {
+      "files": [
+        "components/modes/b1/scripts/quill.ts",
+        "components/base/interfaces/proof.yaml",
+        "components/modes/b1/tests/quill.test.ts"
+      ],
+      "names": {
+        "gained": [],
+        "lost": [],
+        "changed": []
+      }
+    },
+    "tests": ["components/modes/b1/tests/quill.test.ts"],
+    "verdicts": [
+      {
+        "item": "DOD-B1-1",
+        "kind": "fails-first",
+        "verdict": "failed",
+        "detail": "The named tests fail on the head."
+      },
+      {
+        "item": "DOD-B1-2",
+        "kind": "checks",
+        "verdict": "passed",
+        "detail": "It held."
+      }
+    ],
+    "failing": {
+      "items": ["DOD-B1-1"],
+      "cases": [
+        {
+          "name": "b1 quill that was added is counted",
+          "file": "components/modes/b1/tests/quill.test.ts",
+          "message": "got ABCDEFGHIJKLMNOPQRS!"
+        },
+        {
+          "name": "b1 quill that was added is counted twice",
+          "file": "components/modes/b1/tests/quill.test.ts"
+        }
+      ],
+      "withheld": 1,
+      "notListed": 0,
+      "notLoaded": []
+    },
+    "toBuilder": [],
+    "toTests": 0,
+    "conditions": [],
+    "remaining": [],
+    "leaks": []
+  },
+  "review-2": {
+    "round": 2,
+    "stage": "reviewed",
+    "done": false,
+    "base": "1c19f6d4ff4b657f2bbfb977b94be26a843ad21a",
+    "built": {
+      "outcome": "built"
+    },
+    "builder": {
+      "branch": "forge/B1-2",
+      "commit": "f9ee2d31364d54d61adc0ef2348cf2c16cd516f9"
+    },
+    "head": "762dcc5ae5f30b7e033440c6d79b202fc4756cb0",
+    "branch": "forge/B1-tests-2",
+    "declared": {
+      "files": [
+        "components/modes/b1/scripts/quill.ts",
+        "components/base/interfaces/proof.yaml",
+        "components/modes/b1/tests/quill.test.ts"
+      ],
+      "names": {
+        "gained": [],
+        "lost": [],
+        "changed": []
+      }
+    },
+    "tests": ["components/modes/b1/tests/quill.test.ts"],
+    "verdicts": [
+      {
+        "item": "DOD-B1-1",
+        "kind": "fails-first",
+        "verdict": "failed",
+        "detail": "The named tests fail on the head."
+      },
+      {
+        "item": "DOD-B1-2",
+        "kind": "checks",
+        "verdict": "passed",
+        "detail": "It held."
+      }
+    ],
+    "failing": {
+      "items": ["DOD-B1-1"],
+      "cases": [
+        {
+          "name": "b1 quill that was added is counted",
+          "file": "components/modes/b1/tests/quill.test.ts",
+          "message": "got ABCDEFGHIJKLMNOPQRS!"
+        },
+        {
+          "name": "b1 quill that was added is counted twice",
+          "file": "components/modes/b1/tests/quill.test.ts"
+        }
+      ],
+      "withheld": 1,
+      "notListed": 0,
+      "notLoaded": []
+    },
+    "toBuilder": [],
+    "toTests": 0,
+    "conditions": [],
+    "remaining": [],
+    "leaks": [],
+    "builtAt": "round-2",
+    "pinnedAtHead": [
+      {
+        "path": "components/base/interfaces/proof.yaml",
+        "hash": "d03130064851bfa1"
+      }
+    ]
+  },
+  "round-3": {
+    "round": 3,
+    "stage": "proved",
+    "done": false,
+    "base": "1c19f6d4ff4b657f2bbfb977b94be26a843ad21a",
+    "built": {
+      "outcome": "built"
+    },
+    "builder": {
+      "branch": "forge/B1-3",
+      "commit": "859ed4f149773922f2f57ee94acdba1666623648"
+    },
+    "builtAt": "round-3",
+    "head": "2e0b55e6f6a8c7afe7b1f15b7c5a7281c7952c7b",
+    "branch": "forge/B1-tests-3",
+    "folder": ".forge/worktrees/B1-tests-3",
+    "declared": {
+      "files": [
+        "components/modes/b1/scripts/quill.ts",
+        "components/base/interfaces/proof.yaml",
+        "components/modes/b1/tests/quill.test.ts"
+      ],
+      "names": {
+        "gained": [],
+        "lost": [],
+        "changed": []
+      }
+    },
+    "tests": ["components/modes/b1/tests/quill.test.ts"],
+    "verdicts": [
+      {
+        "item": "DOD-B1-1",
+        "kind": "fails-first",
+        "verdict": "failed",
+        "detail": "The named tests fail on the head."
+      },
+      {
+        "item": "DOD-B1-2",
+        "kind": "checks",
+        "verdict": "passed",
+        "detail": "It held."
+      }
+    ],
+    "failing": {
+      "items": ["DOD-B1-1"],
+      "cases": [
+        {
+          "name": "b1 quill that was added is counted",
+          "file": "components/modes/b1/tests/quill.test.ts",
+          "message": "got ABCDEFGHIJKLMNOPQRS!"
+        },
+        {
+          "name": "b1 quill that was added is counted twice",
+          "file": "components/modes/b1/tests/quill.test.ts"
+        }
+      ],
+      "withheld": 1,
+      "notListed": 0,
+      "notLoaded": []
+    },
+    "toBuilder": [],
+    "toTests": 0,
+    "conditions": [],
+    "remaining": [],
+    "leaks": []
+  },
+  "review-3": {
+    "round": 3,
+    "stage": "reviewed",
+    "done": true,
+    "base": "1c19f6d4ff4b657f2bbfb977b94be26a843ad21a",
+    "built": {
+      "outcome": "built"
+    },
+    "builder": {
+      "branch": "forge/B1-3",
+      "commit": "859ed4f149773922f2f57ee94acdba1666623648"
+    },
+    "head": "2e0b55e6f6a8c7afe7b1f15b7c5a7281c7952c7b",
+    "branch": "forge/B1-tests-3",
+    "declared": {
+      "files": [
+        "components/modes/b1/scripts/quill.ts",
+        "components/base/interfaces/proof.yaml",
+        "components/modes/b1/tests/quill.test.ts"
+      ],
+      "names": {
+        "gained": [],
+        "lost": [],
+        "changed": []
+      }
+    },
+    "tests": ["components/modes/b1/tests/quill.test.ts"],
+    "verdicts": [
+      {
+        "item": "DOD-B1-1",
+        "kind": "fails-first",
+        "verdict": "failed",
+        "detail": "The named tests fail on the head."
+      },
+      {
+        "item": "DOD-B1-2",
+        "kind": "checks",
+        "verdict": "passed",
+        "detail": "It held."
+      }
+    ],
+    "failing": {
+      "items": ["DOD-B1-1"],
+      "cases": [
+        {
+          "name": "b1 quill that was added is counted",
+          "file": "components/modes/b1/tests/quill.test.ts",
+          "message": "got ABCDEFGHIJKLMNOPQRS!"
+        },
+        {
+          "name": "b1 quill that was added is counted twice",
+          "file": "components/modes/b1/tests/quill.test.ts"
+        }
+      ],
+      "withheld": 1,
+      "notListed": 0,
+      "notLoaded": []
+    },
+    "toBuilder": [],
+    "toTests": 0,
+    "conditions": [
+      {
+        "item": "DOD-B1-1",
+        "held": false,
+        "why": "The count is off by one for every quill."
+      },
+      {
+        "item": "DOD-B1-2",
+        "held": true,
+        "cases": ["b1 quill that was added is counted"]
+      }
+    ],
+    "remaining": [
+      {
+        "to": "builder",
+        "case": "b1 quill that was added is counted",
+        "question": "condition",
+        "fix": "Count each quill once."
+      },
+      {
+        "to": "test-writer",
+        "case": "b1 quill that was added is counted",
+        "question": "Q3"
+      }
+    ],
+    "leaks": [],
+    "builtAt": "round-3",
+    "practices": {
+      "tally": {
+        "held": 65,
+        "notHeld": 0,
+        "doesNotApply": 0
+      },
+      "notHeld": [],
+      "checks": 12
+    },
+    "reviewedAt": "review-3",
+    "pinnedAtHead": [
+      {
+        "path": "components/base/interfaces/proof.yaml",
+        "hash": "ef5896cbce4cc616"
+      }
+    ]
+  },
+  "bugs": {
+    "bugs": [],
+    "planted": 0
+  },
+  "prove": {
+    "verdicts": [
+      {
+        "item": "DOD-B1-1",
+        "kind": "fails-first",
+        "verdict": "failed",
+        "detail": "The named tests fail on the head.",
+        "cases": {
+          "failures": [
+            {
+              "name": "b1 quill that was added is counted",
+              "file": "/tmp/proof-copy/components/modes/b1/tests/quill.test.ts",
+              "message": "got ABCDEFGHIJKLMNOPQRS!",
+              "charactersCut": 0
+            },
+            {
+              "name": "b1 quill that was added is counted twice",
+              "file": "/tmp/proof-copy/components/modes/b1/tests/quill.test.ts",
+              "message": "",
+              "charactersCut": 0
+            }
+          ],
+          "failuresNotListed": 0,
+          "notLoaded": []
+        }
+      },
+      {
+        "item": "DOD-B1-2",
+        "kind": "checks",
+        "verdict": "passed",
+        "detail": "It held."
+      }
+    ],
+    "judgement": [],
+    "size": [
+      {
+        "path": "components/modes/b1/scripts/quill.ts",
+        "head": 1
+      }
+    ]
+  }
+}

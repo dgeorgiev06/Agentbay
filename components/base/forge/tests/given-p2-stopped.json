@@ -1,0 +1,659 @@
+{
+  "slice": {
+    "slice": {
+      "name": "P2",
+      "kind": "mode",
+      "scope": ["components/modes/p2/**"],
+      "after": [],
+      "done": [
+        {
+          "id": "DOD-P2-1",
+          "says": "A quill is counted once.",
+          "level": "must",
+          "proof": {
+            "kind": "fails-first",
+            "tests": ["components/modes/p2/tests/quill.test.ts"]
+          }
+        },
+        {
+          "id": "DOD-P2-2",
+          "says": "The tests catch planted bugs.",
+          "level": "must",
+          "proof": {
+            "kind": "bugs-caught"
+          }
+        }
+      ]
+    },
+    "base": "ccb94ce",
+    "bugs": [
+      {
+        "name": "the count is one too many",
+        "patch": "--- a/components/modes/p2/scripts/quill.ts\n+++ b/components/modes/p2/scripts/quill.ts\n@@ -1 +1 @@\n-Written by the builder in .forge/worktrees/P2.\n+Written by nobody.\n",
+        "tests": ["components/modes/p2/tests/quill.test.ts"]
+      },
+      {
+        "name": "the count is one too many",
+        "patch": "--- a/components/modes/p2/scripts/quill.ts\n+++ b/components/modes/p2/scripts/quill.ts\n@@ -1 +1 @@\n-Written by the builder in .forge/worktrees/P2.\n+Written by nobody.\n",
+        "tests": ["components/modes/p2/tests/quill.test.ts"]
+      }
+    ],
+    "interface": [],
+    "fixed": ["components/modes/p2/tests/quill.test.ts"],
+    "card": {
+      "title": "Build slice P2?",
+      "lines": [
+        {
+          "mark": "computed",
+          "words": "P2",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "kind mode; base ccb94ce",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "scope: components/modes/p2/**",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "interface: none named, so the test writer and the builder get no agreed shape",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "after no other slice",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "DOD-P2-1, must: A quill is counted once.",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "held by: a test fails first",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "tests: components/modes/p2/tests/quill.test.ts",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "DOD-P2-2, must: The tests catch planted bugs.",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "held by: bugs caught",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "2 bugs to inject: the count is one too many; the count is one too many",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "the planter writes more after the last round",
+          "source": {
+            "step": "slice"
+          }
+        }
+      ],
+      "withheld": {
+        "build": "The slice names no interface files."
+      }
+    },
+    "offered": {
+      "build": false,
+      "build-without-interface": true
+    },
+    "proved": {
+      "name": "P2",
+      "kind": "mode",
+      "scope": ["components/modes/p2/**"],
+      "after": [],
+      "done": [
+        {
+          "id": "DOD-P2-1",
+          "says": "A quill is counted once.",
+          "level": "must",
+          "proof": {
+            "kind": "fails-first",
+            "tests": ["components/modes/p2/tests/quill.test.ts"]
+          }
+        },
+        {
+          "id": "DOD-P2-2",
+          "says": "The tests catch planted bugs.",
+          "level": "must",
+          "proof": {
+            "kind": "bugs-caught"
+          }
+        },
+        {
+          "id": "checks",
+          "says": "Added by forge, as the plan lists no checks item: the toolchain's checks, such as types, lint, format and dead code, and its whole test run pass.",
+          "level": "must",
+          "proof": {
+            "kind": "checks"
+          }
+        }
+      ]
+    }
+  },
+  "start": {
+    "choice": "build-without-interface",
+    "content": {
+      "title": "Build slice P2?",
+      "lines": [
+        {
+          "mark": "computed",
+          "words": "P2",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "kind mode; base ccb94ce",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "scope: components/modes/p2/**",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "interface: none named, so the test writer and the builder get no agreed shape",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "after no other slice",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "DOD-P2-1, must: A quill is counted once.",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "held by: a test fails first",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "tests: components/modes/p2/tests/quill.test.ts",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "DOD-P2-2, must: The tests catch planted bugs.",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "held by: bugs caught",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "2 bugs to inject: the count is one too many; the count is one too many",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "the planter writes more after the last round",
+          "source": {
+            "step": "slice"
+          }
+        }
+      ],
+      "withheld": {
+        "build": "The slice names no interface files."
+      }
+    }
+  },
+  "begin": {
+    "choice": "build-without-interface"
+  },
+  "cut": {
+    "folder": ".forge/worktrees/P2",
+    "branch": "forge/P2",
+    "commit": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc"
+  },
+  "pin": {
+    "pinned": []
+  },
+  "declare": {
+    "files": ["components/modes/p2/scripts/quill.ts"],
+    "names": {
+      "gained": [],
+      "lost": [],
+      "changed": []
+    }
+  },
+  "round-1": {
+    "round": 1,
+    "stage": "proved",
+    "done": false,
+    "base": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc",
+    "built": {
+      "outcome": "stopped",
+      "missing": {
+        "lacks": "kernel",
+        "name": "worktrees.cut"
+      }
+    },
+    "builder": {
+      "branch": "forge/P2",
+      "commit": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc"
+    },
+    "builtAt": "round-1",
+    "head": "1abbf6a3609ed78fb73e004de99466f468dcb413",
+    "branch": "forge/P2-tests-1",
+    "folder": ".forge/worktrees/P2-tests-1",
+    "declared": {
+      "files": ["components/modes/p2/scripts/quill.ts", "components/modes/p2/tests/quill.test.ts"],
+      "names": {
+        "gained": [],
+        "lost": [],
+        "changed": []
+      }
+    },
+    "tests": ["components/modes/p2/tests/quill.test.ts"],
+    "verdicts": [
+      {
+        "item": "DOD-P2-1",
+        "kind": "fails-first",
+        "verdict": "passed",
+        "detail": "It held."
+      },
+      {
+        "item": "DOD-P2-2",
+        "kind": "bugs-caught",
+        "verdict": "inconclusive",
+        "reason": "No bugs were given to inject, so nothing is known."
+      },
+      {
+        "item": "checks",
+        "kind": "checks",
+        "verdict": "passed",
+        "detail": "It held."
+      }
+    ],
+    "failing": {
+      "items": [],
+      "cases": [],
+      "withheld": 0,
+      "notListed": 0,
+      "notLoaded": []
+    },
+    "toBuilder": [],
+    "toTests": 0,
+    "conditions": [],
+    "remaining": [],
+    "leaks": []
+  },
+  "review-1": {
+    "round": 1,
+    "stage": "reviewed",
+    "done": true,
+    "base": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc",
+    "built": {
+      "outcome": "stopped",
+      "missing": {
+        "lacks": "kernel",
+        "name": "worktrees.cut"
+      }
+    },
+    "builder": {
+      "branch": "forge/P2",
+      "commit": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc"
+    },
+    "head": "1abbf6a3609ed78fb73e004de99466f468dcb413",
+    "branch": "forge/P2-tests-1",
+    "declared": {
+      "files": ["components/modes/p2/scripts/quill.ts", "components/modes/p2/tests/quill.test.ts"],
+      "names": {
+        "gained": [],
+        "lost": [],
+        "changed": []
+      }
+    },
+    "tests": ["components/modes/p2/tests/quill.test.ts"],
+    "verdicts": [
+      {
+        "item": "DOD-P2-1",
+        "kind": "fails-first",
+        "verdict": "passed",
+        "detail": "It held."
+      },
+      {
+        "item": "DOD-P2-2",
+        "kind": "bugs-caught",
+        "verdict": "inconclusive",
+        "reason": "No bugs were given to inject, so nothing is known."
+      },
+      {
+        "item": "checks",
+        "kind": "checks",
+        "verdict": "passed",
+        "detail": "It held."
+      }
+    ],
+    "failing": {
+      "items": [],
+      "cases": [],
+      "withheld": 0,
+      "notListed": 0,
+      "notLoaded": []
+    },
+    "toBuilder": [],
+    "toTests": 0,
+    "conditions": [],
+    "remaining": [],
+    "leaks": [],
+    "builtAt": "round-1",
+    "pinnedAtHead": []
+  },
+  "round-2": {
+    "round": 1,
+    "stage": "reviewed",
+    "done": true,
+    "base": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc",
+    "built": {
+      "outcome": "stopped",
+      "missing": {
+        "lacks": "kernel",
+        "name": "worktrees.cut"
+      }
+    },
+    "builder": {
+      "branch": "forge/P2",
+      "commit": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc"
+    },
+    "head": "1abbf6a3609ed78fb73e004de99466f468dcb413",
+    "branch": "forge/P2-tests-1",
+    "declared": {
+      "files": ["components/modes/p2/scripts/quill.ts", "components/modes/p2/tests/quill.test.ts"],
+      "names": {
+        "gained": [],
+        "lost": [],
+        "changed": []
+      }
+    },
+    "tests": ["components/modes/p2/tests/quill.test.ts"],
+    "verdicts": [
+      {
+        "item": "DOD-P2-1",
+        "kind": "fails-first",
+        "verdict": "passed",
+        "detail": "It held."
+      },
+      {
+        "item": "DOD-P2-2",
+        "kind": "bugs-caught",
+        "verdict": "inconclusive",
+        "reason": "No bugs were given to inject, so nothing is known."
+      },
+      {
+        "item": "checks",
+        "kind": "checks",
+        "verdict": "passed",
+        "detail": "It held."
+      }
+    ],
+    "failing": {
+      "items": [],
+      "cases": [],
+      "withheld": 0,
+      "notListed": 0,
+      "notLoaded": []
+    },
+    "toBuilder": [],
+    "toTests": 0,
+    "conditions": [],
+    "remaining": [],
+    "leaks": [],
+    "pinnedAtHead": [],
+    "builtAt": "round-1"
+  },
+  "review-2": {
+    "round": 1,
+    "stage": "reviewed",
+    "done": true,
+    "base": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc",
+    "built": {
+      "outcome": "stopped",
+      "missing": {
+        "lacks": "kernel",
+        "name": "worktrees.cut"
+      }
+    },
+    "builder": {
+      "branch": "forge/P2",
+      "commit": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc"
+    },
+    "head": "1abbf6a3609ed78fb73e004de99466f468dcb413",
+    "branch": "forge/P2-tests-1",
+    "declared": {
+      "files": ["components/modes/p2/scripts/quill.ts", "components/modes/p2/tests/quill.test.ts"],
+      "names": {
+        "gained": [],
+        "lost": [],
+        "changed": []
+      }
+    },
+    "tests": ["components/modes/p2/tests/quill.test.ts"],
+    "verdicts": [
+      {
+        "item": "DOD-P2-1",
+        "kind": "fails-first",
+        "verdict": "passed",
+        "detail": "It held."
+      },
+      {
+        "item": "DOD-P2-2",
+        "kind": "bugs-caught",
+        "verdict": "inconclusive",
+        "reason": "No bugs were given to inject, so nothing is known."
+      },
+      {
+        "item": "checks",
+        "kind": "checks",
+        "verdict": "passed",
+        "detail": "It held."
+      }
+    ],
+    "failing": {
+      "items": [],
+      "cases": [],
+      "withheld": 0,
+      "notListed": 0,
+      "notLoaded": []
+    },
+    "toBuilder": [],
+    "toTests": 0,
+    "conditions": [],
+    "remaining": [],
+    "leaks": [],
+    "pinnedAtHead": [],
+    "builtAt": "round-1"
+  },
+  "round-3": {
+    "round": 1,
+    "stage": "reviewed",
+    "done": true,
+    "base": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc",
+    "built": {
+      "outcome": "stopped",
+      "missing": {
+        "lacks": "kernel",
+        "name": "worktrees.cut"
+      }
+    },
+    "builder": {
+      "branch": "forge/P2",
+      "commit": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc"
+    },
+    "head": "1abbf6a3609ed78fb73e004de99466f468dcb413",
+    "branch": "forge/P2-tests-1",
+    "declared": {
+      "files": ["components/modes/p2/scripts/quill.ts", "components/modes/p2/tests/quill.test.ts"],
+      "names": {
+        "gained": [],
+        "lost": [],
+        "changed": []
+      }
+    },
+    "tests": ["components/modes/p2/tests/quill.test.ts"],
+    "verdicts": [
+      {
+        "item": "DOD-P2-1",
+        "kind": "fails-first",
+        "verdict": "passed",
+        "detail": "It held."
+      },
+      {
+        "item": "DOD-P2-2",
+        "kind": "bugs-caught",
+        "verdict": "inconclusive",
+        "reason": "No bugs were given to inject, so nothing is known."
+      },
+      {
+        "item": "checks",
+        "kind": "checks",
+        "verdict": "passed",
+        "detail": "It held."
+      }
+    ],
+    "failing": {
+      "items": [],
+      "cases": [],
+      "withheld": 0,
+      "notListed": 0,
+      "notLoaded": []
+    },
+    "toBuilder": [],
+    "toTests": 0,
+    "conditions": [],
+    "remaining": [],
+    "leaks": [],
+    "pinnedAtHead": [],
+    "builtAt": "round-1"
+  },
+  "review-3": {
+    "round": 1,
+    "stage": "reviewed",
+    "done": true,
+    "base": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc",
+    "built": {
+      "outcome": "stopped",
+      "missing": {
+        "lacks": "kernel",
+        "name": "worktrees.cut"
+      }
+    },
+    "builder": {
+      "branch": "forge/P2",
+      "commit": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc"
+    },
+    "head": "1abbf6a3609ed78fb73e004de99466f468dcb413",
+    "branch": "forge/P2-tests-1",
+    "declared": {
+      "files": ["components/modes/p2/scripts/quill.ts", "components/modes/p2/tests/quill.test.ts"],
+      "names": {
+        "gained": [],
+        "lost": [],
+        "changed": []
+      }
+    },
+    "tests": ["components/modes/p2/tests/quill.test.ts"],
+    "verdicts": [
+      {
+        "item": "DOD-P2-1",
+        "kind": "fails-first",
+        "verdict": "passed",
+        "detail": "It held."
+      },
+      {
+        "item": "DOD-P2-2",
+        "kind": "bugs-caught",
+        "verdict": "inconclusive",
+        "reason": "No bugs were given to inject, so nothing is known."
+      },
+      {
+        "item": "checks",
+        "kind": "checks",
+        "verdict": "passed",
+        "detail": "It held."
+      }
+    ],
+    "failing": {
+      "items": [],
+      "cases": [],
+      "withheld": 0,
+      "notListed": 0,
+      "notLoaded": []
+    },
+    "toBuilder": [],
+    "toTests": 0,
+    "conditions": [],
+    "remaining": [],
+    "leaks": [],
+    "pinnedAtHead": [],
+    "builtAt": "round-1"
+  }
+}

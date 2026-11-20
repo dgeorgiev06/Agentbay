@@ -132,6 +132,7 @@ function allPassed(name: string, files: readonly string[]): Proved {
     verdicts: [
       { item: `DOD-${name}-1`, kind: "fails-first", verdict: "passed", detail: "It held." },
       { item: `DOD-${name}-2`, kind: "bugs-caught", verdict: "passed", detail: "It held." },
+      { item: "checks", kind: "checks", verdict: "passed", detail: "It held." },
     ],
     judgement: [],
     size: files.map((path) => ({ path, head: 3 })),

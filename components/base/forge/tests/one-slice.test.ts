@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { after, before, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
+import { answered, submitted } from "./kit-copy.ts";
 
 type Answer = { readonly verdict: "approve" | "reject" } | { readonly choice: string };
 
@@ -346,15 +347,6 @@ function decisionWords(waiting: Waiting, step: string, answer: Answer): readonly
 
 async function decided(root: string, waiting: Waiting, answer: Answer & { readonly step: string }): Promise<Json> {
   return bay(root, decisionWords(waiting, answer.step, answer));
-}
-
-async function answered(root: string, runId: string, output: Json): Promise<Json> {
-  const task = fieldsOf(runOf(await bay(root, ["runs", runId, "--new-token"]))).task ?? null;
-  return bay(root, ["submit", JSON.stringify(output), "--token", textAt(task, "token")]);
-}
-
-async function submitted(root: string, runId: string, output: Json): Promise<Json> {
-  return runOf(await answered(root, runId, output));
 }
 
 async function shownCard(root: string, runId: string): Promise<readonly string[]> {

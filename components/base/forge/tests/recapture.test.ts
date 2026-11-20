@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { join } from "node:path";
 import { test } from "node:test";
-import { withCapture, type Source } from "./recapture.ts";
+import { askedFiles, notRemade, withCapture, type Source } from "./recapture.ts";
+
+const given = ["given-b1-card.json", "given-r7-failed.json", "given-p2-stopped.json", "given-wave-ca-cb.json"];
 
 const source: Source = {
   file: "given-x.json",
@@ -33,4 +37,31 @@ test("recapture puts its capture just before the named case reads its card, and 
   assert.throws(() => withCapture(text, { ...source, name: "a case not there" }, "/out/given-x.json"), {
     message: 'x.test.ts has no case "a case not there" that reads its card with: const card = waitingOf(run, "card");',
   });
+});
+
+test("recapture remakes every given file when none is named, the ones named otherwise, and refuses a name it has no case for", () => {
+  assert.deepEqual(askedFiles([]), given);
+  assert.deepEqual(askedFiles(["given-p2-stopped.json"]), ["given-p2-stopped.json"]);
+  assert.throws(() => askedFiles(["given-p2-stopped.json", "given-nope.json"]), {
+    message: `recapture makes only ${given.join(", ")}; it has no case for given-nope.json.`,
+  });
+});
+
+test("recapture fails naming each file it was asked to remake and did not write", () => {
+  assert.equal(notRemade(given, [...given].reverse()), undefined);
+  assert.equal(
+    notRemade(given, ["given-r7-failed.json", "given-wave-ca-cb.json"]),
+    "recapture did not write given-b1-card.json, given-p2-stopped.json: its case was skipped or never reached the " +
+      "capture, so the file is as it was.",
+  );
+  assert.match(notRemade(["given-r7-failed.json"], []) ?? "", /^recapture did not write given-r7-failed\.json: /);
+});
+
+test("recapture run with a file it has no case for exits 1 naming it, before it copies the kit", () => {
+  const ran = spawnSync(process.execPath, [join(import.meta.dirname, "recapture.ts"), "given-nope.json"], {
+    encoding: "utf8",
+  });
+  assert.equal(ran.status, 1, ran.stderr);
+  assert.match(ran.stderr, /it has no case for given-nope\.json\./);
+  assert.equal(ran.stdout, "");
 });

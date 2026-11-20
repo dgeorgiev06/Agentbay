@@ -240,7 +240,7 @@ describe("a leak in the rounds' state and on the card", () => {
       size: [],
     };
     const input = { slice, proof, built: { outcome: "built" as const }, builtAt: "round-1", work: "forge/Q1-tests-1" };
-    const result = drawn({ ...input, kept: "with-tests", into: "integration", leaks });
+    const result = drawn({ ...input, kept: "with-tests", caseMessages: "filtered", into: "integration", leaks });
     assert.deepEqual(result.card.lines.slice(1, 4), [
       {
         mark: "computed",
@@ -261,7 +261,7 @@ describe("a leak in the rounds' state and on the card", () => {
     assert.equal(result.merge, false);
     assert.equal(result.card.withheld.merge, "The builder's work holds text from the tests.");
     assert.equal("keep" in result.card.withheld, false);
-    const clean = drawn({ ...input, kept: "with-tests", into: "integration", leaks: [] });
+    const clean = drawn({ ...input, kept: "with-tests", caseMessages: "filtered", into: "integration", leaks: [] });
     assert.equal(clean.merge, true);
     assert.ok(!clean.card.lines.some((line) => line.words.startsWith("leak")));
   });
@@ -278,6 +278,7 @@ describe("a leak in the rounds' state and on the card", () => {
       builtAt: "round-1",
       work: "forge/Q1-tests-1",
       kept: "with-tests",
+      caseMessages: "filtered",
       into: "integration",
       leaks: [{ kind: "shared-text", path: codePath, lines: 1 }],
     });

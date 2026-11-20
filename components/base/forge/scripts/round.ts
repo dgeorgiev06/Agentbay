@@ -3,7 +3,7 @@ import { answerOf } from "./lib/called.ts";
 import { builtOf, type Built } from "./lib/builder-answer.ts";
 import type { Leak } from "./lib/leaks.ts";
 import { sliceOf } from "./lib/slice-form.ts";
-import { failingOf, withoutCases } from "./lib/failing.ts";
+import { failingOf, safeVerdicts, withoutCases } from "./lib/failing.ts";
 import { handedTestsOf, type HandedTest } from "./lib/handed-tests.ts";
 import { keepTests, keptFindings, keptMark, keptTests } from "./lib/kept-tests.ts";
 import { leaksAfterBuild } from "./lib/leak-check.ts";
@@ -221,7 +221,7 @@ async function ranRound(context: ScriptContext, round: Round, plan: RoundPlan): 
     folder: head.folder,
     declared: withTests(round.declared, paths),
     tests: paths,
-    verdicts: withoutCases(verdicts),
+    verdicts: withoutCases(safeVerdicts(verdicts, tests)),
     failing: failingOf(sliceOf(round.slice), verdicts, tests),
     toBuilder: [],
     toTests: 0,

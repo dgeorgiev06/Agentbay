@@ -6,7 +6,7 @@ import { sliceOf } from "../scripts/lib/slice-form.ts";
 import type { Failing } from "../scripts/lib/failing.ts";
 import type { Finding } from "../scripts/lib/review.ts";
 import { roundsOnCard } from "../scripts/lib/round-card.ts";
-import { reviewedState, reviewPlan, roundPlan, type RoundsState } from "../scripts/lib/rounds.ts";
+import { findingsLeft, reviewedState, reviewPlan, roundPlan, type RoundsState } from "../scripts/lib/rounds.ts";
 
 const commit = "a".repeat(40);
 
@@ -60,7 +60,8 @@ const passedProof = {
 };
 
 function reviewed(state: RoundsState, findings: readonly Finding[]): RoundsState {
-  return reviewedState(state, { plan: "review", review: { conditions: [held, notHeld], findings } }, "review-1");
+  const review = { conditions: [held, notHeld], findings };
+  return reviewedState(state, { plan: "review", review, remaining: findingsLeft(findings, []) }, "review-1");
 }
 
 test("round 1 asks the test writer and the builder; a done review asks no one", () => {
@@ -105,7 +106,9 @@ test("a review with no finding ends the rounds; round 3's review ends them with 
   assert.equal(third.done, true);
   assert.deepEqual(third.toBuilder, []);
   assert.equal(third.toTests, 0);
-  assert.deepEqual(third.remaining, [{ to: "test-writer", case: "a quill is counted", question: "Q2" }]);
+  assert.deepEqual(third.remaining, [
+    { to: "test-writer", case: "a quill is counted", question: "Q2", fix: "Assert all." },
+  ]);
 });
 
 test("failing cases go back without a model, and a stopped builder ends the rounds", () => {
@@ -124,14 +127,47 @@ test("the card counts the rounds and gives the reviewer's verdicts and what rema
     ended: "last-round",
     judged: {
       step: "review-3",
+      round: 3,
       sentences: [
         "DOD-P1-1 held by 1 case",
         "DOD-P1-2 not held: No case refuses an empty quill.",
         "2 findings remain: 1 for the builder, 1 for the test writer",
-        "for the builder, P-05: a quill is counted",
-        "for the test writer, Q2: a quill is counted",
+        "for the builder, P-05: Count once.",
+        "for the test writer, Q2, a quill is counted: Assert all.",
       ],
     },
+  });
+});
+
+test("a finding that remains keeps its fix only when the fix shares no run of 20 characters with the tests", () => {
+  const tests = ['test("a quill is counted", () => count("ABCDEFGHIJKLMNOPQRSTUVWXYZ") === 1);'];
+  const quoting: Finding = { ...forTests, fix: "Assert the count of ABCDEFGHIJKLMNOPQRSTUVWXYZ." };
+  assert.deepEqual(findingsLeft([forBuilder, forTests, quoting], tests), [
+    { to: "builder", case: "a quill is counted", question: "P-05", fix: "Count once." },
+    { to: "test-writer", case: "a quill is counted", question: "Q2", fix: "Assert all." },
+    { to: "test-writer", case: "a quill is counted", question: "Q2" },
+  ]);
+});
+
+test("each finding that remains says what was asked, and one whose fix quotes a test says it is kept from the card", () => {
+  const quoting = {
+    ...reviewed({ ...proved, round: 3 }, []),
+    remaining: [{ to: "test-writer" as const, case: "a quill\u0007 is counted", question: "Q2" }],
+  };
+  assert.equal(
+    roundsOnCard(quoting).judged?.sentences.at(-1),
+    "for the test writer, Q2, a quill is counted: kept from the card: it quotes a test",
+  );
+});
+
+test("the reviewer's lines follow one computed line that names the round they were judged in, before the final proof", () => {
+  const state = { ...reviewed({ ...proved, round: 3 }, []), reviewedAt: "review-2" };
+  const lines = cardOf(roundsOnCard(state)).card.lines;
+  const first = lines.findIndex((line) => line.mark === "judged");
+  assert.deepEqual(lines[first - 1], {
+    mark: "computed",
+    words: "the reviewer, in round 2, before the final proof:",
+    source: { step: "draw" },
   });
 });
 
@@ -160,6 +196,7 @@ function cardOf(rounds: ReturnType<typeof roundsOnCard>): ReturnType<typeof draw
     builtAt: "round-1",
     work: "forge/P1-tests-3",
     kept: "with-tests",
+    caseMessages: "filtered",
     into: "integration",
     rounds,
   });
@@ -187,7 +224,11 @@ test("a reviewer's not held never withholds merge, and its lines are marked judg
 
 test("a long reason is one judged line, its words whole and in order", () => {
   const long = { item: "DOD-P1-2", held: false as const, why: `${"word ".repeat(30)}end.` };
-  const state = reviewedState(proved, { plan: "review", review: { conditions: [long], findings: [] } }, "review-1");
+  const state = reviewedState(
+    proved,
+    { plan: "review", review: { conditions: [long], findings: [] }, remaining: [] },
+    "review-1",
+  );
   const judged = judgedOf(cardOf(roundsOnCard(state)).card.lines);
   assert.deepEqual(
     judged.map((line) => line.words),

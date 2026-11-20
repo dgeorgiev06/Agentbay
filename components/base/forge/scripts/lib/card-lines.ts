@@ -25,14 +25,18 @@ const longestShown = 120;
 
 const unsafe = /[\p{Cc}\p{Cf}]/gu;
 
-export function safeText(text: string): string {
+export function shortened(text: string, longest: number): string {
   const words = text
     .replace(unsafe, " ")
     .split(" ")
     .filter((word) => word !== "")
     .join(" ");
   const characters = Array.from(words);
-  return characters.length <= longestShown ? words : `${characters.slice(0, longestShown).join("")}...`;
+  return characters.length <= longest ? words : `${characters.slice(0, longest).join("")}...`;
+}
+
+export function safeText(text: string): string {
+  return shortened(text, longestShown);
 }
 
 export function counted(count: number, noun: string): string {

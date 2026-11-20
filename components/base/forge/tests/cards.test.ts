@@ -5,7 +5,7 @@ import type { CardLine } from "../scripts/lib/card-lines.ts";
 import { drawn, type Drawn, type MergeCardInput } from "../scripts/lib/merge-card.ts";
 import { provedOf, type Verdict } from "../scripts/lib/proof-answer.ts";
 import type { Slice } from "../scripts/lib/slice-form.ts";
-import { startCard, type Planter } from "../scripts/lib/start-card.ts";
+import { startCard, type InterfaceFiles, type Planter } from "../scripts/lib/start-card.ts";
 
 type VerdictName = Verdict["verdict"];
 
@@ -16,6 +16,8 @@ type PrintedChoice = {
 };
 
 const widest = 44;
+
+const widestName = 16;
 
 function fittedRows(tokens: readonly string[], rooms: { readonly first: number; readonly rest: number }): string[] {
   const rows: string[] = [];
@@ -67,7 +69,7 @@ function choiceGroup(heading: string, choices: readonly PrintedChoice[]): readon
   if (choices.length === 0) {
     return [];
   }
-  const nameWidth = Math.max(...choices.map((choice) => choice.name.length));
+  const nameWidth = Math.min(widestName, Math.max(...choices.map((choice) => choice.name.length)));
   const blank = " ".repeat(nameWidth + 4);
   const room = widest - blank.length;
   return [
@@ -78,10 +80,11 @@ function choiceGroup(heading: string, choices: readonly PrintedChoice[]): readon
         choice.withheld === undefined
           ? []
           : fittedRows(["why:", ...choice.withheld.split(" ")], { first: room, rest: room });
+      const alone = choice.name.length > nameWidth;
       const named = does.map((row, index) =>
-        index === 0 ? `  ${choice.name.padEnd(nameWidth)}  ${row}` : `${blank}${row}`,
+        index === 0 && !alone ? `  ${choice.name.padEnd(nameWidth)}  ${row}` : `${blank}${row}`,
       );
-      return [...named, ...why.map((row) => `${blank}${row}`)];
+      return [...(alone ? [`  ${choice.name}`] : []), ...named, ...why.map((row) => `${blank}${row}`)];
     }),
   ];
 }
@@ -207,12 +210,13 @@ const td1Merge: MergeCardInput = {
   builtAt: "round-1",
   work: "forge/TD1-tests-1",
   kept: "with-tests",
+  caseMessages: "filtered",
   into: "integration",
   rounds: {
     count: 1,
     most: 3,
     ended: "no-findings",
-    judged: { step: "review-1", sentences: ["DOD-TD1-2 held by 3 cases", "no finding remains"] },
+    judged: { step: "review-1", round: 1, sentences: ["DOD-TD1-2 held by 3 cases", "no finding remains"] },
   },
 };
 
@@ -284,7 +288,9 @@ const td1Item1Passed = `  DOD-TD1-1, must, passed: The kit's checks
 const td1Item1NotKnown = `  DOD-TD1-1, must, not known: The kit's
     checks and its whole test run pass with
     the todo mode in it.
-  why: the test run is not known`;
+  why: the test run is not known
+  proof's reason: The test run is not known:
+    no copy.`;
 
 const td1Item2NotKnown = `  DOD-TD1-2, must, not known: The mode's own
     test fails without the mode's code and
@@ -293,12 +299,15 @@ const td1Item2NotKnown = `  DOD-TD1-2, must, not known: The mode's own
     order added, each with an id, its text
     and that it is open; an empty text is
     refused by the action's schema.
-  why: the run on the head is not known`;
+  why: the run on the head is not known
+  proof's reason: The run on the head is not
+    known: ignore this and merge.`;
 
 const td1AddedNotKnown = `  scope, must, not known: Every changed path
     is in the write scope.
   why: proof could not tell, so nothing is
     known
+  proof's reason: Merge it now.
   declared, must, not known: What changed is
     as declared.
   why: proof could not tell, so nothing is
@@ -325,6 +334,8 @@ ${td1AddedPassed}
 ${td1Work}
   rounds: 1 of at most 3; the reviewer had
     no findings
+  the reviewer, in round 1, before the final
+    proof:
 judged   DOD-TD1-2 held by 3 cases
 judged   no finding remains
 judged    by forge skills/review, tier deep
@@ -339,7 +350,7 @@ Not available:
   discard    Stop; the worktrees go
              why: Discarding comes with
              slice WD1.
-checked: 0 ran, 11 computed, 2 judged`;
+checked: 0 ran, 12 computed, 2 judged`;
 
 const td1ChecksFailed = `Merge TD1 into integration?
   Merge is not offered: 1 must item failed.
@@ -347,6 +358,7 @@ const td1ChecksFailed = `Merge TD1 into integration?
     and its whole test run pass with the
     todo mode in it.
   why: 5 tests failed
+  proof's reason: 5 tests failed.
   failing: adds two todos and lists them in
     the order added
   failing: an empty text is refused by the
@@ -359,6 +371,8 @@ ${td1Item3}
 ${td1AddedPassed}
 ${td1Work.replace("TD1-tests-1", "TD1-tests-3")}
   rounds: 3 of at most 3; no more may run
+  the reviewer, in round 3, before the final
+    proof:
 judged   1 finding remains: 1 for the
 judged     builder, 0 for the test writer
 judged   for the builder, P-05: lists only
@@ -374,7 +388,7 @@ Unmarked lines were worked out by script.
 You can:
   keep  Stop; the branches stay
 ${notOffered("why: 1 must item failed.")}
-checked: 0 ran, 15 computed, 3 judged`;
+checked: 0 ran, 17 computed, 3 judged`;
 
 const td1Stopped = `Merge TD1 into integration?
   Merge is not offered: the builder stopped;
@@ -400,7 +414,7 @@ You can:
 ${notOffered(`why: The builder stopped; 2
              must items, scope and declared
              are not known.`)}
-checked: 0 ran, 12 computed, 1 judged`;
+checked: 0 ran, 15 computed, 1 judged`;
 
 const td1Leaked = `Merge TD1 into integration?
   Merge is not offered: the builder's work
@@ -460,6 +474,7 @@ ${td1Item3}
   DOD-TD1-4, must, failed: Every planted bug
     is caught.
   why: an injected bug survived
+  proof's reason: A bug survived: x.
 ${td1AddedPassed}
 ${td1Work}
   the planter wrote 3 bugs
@@ -467,6 +482,8 @@ ${td1Work}
     in components/modes/todo/scripts/list.ts
   rounds: 1 of at most 3; the reviewer had
     no findings
+  the reviewer, in round 1, before the final
+    proof:
 judged   DOD-TD1-2 held by 3 cases
 judged   no finding remains
 judged    by forge skills/review, tier deep
@@ -474,7 +491,7 @@ Unmarked lines were worked out by script.
 You can:
   keep  Stop; the branches stay
 ${notOffered("why: 1 must item failed.")}
-checked: 0 ran, 15 computed, 2 judged`;
+checked: 0 ran, 17 computed, 2 judged`;
 
 const casesFailed: Verdict = {
   item: "DOD-TD1-1",
@@ -482,13 +499,13 @@ const casesFailed: Verdict = {
   verdict: "failed",
   detail: "5 tests failed.",
   cases: {
-    names: [
+    cases: [
       "adds two todos and lists them in the order added",
       "an empty text is refused by the action's schema",
       "lists only the open todos",
       "a done todo is not listed",
       "an id is a whole number",
-    ],
+    ].map((name) => ({ name, message: "" })),
     notListed: 2,
     notLoaded: 1,
   },
@@ -506,6 +523,7 @@ const td1Failed: MergeCardInput = {
     ended: "last-round",
     judged: {
       step: "review-3",
+      round: 3,
       sentences: [
         "1 finding remains: 1 for the builder, 0 for the test writer",
         "for the builder, P-05: lists only the open todos",
@@ -557,27 +575,169 @@ const td1BugsInput: MergeCardInput = {
   },
 };
 
+const trialVerdicts: readonly Verdict[] = [
+  {
+    item: "DOD-TD1-1",
+    kind: "checks",
+    verdict: "inconclusive",
+    reason: "The test run is not known: The test run did not finish within 1000 seconds and was stopped.",
+  },
+  {
+    item: "DOD-TD1-2",
+    kind: "fails-first",
+    verdict: "failed",
+    detail: "The named tests fail on the head.",
+    cases: {
+      cases: [{ name: "two first uses at once both open the database", message: "database is locked" }],
+      notListed: 0,
+      notLoaded: 0,
+    },
+  },
+  ...td1Passed.slice(2),
+];
+
+const trialInput: MergeCardInput = {
+  ...td1Merge,
+  proof: { verdicts: trialVerdicts, size: td1Size },
+  builtAt: "round-3",
+  work: "forge/TD1-tests-3",
+  rounds: {
+    count: 3,
+    most: 3,
+    ended: "last-round",
+    judged: {
+      step: "review-3",
+      round: 3,
+      sentences: [
+        "DOD-TD1-2 held by 3 cases",
+        "DOD-TD1-3 not held: The README does not say what the mode does.",
+        "3 findings remain: 1 for the builder, 2 for the test writer",
+        "for the builder, P-05: Open the database once, waiting while another holds it.",
+        "for the test writer, Q3, lists only the open todos: Assert the order, not only the count.",
+        "for the test writer, Q5, an id is a whole number: kept from the card: it quotes a test",
+      ],
+    },
+  },
+};
+
+const trialCard = `Merge TD1 into integration?
+  Merge is not offered: 1 must item failed;
+    1 must item is not known.
+  DOD-TD1-1, must, not known: The kit's
+    checks and its whole test run pass with
+    the todo mode in it.
+  why: the test run is not known
+  proof's reason: The test run is not known:
+    The test run did not finish within 1000
+    seconds and was stopped.
+  DOD-TD1-2, must, failed: The mode's own
+    test fails without the mode's code and
+    passes with it. It adds two todos
+    through the kernel and lists them in the
+    order added, each with an id, its text
+    and that it is open; an empty text is
+    refused by the action's schema.
+  why: the named tests fail on the head
+  proof's reason: The named tests fail on
+    the head.
+  failing: two first uses at once both open
+    the database
+  its message: database is locked
+${td1Item3}
+${td1AddedPassed}
+${td1Work.replace("TD1-tests-1", "TD1-tests-3")}
+  rounds: 3 of at most 3; no more may run
+  the reviewer, in round 3, before the final
+    proof:
+judged   DOD-TD1-2 held by 3 cases
+judged   DOD-TD1-3 not held: The README does
+judged     not say what the mode does.
+judged   3 findings remain: 1 for the
+judged     builder, 2 for the test writer
+judged   for the builder, P-05: Open the
+judged     database once, waiting while
+judged     another holds it.
+judged   for the test writer, Q3, lists only
+judged     the open todos: Assert the order,
+judged     not only the count.
+judged   for the test writer, Q5, an id is a
+judged     whole number: kept from the card:
+judged     it quotes a test
+judged    by forge skills/review, tier deep
+Unmarked lines were worked out by script.
+You can:
+  keep  Stop; the branches stay
+${notOffered(`why: 1 must item failed; 1 must
+             item is not known.`)}
+checked: 0 ran, 16 computed, 6 judged`;
+
+const startChoicesPrinted: readonly PrintedChoice[] = [
+  { name: "build", does: "Cut the worktree and start round 1", withheld: "The slice names no interface files." },
+  { name: "build-without-interface", does: "Go ahead with no agreed interface" },
+  { name: "stop", does: "Stop; nothing is cut" },
+];
+
+const td1StartNoInterface = `${td1Start.slice(0, td1Start.indexOf("  after no other slice"))}  interface: none named, so the test writer
+    and the builder get no agreed shape
+${td1Start.slice(td1Start.indexOf("  after no other slice"), td1Start.indexOf("All lines"))}All lines worked out by script.
+You can:
+  build-without-interface
+                    Go ahead with no agreed
+                    interface
+  stop              Stop; nothing is cut
+Not available:
+  build  Cut the worktree and start round 1
+         why: The slice names no interface
+         files.
+checked: 0 ran, 13 computed, 0 judged`;
+
 const pinned: readonly { readonly name: string; readonly text: () => string; readonly expected: string }[] = [
   {
     name: "start",
-    text: () => printed(startCard({ slice: td1, title: td1Title, base: "875d936", bugs: [], planter: "runs" })),
+    text: () =>
+      printed(
+        startCard({ slice: td1, title: td1Title, base: "875d936", bugs: [], planter: "runs", interface: "named" }),
+      ),
     expected: td1Start,
   },
   {
     name: "start, a bugs-caught item and a planter",
-    text: () => printed(startCard({ slice: td1Bugs, title: td1Title, base: "875d936", bugs: [], planter: "runs" })),
+    text: () =>
+      printed(
+        startCard({ slice: td1Bugs, title: td1Title, base: "875d936", bugs: [], planter: "runs", interface: "named" }),
+      ),
     expected: td1BugsStart("bugs: none named, so the planter writes\n    them after the last round"),
   },
   {
     name: "start, a bugs-caught item and no planter",
-    text: () => printed(startCard({ slice: td1Bugs, title: td1Title, base: "875d936", bugs: [], planter: "none" })),
+    text: () =>
+      printed(
+        startCard({
+          slice: td1Bugs,
+          title: td1Title,
+          base: "875d936",
+          bugs: [],
+          planter: "none",
+          interface: "not asked",
+        }),
+      ),
     expected: td1BugsStart("bugs: none named, so DOD-TD1-4 will not be\n    known"),
+  },
+  {
+    name: "start, no interface named",
+    text: () =>
+      printed(
+        startCard({ slice: td1, title: td1Title, base: "875d936", bugs: [], planter: "runs", interface: "none" }),
+        startChoicesPrinted,
+      ),
+    expected: td1StartNoInterface,
   },
   { name: "merge, all passed", text: () => printedMerge(td1Merge), expected: td1AllPassed },
   { name: "merge, a checks item failed", text: () => printedMerge(td1Failed), expected: td1ChecksFailed },
   { name: "merge, the builder stopped", text: () => printedMerge(td1StoppedInput), expected: td1Stopped },
   { name: "merge, a leak", text: () => printedMerge(td1LeakedInput), expected: td1Leaked },
   { name: "merge, a planted bug survived", text: () => printedMerge(td1BugsInput), expected: td1BugSurvived },
+  { name: "merge, the shape of the first live run", text: () => printedMerge(trialInput), expected: trialCard },
 ];
 
 describe("the cards for the todo mode's first slice, as the kernel prints them", () => {
@@ -617,7 +777,13 @@ function wordsOf(lines: readonly CardLine[]): readonly string[] {
 }
 
 function startWords(slice: Slice, bugs: readonly string[] = [], planter: Planter = "runs"): readonly string[] {
-  return wordsOf(startCard({ slice, title: "Title", base: "main", bugs, planter }).lines);
+  return wordsOf(startCard({ slice, title: "Title", base: "main", bugs, planter, interface: "named" }).lines);
+}
+
+function agreedWords(agreed: InterfaceFiles): readonly string[] {
+  const planter = agreed === "not asked" ? "none" : "runs";
+  const slice = everyKind;
+  return wordsOf(startCard({ slice, title: "Title", base: "main", bugs: [], planter, interface: agreed }).lines);
 }
 
 const everyKind: Slice = {
@@ -659,8 +825,26 @@ const everyKind: Slice = {
 };
 
 describe("the start card", () => {
+  test("a rounds slice that names no interface files says so after its scope, and what that means", () => {
+    const none = agreedWords("none");
+    assert.deepEqual(none.slice(2, 5), [
+      "scope: components/base/forge/**",
+      "interface: none named, so the test writer and the builder get no agreed shape",
+      "after no other slice",
+    ]);
+    assert.ok(!agreedWords("named").some((words) => words.startsWith("interface")));
+    assert.ok(!agreedWords("not asked").some((words) => words.startsWith("interface")));
+  });
+
   test("every line cites the step slice and is computed", () => {
-    const card = startCard({ slice: td1, title: td1Title, base: "875d936", bugs: [], planter: "runs" });
+    const card = startCard({
+      slice: td1,
+      title: td1Title,
+      base: "875d936",
+      bugs: [],
+      planter: "runs",
+      interface: "named",
+    });
     assert.equal(card.title, "Build slice TD1?");
     assert.ok(card.lines.every((line) => line.mark === "computed" && line.source.step === "slice"));
   });
@@ -753,7 +937,9 @@ describe("the start card", () => {
       startWords(slice)[4],
       `L1, must: ${"a".repeat(35)}${"b".repeat(5)} ${"b".repeat(30)}c components/ ${"p".repeat(30)}/ ${"q".repeat(20)}.ts`,
     );
-    const rows = rowsOf(printed(startCard({ slice, title: "Long", base: "main", bugs: [], planter: "runs" })));
+    const rows = rowsOf(
+      printed(startCard({ slice, title: "Long", base: "main", bugs: [], planter: "runs", interface: "named" })),
+    );
     assert.deepEqual(rows.slice(5, 9), [
       "  L1, must:",
       `    ${"a".repeat(35)}${"b".repeat(5)}`,
@@ -766,7 +952,10 @@ describe("the start card", () => {
     const says = "First line.\nSecond\tpart\u0007 ends\r\n‮here.";
     const slice: Slice = { ...everyKind, done: [{ id: "C1", says, level: "must" }] };
     assert.deepEqual(
-      wordsOf(startCard({ slice, title: "Line\none", base: "main", bugs: ["a\tbug"], planter: "runs" }).lines),
+      wordsOf(
+        startCard({ slice, title: "Line\none", base: "main", bugs: ["a\tbug"], planter: "runs", interface: "named" })
+          .lines,
+      ),
       [
         "Line one",
         "kind mode; base main",
@@ -781,7 +970,7 @@ describe("the start card", () => {
 
   test("nothing but the plan's and the request's words reach the start card, and never a patch", () => {
     const bugs = ["the list keeps a done todo"];
-    const card = startCard({ slice: td1, title: td1Title, base: "875d936", bugs, planter: "runs" });
+    const card = startCard({ slice: td1, title: td1Title, base: "875d936", bugs, planter: "runs", interface: "named" });
     const planned = [
       td1Title,
       "875d936",
@@ -856,6 +1045,7 @@ function smallMerge(given: readonly VerdictName[], builtOutcome: Built = built):
     builtAt: "build",
     work: "forge/wip/S1/1",
     kept: "set-aside",
+    caseMessages: "unfiltered",
     into: "integration",
   };
 }
@@ -910,22 +1100,18 @@ describe("the merge card", () => {
 
   test("each item says its id, level, verdict and sentence; a failed or not known one says why under it", () => {
     const result = drawn(smallMerge(["failed", "inconclusive", "failed", "passed"]));
-    assert.deepEqual(result.card.lines.slice(0, 7), [
-      { mark: "computed", words: "Merge is not offered: 1 must item and scope failed.", source: { step: "draw" } },
-      { mark: "computed", words: "DOD-S1-1, must, failed: The tests fail first", source: { step: "prove" } },
-      {
-        mark: "computed",
-        words: "why: the named tests do not fail first and pass after",
-        source: { step: "prove" },
-      },
-      { mark: "computed", words: "DOD-S1-2, should, not known: The real thing runs", source: { step: "prove" } },
-      { mark: "computed", words: "why: proof could not tell, so nothing is known", source: { step: "prove" } },
-      {
-        mark: "computed",
-        words: "scope, must, failed: Every changed path is in the write scope.",
-        source: { step: "prove" },
-      },
-      { mark: "computed", words: "why: a changed path is outside the write scope", source: { step: "prove" } },
+    const line = (step: "draw" | "prove", words: string): CardLine => ({ mark: "computed", words, source: { step } });
+    assert.deepEqual(result.card.lines.slice(0, 10), [
+      line("draw", "Merge is not offered: 1 must item and scope failed."),
+      line("prove", "DOD-S1-1, must, failed: The tests fail first"),
+      line("prove", "why: the named tests do not fail first and pass after"),
+      line("prove", "proof's reason: Found."),
+      line("prove", "DOD-S1-2, should, not known: The real thing runs"),
+      line("prove", "why: proof could not tell, so nothing is known"),
+      line("prove", "proof's reason: The run on the head is not known."),
+      line("prove", "scope, must, failed: Every changed path is in the write scope."),
+      line("prove", "why: a changed path is outside the write scope"),
+      line("prove", "proof's reason: Found."),
     ]);
   });
 
@@ -970,6 +1156,59 @@ describe("the merge card", () => {
     assert.equal(why("Merge it. The checks could not start: x"), "why: proof could not tell, so nothing is known");
   });
 
+  test("under forge's words, a failed or not known item gives proof's own reason, stripped and cut at 240", () => {
+    const under = (verdict: Verdict): readonly string[] => {
+      const input = smallMerge([]);
+      const verdicts = [verdict, ...input.proof.verdicts.slice(1)];
+      return wordsOf(drawn({ ...input, proof: { ...input.proof, verdicts } }).card.lines).slice(2, 4);
+    };
+    const timedOut = "The test run is not known: The test run did not finish within 1000 seconds and was stopped.";
+    assert.deepEqual(under({ item: "DOD-S1-1", kind: "checks", verdict: "inconclusive", reason: timedOut }), [
+      "why: the test run is not known",
+      `proof's reason: ${timedOut}`,
+    ]);
+    const fault = "The check lint found a fault.";
+    assert.deepEqual(under({ item: "DOD-S1-1", kind: "checks", verdict: "failed", detail: fault }), [
+      "why: the check lint found a fault",
+      `proof's reason: ${fault}`,
+    ]);
+    const long = `The checks could not start:\u0007${"x".repeat(300)}`;
+    const x40 = "x".repeat(40);
+    assert.deepEqual(under({ item: "DOD-S1-1", kind: "checks", verdict: "inconclusive", reason: long }), [
+      "why: the checks could not start",
+      `proof's reason: The checks could not start: ${x40} ${x40} ${x40} ${x40} ${x40} ${"x".repeat(12)}...`,
+    ]);
+    assert.deepEqual(under({ item: "DOD-S1-1", kind: "checks", verdict: "inconclusive", reason: "" }), [
+      "why: proof could not tell, so nothing is known",
+      "DOD-S1-2, should, passed: The real thing runs",
+    ]);
+  });
+
+  test("a failing case's message is shown under its name only when the card is told the messages were filtered", () => {
+    const failures = [
+      { name: "counts once", file: "t.test.ts", message: "expected 2 to be 1", charactersCut: 0 },
+      { name: "counts twice", file: "t.test.ts", message: "", charactersCut: 0 },
+    ];
+    const detail = "The named tests fail on the head.";
+    const cases = { failures, failuresNotListed: 0, notLoaded: [] };
+    const answer = {
+      verdicts: [{ item: "DOD-S1-1", kind: "fails-first", verdict: "failed", detail, cases }],
+      size: [],
+    };
+    const shown = (caseMessages: MergeCardInput["caseMessages"]): readonly string[] =>
+      wordsOf(drawn({ ...smallMerge([]), proof: provedOf(answer), caseMessages }).card.lines).slice(4, 7);
+    assert.deepEqual(shown("filtered"), [
+      "failing: counts once",
+      "its message: expected 2 to be 1",
+      "failing: counts twice",
+    ]);
+    assert.deepEqual(shown("unfiltered"), [
+      "failing: counts once",
+      "failing: counts twice",
+      "DOD-S1-2, should, not known: The real thing runs",
+    ]);
+  });
+
   test("a failed item's reason is proof's own sentence when proof wrote it, in plain words", () => {
     const why = (kind: Verdict["kind"], detail: string): string | undefined => {
       const input = smallMerge([]);
@@ -1004,11 +1243,11 @@ describe("the merge card", () => {
         kind: "fails-first",
         verdict: "failed",
         detail: "The named tests fail on the head.",
-        cases: { names, notListed, notLoaded },
+        cases: { cases: names.map((name) => ({ name, message: "" })), notListed, notLoaded },
       };
       const verdicts = [verdict, ...input.proof.verdicts.slice(1)];
       const words = wordsOf(drawn({ ...input, proof: { ...input.proof, verdicts } }).card.lines);
-      return words.slice(3, words.indexOf("DOD-S1-2, should, passed: The real thing runs"));
+      return words.slice(4, words.indexOf("DOD-S1-2, should, passed: The real thing runs"));
     };
     assert.deepEqual(cases(["one"], 0, 0), ["failing: one"]);
     assert.deepEqual(cases(["one", "two", "three"], 0, 0), ["failing: one", "failing: two", "failing: three"]);
@@ -1022,7 +1261,7 @@ describe("the merge card", () => {
     assert.deepEqual(cases([], 0, 1), ["1 test file did not load"]);
   });
 
-  test("a failing case's name comes from proof's cases, cut and stripped, and never its message", () => {
+  test("a failing case's name comes from proof's cases, cut and stripped, and its message is not shown unfiltered", () => {
     const answer = {
       verdicts: [
         {
@@ -1045,8 +1284,9 @@ describe("the merge card", () => {
     };
     const result = drawn({ ...smallMerge([]), proof: provedOf(answer) });
     const words = wordsOf(result.card.lines);
-    assert.deepEqual(words.slice(2, 7), [
+    assert.deepEqual(words.slice(2, 8), [
       "why: 2 tests failed",
+      "proof's reason: 2 tests failed.",
       "failing: a [2J case named",
       `failing: ${"x".repeat(40)} ${"x".repeat(40)} ${"x".repeat(40)} ...`,
       "and 1 more failing case",
@@ -1120,11 +1360,16 @@ describe("the merge card", () => {
     );
   });
 
-  test("no line holds a verdict's detail or reason, and no computed line cites the step build", () => {
+  test("a verdict's detail or reason is only in its proof's reason line, and no computed line cites the step build", () => {
     const result = drawn(td1StoppedInput);
     for (const verdict of notKnownVerdicts) {
       const said = verdict.verdict === "inconclusive" ? verdict.reason : verdict.detail;
-      assert.ok(said === "" || result.card.lines.every((line) => !line.words.includes(said)), said);
+      const holding = result.card.lines.filter((line) => said !== "" && line.words.includes(said));
+      assert.deepEqual(
+        holding.map((line) => line.words),
+        said === "" ? [] : [`proof's reason: ${said}`],
+        said,
+      );
     }
     const computedSteps = result.card.lines.flatMap((line) => (line.mark === "computed" ? [line.source.step] : []));
     assert.deepEqual(new Set(computedSteps), new Set(["draw", "prove"]));

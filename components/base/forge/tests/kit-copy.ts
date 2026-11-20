@@ -214,6 +214,19 @@ export async function decided(
   return bay(root, [...words, "--via", "chat", "--quote", "as the owner"]);
 }
 
+export async function printedCard(root: string, runId: string, heading = "Merge "): Promise<readonly string[]> {
+  const widest = 44;
+  const printed = (await bayRan(root, ["runs", runId])).stdout.split("\n");
+  const first = printed.findIndex((line) => line.startsWith(heading));
+  const last = printed.findIndex((line) => line.startsWith("hash "));
+  const card = printed.slice(first, last);
+  assert.ok(
+    card.every((line) => Array.from(line).length <= widest),
+    card.join("\n"),
+  );
+  return card;
+}
+
 export async function shown(root: string, runId: string): Promise<Json> {
   return runOf(await bay(root, ["runs", runId]));
 }
@@ -388,8 +401,17 @@ export type RoundPlan = {
 
 const noNames = { gained: [], lost: [], changed: [] };
 
+export function goAhead(start: Waiting): string {
+  const offered = listOf(start.choices).filter((choice) => textAt(choice, "status") === "offered");
+  return offered.map((choice) => textAt(choice, "name")).find((name) => name !== "stop") ?? "";
+}
+
+export async function begun(root: string, start: Waiting): Promise<Json> {
+  return decided(root, start, { step: "start", choice: goAhead(start) });
+}
+
 export async function declared(root: string, start: Waiting, files: readonly string[]): Promise<void> {
-  await decided(root, start, { step: "start", verdict: "approve" });
+  await begun(root, start);
   const answered = await submitted(root, start.id, { files: [...files], names: noNames });
   assert.equal(textAt(answered, "status"), "waiting", JSON.stringify(answered));
 }

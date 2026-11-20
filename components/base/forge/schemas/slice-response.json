@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "SliceResponse",
-  "description": "The slice, base, bugs and interface handed on to the later steps, the files the builder may not change, and the start card the owner reads before anything is cut.",
+  "description": "The slice, base, bugs and interface handed on to the later steps, the files the builder may not change, the start card the owner reads before anything is cut, and in the workflow rounds which go-ahead choice the card offers.",
   "type": "object",
   "additionalProperties": false,
   "required": ["slice", "base", "bugs", "interface", "fixed", "card"],
@@ -41,7 +41,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["title", "lines"],
-      "description": "The start card: the slice's title, kind, base, scope and afters, every item of its definition of done, and the bugs: those named to inject, whether the planter writes them, or that none will be planted.",
+      "description": "The start card: the slice's title, kind, base, scope, in the workflow rounds whether it names no interface files, its afters, every item of its definition of done, and the bugs: those named to inject, whether the planter writes them, or that none will be planted.",
       "properties": {
         "title": {
           "type": "string",
@@ -79,7 +79,26 @@
               }
             }
           }
+        },
+        "withheld": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "In the workflow rounds only: the reason for each go-ahead choice the start approval withholds, one full sentence.",
+          "properties": {
+            "build": { "type": "string", "minLength": 1, "maxLength": 200 },
+            "build-without-interface": { "type": "string", "minLength": 1, "maxLength": 200 }
+          }
         }
+      }
+    },
+    "offered": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["build", "build-without-interface"],
+      "description": "In the workflow rounds only: which go-ahead choice the start approval offers. build when the slice names interface files, build-without-interface when it names none; never both.",
+      "properties": {
+        "build": { "type": "boolean" },
+        "build-without-interface": { "type": "boolean" }
       }
     }
   }

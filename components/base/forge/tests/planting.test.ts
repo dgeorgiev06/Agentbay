@@ -218,6 +218,7 @@ describe("the merge card's lines for the bugs", () => {
       builtAt: "round-1",
       work: "forge/P1-tests-3",
       kept: "with-tests",
+      caseMessages: "filtered",
       into: "integration",
       bugs: bugsOnCard(bugs, said, planted),
     };

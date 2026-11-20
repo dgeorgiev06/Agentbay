@@ -1,9 +1,10 @@
-import { counted } from "./card-lines.ts";
+import { counted, safeText } from "./card-lines.ts";
 import type { Condition } from "./review.ts";
 import { lastRound, type Remaining, type RoundsState } from "./rounds.ts";
 
 type JudgedLines = {
   readonly step: string;
+  readonly round: number;
   readonly sentences: readonly string[];
 };
 
@@ -18,15 +19,21 @@ export type RoundsOnCard = {
 
 const findingsNamed = 3;
 
-const addresseeSaid: Readonly<Record<Remaining["to"], string>> = {
-  builder: "for the builder",
-  "test-writer": "for the test writer",
-};
+const keptFix = "kept from the card: it quotes a test";
+
+const reviewStep = /^review-(\d)$/;
 
 function conditionSentence(condition: Condition): string {
   return condition.held
     ? `${condition.item} held by ${counted(condition.cases.length, "case")}`
     : `${condition.item} not held: ${condition.why}`;
+}
+
+function findingSentence(finding: Remaining): string {
+  const fix = finding.fix === undefined ? keptFix : safeText(finding.fix);
+  return finding.to === "builder"
+    ? `for the builder, ${finding.question}: ${fix}`
+    : `for the test writer, ${finding.question}, ${safeText(finding.case)}: ${fix}`;
 }
 
 function remainingSentences(remaining: readonly Remaining[]): readonly string[] {
@@ -38,10 +45,7 @@ function remainingSentences(remaining: readonly Remaining[]): readonly string[] 
   const count =
     `${counted(remaining.length, "finding")} ${verb}: ${String(builder)} for the builder, ` +
     `${String(remaining.length - builder)} for the test writer`;
-  const named = remaining
-    .slice(0, findingsNamed)
-    .map((finding) => `${addresseeSaid[finding.to]}, ${finding.question}: ${finding.case}`);
-  return [count, ...named];
+  return [count, ...remaining.slice(0, findingsNamed).map(findingSentence)];
 }
 
 function endedOf(state: RoundsState): RoundsEnded {
@@ -60,5 +64,6 @@ export function roundsOnCard(state: RoundsState): RoundsOnCard {
     return count;
   }
   const sentences = [...state.conditions.map(conditionSentence), ...remainingSentences(state.remaining)];
-  return { ...count, judged: { step: state.reviewedAt, sentences } };
+  const round = Number(reviewStep.exec(state.reviewedAt)?.[1] ?? state.round);
+  return { ...count, judged: { step: state.reviewedAt, round, sentences } };
 }

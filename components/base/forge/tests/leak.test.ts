@@ -8,7 +8,6 @@ import { markOf } from "../scripts/lib/mark.ts";
 import {
   allHeld,
   askedOf,
-  bayRan,
   branches,
   decided,
   declared,
@@ -31,6 +30,7 @@ import {
   type Handed,
   type Played,
   type Proved,
+  printedCard,
 } from "./kit-copy.ts";
 
 const condition = "A quill is counted once, even when the ink is dry and the moon is full.";
@@ -153,13 +153,6 @@ async function written(root: string, folder: string, files: readonly Handed[]): 
 function keptMarkNow(root: string): string {
   const [row] = keptRows(root);
   return row === undefined ? "" : (markOf(unpacked(textAt(row, "packed"))) ?? "");
-}
-
-async function printedCard(root: string, runId: string): Promise<readonly string[]> {
-  const printed = (await bayRan(root, ["runs", runId])).stdout.split("\n");
-  const first = printed.findIndex((line) => line.startsWith("Merge "));
-  const last = printed.findIndex((line) => line.startsWith("hash "));
-  return printed.slice(first, last);
 }
 
 type Ran = {

@@ -6,6 +6,7 @@ import { reviewersPractices, type Practice } from "./lib/practices.ts";
 import { reviewOf } from "./lib/review.ts";
 import {
   afterRoundOf,
+  findingsLeft,
   reviewPlan,
   reviewedState,
   type AfterRound,
@@ -46,7 +47,11 @@ async function reviewed(context: ScriptContext, asked: Asked, folder: string): P
   const review = reviewOf(answer);
   const forTests = review.findings.filter((finding) => finding.to === "test-writer");
   await keepFindings(context, asked.name, forTests);
-  return { plan: "review", review };
+  const remaining = findingsLeft(
+    review.findings,
+    tests.map((test) => test.text),
+  );
+  return { plan: "review", review, remaining };
 }
 
 async function reviewedOrNot(

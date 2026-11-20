@@ -3,12 +3,15 @@ import type { Item, Proof, Slice } from "./slice-form.ts";
 
 export type Planter = "runs" | "none";
 
+export type InterfaceFiles = "named" | "none" | "not asked";
+
 export type StartCardInput = {
   readonly slice: Slice;
   readonly title: string;
   readonly base: string;
   readonly bugs: readonly string[];
   readonly planter: Planter;
+  readonly interface: InterfaceFiles;
 };
 
 const heldSaid: Readonly<Record<Proof["kind"], string>> = {
@@ -23,6 +26,10 @@ const heldSaid: Readonly<Record<Proof["kind"], string>> = {
 function scopeWords(scope: readonly string[]): string {
   const [first = "", ...rest] = scope;
   return rest.length === 0 ? `scope: ${first}` : `scope: ${first} and ${counted(rest.length, "more path")}`;
+}
+
+function interfaceWords(files: InterfaceFiles): readonly string[] {
+  return files === "none" ? ["interface: none named, so the test writer and the builder get no agreed shape"] : [];
 }
 
 function countWords(proof: Extract<Proof, { readonly kind: "count" }>): string {
@@ -95,6 +102,7 @@ export function startCard(input: StartCardInput): Card {
     title,
     `kind ${slice.kind}; base ${base}`,
     scopeWords(slice.scope),
+    ...interfaceWords(input.interface),
     ...(afters.length === 0 ? ["after no other slice"] : afters),
     ...slice.done.flatMap(itemWords),
     ...bugsWords(input),

@@ -3,8 +3,13 @@ import { safeText } from "./card-lines.ts";
 import { listOf, numberOf, oneOf, textOf } from "./json-values.ts";
 import { proofKinds, type ProofKind } from "./slice-form.ts";
 
-export type FailingNames = {
-  readonly names: readonly string[];
+export type FailingCase = {
+  readonly name: string;
+  readonly message: string;
+};
+
+export type FailingCases = {
+  readonly cases: readonly FailingCase[];
   readonly notListed: number;
   readonly notLoaded: number;
 };
@@ -16,7 +21,7 @@ export type Verdict =
       readonly kind: ProofKind;
       readonly verdict: "failed";
       readonly detail: string;
-      readonly cases?: FailingNames;
+      readonly cases?: FailingCases;
     }
   | { readonly item: string; readonly kind: ProofKind; readonly verdict: "inconclusive"; readonly reason: string };
 
@@ -31,11 +36,20 @@ export type Proved = {
   readonly size: readonly Sized[];
 };
 
-function failingNamesOf(value: Json | undefined): FailingNames {
+function failingCaseOf(value: Json): FailingCase {
+  const fields = fieldsOf(value);
+  return { name: safeText(textOf(fields.name)), message: safeText(textOf(fields.message)) };
+}
+
+function onceEach(cases: readonly FailingCase[]): readonly FailingCase[] {
+  const names = cases.map((each) => each.name);
+  return cases.filter((each, at) => each.name !== "" && names.indexOf(each.name) === at);
+}
+
+function failingCasesOf(value: Json | undefined): FailingCases {
   const fields = fieldsOf(value ?? null);
-  const names = listOf(fields.failures).map((failure) => safeText(textOf(fieldsOf(failure).name)));
   return {
-    names: [...new Set(names)].filter((name) => name !== ""),
+    cases: onceEach(listOf(fields.failures).map(failingCaseOf)),
     notListed: numberOf(fields.failuresNotListed),
     notLoaded: listOf(fields.notLoaded).length,
   };
@@ -53,7 +67,7 @@ function verdictOf(value: Json): Verdict {
   if (verdict === "passed" || fields.cases === undefined) {
     return { item, kind, verdict, detail };
   }
-  return { item, kind, verdict, detail, cases: failingNamesOf(fields.cases) };
+  return { item, kind, verdict, detail, cases: failingCasesOf(fields.cases) };
 }
 
 function sizedOf(value: Json): Sized {

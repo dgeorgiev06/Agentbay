@@ -1,7 +1,7 @@
 import type { BugsOnCard } from "./bug-card.ts";
 import type { Built, Missing } from "./builder-answer.ts";
 import { computed, counted, grouped, joined, judged, type Card, type CardLine } from "./card-lines.ts";
-import { verdictLines } from "./item-lines.ts";
+import { verdictLines, type CaseMessages } from "./item-lines.ts";
 import type { Leak } from "./leaks.ts";
 import { answerWords, mergeReason, withheldReasons, type WithheldChoice } from "./merge-choices.ts";
 import type { Proved, Sized } from "./proof-answer.ts";
@@ -17,6 +17,7 @@ export type MergeCardInput = {
   readonly builtAt: string;
   readonly work: string;
   readonly kept: Kept;
+  readonly caseMessages: CaseMessages;
   readonly into: string;
   readonly rounds?: RoundsOnCard;
   readonly bugs?: BugsOnCard;
@@ -92,8 +93,12 @@ function roundLines(rounds: RoundsOnCard | undefined): readonly CardLine[] {
   }
   const ran = `rounds: ${String(rounds.count)} of at most ${String(rounds.most)}; ${endedSaid[rounds.ended]}`;
   const { judged: lines } = rounds;
-  const sentences = lines === undefined ? [] : lines.sentences.map((words) => judged(lines.step, words));
-  return [computed("draw", ran), ...sentences];
+  if (lines === undefined) {
+    return [computed("draw", ran)];
+  }
+  const when = `the reviewer, in round ${String(lines.round)}, before the final proof:`;
+  const sentences = lines.sentences.map((words) => judged(lines.step, words));
+  return [computed("draw", ran), computed("draw", when), ...sentences];
 }
 
 function builderLines(built: Built, step: string): readonly CardLine[] {
@@ -130,7 +135,7 @@ function drawnLines(input: MergeCardInput, reason: string | undefined): readonly
   return [
     computed("draw", answerWords(reason)),
     ...(input.leaks ?? []).map((leak) => computed("draw", leakWords(leak))),
-    ...verdictLines(slice, proof.verdicts),
+    ...verdictLines(slice, proof.verdicts, input.caseMessages),
     ...[...drawnWords, ...bugWords(input.bugs)].map((said) => computed("draw", said)),
     ...roundLines(input.rounds),
     ...builderLines(input.built, input.builtAt),

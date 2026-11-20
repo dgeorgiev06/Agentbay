@@ -117,6 +117,10 @@
       ],
       "description": "How the work came to be on its branch: set aside by itself, or committed with the tests a test writer handed in. Left out, set aside."
     },
+    "caseMessages": {
+      "const": "filtered",
+      "description": "Set when every failing case's message in proof's answer has been compared with the tests and emptied where it shares a run of 20 characters with one; the card then shows each message left under its case. Left out, the card names the cases and shows no message."
+    },
     "rounds": {
       "type": "object",
       "description": "Where the rounds stand after the last review, as rounds.json gives it. Left out, the card has no rounds."

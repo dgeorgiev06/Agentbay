@@ -7,6 +7,7 @@ import {
   allHeld,
   askedOf,
   assertTheMainCheckoutIsUntouched,
+  begun,
   bayRan,
   branches,
   builderWrites,
@@ -18,6 +19,7 @@ import {
   kitTemplate,
   listOf,
   project,
+  printedCard,
   provedIn,
   removeAll,
   roundToCard,
@@ -142,6 +144,16 @@ describe(
       const files = [codeOf("R1")];
       await allPassedIn(root, "R1", [...files, tests[0]?.path ?? ""]);
       const start = await started(root, trigger(root, "R1", [testPath("R1", "quill.test.ts")]));
+      assert.deepEqual(start.choices, [
+        { name: "build", status: "offered", does: "Cut the worktree and start round 1" },
+        {
+          name: "build-without-interface",
+          status: "withheld",
+          does: "Go ahead with no agreed interface",
+          reason: "The slice names its interface files.",
+        },
+        { name: "stop", status: "offered", does: "Stop; nothing is cut" },
+      ]);
       const card = await roundToCard(root, start, { name: "R1", files, tests, built: { outcome: "built" } });
       assert.deepEqual(card.choices, [
         { name: "merge", status: "offered", does: "Merge into the integration branch" },
@@ -181,7 +193,7 @@ describe(
       const root = await project(template);
       const named = [testPath("R2", "first.test.ts"), testPath("R2", "second.test.ts")];
       const start = await started(root, trigger(root, "R2", named));
-      await decided(root, start, { step: "start", verdict: "approve" });
+      await begun(root, start);
       await submitted(root, start.id, { files: [codeOf("R2")], names: noNames });
       const outside = { path: "bay/quill.test.ts", text: handed("R2", "first.test.ts").text };
       const sentBack = await submitted(root, start.id, { tests: [handed("R2", "first.test.ts"), outside] });
@@ -219,7 +231,7 @@ describe(
       const root = await project(template);
       const named = testPath("R3", "quill.test.ts");
       const start = await started(root, trigger(root, "R3", [named]));
-      await decided(root, start, { step: "start", verdict: "approve" });
+      await begun(root, start);
       const sentBack = await submitted(root, start.id, { files: [codeOf("R3"), named], names: noNames });
       assert.equal(stepOf(sentBack), "declare/0#2");
       assert.deepEqual(feedbackOf(sentBack), [
@@ -258,11 +270,41 @@ describe(
       assertTheMainCheckoutIsUntouched(root);
     });
 
-    test("5. a rejected start card fails the run and leaves nothing: no branch, no worktree, no kept test", async () => {
+    test("5. a slice that names no interface files: the start card says so, offers going ahead without one or stopping, and stop leaves nothing", async () => {
       const root = await project(template);
-      const start = await started(root, trigger(root, "R5", [testPath("R5", "quill.test.ts")]));
-      const rejected = runOf(await decided(root, start, { step: "start", verdict: "reject" }));
-      assert.equal(textAt(rejected, "status"), "failed");
+      const start = await started(root, {
+        ...fieldsOf(trigger(root, "R5", [testPath("R5", "quill.test.ts")])),
+        interface: [],
+      });
+      assert.ok(
+        wordsOf(start).includes("interface: none named, so the test writer and the builder get no agreed shape"),
+      );
+      assert.deepEqual(start.choices, [
+        {
+          name: "build",
+          status: "withheld",
+          does: "Cut the worktree and start round 1",
+          reason: "The slice names no interface files.",
+        },
+        { name: "build-without-interface", status: "offered", does: "Go ahead with no agreed interface" },
+        { name: "stop", status: "offered", does: "Stop; nothing is cut" },
+      ]);
+      const printed = await printedCard(root, start.id, "Build slice");
+      assert.deepEqual(printed.slice(printed.indexOf("You can:")), [
+        "You can:",
+        "  build-without-interface",
+        "                    Go ahead with no agreed",
+        "                    interface",
+        "  stop              Stop; nothing is cut",
+        "Not available:",
+        "  build  Cut the worktree and start round 1",
+        "         why: The slice names no interface",
+        "         files.",
+        "checked: 0 ran, 11 computed, 0 judged",
+      ]);
+      const stopped = runOf(await decided(root, start, { step: "start", choice: "stop" }));
+      assert.equal(textAt(stopped, "status"), "failed");
+      assert.match(JSON.stringify(stopped), /The owner chose stop on the start card, so nothing is cut\./);
       assert.deepEqual(branches(root), []);
       assert.deepEqual(worktrees(root), []);
       assert.deepEqual(keptRows(root), []);
@@ -275,7 +317,7 @@ describe(
       const tests = [handed("R6", "quill.test.ts")];
       await allPassedIn(root, "R6", [codeOf("R6")]);
       const start = await started(root, trigger(root, "R6", [testPath("R6", "quill.test.ts")]));
-      await decided(root, start, { step: "start", verdict: "approve" });
+      await begun(root, start);
       await submitted(root, start.id, { files: [codeOf("R6")], names: noNames });
       assert.equal(stepOf(await shown(root, start.id)), "round-1/0.call0/0#1");
       await submitted(root, start.id, { tests });

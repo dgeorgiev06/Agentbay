@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Json } from "../../../../bay/sdk.ts";
+import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
 import { sliceOf } from "../scripts/lib/slice-form.ts";
-import { failingOf, withoutCases } from "../scripts/lib/failing.ts";
+import { failingOf, filteredProof, withoutCases } from "../scripts/lib/failing.ts";
 import { quotesAny } from "../scripts/lib/quoting.ts";
 
 const named = "components/modes/f1/tests/quill.test.ts";
@@ -135,5 +135,51 @@ test("verdicts lose their cases and keep every other field", () => {
   assert.deepEqual(withoutCases([passed, failed("DOD-F1-1", [failure("x", twenty)])]), [
     passed,
     { item: "DOD-F1-1", kind: "fails-first", verdict: "failed", detail: "The named tests fail on the head." },
+  ]);
+});
+
+test("the final proof's answer keeps proof's shape, and a case's message that quotes a test is emptied, no other", () => {
+  const answer = {
+    verdicts: [failed("DOD-F1-1", [failure("a quill is counted", twenty), failure("another", nineteen)])],
+    judgement: [],
+    size: [{ path: named, head: 2 }],
+  };
+  assert.deepEqual(filteredProof(answer, tests), {
+    verdicts: [
+      {
+        item: "DOD-F1-1",
+        kind: "fails-first",
+        verdict: "failed",
+        detail: "The named tests fail on the head.",
+        cases: {
+          failures: [
+            { name: "a quill is counted", file: `/tmp/proof-copy/${named}`, message: "", charactersCut: 0 },
+            { name: "another", file: `/tmp/proof-copy/${named}`, message: nineteen, charactersCut: 0 },
+          ],
+          failuresNotListed: 0,
+          notLoaded: [],
+        },
+      },
+    ],
+    judgement: [],
+    size: [{ path: named, head: 2 }],
+  });
+});
+
+test("in the final proof's answer, a detail or a reason that quotes a test is replaced by a sentence that says so", () => {
+  const kept = "Proof's reason is kept from the card: it quotes a test.";
+  const answer = {
+    verdicts: [
+      { item: "DOD-F1-1", kind: "checks", verdict: "inconclusive", reason: `The test run is not known: ${twenty}` },
+      { item: "DOD-F1-2", kind: "fails-first", verdict: "failed", detail: `The check x found ${twenty}.` },
+      { item: "scope", kind: "in-scope", verdict: "inconclusive", reason: `The run is not known: ${nineteen}` },
+    ],
+    judgement: [],
+    size: [],
+  };
+  assert.deepEqual(fieldsOf(filteredProof(answer, tests)).verdicts, [
+    { item: "DOD-F1-1", kind: "checks", verdict: "inconclusive", reason: kept },
+    { item: "DOD-F1-2", kind: "fails-first", verdict: "failed", detail: kept },
+    { item: "scope", kind: "in-scope", verdict: "inconclusive", reason: `The run is not known: ${nineteen}` },
   ]);
 });

@@ -7,7 +7,6 @@ import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
 import {
   allHeld,
   askedOf,
-  bayRan,
   branches,
   builderWrites,
   decided,
@@ -31,6 +30,7 @@ import {
   type Asked,
   type Handed,
   type Proved,
+  printedCard,
 } from "./kit-copy.ts";
 
 const alphabet = Array.from({ length: 26 }, (_, at) => String.fromCharCode(65 + at)).join("");
@@ -146,19 +146,6 @@ function rev(root: string, name: string): string {
 
 function stepsOf(asked: readonly Asked[]): readonly string[] {
   return asked.map((each) => `${each.action} ${each.step}`);
-}
-
-async function printedCard(root: string, runId: string): Promise<readonly string[]> {
-  const widest = 44;
-  const printed = (await bayRan(root, ["runs", runId])).stdout.split("\n");
-  const first = printed.findIndex((line) => line.startsWith("Merge "));
-  const last = printed.findIndex((line) => line.startsWith("hash "));
-  const card = printed.slice(first, last);
-  assert.ok(
-    card.every((line) => Array.from(line).length <= widest),
-    card.join("\n"),
-  );
-  return card;
 }
 
 type Seen = {
@@ -279,6 +266,8 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "  size in lines: components/ +1",
       "  rounds: 2 of at most 3; the reviewer had",
       "    no findings",
+      "  the reviewer, in round 2, before the final",
+      "    proof:",
       "judged   DOD-A1-1 held by 1 case",
       "judged   DOD-A1-2 held by 1 case",
       "judged   no finding remains",
@@ -294,7 +283,7 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "  discard    Stop; the worktrees go",
       "             why: Discarding comes with",
       "             slice WD1.",
-      "checked: 0 ran, 6 computed, 3 judged",
+      "checked: 0 ran, 7 computed, 3 judged",
     ]);
     await decided(root, card, { step: "card", choice: "merge" });
     assert.deepEqual(branches(root), [
@@ -365,8 +354,11 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "  DOD-B1-1, must, failed: A quill that was",
       "    added is counted.",
       "  why: the named tests fail on the head",
+      "  proof's reason: The named tests fail on",
+      "    the head.",
       "  failing: b1 quill that was added is",
       "    counted",
+      `  its message: ${nineteen}`,
       "  failing: b1 quill that was added is",
       "    counted twice",
       "  DOD-B1-2, must, passed: The checks pass.",
@@ -374,15 +366,18 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "    on forge/B1-tests-3",
       "  size in lines: components/ +1",
       "  rounds: 3 of at most 3; no more may run",
+      "  the reviewer, in round 3, before the final",
+      "    proof:",
       "judged   DOD-B1-1 not held: The count is off",
       "judged     by one for every quill.",
       "judged   DOD-B1-2 held by 1 case",
       "judged   2 findings remain: 1 for the",
       "judged     builder, 1 for the test writer",
-      "judged   for the builder, condition: b1",
-      "judged     quill that was added is counted",
-      "judged   for the test writer, Q3: b1 quill",
-      "judged     that was added is counted",
+      "judged   for the builder, condition: Count",
+      "judged     each quill once.",
+      "judged   for the test writer, Q3, b1 quill",
+      "judged     that was added is counted: State",
+      "judged     the count literally.",
       "judged    by forge skills/review, tier deep",
       "Unmarked lines were worked out by script.",
       "You can:",
@@ -397,7 +392,7 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "  discard    Stop; the worktrees go",
       "             why: Discarding comes with",
       "             slice WD1.",
-      "checked: 0 ran, 9 computed, 5 judged",
+      "checked: 0 ran, 12 computed, 5 judged",
     ]);
     const kept = runOf(await decided(root, card, { step: "card", choice: "keep" }));
     assert.deepEqual(fieldsOf(kept).output, { choice: "keep", kept: ["forge/B1", "forge/B1-tests-3"] });

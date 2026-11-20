@@ -25,6 +25,7 @@ export const run = defineScript((input) => {
     builtAt: rounds?.builtAt ?? "build",
     work: branch("work"),
     kept: fields.kept === "with-tests" ? "with-tests" : "set-aside",
+    caseMessages: fields.caseMessages === "filtered" ? "filtered" : "unfiltered",
     into: branch("into"),
     ...(rounds === undefined ? {} : { rounds: roundsOnCard(rounds), leaks: rounds.leaks }),
     ...bugs,

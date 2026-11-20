@@ -513,7 +513,7 @@ async function runCall(walk: Walk, frame: ActionFrame, call: CallStep): Promise<
     const reason =
       `The ${frameLabel(frame)} calls ${call.call}, which has the effects ${missing.join(", ")} ` +
       `that ${frame.name} does not declare; the call is refused.`;
-    return refuse(walk, { ...start, kept: eitherKeeping(within, keepingOf(target.action)) }, reason);
+    return refuse(walk, start, reason);
   }
   const caller = target.caller;
   const nested = { key: call.key, kind: "call" as const, target, input: call.input, caller, within };

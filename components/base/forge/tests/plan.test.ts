@@ -172,7 +172,7 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
     assert.deepEqual(worktrees(root), []);
   });
 
-  test("a challenge with a finding runs the planner's second round and a second challenge, whose finding left the card cites", async () => {
+  test("a challenge that leaves out a practice is sent back; one with a finding runs the planner's second round and a second challenge, whose finding left the card cites", async () => {
     const root = await designed();
     const run = await startedPlan(root);
     const tasks: Json[] = [];
@@ -185,22 +185,30 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
         Promise.resolve(fieldsOf(fieldsOf(task).input ?? null).answering === undefined ? todoPlan : answered),
       planChallenger: (task) => {
         tasks.push(task);
-        return Promise.resolve(answers(task, tasks.length === 1 ? [finding] : [left]));
+        const step = textAt(task, "stepKey");
+        const answer = answers(task, step.startsWith("challenge-1") ? [finding] : [left]);
+        const short = { ...fieldsOf(answer), practices: listOf(fieldsOf(answer).practices).slice(1) };
+        return Promise.resolve(step === "challenge-1/0#1" ? short : answer);
       },
     });
     assert.deepEqual(actions(asked), [
       "plan-1/0#1 plan",
       "challenge-1/0#1 challenge-plan",
+      "challenge-1/0#2 challenge-plan",
       "plan-2/0.call0/0#1 plan",
       "challenge-2/0.call0/0#1 challenge-plan",
     ]);
-    const second = asked[2]?.task ?? null;
+    assert.deepEqual(fieldsOf(tasks[1] ?? null).feedback, [
+      "The challenge leaves out the practice P-33; answer every practice held by a plan, each held, not-held or " +
+        "does-not-apply, with its sentence.",
+    ]);
+    const second = asked[3]?.task ?? null;
     assert.deepEqual(fieldsOf(fieldsOf(second).input ?? null).answering, { plan: todoPlan, findings: [finding] });
-    assert.deepEqual(fieldsOf(fieldsOf(tasks[1] ?? null).input ?? null).answered, { findings: [finding] });
+    assert.deepEqual(fieldsOf(fieldsOf(tasks[2] ?? null).input ?? null).answered, { findings: [finding] });
     const card = waitingOf(await shown(root, textAt(run, "id")), "card");
     const expected = {
       plan: answered,
-      challenge: answers(tasks[1] ?? null, [left]),
+      challenge: answers(tasks[2] ?? null, [left]),
       challenger: "challenge-2",
       answer: { kind: "answered", changes: ["TD2's title"] },
     } as const;

@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DropBranchResponse",
+  "description": "That the branch was deleted and the commit it pointed at, that there was no such branch, or why it was kept.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["how", "branch", "commit"],
+      "description": "The branch was deleted, merged or not.",
+      "properties": {
+        "how": {
+          "const": "dropped",
+          "description": "The branch was deleted."
+        },
+        "branch": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "The branch that was deleted."
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+          "description": "The commit the branch pointed at, in full, so that its work can be found again."
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["how", "branch"],
+      "description": "There was no such branch, so nothing was done. Dropping a branch twice gives this the second time.",
+      "properties": {
+        "how": {
+          "const": "not-there",
+          "description": "There is no such branch."
+        },
+        "branch": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "The branch asked for."
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["how", "branch", "reason"],
+      "description": "The branch was kept, as it was.",
+      "properties": {
+        "how": {
+          "const": "refused",
+          "description": "The branch was not deleted."
+        },
+        "branch": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "The branch asked for."
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+          "description": "The commit the branch points at, in full, when it exists."
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "A sentence that says why the branch was kept and what would let it go."
+        }
+      }
+    }
+  ]
+}

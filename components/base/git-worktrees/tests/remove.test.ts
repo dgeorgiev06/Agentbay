@@ -44,3 +44,22 @@ test("a worktree merged into the named branch but not into the project's head is
     await project.close();
   }
 });
+
+test("with the branch deleted, a worktree at a commit its branch does not hold is refused, so that commit is not lost", async () => {
+  const project = await openRepositoryProject();
+  try {
+    await cutWithCommit(project);
+    git(project, ".", ["merge", "--quiet", "--ff-only", "forge/done"]);
+    git(project, folder, ["switch", "--quiet", "--detach"]);
+    const loose = await commitFiles(project, { folder, files: { "loose.txt": "only here\n" }, message: "Loose" });
+    assert.equal(
+      await project.failure("git-worktrees.remove", { folder, into: "main" }),
+      `The worktree ${folder} is at the commit ${loose}, which its branch forge/done does not hold, so the ` +
+        "worktree and its branch are kept.",
+    );
+    assert.deepEqual(await kept(project), [true, "forge/done\n"]);
+    assert.equal(git(project, folder, ["rev-parse", "HEAD"]).trim(), loose);
+  } finally {
+    await project.close();
+  }
+});

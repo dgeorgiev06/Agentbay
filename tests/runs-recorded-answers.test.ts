@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import type { ScriptRequest } from "../bay/contracts.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
-import { textField } from "../bay/json.ts";
+import { numberField, textField } from "../bay/json.ts";
 import type { Run, Runs } from "../bay/runs/runs.ts";
 import {
   answer,
@@ -280,5 +280,39 @@ test("a recorded answer is scrubbed before kernel.db keeps it", async () => {
   assert.ok(kept.includes("coffee and") && !kept.includes(secretValue), kept);
   gate.open();
   await first;
+  opened.close();
+});
+
+async function roundOf(runs: Runs, runId: string, key: string): Promise<number | undefined> {
+  const step = runOf(await runs.show(runId)).steps.find((each) => each.key === key);
+  return numberField(step?.detail ?? null, "round");
+}
+
+test("while the run advances, an answer with the step key of a round the step has left is refused", async () => {
+  const gate = gateOn("coffee");
+  const opened = await openedRuns({ scripts: { [check]: gate.script }, changes: withFlow(drafts(2)) });
+  const started = runOf(await opened.runs.start(flow, ["tea", "coffee"]));
+  const [tea = "", coffee = ""] = tokensOf(started);
+  const database = new DatabaseSync(opened.database);
+  database
+    .prepare("update runs set lock_owner = ?, lock_heartbeat = ? where id = ?")
+    .run("engine-that-died", opened.clock.now().toISOString(), started.id);
+  database.close();
+  runOf(await opened.runs.submit(tea, said("tea")));
+  runOf(await opened.runs.submit(coffee, said("coffee is long enough")));
+  opened.clock.advance(11 * 60_000);
+  const resuming = opened.runs.resume(started.id);
+  await gate.reached;
+  const other = await opened.reopen();
+  while ((await roundOf(other, started.id, "each[0].write/0")) !== 2) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  const late = messagesOf(await other.submit(tea, said("tea, now long enough")));
+  assert.match(late, /already has a submission for each\[0\]\.write\/0#1/);
+  gate.open();
+  assert.deepEqual(
+    waitsOf(runOf(await resuming)).map((waiting) => waiting.stepKey),
+    ["each[0].write/0#2"],
+  );
   opened.close();
 });

@@ -5,15 +5,24 @@ import type { Keeping } from "../../../bay/generated/mode.ts";
 import { failedWith, succeededWith, unplacedProblem } from "../../../bay/outcome.ts";
 import type { AnswerRule, Recording } from "../../../bay/runs/run-store.ts";
 import { SqliteRunStore } from "../../../bay/runs/sqlite-run-store.ts";
-import { answer, withFlow } from "../../runs-fixture.ts";
+import { answer, notesFlow, withFlow } from "../../runs-fixture.ts";
 import { harness, problemsOf, runOf } from "./engine-harness.ts";
-import { temporaryKernelDb } from "./kernel-db-fixture.ts";
+import { faultInjector, temporaryKernelDb } from "./kernel-db-fixture.ts";
 
 const at = "2026-11-14T09:00:00.000Z";
 
 const now = new Date(at);
 
 const target = { kind: "action" as const, mode: "writer", name: "compose" };
+
+const twoDrafts = [
+  {
+    id: "each",
+    foreach: "$trigger",
+    sideBySide: 2,
+    steps: [{ id: "write", action: "draft", input: { topic: "$item" } }],
+  },
+];
 
 function allowing(kept: Keeping): AnswerRule {
   return () => succeededWith({ kept });
@@ -102,5 +111,36 @@ test("a record that finds kernel.db busy is a refusal to try again, and nothing 
   assert.deepEqual(await impatient.recordedAnswers(id), []);
   assert.deepEqual(await impatient.readRun(id), before);
   impatient.close();
+  close();
+});
+
+test("the engine refuses an answer for a skill step the waiting run does not wait for", async () => {
+  const { engine, store, close } = await harness({ changes: withFlow(twoDrafts) });
+  const id = runOf(await engine.startWorkflow(notesFlow, ["tea", "coffee"])).id;
+  const lock = await store.acquire(id, "test", now);
+  assert.ok(lock.status === "acquired");
+  const state = { status: "waiting" as const, reason: "budget" as const, stepKey: "each[1].write/0" };
+  await store.updateRun(lock.writer, { state, at }, []);
+  await store.release(lock.writer);
+  const refused = problemsOf(await engine.submit(id, "each[1].write/0#1", answer({ text: "long enough text" })));
+  assert.match(refused.join(" "), /is not waiting for skill at step each\[1\]\.write\/0#1; it is waiting for budget/);
+  assert.deepEqual(await store.recordedAnswers(id), []);
+  close();
+});
+
+test("an answer left behind for round 1 is dropped with its reason once the step is in round 2", async () => {
+  const { engine, store, clock, freshEngine, reopen, close } = await harness();
+  const id = runOf(await engine.startAction("notes.draft", {})).id;
+  const crashing = faultInjector(store, { at: 3, when: "before" });
+  await assert.rejects(freshEngine({ store: crashing }).submit(id, "0#1", answer({ text: "short" })), /simulated/);
+  assert.deepEqual(crashing.writes, ["recordAnswer", "saveStepDetail", "forgetAnswer"]);
+  clock.advance(11 * 60_000);
+  const fresh = reopen();
+  const resumed = runOf(await freshEngine({ store: fresh }).resume(id));
+  assert.ok(resumed.state.status === "waiting" && resumed.state.waiting.stepKey === "0#2");
+  assert.deepEqual(await fresh.recordedAnswers(id), []);
+  const dropped = (await fresh.readEvents(id)).filter((event) => event.kind === "answer.dropped");
+  assert.equal(dropped.length, 1);
+  assert.match(JSON.stringify(dropped[0]?.detail), /"stepKey":"0#1".*not waiting for skill at step 0#1/);
   close();
 });

@@ -30,6 +30,11 @@ type StaticScope = {
   readonly insideForeach: boolean;
 };
 
+type Quotable = {
+  readonly earlier: readonly string[];
+  readonly inItems: readonly string[];
+};
+
 const stepsPattern = /^\$steps\.([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\.output((?:\.[A-Za-z0-9_-]+)*)$/;
 
 const settingsPattern = /^\$settings\.([A-Za-z0-9_-]+)$/;
@@ -229,18 +234,21 @@ function placeIssues(place: ReferencePlace, scope: StaticScope): readonly Refere
   return issues.flatMap((issue) => (issue === undefined ? [] : [{ path: place.path, ...issue }]));
 }
 
-function quoteIssues(step: WorkflowStep, path: PathSegments, earlier: readonly string[]): readonly ReferenceIssue[] {
+function quoteIssues(step: WorkflowStep, path: PathSegments, quotable: Quotable): readonly ReferenceIssue[] {
   const quotes = "approval" in step ? (step.quotes ?? []) : [];
+  const { earlier, inItems } = quotable;
   return quotes.flatMap((id, index) =>
-    earlier.includes(id)
+    earlier.includes(id) || inItems.includes(id)
       ? []
       : [
           {
             path: [...path, "quotes", index],
             message:
               `the approval quotes the step ${id}, which is not defined before this step in its scope ` +
-              `(earlier steps: ${listed(earlier)}).`,
-            fix: "Quote a step that comes earlier in the same list of steps or in a list that encloses it.",
+              `(earlier steps: ${listed(earlier)}; in the items of an earlier foreach: ${listed(inItems)}).`,
+            fix:
+              "Quote a step that comes earlier in the same list of steps or in a list that encloses it, " +
+              "or a step of an earlier foreach's own steps.",
           },
         ],
   );
@@ -248,14 +256,16 @@ function quoteIssues(step: WorkflowStep, path: PathSegments, earlier: readonly s
 
 function issuesIn(steps: readonly WorkflowStep[], prefix: PathSegments, scope: StaticScope): readonly ReferenceIssue[] {
   const earlier = [...scope.earlier];
+  const inItems: string[] = [];
   const issues: ReferenceIssue[] = [];
   for (const [index, step] of steps.entries()) {
     const path = [...prefix, "steps", index];
     const current = { earlier: [...earlier], insideForeach: scope.insideForeach };
     issues.push(...referencePlaces(step, path).flatMap((place) => placeIssues(place, current)));
-    issues.push(...quoteIssues(step, path, earlier));
+    issues.push(...quoteIssues(step, path, { earlier, inItems }));
     if ("foreach" in step) {
       issues.push(...issuesIn(step.steps, path, { earlier: [...earlier], insideForeach: true }));
+      inItems.push(...step.steps.map((inner) => inner.id));
     }
     earlier.push(step.id);
   }

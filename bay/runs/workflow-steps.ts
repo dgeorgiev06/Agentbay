@@ -123,13 +123,27 @@ function evaluatedRules(scope: WorkflowScope, step: ApprovalStep): Outcome<reado
   return evaluatedChoices({ stepId: step.id, choices: step.choices, resolve });
 }
 
+function stepSeen(record: StepRecord): StepSeen {
+  const seen = { kind: record.kind, status: record.status };
+  if (record.kind === "foreach" && record.detail !== null) {
+    return { ...seen, skill: undefined, attempts: record.detail.attempts };
+  }
+  return { ...seen, skill: record.kind === "skill" && record.detail !== null ? record.detail : undefined };
+}
+
 function stepsSeen(records: ReadonlyMap<string, StepRecord>): ReadonlyMap<string, StepSeen> {
-  return new Map(
-    [...records].map(([key, record]) => {
-      const skill = record.kind === "skill" && record.detail !== null ? record.detail : undefined;
-      return [key, { kind: record.kind, status: record.status, skill }];
-    }),
-  );
+  return new Map([...records].map(([key, record]) => [key, stepSeen(record)]));
+}
+
+function foreachOfSteps(steps: readonly WorkflowStep[]): ReadonlyMap<string, string> {
+  const foreachOf = new Map<string, string>();
+  for (const step of steps) {
+    if ("foreach" in step) {
+      step.steps.forEach((inner) => foreachOf.set(inner.id, step.id));
+      foreachOfSteps(step.steps).forEach((foreach, inner) => foreachOf.set(inner, foreach));
+    }
+  }
+  return foreachOf;
 }
 
 async function checkedShown(walk: Walk, scope: WorkflowScope, at: ShownAt): Promise<Outcome<ShownParts>> {
@@ -139,6 +153,7 @@ async function checkedShown(walk: Walk, scope: WorkflowScope, at: ShownAt): Prom
     stepId: step.id,
     quotes: step.quotes ?? [],
     keys: scope.keys,
+    foreachOf: foreachOfSteps(scope.workflow.workflow.steps),
     steps: stepsSeen(walk.records),
     events: await store.readEvents(walk.writer.runId),
     eventsOf: (runId: string) => store.readEvents(runId),

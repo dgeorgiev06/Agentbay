@@ -1,13 +1,14 @@
 import { tiers, type Json, type RunEvent, type Tier } from "../contracts.ts";
 import { fieldOf, isRecord, textField, toJson } from "../json.ts";
 import { failedWith, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
+import { foreachItemKey, workflowStepKey } from "./step-key.ts";
 import { isGivenStep } from "./workflow-part.ts";
 
 const marks = ["ran", "computed", "judged"] as const;
 
 type Mark = (typeof marks)[number];
 
-type StepSource = { readonly step: string };
+type StepSource = { readonly step: string; readonly item?: number };
 
 type CommandSource = StepSource & {
   readonly command: string;
@@ -24,15 +25,17 @@ type GivenLine =
   | { readonly mark: "ran"; readonly words: string; readonly source: CommandSource }
   | { readonly mark: "computed" | "judged"; readonly words: string; readonly source: StepSource };
 
+type InItem = { readonly foreach?: string };
+
 type CardLine =
-  | { readonly mark: "ran"; readonly words: string; readonly source: CommandSource }
-  | { readonly mark: "computed"; readonly words: string; readonly source: StepSource }
-  | {
+  | ({ readonly mark: "ran"; readonly words: string; readonly source: CommandSource } & InItem)
+  | ({ readonly mark: "computed"; readonly words: string; readonly source: StepSource } & InItem)
+  | ({
       readonly mark: "judged";
       readonly words: string;
       readonly source: StepSource;
       readonly skills: readonly SkillUsed[];
-    };
+    } & InItem);
 
 export type Card = {
   readonly title: string;
@@ -48,12 +51,14 @@ export type StepSeen = {
   readonly kind: string;
   readonly status: string;
   readonly skill: SkillSeen | undefined;
+  readonly attempts?: readonly number[];
 };
 
 type CardContext = {
   readonly stepId: string;
   readonly quotes: readonly string[];
   readonly keys: ReadonlyMap<string, string>;
+  readonly foreachOf: ReadonlyMap<string, string>;
   readonly steps: ReadonlyMap<string, StepSeen>;
   readonly events: readonly RunEvent[];
   readonly eventsOf: (runId: string) => Promise<readonly RunEvent[]>;
@@ -66,7 +71,9 @@ type Given = {
 
 type Cited = {
   readonly id: string;
+  readonly named: string;
   readonly key: string;
+  readonly foreach?: string;
   readonly skills: readonly SkillUsed[];
   readonly calledRuns: readonly string[];
   readonly given: boolean;
@@ -76,9 +83,11 @@ const cardFields: readonly string[] = ["title", "lines", "withheld"];
 
 const lineFields: readonly string[] = ["mark", "words", "source"];
 
-const commandSourceFields: readonly string[] = ["step", "command", "run"];
+const kernelLineFields: readonly string[] = ["skills", "foreach"];
 
-const stepSourceFields: readonly string[] = ["step"];
+const commandSourceFields: readonly string[] = ["step", "command", "run", "item"];
+
+const stepSourceFields: readonly string[] = ["step", "item"];
 
 function isCard(content: Json): boolean {
   return isRecord(content) && Object.hasOwn(content, "lines");
@@ -104,6 +113,16 @@ function strayField(value: Readonly<Record<string, unknown>>, allowed: readonly 
   return Object.keys(value).find((field) => !allowed.includes(field));
 }
 
+function itemSource(source: Readonly<Record<string, unknown>>, step: string): StepSource | string {
+  if (!Object.hasOwn(source, "item")) {
+    return { step };
+  }
+  const item = source["item"];
+  return typeof item === "number" && Number.isSafeInteger(item) && item >= 0
+    ? { step, item }
+    : `has the source.item ${JSON.stringify(item ?? null)}; an item is counted from 0 as a whole number.`;
+}
+
 function commandSource(source: Readonly<Record<string, unknown>>, step: string): CommandSource | string {
   const stray = strayField(source, commandSourceFields);
   const command = textField(toJson(source), "command");
@@ -114,13 +133,17 @@ function commandSource(source: Readonly<Record<string, unknown>>, step: string):
   if (command === undefined) {
     return "is marked ran but names no command in its source.";
   }
-  return run === undefined ? { step, command } : { step, command, run };
+  const cited = itemSource(source, step);
+  if (typeof cited === "string") {
+    return cited;
+  }
+  return run === undefined ? { ...cited, command } : { ...cited, command, run };
 }
 
 function stepSource(source: Readonly<Record<string, unknown>>, step: string, mark: Mark): StepSource | string {
   const stray = strayField(source, stepSourceFields);
   return stray === undefined
-    ? { step }
+    ? itemSource(source, step)
     : `has the field source.${stray}, which the source of a ${mark} line does not take.`;
 }
 
@@ -174,16 +197,59 @@ function isUnder(key: string, other: string): boolean {
   return other.startsWith(`${key}/`);
 }
 
-function citedStep(context: CardContext, id: string): Cited | string {
+type Placed = {
+  readonly named: string;
+  readonly key: string | undefined;
+  readonly foreach?: string;
+  readonly given: boolean;
+};
+
+function plainPlace(context: CardContext, id: string): Placed | string {
+  const foreach = context.foreachOf.get(id);
+  if (foreach !== undefined && !context.keys.has(id)) {
+    return `cites step ${id}, which runs in each item of step ${foreach}; a line names its item as source.item.`;
+  }
   const key = context.keys.get(id);
+  return { named: `step ${id}`, key, given: key !== undefined && isGivenStep(context.events, key) };
+}
+
+function itemPlace(context: CardContext, id: string, item: number): Placed | string {
+  const foreach = context.foreachOf.get(id);
+  if (foreach === undefined) {
+    return `cites item ${String(item)} of step ${id}, which is not a step inside a foreach.`;
+  }
+  const named = `step ${id} in item ${String(item)} of ${foreach}`;
+  const foreachKey = context.keys.get(foreach);
+  if (foreachKey === undefined) {
+    return { named, key: undefined, foreach, given: false };
+  }
+  const attempt = context.steps.get(foreachKey)?.attempts?.[item] ?? 1;
+  const key = workflowStepKey(foreachItemKey(foreachKey, item, attempt), id);
+  return { named, key, foreach, given: isGivenStep(context.events, foreachKey) };
+}
+
+function placeOf(context: CardContext, source: StepSource): Placed | string {
+  return source.item === undefined ? plainPlace(context, source.step) : itemPlace(context, source.step, source.item);
+}
+
+function citedStep(context: CardContext, source: StepSource): Cited | string {
+  const placed = placeOf(context, source);
+  if (typeof placed === "string") {
+    return placed;
+  }
+  const { named, key, given } = placed;
+  const inItem = placed.foreach === undefined ? {} : { foreach: placed.foreach };
   const record = key === undefined ? undefined : context.steps.get(key);
+  if (key !== undefined && record === undefined && given) {
+    return { id: source.step, named, key, ...inItem, skills: [], calledRuns: [], given };
+  }
   if (key === undefined || record === undefined || record.status !== "done") {
-    return `cites step ${id}, which has not finished in this run before the approval.`;
+    return `cites ${named}, which has not finished in this run before the approval.`;
   }
   if (record.kind !== "action") {
-    return `cites step ${id}, which is a ${record.kind} step; a line cites an action step.`;
+    return `cites ${named}, which is a ${record.kind} step; a line cites an action step.`;
   }
-  return { id, key, ...skillsUnder(context.steps, key), given: isGivenStep(context.events, key) };
+  return { id: source.step, named, key, ...inItem, ...skillsUnder(context.steps, key), given };
 }
 
 function skillsUnder(steps: CardContext["steps"], key: string): Pick<Cited, "skills" | "calledRuns"> {
@@ -203,7 +269,7 @@ function computedProblem(cited: Cited): string | undefined {
   const skill = cited.skills[0];
   return skill === undefined
     ? undefined
-    : `is marked computed but cites step ${cited.id}, which ran the skill ${skill.skill} of mode ${skill.mode}; ` +
+    : `is marked computed but cites ${cited.named}, which ran the skill ${skill.skill} of mode ${skill.mode}; ` +
         "a computed line cites a step that ran no skill.";
 }
 
@@ -211,13 +277,13 @@ function judgedProblem(context: CardContext, cited: Cited): string | undefined {
   if (!context.quotes.includes(cited.id)) {
     const listed = context.quotes.length === 0 ? "none" : context.quotes.join(", ");
     return (
-      `is marked judged but cites step ${cited.id}, which the approval does not list under quotes ` +
+      `is marked judged but cites ${cited.named}, which the approval does not list under quotes ` +
       `(it lists: ${listed}).`
     );
   }
   return cited.skills.length > 0 || cited.given
     ? undefined
-    : `is marked judged but cites step ${cited.id}, which ran no skill; ` +
+    : `is marked judged but cites ${cited.named}, which ran no skill; ` +
         "a judged line cites a skill step the approval lists under quotes.";
 }
 
@@ -232,12 +298,12 @@ async function ranProblem(context: CardContext, cited: Cited, source: CommandSou
     const found = context.events.some((event) => isCommand(event, command) && isUnder(cited.key, stepOf(event)));
     return found
       ? undefined
-      : `is marked ran but cites the command ${command} of step ${cited.id}, ` +
+      : `is marked ran but cites the command ${command} of ${cited.named}, ` +
           `and the kernel recorded no command ${command} in that step.`;
   }
   if (!cited.calledRuns.includes(run)) {
     return (
-      `is marked ran but cites run ${run}, which no skill of step ${cited.id} called; ` +
+      `is marked ran but cites run ${run}, which no skill of ${cited.named} called; ` +
       "a ran line cites a command of this run or of a run that one of its skills called."
     );
   }
@@ -252,17 +318,18 @@ async function checkedLine(context: CardContext, line: Json): Promise<CardLine |
   if (typeof given === "string") {
     return given;
   }
-  const cited = citedStep(context, given.source.step);
+  const cited = citedStep(context, given.source);
   if (typeof cited === "string") {
     return cited;
   }
+  const inItem = cited.foreach === undefined ? {} : { foreach: cited.foreach };
   switch (given.mark) {
     case "ran":
-      return (await ranProblem(context, cited, given.source)) ?? given;
+      return (await ranProblem(context, cited, given.source)) ?? { ...given, ...inItem };
     case "computed":
-      return computedProblem(cited) ?? { mark: "computed", words: given.words, source: given.source };
+      return computedProblem(cited) ?? { mark: "computed", words: given.words, source: given.source, ...inItem };
     case "judged":
-      return judgedProblem(context, cited) ?? { ...given, mark: "judged", skills: cited.skills };
+      return judgedProblem(context, cited) ?? { ...given, mark: "judged", skills: cited.skills, ...inItem };
   }
 }
 
@@ -316,20 +383,31 @@ function storedSkills(value: Json | undefined): readonly SkillUsed[] {
   });
 }
 
+function storedForeach(entry: Json, source: StepSource): InItem {
+  const foreach = textField(entry, "foreach");
+  if ((foreach === undefined) !== (source.item === undefined)) {
+    throw malformedCard();
+  }
+  return foreach === undefined ? {} : { foreach };
+}
+
 function storedLine(value: unknown): CardLine {
   const entry = toJson(value);
-  const without = isRecord(entry) ? Object.fromEntries(Object.entries(entry).filter(([key]) => key !== "skills")) : {};
-  const line = givenLine(toJson(without));
+  const given = isRecord(entry) ? Object.entries(entry).filter(([key]) => !kernelLineFields.includes(key)) : [];
+  const line = givenLine(toJson(Object.fromEntries(given)));
   if (typeof line === "string") {
     throw malformedCard();
   }
+  const inItem = storedForeach(entry, line.source);
   switch (line.mark) {
     case "ran":
-      return line;
+      return { ...line, ...inItem };
     case "computed":
-      return { mark: "computed", words: line.words, source: line.source };
-    case "judged":
-      return { mark: "judged", words: line.words, source: line.source, skills: storedSkills(fieldOf(entry, "skills")) };
+      return { mark: "computed", words: line.words, source: line.source, ...inItem };
+    case "judged": {
+      const skills = storedSkills(fieldOf(entry, "skills"));
+      return { mark: "judged", words: line.words, source: line.source, skills, ...inItem };
+    }
   }
 }
 

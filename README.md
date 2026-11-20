@@ -305,3 +305,12 @@ A run started this way says so. `bay runs <run> --json` shows its target with `p
 owner with a question that says a test stopped it there. Resuming it stops there again. `bay` itself has no way
 to start one: a test that drives `bay` in a process of its own runs `node tests/start-part.ts <mode>:<path>
 '<trigger json>' '<part json>'` in its project, which works only in a folder under the temporary folder.
+
+Forge's tests give outputs captured from whole runs, in `components/base/forge/tests/given-*.json`. When a
+workflow or an output schema changes, they no longer start, and the refusal names the step. `node
+components/base/forge/tests/recapture.ts [given-<name>.json ...]` makes them again: in a copy of the kit, it runs
+the whole end-to-end case each file comes from, writes the outputs of the steps before the one the test runs from,
+with the commits the test makes again by branch, and formats the files. `recapture.ts` lists, for each file, its
+case and the step its test runs from. With no file named it makes all three, in
+about two and a half minutes; the test that reads a file may then need its expected card changed to what the whole case
+now expects.

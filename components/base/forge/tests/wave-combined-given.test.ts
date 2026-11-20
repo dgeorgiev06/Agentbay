@@ -5,6 +5,7 @@ import { after, before, test } from "node:test";
 import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
 import {
   askedOf,
+  branches,
   decided,
   git,
   into,
@@ -107,6 +108,8 @@ test("given a wave's slices built and each passing its own proof, the combined h
   assert.equal((await askedOf(root, "wave-1")).length, 1);
   assert.deepEqual(kindsAsked((await askedOf(root, "CA")).slice(-1)), ["checks"]);
   const kept = runOf(await decided(root, card, { step: "card", choice: "keep" }));
-  assert.deepEqual(fieldsOf(fieldsOf(kept).output ?? null).kept, ["forge/CA-tests-1", "forge/CB-tests-1"]);
+  const stay = ["forge/CA", "forge/CA-tests-1", "forge/CB", "forge/CB-tests-1", "forge/wave-1"];
+  assert.deepEqual(fieldsOf(fieldsOf(kept).output ?? null).kept, stay);
+  assert.deepEqual(branches(root), stay);
   assert.deepEqual(worktrees(root), []);
 });

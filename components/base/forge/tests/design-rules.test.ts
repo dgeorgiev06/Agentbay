@@ -137,6 +137,35 @@ describe("the design check, one rule at a time, each problem with its sentence",
     ]);
   });
 
+  test("a reference outside the interface inside a list or two levels down is refused, naming its side", () => {
+    const request = { oneOf: [{ type: "object" }, { $ref: "../list/list-request.json" }] };
+    const response = {
+      type: "object",
+      properties: { todos: { type: "array", items: { properties: { id: { $ref: "scripts/ids.ts" } } } } },
+    };
+    const design = actionChanged("done", (action) => ({ ...fieldsOf(action), request, response }));
+    assert.deepEqual(problemsOf(design(todoDesign)), [
+      'The request schema of "todo.done" refers to "../list/list-request.json"; an interface file refers only to a part of itself (#/...) or to another schema file of its interface, such as add-request.json.',
+      'The response schema of "todo.done" refers to "scripts/ids.ts"; an interface file refers only to a part of itself (#/...) or to another schema file of its interface, such as add-request.json.',
+    ]);
+  });
+
+  test("a reference under $defs or additionalProperties is held by the rule, and a part of itself inside a list is accepted", () => {
+    const inside = {
+      $defs: { id: { type: "integer" } },
+      anyOf: [{ $ref: "#/$defs/id" }, { prefixItems: [{ $ref: "add-response.json" }] }],
+    };
+    const accepted = actionChanged("done", (action) => ({ ...fieldsOf(action), request: inside }));
+    assert.deepEqual(problemsOf(accepted(todoDesign)), []);
+    const request = { $defs: { id: { $ref: "/abs/id.json" } } };
+    const response = { type: "object", additionalProperties: { $ref: "https://example.invalid/todo.json" } };
+    const design = actionChanged("done", (action) => ({ ...fieldsOf(action), request, response }));
+    assert.deepEqual(problemsOf(design(todoDesign)), [
+      'The request schema of "todo.done" refers to "/abs/id.json"; an interface file refers only to a part of itself (#/...) or to another schema file of its interface, such as add-request.json.',
+      'The response schema of "todo.done" refers to "https://example.invalid/todo.json"; an interface file refers only to a part of itself (#/...) or to another schema file of its interface, such as add-request.json.',
+    ]);
+  });
+
   test("a schema that refers into implementation code, outside the design, or to a file of no action", () => {
     const outside = { type: "object", properties: { id: { $ref: "../../components/modes/todo/scripts/add.ts" } } };
     const elsewhere = { $ref: "purge-request.json" };

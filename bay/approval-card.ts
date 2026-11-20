@@ -41,21 +41,28 @@ function skillWords(skill: SkillUsed): string {
   return `${skill.mode} ${skill.skill}, tier ${skill.tier}`;
 }
 
+function itemWords(line: CardLine): string {
+  const { item } = line.source;
+  return item === undefined || line.foreach === undefined ? "" : `, in item ${String(item)} of ${line.foreach}`;
+}
+
 function sourceWords(line: CardLine): string | undefined {
   switch (line.mark) {
     case "computed":
       return undefined;
     case "ran": {
       const { command, run } = line.source;
-      return run === undefined ? `by the command ${command}` : `by the command ${command} in run ${run}`;
+      const by = run === undefined ? `by the command ${command}` : `by the command ${command} in run ${run}`;
+      return `${by}${itemWords(line)}`;
     }
     case "judged":
-      return line.skills.length === 0 ? undefined : `by ${line.skills.map(skillWords).join("; ")}`;
+      return line.skills.length === 0 ? undefined : `by ${line.skills.map(skillWords).join("; ")}${itemWords(line)}`;
   }
 }
 
 function sharesSource(line: CardLine, next: CardLine | undefined): boolean {
-  if (next === undefined || next.mark !== line.mark || next.source.step !== line.source.step) {
+  const sameStep = next?.source.step === line.source.step && next.source.item === line.source.item;
+  if (next === undefined || next.mark !== line.mark || !sameStep) {
     return false;
   }
   return (

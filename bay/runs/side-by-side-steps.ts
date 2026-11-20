@@ -7,6 +7,8 @@ import {
   foreachEnd,
   itemsRerun,
   itemsToStart,
+  notStarted,
+  phaseAfter,
   type ItemEnd,
   type ItemPhase,
 } from "./side-by-side.ts";
@@ -65,27 +67,34 @@ async function settled<T>(work: Promise<T>): Promise<Settled<T>> {
   }
 }
 
-async function sideBySide<T>(count: number, cap: number, run: (index: number) => Promise<T>): Promise<readonly T[]> {
-  const phases: ItemPhase[] = Array.from({ length: count }, () => "queued");
-  const results = new Map<number, Settled<T>>();
+async function sideBySide(
+  phases: ItemPhase[],
+  cap: number,
+  run: (position: number) => Promise<ItemRun>,
+): Promise<readonly ItemRun[]> {
+  const results = new Map<number, Settled<ItemRun>>();
   const running = new Map<number, Promise<number>>();
   for (;;) {
-    for (const index of itemsToStart(phases, cap)) {
-      phases[index] = "running";
+    for (const position of itemsToStart(phases, cap)) {
+      phases[position] = "running";
       const finished = async (): Promise<number> => {
-        results.set(index, await settled(run(index)));
-        return index;
+        results.set(position, await settled(run(position)));
+        return position;
       };
-      running.set(index, finished());
+      running.set(position, finished());
     }
     if (running.size === 0) {
       break;
     }
     const ended = await Promise.race(running.values());
     running.delete(ended);
-    phases[ended] = "ended";
+    const result = results.get(ended);
+    phases[ended] = result?.ok === true ? phaseAfter(result.value.end) : "ended";
   }
-  return [...results.entries()].sort(([first], [second]) => first - second).map(([, result]) => valueOf(result));
+  return phases.map((_, position) => {
+    const result = results.get(position);
+    return result === undefined ? { end: notStarted, spent: noSpend } : valueOf(result);
+  });
 }
 
 function valueOf<T>(result: Settled<T>): T {
@@ -102,7 +111,7 @@ async function runItem(
 ): Promise<ItemRun> {
   const { pass, index } = at;
   const { loop } = pass;
-  const within = foreachItemKey(loop.at.key, index, pass.attempts[index] ?? 1);
+  const within = itemKeyOf(pass, index);
   const budget = itemFrame(pass.shared);
   const item = loop.items[index] ?? null;
   const inner = { ...scope, budget, within, outputs: new Map(scope.outputs), keys: new Map(scope.keys), item };
@@ -110,8 +119,20 @@ async function runItem(
   return { end: itemEndOf(progress, within), spent: budget.spent };
 }
 
+function itemKeyOf(pass: Pass, index: number): string {
+  return foreachItemKey(pass.loop.at.key, index, pass.attempts[index] ?? 1);
+}
+
+function phasesOf(walk: Walk, pass: Pass): ItemPhase[] {
+  const keys = [...walk.records.keys()];
+  return pass.indexes.map((index) => {
+    const within = `${itemKeyOf(pass, index)}.`;
+    return keys.some((key) => key.startsWith(within)) ? "resumed" : "queued";
+  });
+}
+
 async function runPass(walk: Walk, scope: WorkflowScope, pass: Pass): Promise<readonly ItemRun[]> {
-  return sideBySide(pass.indexes.length, pass.loop.cap, (position) =>
+  return sideBySide(phasesOf(walk, pass), pass.loop.cap, (position) =>
     runItem(walk, scope, { pass, index: pass.indexes[position] ?? 0 }),
   );
 }

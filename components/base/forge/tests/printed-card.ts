@@ -39,11 +39,26 @@ function hanging(words: string, first: string, rest: string): readonly string[] 
   return rows.map((row, index) => `${index === 0 ? first : rest}${row}`);
 }
 
-function sharesStep(line: CardLine, next: CardLine | undefined): boolean {
-  return next !== undefined && next.mark === line.mark && next.source.step === line.source.step;
+type Skills = Readonly<Record<string, string>>;
+
+const itemsOf = "slices";
+
+function itemOf(line: CardLine): number | undefined {
+  return line.mark === "judged" ? line.source.item : undefined;
 }
 
-function lineRows(lines: readonly CardLine[], skills: Readonly<Record<string, string>>): readonly string[] {
+function sharesStep(line: CardLine, next: CardLine | undefined): boolean {
+  const sameItem = next !== undefined && itemOf(next) === itemOf(line);
+  return next !== undefined && next.mark === line.mark && next.source.step === line.source.step && sameItem;
+}
+
+function byWords(line: CardLine, skills: Skills): string {
+  const item = itemOf(line);
+  const by = `by ${skills[line.source.step] ?? ""}`;
+  return item === undefined ? by : `${by}, in item ${String(item)} of ${itemsOf}`;
+}
+
+function lineRows(lines: readonly CardLine[], skills: Skills): readonly string[] {
   return lines.flatMap((line, index) => {
     if (line.mark === "computed") {
       return hanging(line.words, "  ", "    ");
@@ -52,7 +67,7 @@ function lineRows(lines: readonly CardLine[], skills: Readonly<Record<string, st
     if (sharesStep(line, lines[index + 1])) {
       return rows;
     }
-    return [...rows, ...hanging(`by ${skills[line.source.step] ?? ""}`, "judged    ", "judged      ")];
+    return [...rows, ...hanging(byWords(line, skills), "judged    ", "judged      ")];
   });
 }
 
@@ -93,7 +108,7 @@ function countedRow(lines: readonly CardLine[]): string {
 export function printed(
   card: { readonly title: string; readonly lines: readonly CardLine[] },
   choices: readonly PrintedChoice[] = [],
-  skills: Readonly<Record<string, string>> = {},
+  skills: Skills = {},
 ): string {
   return [
     ...hanging(card.title, "", "  "),

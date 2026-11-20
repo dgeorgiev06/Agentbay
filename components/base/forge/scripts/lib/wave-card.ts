@@ -20,9 +20,6 @@ export type WaveDrawn = {
   readonly merge: boolean;
 };
 
-const notQuoted =
-  "judged lines are left off: this card cannot quote the reviewer's or the builder's steps inside the wave's foreach";
-
 function joinedWords(joinedHead: Joined): readonly string[] {
   switch (joinedHead.kind) {
     case "combined":
@@ -53,12 +50,7 @@ function aloneLines(alone: readonly Alone[]): readonly CardLine[] {
 
 function waveLines(input: WaveCardInput): readonly CardLine[] {
   const checks = input.checks.kind === "asked" ? checkedLines(input.checks, "prove") : [];
-  return [
-    ...joinedWords(input.joined).map((words) => computed("draw", words)),
-    ...checks,
-    ...aloneLines(input.alone),
-    computed("draw", notQuoted),
-  ];
+  return [...joinedWords(input.joined).map((words) => computed("draw", words)), ...checks, ...aloneLines(input.alone)];
 }
 
 function mergedOf(joinedHead: Joined): readonly string[] {
@@ -70,7 +62,7 @@ export function waveDrawn(input: WaveCardInput): WaveDrawn {
   const at = { merged: mergedOf(input.joined), must: input.must };
   const lines = [
     computed("draw", answer.words),
-    ...input.slices.flatMap((settled) => sliceLines(settled, at)),
+    ...input.slices.flatMap((settled, item) => sliceLines(settled, { ...at, item })),
     ...waveLines(input),
   ];
   const withheld = answer.reason === undefined ? {} : { merge: sentenceOf(answer.reason) };

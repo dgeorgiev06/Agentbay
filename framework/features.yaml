@@ -141,6 +141,7 @@ features:
       - bay/runs/task-tokens.ts
       - bay/runs/choices.ts
       - bay/runs/card.ts
+      - bay/runs/cited-step.ts
       - bay/runs/hook-seen.ts
       - bay/runs/packed-output.ts
       - bay/runs/foreach-steps.ts

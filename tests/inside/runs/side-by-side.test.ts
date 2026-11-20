@@ -8,6 +8,7 @@ import {
   foreachEnd,
   itemsRerun,
   itemsToStart,
+  phaseAfter,
   type ItemEnd,
 } from "../../../bay/runs/side-by-side.ts";
 import { isDueAt } from "../../../bay/runs/run-ending.ts";
@@ -23,6 +24,16 @@ test("items start in item order up to the cap, and a freed lane takes the next q
   assert.deepEqual(itemsToStart(["ended", "running", "queued", "queued"], 2), [2]);
   assert.deepEqual(itemsToStart(["ended", "ended", "ended"], 3), []);
   assert.deepEqual(itemsToStart(["queued", "queued"], 8), [0, 1]);
+});
+
+test("an item that waits holds its place, and an item that had started before resumes whatever the cap", () => {
+  assert.deepEqual(itemsToStart(["holding", "running", "queued"], 2), []);
+  assert.deepEqual(itemsToStart(["holding", "ended", "queued", "queued"], 2), [2]);
+  assert.deepEqual(itemsToStart(["resumed", "resumed", "resumed", "queued"], 2), [0, 1, 2]);
+  assert.deepEqual(itemsToStart(["resumed", "queued", "queued"], 2), [0, 1]);
+  assert.equal(phaseAfter({ kind: "waiting", waits: [] }), "holding");
+  assert.equal(phaseAfter({ kind: "done", output: null }), "ended");
+  assert.equal(phaseAfter({ kind: "failed", key: "each[0]", reason: "broke" }), "ended");
 });
 
 test("a foreach whose items all finished gives their outputs in item order", () => {

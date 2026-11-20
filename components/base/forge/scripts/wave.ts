@@ -11,7 +11,7 @@ import { leftOver } from "./lib/drops.ts";
 import { lastRound } from "./lib/rounds.ts";
 import { waveChoices } from "./lib/start-choices.ts";
 import { testsToLookFor, waveOf, type PlanFound, type WaveAsked } from "./lib/wave-plan.ts";
-import { batchesOf, sideBySideOf } from "./lib/wave-batches.ts";
+import { sideBySideOf } from "./lib/side-by-side.ts";
 import { waveStartCard } from "./lib/wave-start-card.ts";
 
 type Read = {
@@ -110,6 +110,7 @@ export const run = defineScript(async (input, context) => {
     offered: choices.offered,
     leftovers: leftovers.map((left) => ({ ...left })),
     slices: wave.slices.map((slice) => slice.name),
-    batches: batchesOf(wave.requests, sideBySide).map((batch) => [...batch]),
+    requests: [...wave.requests],
+    sideBySide,
   };
 });

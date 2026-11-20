@@ -9,7 +9,7 @@ export type CardLine =
   | {
       readonly mark: "judged";
       readonly words: string;
-      readonly source: { readonly step: string };
+      readonly source: { readonly step: string; readonly item?: number };
     };
 
 export type Card = {
@@ -89,4 +89,8 @@ export function computed(step: ComputedBy, words: string): CardLine {
 
 export function judged(step: string, words: string): CardLine {
   return { mark: "judged", words: fitted(words, judgedRoom), source: { step } };
+}
+
+export function inItem(item: number, lines: readonly CardLine[]): readonly CardLine[] {
+  return lines.map((line) => (line.mark === "judged" ? { ...line, source: { step: line.source.step, item } } : line));
 }

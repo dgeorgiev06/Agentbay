@@ -4,7 +4,7 @@ import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
 import { listOf } from "../scripts/lib/json-values.ts";
 import { planOf } from "../scripts/lib/plan-form.ts";
 import { workOut } from "../scripts/lib/plan-waves.ts";
-import { batchesOf, sideBySideOf } from "../scripts/lib/wave-batches.ts";
+import { sideBySideOf } from "../scripts/lib/side-by-side.ts";
 import { proving, waveProofRequest, type ToJoin } from "../scripts/lib/wave-join.ts";
 import { nameClashes, testsToLookFor, waveOf, type PlanFound } from "../scripts/lib/wave-plan.ts";
 import { modelCallsOfASlice } from "../scripts/lib/wave-start-card.ts";
@@ -106,17 +106,10 @@ describe("which slices a wave holds, and their requests", () => {
 });
 
 describe("how many builders at once, and what a slice costs", () => {
-  test("the setting sideBySide is 2 when left out and held to 2 to 8", () => {
+  test("the setting sideBySide is 2 when left out, and otherwise as the owner set it, for the kernel to hold to 2 to 8", () => {
     assert.equal(sideBySideOf(undefined), 2);
     assert.equal(sideBySideOf(3), 3);
-    assert.equal(sideBySideOf(12), 8);
-    assert.equal(sideBySideOf(1), 2);
-  });
-
-  test("a wave's slices are cut into batches of the setting, in plan order", () => {
-    assert.deepEqual(batchesOf(["A", "B", "C"], 2), [["A", "B"], ["C"]]);
-    assert.deepEqual(batchesOf(["A", "B"], 2), [["A", "B"]]);
-    assert.deepEqual(batchesOf([], 2), []);
+    assert.equal(sideBySideOf(12), 12);
   });
 
   test("a slice's rounds ask the models at most 27 times: declare, plant and three each of tests and review three times over, and three builds", () => {
@@ -152,9 +145,9 @@ describe("what the wave asks proof", () => {
   });
 
   test("each merged slice is to be proved alone with its own checks items at its own head, filtered by its own kept tests", () => {
-    const asking = fieldsOf(proving(wave, joined, { head: "combined", sideBySide: 2 }));
+    const asking = fieldsOf(proving(wave, joined, "combined"));
     assert.deepEqual(asking.keptOf, ["TD1", "TD10"]);
-    const alone = listOf(asking.whenFailed).flatMap(listOf).map(fieldsOf);
+    const alone = listOf(asking.whenFailed).map(fieldsOf);
     assert.deepEqual(
       alone.map((each) => each.keptOf),
       [["TD1"], ["TD10"]],

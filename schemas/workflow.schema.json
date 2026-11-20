@@ -134,7 +134,7 @@
               "additionalProperties": { "$ref": "#/$defs/choice" }
             },
             "quotes": {
-              "description": "The ids of earlier action steps whose skills a card's judged lines may cite.",
+              "description": "The ids of earlier action steps whose skills a card's judged lines may cite, or of steps an earlier foreach runs in each item; a line cites such a step with its item, counted from 0, as source.item.",
               "type": "array",
               "uniqueItems": true,
               "items": { "$ref": "#/$defs/name" }
@@ -171,10 +171,15 @@
               "$ref": "#/$defs/reference"
             },
             "sideBySide": {
-              "description": "How many elements may run at the same time, from 2 to 8. The output stays in the order of the list. When an element fails, the others still run to their end, then the run waits for the owner with every failure named; resume --rerun runs the failed ones again.",
-              "type": "integer",
-              "minimum": 2,
-              "maximum": 8
+              "description": "How many elements may run at the same time, from 2 to 8: a whole number, or a reference resolved and checked each time the foreach starts or resumes. The output stays in the order of the list. When an element fails, the others still run to their end, then the run waits for the owner with every failure named; resume --rerun runs the failed ones again.",
+              "oneOf": [
+                { "type": "integer", "minimum": 2, "maximum": 8 },
+                {
+                  "description": "A reference to a whole number from 2 to 8: $settings.<key>, $steps.<id>.output with an optional path, $trigger, or $item of an enclosing foreach.",
+                  "type": "string",
+                  "pattern": "^\\$"
+                }
+              ]
             },
             "id": {
               "description": "The step's id, unique in the whole file; its output is saved under it.",

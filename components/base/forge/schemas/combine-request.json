@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "CombineRequest",
-  "description": "The wave as its first step answered, and every slice as settle handed it on, in batches.",
+  "description": "The wave as its first step answered, and every slice as settle handed it on, in plan order.",
   "type": "object",
   "additionalProperties": false,
   "required": ["wave", "slices"],
@@ -13,14 +13,10 @@
     "slices": {
       "type": "array",
       "maxItems": 50,
-      "description": "Each batch's slices, as settle answered for each.",
+      "description": "The slices, as settle answered for each.",
       "items": {
-        "type": "array",
-        "maxItems": 8,
-        "items": {
-          "type": "object",
-          "description": "A slice of the wave as the step settle handed it on, the last step of the slice's item."
-        }
+        "type": "object",
+        "description": "A slice of the wave as the step settle handed it on, the last step of the slice's item."
       }
     }
   }

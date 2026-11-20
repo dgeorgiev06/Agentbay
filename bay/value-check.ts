@@ -102,10 +102,21 @@ function branchDiscriminators(choice: ErrorObject): readonly string[] {
   return branches.flatMap((branch: unknown) => discriminator(branch) ?? []);
 }
 
+function typeFits(branch: unknown, data: unknown): boolean {
+  const type = isRecord(branch) ? branch.type : undefined;
+  return (type === "integer" && typeof data === "number") || (type === "string" && typeof data === "string");
+}
+
+function typedBranch(choice: ErrorObject): number | undefined {
+  const branches: unknown = choice.schema;
+  const index = Array.isArray(branches) ? branches.findIndex((branch: unknown) => typeFits(branch, choice.data)) : -1;
+  return index < 0 ? undefined : index;
+}
+
 function chosenBranch(choice: ErrorObject): number | undefined {
   const data = choice.data;
   if (!isRecord(data)) {
-    return undefined;
+    return typedBranch(choice);
   }
   const index = branchDiscriminators(choice).findIndex((field) => field in data);
   return index < 0 ? undefined : index;
@@ -203,8 +214,22 @@ function describePattern(error: ErrorObject, place: string): Wording {
   return { message: `${place} is not in the expected form. ${expected}` };
 }
 
+function branchTypeWords(choice: ErrorObject): readonly string[] {
+  const branches: unknown = choice.schema;
+  const types = Array.isArray(branches) ? branches.map((branch: unknown) => (isRecord(branch) ? branch.type : "")) : [];
+  return types.flatMap((type) =>
+    typeof type === "string" && typeWords.has(type) ? [typeWords.get(type) ?? type] : [],
+  );
+}
+
 function describeOneOf(error: ErrorObject, place: string): Wording {
-  return { message: `${place} must have exactly one of the fields ${branchDiscriminators(error).join(", ")}.` };
+  const fields = branchDiscriminators(error);
+  if (fields.length > 0) {
+    return { message: `${place} must have exactly one of the fields ${fields.join(", ")}.` };
+  }
+  return {
+    message: `${place} must be ${branchTypeWords(error).join(" or ")}, but it is ${describeValue(error.data)}.`,
+  };
 }
 
 function describeMinItems(error: ErrorObject, place: string): Wording {

@@ -14,6 +14,8 @@ import { sliceOf, type Slice } from "./slice-form.ts";
 import { onlyChecks, withoutChecks } from "./tool-checks.ts";
 import type { Leak } from "./leaks.ts";
 
+const firstRound = "round-1";
+
 export type Settled = {
   readonly name: string;
   readonly title: string;
@@ -27,6 +29,7 @@ export type Settled = {
   readonly rounds: RoundsOnCard;
   readonly leaks: readonly Leak[];
   readonly built: Built;
+  readonly builtAt: string;
   readonly pins: Pins;
   readonly bugs: BugsOnCard;
   readonly stayed: readonly Stayed[];
@@ -53,6 +56,10 @@ export function ownProofReason(parts: SettledParts): string | undefined {
   });
 }
 
+function builtAtOf(state: RoundsState | undefined): string {
+  return state?.builtAt ?? firstRound;
+}
+
 function stateOf(value: Json | undefined): RoundsState | undefined {
   return roundsStateOf(value ?? null);
 }
@@ -75,6 +82,7 @@ export function settledOf(value: Json): Settled {
     rounds: state === undefined ? { count: 0, most: 0, ended: "last-round" } : roundsOnCard(state),
     leaks: state?.leaks ?? [],
     built: builtOf(fields.built),
+    builtAt: builtAtOf(state),
     pins: { base: pinsOf(fields.pinned), head: state?.pinnedAtHead ?? [] },
     bugs: bugsOnCard(bugsOf(fields.bugs), proof.verdicts, numberOf(fields.planted)),
     stayed: stayedOf(fields.stayed),

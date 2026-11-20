@@ -24,6 +24,22 @@ function checksOf(name: string): Slice {
   return { ...slice, done: slice.done.filter((item) => item.proof?.kind === "checks") };
 }
 
+const reviewed = {
+  step: "review-1",
+  round: 1,
+  sentences: ["DOD-TD1-1 held by 2 cases", "no finding remains"],
+  practices: {
+    tally: { held: 64, notHeld: 1, doesNotApply: 0 },
+    notHeld: [{ id: "P-12", says: "Functions stay small.", path: "src/count.ts", sentence: "count is 40 lines." }],
+    checks: 12,
+  },
+};
+
+const waveSkills = {
+  "review-1": "forge skills/review, tier deep",
+  "round-1": "forge skills/write-tests, tier balanced; forge skills/build-without-tests, tier balanced",
+};
+
 function settled(name: string, proof: Proved, reason?: string): Settled {
   const shown = {
     name,
@@ -39,15 +55,11 @@ function settled(name: string, proof: Proved, reason?: string): Settled {
       count: 1,
       most: 3,
       ended: "no-findings" as const,
-      judged: {
-        step: "review-1",
-        round: 1,
-        sentences: [],
-        practices: { tally: { held: 64, notHeld: 1, doesNotApply: 0 }, notHeld: [], checks: 12 },
-      },
+      judged: reviewed,
     },
     leaks: [],
-    built: { outcome: "built" as const },
+    built: { outcome: "built" as const, decisions: [`${name} counts in memory`] },
+    builtAt: "round-1",
     pins: {
       base: [{ path: "a.json", hash: "0123456789abcdef" }],
       head: [{ path: "a.json", hash: "0123456789abcdef" }],
@@ -128,8 +140,8 @@ describe("the wave's start card", () => {
     );
   });
 
-  test("a wave with more slices than the setting says which batches run one after another", () => {
-    const plan = planOf({ title: "A wave", slices: ["A1", "A2", "A3"].map(plannedSlice) });
+  test("a wave with more slices than the setting says which start first and that the rest start as slices end", () => {
+    const plan = planOf({ title: "A wave", slices: ["A1", "A2", "A3", "A4"].map(plannedSlice) });
     const start = {
       plan: "p.yaml",
       wave: 1,
@@ -140,7 +152,12 @@ describe("the wave's start card", () => {
       leftovers: [],
     };
     const words = waveStartCard({ ...start, slices: plan.slices }).lines.map((line) => line.words);
-    assert.ok(words.includes("in 2 batches, each after the one before: A1 and A2; then A3"), words.join("\n"));
+    assert.ok(
+      words.includes("first A1 and A2; then A3 and A4, each starting as soon as a slice ends"),
+      words.join("\n"),
+    );
+    const three = waveStartCard({ ...start, slices: plan.slices.slice(0, 3) }).lines.map((line) => line.words);
+    assert.ok(three.includes("first A1 and A2; then A3, which starts as soon as a slice ends"), three.join("\n"));
     assert.ok(waveStartCard({ ...start, slices: plan.slices }).lines.every((line) => line.source.step === "wave"));
   });
 });
@@ -149,10 +166,14 @@ describe("the wave's merge card", () => {
   test("two slices, one failing its own proof, read line by line as pinned", () => {
     const drawn = waveDrawn(oneFailing);
     assert.equal(drawn.merge, true);
-    const text = printed(drawn.card, [
-      { name: "merge", does: "Merge the combined head into the integration branch" },
-      { name: "keep", does: "Stop; every slice's branches stay" },
-    ]);
+    const text = printed(
+      drawn.card,
+      [
+        { name: "merge", does: "Merge the combined head into the integration branch" },
+        { name: "keep", does: "Stop; every slice's branches stay" },
+      ],
+      waveSkills,
+    );
     assert.equal(
       text,
       [
@@ -174,10 +195,27 @@ describe("the wave's merge card", () => {
         "  practices answered by the reviewer in",
         "    round 1: 65; 64 held, 1 not held, 0 do",
         "    not apply; a check holds 12 more",
+        "judged   P-12, not held: Functions stay",
+        "judged     small. In src/count.ts: count is",
+        "judged     40 lines.",
+        "judged    by forge skills/review, tier deep,",
+        "judged      in item 0 of slices",
         "  interface files: 1 unchanged since the",
         "    base, by hash",
         "  rounds: 1 of at most 3; the reviewer had",
         "    no findings",
+        "  the reviewer, in round 1, before the final",
+        "    proof:",
+        "judged   DOD-TD1-1 held by 2 cases",
+        "judged   no finding remains",
+        "judged    by forge skills/review, tier deep,",
+        "judged      in item 0 of slices",
+        "judged   the builder decided: TD1 counts in",
+        "judged     memory",
+        "judged    by forge skills/write-tests, tier",
+        "judged      balanced; forge",
+        "judged      skills/build-without-tests, tier",
+        "judged      balanced, in item 0 of slices",
         "  TD2: The td2 mode counts what was added",
         "  TD2 is left out: 1 must item failed. Its",
         "    branches stay; the work and the tests",
@@ -195,10 +233,27 @@ describe("the wave's merge card", () => {
         "  practices answered by the reviewer in",
         "    round 1: 65; 64 held, 1 not held, 0 do",
         "    not apply; a check holds 12 more",
+        "judged   P-12, not held: Functions stay",
+        "judged     small. In src/count.ts: count is",
+        "judged     40 lines.",
+        "judged    by forge skills/review, tier deep,",
+        "judged      in item 1 of slices",
         "  interface files: 1 unchanged since the",
         "    base, by hash",
         "  rounds: 1 of at most 3; the reviewer had",
         "    no findings",
+        "  the reviewer, in round 1, before the final",
+        "    proof:",
+        "judged   DOD-TD1-1 held by 2 cases",
+        "judged   no finding remains",
+        "judged    by forge skills/review, tier deep,",
+        "judged      in item 1 of slices",
+        "judged   the builder decided: TD2 counts in",
+        "judged     memory",
+        "judged    by forge skills/write-tests, tier",
+        "judged      balanced; forge",
+        "judged      skills/build-without-tests, tier",
+        "judged      balanced, in item 1 of slices",
         "  the combined head: 3710c98 on",
         "    forge/wave-1, with TD1 merged in plan",
         "    order",
@@ -206,16 +261,12 @@ describe("the wave's merge card", () => {
         "    whole test run pass.",
         "  checks passed: typecheck, lint",
         "  tests passed: 40",
-        "  judged lines are left off: this card",
-        "    cannot quote the reviewer's or the",
-        "    builder's steps inside the wave's",
-        "    foreach",
-        "All lines worked out by script.",
+        "Unmarked lines were worked out by script.",
         "You can:",
         "  merge  Merge the combined head into the",
         "         integration branch",
         "  keep   Stop; every slice's branches stay",
-        "checked: 0 ran, 24 computed, 0 judged",
+        "checked: 0 ran, 25 computed, 8 judged",
       ].join("\n"),
     );
     assert.ok(text.split("\n").every((row) => Array.from(row).length <= widest));

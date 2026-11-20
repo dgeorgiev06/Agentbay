@@ -1,7 +1,6 @@
 import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
 import { listOf, textOf, textsOf } from "./json-values.ts";
 import { onlyChecks } from "./tool-checks.ts";
-import { batchesOf } from "./wave-batches.ts";
 
 export type ToJoin = {
   readonly name: string;
@@ -36,8 +35,8 @@ export function toJoinOf(settled: Json): ToJoin {
   };
 }
 
-export function slicesToJoin(batches: Json): readonly ToJoin[] {
-  return listOf(batches).flatMap(listOf).map(toJoinOf);
+export function slicesToJoin(slices: Json): readonly ToJoin[] {
+  return listOf(slices).map(toJoinOf);
 }
 
 function unionOf(lists: readonly (readonly string[])[]): readonly string[] {
@@ -73,12 +72,11 @@ function aloneRequest(wave: WaveNamed, joined: ToJoin): Json {
   return { kind: "asked", asked, keptOf: [joined.name], whenFailed: [] };
 }
 
-export function proving(wave: WaveNamed, joined: readonly ToJoin[], at: { head: string; sideBySide: number }): Json {
-  const alone = joined.map((each) => aloneRequest(wave, each));
+export function proving(wave: WaveNamed, joined: readonly ToJoin[], head: string): Json {
   return {
     kind: "asked",
-    asked: waveProofRequest(wave, joined, at.head),
+    asked: waveProofRequest(wave, joined, head),
     keptOf: joined.map((each) => each.name),
-    whenFailed: batchesOf(alone, at.sideBySide).map((batch) => [...batch]),
+    whenFailed: joined.map((each) => aloneRequest(wave, each)),
   };
 }

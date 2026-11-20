@@ -1,10 +1,10 @@
 {
   "commits": {
-    "integration": "654f2c6299646ebee0363e703c071b3843eeee33",
-    "forge/CA": "984f9b0e23aed85a126e2934585d64a5840f818c",
-    "forge/CA-tests-1": "e07df4185b8fc0ffaa325a60dfc060492b23a41f",
-    "forge/CB": "d8692baa614e2338989e3fc9223afa2ab1bffadf",
-    "forge/CB-tests-1": "3e4dbac710e2b7a113b80e2fc551318fe54346a7"
+    "integration": "49a5668d2f74b9aa1c1d8c99421e215fd50ab85d",
+    "forge/CA": "30ef9a73893ab0c8507dbae8d1fa8dc225fc0eb7",
+    "forge/CA-tests-1": "72b542e26f6afb2ec59aec44dde8fe06e68a5bcc",
+    "forge/CB": "0f09c46b766726056b673f5853d6c6ce1306efe8",
+    "forge/CB-tests-1": "b44b4c9f57584dab3151097901bad83e2f97405a"
   },
   "given": {
     "wave": {
@@ -12,7 +12,7 @@
       "plan": "docs/plans/0099-wave.yaml",
       "wave": 1,
       "into": "integration",
-      "base": "654f2c6299646ebee0363e703c071b3843eeee33",
+      "base": "49a5668d2f74b9aa1c1d8c99421e215fd50ab85d",
       "card": {
         "title": "Build wave 1 of 0099-wave.yaml?",
         "lines": [
@@ -25,7 +25,7 @@
           },
           {
             "mark": "computed",
-            "words": "base 654f2c6, the head of integration",
+            "words": "base 49a5668, the head of integration",
             "source": {
               "step": "wave"
             }
@@ -90,76 +90,75 @@
       },
       "leftovers": [],
       "slices": ["CA", "CB"],
-      "batches": [
-        [
-          {
-            "planned": {
-              "title": "The ca mode counts what was added",
-              "slice": {
-                "name": "CA",
-                "kind": "mode",
-                "scope": ["components/modes/ca/**"],
-                "after": [],
-                "done": [
-                  {
-                    "id": "DOD-CA-1",
-                    "says": "What was added is counted.",
-                    "level": "must",
-                    "proof": {
-                      "kind": "fails-first",
-                      "tests": ["components/modes/ca/tests/ca.test.ts"]
-                    }
-                  },
-                  {
-                    "id": "DOD-CA-2",
-                    "says": "The checks pass.",
-                    "level": "must",
-                    "proof": {
-                      "kind": "checks"
-                    }
+      "requests": [
+        {
+          "planned": {
+            "title": "The ca mode counts what was added",
+            "slice": {
+              "name": "CA",
+              "kind": "mode",
+              "scope": ["components/modes/ca/**"],
+              "after": [],
+              "done": [
+                {
+                  "id": "DOD-CA-1",
+                  "says": "What was added is counted.",
+                  "level": "must",
+                  "proof": {
+                    "kind": "fails-first",
+                    "tests": ["components/modes/ca/tests/ca.test.ts"]
                   }
-                ]
-              }
-            },
-            "base": "654f2c6299646ebee0363e703c071b3843eeee33",
-            "bugs": [],
-            "interface": ["components/base/interfaces/proof.yaml"]
+                },
+                {
+                  "id": "DOD-CA-2",
+                  "says": "The checks pass.",
+                  "level": "must",
+                  "proof": {
+                    "kind": "checks"
+                  }
+                }
+              ]
+            }
           },
-          {
-            "planned": {
-              "title": "The cb mode counts what was added",
-              "slice": {
-                "name": "CB",
-                "kind": "mode",
-                "scope": ["components/modes/cb/**"],
-                "after": [],
-                "done": [
-                  {
-                    "id": "DOD-CB-1",
-                    "says": "What was added is counted.",
-                    "level": "must",
-                    "proof": {
-                      "kind": "fails-first",
-                      "tests": ["components/modes/cb/tests/cb.test.ts"]
-                    }
-                  },
-                  {
-                    "id": "DOD-CB-2",
-                    "says": "The checks pass.",
-                    "level": "must",
-                    "proof": {
-                      "kind": "checks"
-                    }
+          "base": "49a5668d2f74b9aa1c1d8c99421e215fd50ab85d",
+          "bugs": [],
+          "interface": ["components/base/interfaces/proof.yaml"]
+        },
+        {
+          "planned": {
+            "title": "The cb mode counts what was added",
+            "slice": {
+              "name": "CB",
+              "kind": "mode",
+              "scope": ["components/modes/cb/**"],
+              "after": [],
+              "done": [
+                {
+                  "id": "DOD-CB-1",
+                  "says": "What was added is counted.",
+                  "level": "must",
+                  "proof": {
+                    "kind": "fails-first",
+                    "tests": ["components/modes/cb/tests/cb.test.ts"]
                   }
-                ]
-              }
-            },
-            "base": "654f2c6299646ebee0363e703c071b3843eeee33",
-            "bugs": [],
-            "interface": ["components/base/interfaces/proof.yaml"]
-          }
-        ]
-      ]
+                },
+                {
+                  "id": "DOD-CB-2",
+                  "says": "The checks pass.",
+                  "level": "must",
+                  "proof": {
+                    "kind": "checks"
+                  }
+                }
+              ]
+            }
+          },
+          "base": "49a5668d2f74b9aa1c1d8c99421e215fd50ab85d",
+          "bugs": [],
+          "interface": ["components/base/interfaces/proof.yaml"]
+        }
+      ],
+      "sideBySide": 3
     },
     "start": {
       "choice": "build",
@@ -175,7 +174,7 @@
           },
           {
             "mark": "computed",
-            "words": "base 654f2c6, the head of integration",
+            "words": "base 49a5668, the head of integration",
             "source": {
               "step": "wave"
             }
@@ -239,162 +238,82 @@
       "choice": "build",
       "slices": ["CA", "CB"]
     },
-    "batches": [
-      [
-        {
+    "slices": [
+      {
+        "name": "CA",
+        "title": "The ca mode counts what was added",
+        "base": "49a5668d2f74b9aa1c1d8c99421e215fd50ab85d",
+        "head": "72b542e26f6afb2ec59aec44dde8fe06e68a5bcc",
+        "work": "forge/CA-tests-1",
+        "builder": "forge/CA",
+        "slice": {
           "name": "CA",
-          "title": "The ca mode counts what was added",
-          "base": "654f2c6299646ebee0363e703c071b3843eeee33",
-          "head": "e07df4185b8fc0ffaa325a60dfc060492b23a41f",
-          "work": "forge/CA-tests-1",
-          "builder": "forge/CA",
-          "slice": {
-            "name": "CA",
-            "kind": "mode",
-            "scope": ["components/modes/ca/**"],
-            "after": [],
-            "done": [
-              {
-                "id": "DOD-CA-1",
-                "says": "What was added is counted.",
-                "level": "must",
-                "proof": {
-                  "kind": "fails-first",
-                  "tests": ["components/modes/ca/tests/ca.test.ts"]
-                }
-              },
-              {
-                "id": "DOD-CA-2",
-                "says": "The checks pass.",
-                "level": "must",
-                "proof": {
-                  "kind": "checks"
-                }
-              }
-            ]
-          },
-          "proof": {
-            "verdicts": [
-              {
-                "item": "DOD-CA-1",
-                "kind": "fails-first",
-                "verdict": "passed",
-                "detail": "It held."
-              },
-              {
-                "item": "scope",
-                "kind": "in-scope",
-                "verdict": "passed",
-                "detail": "It held."
-              },
-              {
-                "item": "declared",
-                "kind": "as-declared",
-                "verdict": "passed",
-                "detail": "It held."
-              }
-            ],
-            "judgement": [],
-            "size": [
-              {
-                "path": "components/modes/ca/scripts/ca.ts",
-                "head": 1
-              }
-            ]
-          },
-          "rounds": {
-            "round": 1,
-            "stage": "reviewed",
-            "done": true,
-            "base": "654f2c6299646ebee0363e703c071b3843eeee33",
-            "built": {
-              "outcome": "built"
-            },
-            "builder": {
-              "branch": "forge/CA",
-              "commit": "984f9b0e23aed85a126e2934585d64a5840f818c"
-            },
-            "head": "e07df4185b8fc0ffaa325a60dfc060492b23a41f",
-            "branch": "forge/CA-tests-1",
-            "declared": {
-              "files": ["components/modes/ca/scripts/ca.ts", "components/modes/ca/tests/ca.test.ts"],
-              "names": {
-                "gained": [],
-                "lost": [],
-                "changed": []
-              }
-            },
-            "tests": ["components/modes/ca/tests/ca.test.ts"],
-            "verdicts": [
-              {
-                "item": "DOD-CA-1",
-                "kind": "fails-first",
-                "verdict": "passed",
-                "detail": "It held."
-              },
-              {
-                "item": "scope",
-                "kind": "in-scope",
-                "verdict": "passed",
-                "detail": "It held."
-              },
-              {
-                "item": "declared",
-                "kind": "as-declared",
-                "verdict": "passed",
-                "detail": "It held."
-              }
-            ],
-            "failing": {
-              "items": [],
-              "cases": [],
-              "withheld": 0,
-              "notListed": 0,
-              "notLoaded": []
-            },
-            "toBuilder": [],
-            "toTests": 0,
-            "conditions": [
-              {
-                "item": "DOD-CA-1",
-                "held": true,
-                "cases": ["ca counts one added thing"]
-              },
-              {
-                "item": "DOD-CA-2",
-                "held": true,
-                "cases": ["ca counts one added thing"]
-              }
-            ],
-            "remaining": [],
-            "leaks": [],
-            "practices": {
-              "tally": {
-                "held": 65,
-                "notHeld": 0,
-                "doesNotApply": 0
-              },
-              "notHeld": [],
-              "checks": 12
-            },
-            "pinnedAtHead": [
-              {
-                "path": "components/base/interfaces/proof.yaml",
-                "hash": "dc9833d498410bd4"
-              }
-            ],
-            "builtAt": "round-1",
-            "reviewedAt": "review-1"
-          },
-          "pinned": [
+          "kind": "mode",
+          "scope": ["components/modes/ca/**"],
+          "after": [],
+          "done": [
             {
-              "path": "components/base/interfaces/proof.yaml",
-              "hash": "dc9833d498410bd4"
+              "id": "DOD-CA-1",
+              "says": "What was added is counted.",
+              "level": "must",
+              "proof": {
+                "kind": "fails-first",
+                "tests": ["components/modes/ca/tests/ca.test.ts"]
+              }
+            },
+            {
+              "id": "DOD-CA-2",
+              "says": "The checks pass.",
+              "level": "must",
+              "proof": {
+                "kind": "checks"
+              }
+            }
+          ]
+        },
+        "proof": {
+          "verdicts": [
+            {
+              "item": "DOD-CA-1",
+              "kind": "fails-first",
+              "verdict": "passed",
+              "detail": "It held."
+            },
+            {
+              "item": "scope",
+              "kind": "in-scope",
+              "verdict": "passed",
+              "detail": "It held."
+            },
+            {
+              "item": "declared",
+              "kind": "as-declared",
+              "verdict": "passed",
+              "detail": "It held."
             }
           ],
-          "bugs": [],
-          "planted": 0,
-          "stayed": [],
+          "judgement": [],
+          "size": [
+            {
+              "path": "components/modes/ca/scripts/ca.ts",
+              "head": 1
+            }
+          ]
+        },
+        "rounds": {
+          "round": 1,
+          "stage": "reviewed",
+          "done": true,
+          "base": "49a5668d2f74b9aa1c1d8c99421e215fd50ab85d",
+          "built": {
+            "outcome": "built"
+          },
+          "builder": {
+            "branch": "forge/CA",
+            "commit": "30ef9a73893ab0c8507dbae8d1fa8dc225fc0eb7"
+          },
+          "head": "72b542e26f6afb2ec59aec44dde8fe06e68a5bcc",
+          "branch": "forge/CA-tests-1",
           "declared": {
             "files": ["components/modes/ca/scripts/ca.ts", "components/modes/ca/tests/ca.test.ts"],
             "names": {
@@ -403,165 +322,165 @@
               "changed": []
             }
           },
-          "built": {
-            "outcome": "built"
+          "tests": ["components/modes/ca/tests/ca.test.ts"],
+          "verdicts": [
+            {
+              "item": "DOD-CA-1",
+              "kind": "fails-first",
+              "verdict": "passed",
+              "detail": "It held."
+            },
+            {
+              "item": "scope",
+              "kind": "in-scope",
+              "verdict": "passed",
+              "detail": "It held."
+            },
+            {
+              "item": "declared",
+              "kind": "as-declared",
+              "verdict": "passed",
+              "detail": "It held."
+            }
+          ],
+          "failing": {
+            "items": [],
+            "cases": [],
+            "withheld": 0,
+            "notListed": 0,
+            "notLoaded": []
           },
-          "reason": null
-        },
-        {
-          "name": "CB",
-          "title": "The cb mode counts what was added",
-          "base": "654f2c6299646ebee0363e703c071b3843eeee33",
-          "head": "3e4dbac710e2b7a113b80e2fc551318fe54346a7",
-          "work": "forge/CB-tests-1",
-          "builder": "forge/CB",
-          "slice": {
-            "name": "CB",
-            "kind": "mode",
-            "scope": ["components/modes/cb/**"],
-            "after": [],
-            "done": [
-              {
-                "id": "DOD-CB-1",
-                "says": "What was added is counted.",
-                "level": "must",
-                "proof": {
-                  "kind": "fails-first",
-                  "tests": ["components/modes/cb/tests/cb.test.ts"]
-                }
-              },
-              {
-                "id": "DOD-CB-2",
-                "says": "The checks pass.",
-                "level": "must",
-                "proof": {
-                  "kind": "checks"
-                }
-              }
-            ]
+          "toBuilder": [],
+          "toTests": 0,
+          "conditions": [
+            {
+              "item": "DOD-CA-1",
+              "held": true,
+              "cases": ["ca counts one added thing"]
+            },
+            {
+              "item": "DOD-CA-2",
+              "held": true,
+              "cases": ["ca counts one added thing"]
+            }
+          ],
+          "remaining": [],
+          "leaks": [],
+          "practices": {
+            "tally": {
+              "held": 65,
+              "notHeld": 0,
+              "doesNotApply": 0
+            },
+            "notHeld": [],
+            "checks": 12
           },
-          "proof": {
-            "verdicts": [
-              {
-                "item": "DOD-CB-1",
-                "kind": "fails-first",
-                "verdict": "passed",
-                "detail": "It held."
-              },
-              {
-                "item": "scope",
-                "kind": "in-scope",
-                "verdict": "passed",
-                "detail": "It held."
-              },
-              {
-                "item": "declared",
-                "kind": "as-declared",
-                "verdict": "passed",
-                "detail": "It held."
-              }
-            ],
-            "judgement": [],
-            "size": [
-              {
-                "path": "components/modes/cb/scripts/cb.ts",
-                "head": 1
-              }
-            ]
-          },
-          "rounds": {
-            "round": 1,
-            "stage": "reviewed",
-            "done": true,
-            "base": "654f2c6299646ebee0363e703c071b3843eeee33",
-            "built": {
-              "outcome": "built"
-            },
-            "builder": {
-              "branch": "forge/CB",
-              "commit": "d8692baa614e2338989e3fc9223afa2ab1bffadf"
-            },
-            "head": "3e4dbac710e2b7a113b80e2fc551318fe54346a7",
-            "branch": "forge/CB-tests-1",
-            "declared": {
-              "files": ["components/modes/cb/scripts/cb.ts", "components/modes/cb/tests/cb.test.ts"],
-              "names": {
-                "gained": [],
-                "lost": [],
-                "changed": []
-              }
-            },
-            "tests": ["components/modes/cb/tests/cb.test.ts"],
-            "verdicts": [
-              {
-                "item": "DOD-CB-1",
-                "kind": "fails-first",
-                "verdict": "passed",
-                "detail": "It held."
-              },
-              {
-                "item": "scope",
-                "kind": "in-scope",
-                "verdict": "passed",
-                "detail": "It held."
-              },
-              {
-                "item": "declared",
-                "kind": "as-declared",
-                "verdict": "passed",
-                "detail": "It held."
-              }
-            ],
-            "failing": {
-              "items": [],
-              "cases": [],
-              "withheld": 0,
-              "notListed": 0,
-              "notLoaded": []
-            },
-            "toBuilder": [],
-            "toTests": 0,
-            "conditions": [
-              {
-                "item": "DOD-CB-1",
-                "held": true,
-                "cases": ["cb counts one added thing"]
-              },
-              {
-                "item": "DOD-CB-2",
-                "held": true,
-                "cases": ["cb counts one added thing"]
-              }
-            ],
-            "remaining": [],
-            "leaks": [],
-            "practices": {
-              "tally": {
-                "held": 65,
-                "notHeld": 0,
-                "doesNotApply": 0
-              },
-              "notHeld": [],
-              "checks": 12
-            },
-            "pinnedAtHead": [
-              {
-                "path": "components/base/interfaces/proof.yaml",
-                "hash": "dc9833d498410bd4"
-              }
-            ],
-            "builtAt": "round-1",
-            "reviewedAt": "review-1"
-          },
-          "pinned": [
+          "pinnedAtHead": [
             {
               "path": "components/base/interfaces/proof.yaml",
               "hash": "dc9833d498410bd4"
             }
           ],
-          "bugs": [],
-          "planted": 0,
-          "stayed": [],
+          "builtAt": "round-1",
+          "reviewedAt": "review-1"
+        },
+        "pinned": [
+          {
+            "path": "components/base/interfaces/proof.yaml",
+            "hash": "dc9833d498410bd4"
+          }
+        ],
+        "bugs": [],
+        "planted": 0,
+        "stayed": [],
+        "declared": {
+          "files": ["components/modes/ca/scripts/ca.ts", "components/modes/ca/tests/ca.test.ts"],
+          "names": {
+            "gained": [],
+            "lost": [],
+            "changed": []
+          }
+        },
+        "built": {
+          "outcome": "built"
+        },
+        "reason": null
+      },
+      {
+        "name": "CB",
+        "title": "The cb mode counts what was added",
+        "base": "49a5668d2f74b9aa1c1d8c99421e215fd50ab85d",
+        "head": "b44b4c9f57584dab3151097901bad83e2f97405a",
+        "work": "forge/CB-tests-1",
+        "builder": "forge/CB",
+        "slice": {
+          "name": "CB",
+          "kind": "mode",
+          "scope": ["components/modes/cb/**"],
+          "after": [],
+          "done": [
+            {
+              "id": "DOD-CB-1",
+              "says": "What was added is counted.",
+              "level": "must",
+              "proof": {
+                "kind": "fails-first",
+                "tests": ["components/modes/cb/tests/cb.test.ts"]
+              }
+            },
+            {
+              "id": "DOD-CB-2",
+              "says": "The checks pass.",
+              "level": "must",
+              "proof": {
+                "kind": "checks"
+              }
+            }
+          ]
+        },
+        "proof": {
+          "verdicts": [
+            {
+              "item": "DOD-CB-1",
+              "kind": "fails-first",
+              "verdict": "passed",
+              "detail": "It held."
+            },
+            {
+              "item": "scope",
+              "kind": "in-scope",
+              "verdict": "passed",
+              "detail": "It held."
+            },
+            {
+              "item": "declared",
+              "kind": "as-declared",
+              "verdict": "passed",
+              "detail": "It held."
+            }
+          ],
+          "judgement": [],
+          "size": [
+            {
+              "path": "components/modes/cb/scripts/cb.ts",
+              "head": 1
+            }
+          ]
+        },
+        "rounds": {
+          "round": 1,
+          "stage": "reviewed",
+          "done": true,
+          "base": "49a5668d2f74b9aa1c1d8c99421e215fd50ab85d",
+          "built": {
+            "outcome": "built"
+          },
+          "builder": {
+            "branch": "forge/CB",
+            "commit": "0f09c46b766726056b673f5853d6c6ce1306efe8"
+          },
+          "head": "b44b4c9f57584dab3151097901bad83e2f97405a",
+          "branch": "forge/CB-tests-1",
           "declared": {
             "files": ["components/modes/cb/scripts/cb.ts", "components/modes/cb/tests/cb.test.ts"],
             "names": {
@@ -570,12 +489,90 @@
               "changed": []
             }
           },
-          "built": {
-            "outcome": "built"
+          "tests": ["components/modes/cb/tests/cb.test.ts"],
+          "verdicts": [
+            {
+              "item": "DOD-CB-1",
+              "kind": "fails-first",
+              "verdict": "passed",
+              "detail": "It held."
+            },
+            {
+              "item": "scope",
+              "kind": "in-scope",
+              "verdict": "passed",
+              "detail": "It held."
+            },
+            {
+              "item": "declared",
+              "kind": "as-declared",
+              "verdict": "passed",
+              "detail": "It held."
+            }
+          ],
+          "failing": {
+            "items": [],
+            "cases": [],
+            "withheld": 0,
+            "notListed": 0,
+            "notLoaded": []
           },
-          "reason": null
-        }
-      ]
+          "toBuilder": [],
+          "toTests": 0,
+          "conditions": [
+            {
+              "item": "DOD-CB-1",
+              "held": true,
+              "cases": ["cb counts one added thing"]
+            },
+            {
+              "item": "DOD-CB-2",
+              "held": true,
+              "cases": ["cb counts one added thing"]
+            }
+          ],
+          "remaining": [],
+          "leaks": [],
+          "practices": {
+            "tally": {
+              "held": 65,
+              "notHeld": 0,
+              "doesNotApply": 0
+            },
+            "notHeld": [],
+            "checks": 12
+          },
+          "pinnedAtHead": [
+            {
+              "path": "components/base/interfaces/proof.yaml",
+              "hash": "dc9833d498410bd4"
+            }
+          ],
+          "builtAt": "round-1",
+          "reviewedAt": "review-1"
+        },
+        "pinned": [
+          {
+            "path": "components/base/interfaces/proof.yaml",
+            "hash": "dc9833d498410bd4"
+          }
+        ],
+        "bugs": [],
+        "planted": 0,
+        "stayed": [],
+        "declared": {
+          "files": ["components/modes/cb/scripts/cb.ts", "components/modes/cb/tests/cb.test.ts"],
+          "names": {
+            "gained": [],
+            "lost": [],
+            "changed": []
+          }
+        },
+        "built": {
+          "outcome": "built"
+        },
+        "reason": null
+      }
     ]
   }
 }

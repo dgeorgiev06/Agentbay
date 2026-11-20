@@ -22,34 +22,74 @@
           "maxItems": 4000,
           "description": "One line for each thing the card says, wrapped by the kernel to 44 columns.",
           "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["mark", "words", "source"],
-            "properties": {
-              "mark": {
-                "const": "computed",
-                "description": "Every line of this card comes from a step that ran no skill."
-              },
-              "words": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 2000,
-                "description": "What the owner reads, worked out by script."
-              },
-              "source": {
+            "oneOf": [
+              {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["step"],
+                "required": ["mark", "words", "source"],
                 "properties": {
-                  "step": {
+                  "mark": {
+                    "const": "computed",
+                    "description": "The line was worked out by script from a step that ran no skill."
+                  },
+                  "words": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 64,
-                    "description": "The step of the wave that the line cites."
+                    "maxLength": 2000,
+                    "description": "What the owner reads, worked out by script."
+                  },
+                  "source": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["step"],
+                    "properties": {
+                      "step": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64,
+                        "description": "The step of the wave that the line cites."
+                      }
+                    }
+                  }
+                },
+                "description": "A line worked out by script."
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["mark", "words", "source"],
+                "description": "A line of judgement from inside a slice's item: the reviewer's, citing the review step under which the reviewer last ran, or the builder's, citing the round under which it last built; the kernel adds the skills and tiers of that step and the item.",
+                "properties": {
+                  "mark": {
+                    "const": "judged",
+                    "description": "The line is a model's judgement, never a check."
+                  },
+                  "words": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "description": "The reviewer's verdict on a condition, a finding that remains or a practice it answered not held, in the reviewer's words; or what the builder says is missing, or a decision it made, in its words."
+                  },
+                  "source": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["step", "item"],
+                    "properties": {
+                      "step": {
+                        "enum": ["review-1", "review-2", "review-3", "round-1", "round-2", "round-3"],
+                        "description": "The review step the line cites, or the round under which the builder last built."
+                      },
+                      "item": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 49,
+                        "description": "The slice's item in the foreach slices, counted from 0 in plan order."
+                      }
+                    }
                   }
                 }
               }
-            }
+            ]
           }
         },
         "withheld": {

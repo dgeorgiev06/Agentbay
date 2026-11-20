@@ -100,11 +100,15 @@ test("given a wave's slices built and each passing its own proof, the combined h
   const runId = await partStarted(root, "forge:workflows/wave.yaml", { trigger, part: { given } });
   const card = waitingOf(await shown(root, runId), "card");
   assert.equal(textAt(listOf(card.choices)[0] ?? null, "status"), "withheld");
-  const printed = flowing(await printedCard(root, card.id));
+  const rows = await printedCard(root, card.id);
+  const printed = flowing(rows);
   assert.ok(printed.includes("Merge is not offered: the wave's checks failed on the slices combined."), printed);
   assert.ok(printed.includes("CA proved alone with the checks: DOD-CA-2, must, passed"), printed);
   assert.ok(printed.includes("CB fails the checks alone, so its work breaks the suite"), printed);
   assert.ok(printed.includes("on forge/wave-1, with CA, CB merged in plan order"), printed);
+  assert.ok(rows.includes("judged   DOD-CA-1 held by 1 case"), printed);
+  assert.ok(rows.includes("judged   DOD-CB-2 held by 1 case"), printed);
+  assert.ok(rows.includes("checked: 0 ran, 32 computed, 6 judged"), printed);
   assert.equal((await askedOf(root, "wave-1")).length, 1);
   assert.deepEqual(kindsAsked((await askedOf(root, "CA")).slice(-1)), ["checks"]);
   const kept = runOf(await decided(root, card, { step: "card", choice: "keep" }));

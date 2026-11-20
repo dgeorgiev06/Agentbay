@@ -60,6 +60,10 @@ function flowing(rows: readonly string[]): string {
   return rows.join(" ").replace(/\s+/g, " ");
 }
 
+function unmarked(rows: readonly string[]): string {
+  return flowing(rows.map((row) => row.replace(/^judged\s+/, "")));
+}
+
 function sliceAsked(task: Json): string {
   return textAt(fieldsOf(fieldsOf(task).input ?? null).slice ?? null, "name");
 }
@@ -85,7 +89,7 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     const asking = await shown(root, start.id);
     const question = textAt(fieldsOf(asking).waiting ?? null, "question");
     assert.equal(textAt(fieldsOf(asking).waiting ?? null, "reason"), "owner", JSON.stringify(asking));
-    assert.match(question, /1 of 3 items: item 1 \(batches\[0\]\.slices\[1\]\)/);
+    assert.match(question, /1 of 3 items: item 1 \(slices\[1\]\)/);
     assert.deepEqual(keptSlices(root), ["TD1", "TD10", "TD2"]);
     await provedAs(root, "TD10", ownPassed("TD10"));
     await bay(root, ["resume", start.id, "--rerun"]);
@@ -101,6 +105,10 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     assert.ok(said.includes("TD2 is left out: 1 must item failed. Its branches stay"), said);
     const td10 = "the work and the tests are on forge/TD10-tests-1, the builder's work alone on forge/TD10";
     assert.ok(said.includes(`TD10 is in the combined head; ${td10}`), said);
+    const judged = unmarked(printed);
+    for (const item of [0, 1, 2]) {
+      assert.ok(judged.includes(`by forge skills/review, tier deep, in item ${String(item)} of slices`), judged);
+    }
     assert.deepEqual(kindsAsked(await askedOf(root, "wave-1")), ["checks"]);
     assert.equal((await askedOf(root, "wave-1")).length, 1);
     for (const name of ["TD1", "TD10", "TD2"]) {

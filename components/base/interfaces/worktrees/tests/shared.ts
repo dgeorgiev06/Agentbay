@@ -1042,12 +1042,12 @@ const cases: readonly Case[] = [
         assert.deepEqual(await world.output("drop-branch", { branch }), { how: "not-there", branch });
       }
       assert.deepEqual(await world.parentsOf(head), [world.base]);
+      assert.deepEqual(await ownersCheckout(world), before);
       assert.deepEqual(await world.output("cut", { slice: "feature", base: ownersBranch }), {
         folder,
         branch: "forge/feature",
         commit: world.base,
       });
-      assert.deepEqual(await ownersCheckout(world), before);
     },
   },
   {

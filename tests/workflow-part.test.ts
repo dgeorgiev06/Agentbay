@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { stringify } from "yaml";
@@ -306,6 +306,24 @@ test("until stops the run after the step it names, with that step's output recor
   });
 });
 
+test("until after a skill step holds once the skill is answered: the step's output is recorded and the next step does not start", async () => {
+  await withParts(async (project) => {
+    const given = { first: firstGiven, pick: { choice: "go" }, second: { count: 7, choice: "go" } };
+    const asking = await startPart(project, { given, until: "review" });
+    const answered = await project.answer(tokenOf(asking), { text: reviewWords });
+    assert.deepEqual(waitingOf(answered), {
+      reason: "owner",
+      stepKey: "review",
+      question:
+        "A test started this run to stop after step review, and it did: no later step starts, " +
+        "and resuming the run stops here again.",
+    });
+    assert.deepEqual(stepOutput(answered, "review"), { text: reviewWords });
+    assert.ok(!keysOf(answered).includes("draw"), JSON.stringify(keysOf(answered)));
+    assert.deepEqual(await countsIn(project), {});
+  });
+});
+
 test("until with no step given runs every step up to the one it names, and nothing after", async () => {
   await withParts(async (project) => {
     const run = await startPart(project, { input: { open: false }, until: "first" });
@@ -582,8 +600,8 @@ test("a test that drives bay in its own process starts a part with tests/start-p
   }
 });
 
-test("tests/start-part.ts refuses a project outside the temporary folder, such as the kit, and a part that breaks a schema", async () => {
-  const outside = partStarted(kit, [`forge:workflows/rounds.yaml`, "{}", "{}"]);
+test("tests/start-part.ts refuses a project outside the temporary folder, such as the home folder, and a part that breaks a schema", async () => {
+  const outside = partStarted(homedir(), [`forge:workflows/rounds.yaml`, "{}", "{}"]);
   assert.equal(outside.status, 1);
   assert.deepEqual(outside.answer, {
     ok: false,
@@ -591,7 +609,7 @@ test("tests/start-part.ts refuses a project outside the temporary folder, such a
       {
         message:
           `tests/start-part.ts starts a part of a workflow only in a test's project, under ${tmpdir()}; ` +
-          `${kit} is not under it.`,
+          `${homedir()} is not under it.`,
         fix: "node tests/start-part.ts <mode>:<path> '<trigger json>' '<part json>'",
       },
     ],

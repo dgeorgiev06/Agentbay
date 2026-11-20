@@ -14,6 +14,7 @@ import {
   notesFlow,
   openedRuns,
   runOf,
+  secretValue,
   withFlow,
   type OpenedRuns,
   type Script,
@@ -264,5 +265,17 @@ test("while the run advances, a made-up token and the advancing step's own token
     ["each[1].write/0#1"],
   );
   assert.equal(runOf(await other.submit(coffee, said("coffee is long enough"))).state.status, "done");
+  opened.close();
+});
+
+test("a recorded answer is scrubbed before kernel.db keeps it", async () => {
+  const { opened, gate, tokens, first, other } = await whileTeaAdvances(["tea", "coffee"]);
+  runOf(await other.submit(tokens[1] ?? "", said(`coffee and ${secretValue}`)));
+  const database = new DatabaseSync(opened.database, { readOnly: true });
+  const kept = JSON.stringify(database.prepare("select * from answers").all());
+  database.close();
+  assert.ok(kept.includes("coffee and") && !kept.includes(secretValue), kept);
+  gate.open();
+  await first;
   opened.close();
 });

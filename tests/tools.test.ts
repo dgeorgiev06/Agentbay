@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import type { Json } from "../bay/contracts.ts";
 import { fieldOf, numberField, textField } from "../bay/json.ts";
@@ -354,4 +356,32 @@ test("submit whose check cannot run is not accepted and gives the step's reason"
     kernel.close();
     await project.remove();
   }
+});
+
+test("a submit while another call advances the run answers that the output is recorded, and keeps the token", async () => {
+  await withWaiting(async ({ kernel, project }, waiting) => {
+    const database = new DatabaseSync(join(project.root, ".agentbay/kernel.db"));
+    database
+      .prepare(
+        "update runs set status = 'running', waiting_reason = null, waiting_step = null, lock_owner = ?, " +
+          "lock_heartbeat = ? where id = ?",
+      )
+      .run("another-engine", new Date().toISOString(), waiting.runId);
+    database.close();
+    const read = await callKernelTool(kernel, "files_read", { token: waiting.token, path: "README.md" });
+    assert.match(refusalOf(read), /does not wait for a skill at step/);
+    const output = { text: "Hello, Ada, and welcome back." };
+    const submitted = valueOf(await callKernelTool(kernel, "submit", { token: waiting.token, output }));
+    assert.deepEqual(submitted, {
+      accepted: true,
+      recorded: true,
+      run: { id: waiting.runId, status: "running" },
+      next:
+        "The kernel recorded your output while another call advances the run; the run checks it when that call " +
+        "ends. Stop here: the coordinator gives the next round's task if the checks ask for one.",
+    });
+    const again = await callKernelTool(kernel, "submit", { token: waiting.token, output });
+    assert.match(refusalOf(again), /already has a submission/);
+    assert.deepEqual((await shownRun(kernel, waiting.runId)).recordedAnswers, [waiting.stepKey]);
+  });
 });

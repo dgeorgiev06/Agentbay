@@ -40,7 +40,7 @@ function givenOf(part: Json): Readonly<Record<string, Json>> | undefined {
   return Object.fromEntries(Object.entries(given).map(([id, output]) => [id, toJson(output)]));
 }
 
-function requestOf(words: readonly string[]): Outcome<Request> {
+export function partRequestOf(words: readonly string[]): Outcome<Request> {
   const [target = "", trigger, partText] = words;
   const separator = target.indexOf(":");
   if (separator <= 0) {
@@ -106,10 +106,12 @@ function printed(answer: Outcome<Json>): string {
 }
 
 async function main(): Promise<void> {
-  const request = requestOf(process.argv.slice(2));
+  const request = partRequestOf(process.argv.slice(2));
   const answer = request.ok ? await started(process.cwd(), request.value) : request;
   process.stdout.write(`${printed(answer)}\n`);
   process.exitCode = answer.ok ? 0 : 1;
 }
 
-await main();
+if (import.meta.main) {
+  await main();
+}

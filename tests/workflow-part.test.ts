@@ -9,6 +9,7 @@ import { stringify } from "yaml";
 import type { Json } from "../bay/contracts.ts";
 import { fieldOf, parseJson, textField } from "../bay/json.ts";
 import { makeProject, kit, type Project } from "./project-fixture.ts";
+import { partRequestOf } from "./start-part.ts";
 import { openModeProject, type ModeProject, type Run, type WorkflowPart } from "./test-toolbox.ts";
 
 const config = {
@@ -617,4 +618,27 @@ test("tests/start-part.ts refuses a project outside the temporary folder, such a
   } finally {
     await beside.remove();
   }
+});
+
+test("tests/start-part.ts reads the workflow as <mode>:<path>, the trigger and the part as JSON, and refuses anything else with its usage", () => {
+  const fix = "node tests/start-part.ts <mode>:<path> '<trigger json>' '<part json>'";
+  assert.deepEqual(
+    partRequestOf(["forge:workflows/rounds.yaml", '{"a":1}', '{"given":{"slice":{}},"until":"start"}']),
+    {
+      ok: true,
+      value: { mode: "forge", path: "workflows/rounds.yaml", input: { a: 1 }, given: { slice: {} }, until: "start" },
+    },
+  );
+  assert.deepEqual(partRequestOf(["rounds"]), {
+    ok: false,
+    problems: [{ file: "", path: "", message: "The workflow is named as <mode>:<path>, not rounds.", fix }],
+  });
+  assert.deepEqual(partRequestOf(["forge:workflows/rounds.yaml", "{"]), {
+    ok: false,
+    problems: [{ file: "", path: "", message: "The trigger is not JSON: {", fix }],
+  });
+  assert.deepEqual(partRequestOf(["forge:workflows/rounds.yaml", "{}", '{"given":[1]}']), {
+    ok: false,
+    problems: [{ file: "", path: "", message: "The part's given is not a mapping of step ids to outputs.", fix }],
+  });
 });

@@ -18,6 +18,7 @@ import {
   liveDroppingShelf,
   shelf,
   shelfFiles,
+  strayFindingShelf,
   wrongShelf,
   type ShelfVariant,
 } from "./made-up-worktrees.ts";
@@ -35,6 +36,10 @@ const dropKeepsALiveWorktreesBranch =
   "drop-branch keeps a branch a live worktree of the mode still has, the branch named as into, and a branch under " +
   "forge/ the mode never makes, and answers refused with its commit; once the worktree is removed its branch goes";
 
+const findReadsOnlyMadeBranches =
+  "find-branch answers the commit a branch the mode made points at, a live worktree's branch too, and not-there " +
+  "for one it does not have; it refuses a branch under forge/ the mode never makes with a reason, and changes nothing";
+
 type Wrong = {
   readonly name: string;
   readonly variant: ShelfVariant;
@@ -45,6 +50,7 @@ const wrongShelves: readonly Wrong[] = [
   { name: wrongShelf, variant: "removes a changed worktree", fails: removeKeepsAChangedWorktree },
   { name: liveDroppingShelf, variant: "drops a branch a live worktree has", fails: dropKeepsALiveWorktreesBranch },
   { name: absentFailingShelf, variant: "fails on a branch not there", fails: dropAnswersNotThere },
+  { name: strayFindingShelf, variant: "finds a branch it does not make", fails: findReadsOnlyMadeBranches },
 ];
 
 let copy: string;
@@ -83,10 +89,10 @@ test("bay check accepts a made-up worktrees mode that keeps commits as files and
   assert.match(checked.output, /^bay check: 0 errors, /m);
 });
 
-test("a made-up worktrees mode passes every case of the shared test that its eight built actions answer", () => {
+test("a made-up worktrees mode passes every case of the shared test that its nine built actions answer", () => {
   assert.equal(shelfTested.status, 1, shelfTested.output);
   assert.deepEqual(failedTests(shelfTested.output), casesOf(shelf, casesThatNeedMergeSetAsideOrApply));
-  assert.match(shelfTested.output, /^# pass 32$/m);
+  assert.match(shelfTested.output, /^# pass 33$/m);
 });
 
 for (const [index, wrong] of wrongShelves.entries()) {

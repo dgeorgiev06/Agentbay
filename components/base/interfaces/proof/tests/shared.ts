@@ -1421,6 +1421,7 @@ function recorderManifest(): string {
       commit: action("The recorder does not build this action.", "scripts/unbuilt.ts", changing),
       apply: action("When proof injects a bug into a copy.", "scripts/apply.ts", changing),
       "drop-branch": action("The recorder does not build this action.", "scripts/unbuilt.ts", changing),
+      "find-branch": action("The recorder does not build this action.", "scripts/unbuilt.ts", ["read"]),
     },
   });
 }

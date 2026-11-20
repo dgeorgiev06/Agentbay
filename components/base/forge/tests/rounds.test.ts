@@ -293,7 +293,7 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
     assert.deepEqual(branches(root), []);
     assert.deepEqual(worktrees(root), []);
     assert.deepEqual(keptRows(root), []);
-    assert.equal(git(root, ["show", `${into}:${testPath(name)}`]), tests[0]?.text);
+    assert.equal(git(root, ["show", `${into}:${testPath(name)}`]), testsOf(name, 1).text);
     assert.deepEqual(await filesHolding(root, ".agentbay", lines), []);
   });
 

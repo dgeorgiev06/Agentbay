@@ -7,10 +7,15 @@
     {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind"],
+      "required": ["kind", "alone"],
       "properties": {
         "kind": {
           "const": "not asked"
+        },
+        "alone": {
+          "type": "array",
+          "maxItems": 0,
+          "description": "No solo proof runs when proof was not asked."
         }
       }
     },

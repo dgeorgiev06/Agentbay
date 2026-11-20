@@ -139,6 +139,22 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     assert.deepEqual(keptRows(root), []);
   });
 
+  test("a wave whose only slice fails its own proof joins nothing, asks proof for no checks, and withholds merge", async () => {
+    const root = await project(template);
+    await planOnInto(root, ["NA"]);
+    await provedAs(root, "NA", ownFailed("NA"));
+    const start = await waveStarted(root);
+    await decided(root, start, { step: "start", choice: "build" });
+    await playedSideBySide(root, start.id, wavePlayers(root));
+    const card = cardOf(await shown(root, start.id));
+    const printed = flowing(await printedCard(root, card.id));
+    assert.ok(printed.includes("Merge is not offered: no slice passed its own proof; left out: NA"), printed);
+    assert.ok(printed.includes("no combined head: no slice passed its own proof"), printed);
+    await decided(root, card, { step: "card", choice: "keep" });
+    assert.deepEqual(worktrees(root), []);
+    assert.deepEqual(keptRows(root), []);
+  });
+
   test("a wave stopped after a slice failed as a run forgets every kept test", async () => {
     const root = await project(template);
     await planOnInto(root, ["SA"]);

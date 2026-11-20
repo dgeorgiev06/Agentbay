@@ -9,7 +9,7 @@ import { checksVerdict } from "./lib/wave-answer.ts";
 export const run = defineScript(async (input, context) => {
   const fields = fieldsOf(fieldsOf(input).proving ?? null);
   if (fields.kind !== "asked") {
-    return { kind: "not asked" };
+    return { kind: "not asked", alone: [] };
   }
   const asked = fields.asked ?? null;
   const kept = await Promise.all(textsOf(fields.keptOf).map((name) => keptTests(context, name)));

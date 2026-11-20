@@ -18,7 +18,7 @@ export type SourceProblem = {
   readonly sentence: string;
 };
 
-export type SourcesRead = {
+type SourcesRead = {
   readonly sources: Sources;
   readonly problems: readonly SourceProblem[];
 };
@@ -47,7 +47,7 @@ export function plannerInput(start: Json): Json {
 
 const nothingNamed: SourcesRead = { sources: {}, problems: [] };
 
-export function conditionsGiven(file: string, requirements: Json): Conditions {
+function conditionsGiven(file: string, requirements: Json): Conditions {
   return { file, ids: conditionsOf(requirementsOf(requirements)) };
 }
 

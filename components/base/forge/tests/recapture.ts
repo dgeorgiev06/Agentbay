@@ -161,7 +161,7 @@ export function notRemade(asked: readonly string[], written: readonly string[]):
         "file is as it was.";
 }
 
-async function recaptured(copy: string, source: Source): Promise<readonly string[]> {
+export async function recaptured(copy: string, source: Source): Promise<readonly string[]> {
   const test = join(copy, "components/base/forge/tests", source.test);
   const into = join(copy, "recaptured", source.file);
   await mkdir(dirname(into), { recursive: true });

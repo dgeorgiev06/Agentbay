@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { askedFiles, notRemade, withCapture, type Source } from "./recapture.ts";
+import { askedFiles, notRemade, recaptured, withCapture, type Source } from "./recapture.ts";
 
 const given = ["given-b1-card.json", "given-r7-failed.json", "given-p2-stopped.json", "given-wave-ca-cb.json"];
 
@@ -64,4 +66,23 @@ test("recapture run with a file it has no case for exits 1 naming it, before it 
   assert.equal(ran.status, 1, ran.stderr);
   assert.match(ran.stderr, /it has no case for given-nope\.json\./);
   assert.equal(ran.stdout, "");
+});
+
+test("a case that is skipped writes no capture, and recapture counts its file as not written", async () => {
+  const copy = await realpath(await mkdtemp(join(tmpdir(), "agentbay-recapture-test-")));
+  try {
+    const skipped = [
+      'import { test } from "node:test";',
+      'test.skip("a case that reaches its card", async () => {',
+      "  const root = process.cwd();",
+      '  const card = waitingOf(run, "card");',
+      "});",
+      "",
+    ].join("\n");
+    await mkdir(join(copy, "components/base/forge/tests"), { recursive: true });
+    await writeFile(join(copy, "components/base/forge/tests", source.test), skipped, "utf8");
+    assert.deepEqual(await recaptured(copy, source), []);
+  } finally {
+    await rm(copy, { recursive: true, force: true });
+  }
 });

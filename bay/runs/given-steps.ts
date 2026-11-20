@@ -18,7 +18,7 @@ export type GivenRecord = StepDetail & {
   readonly output: Json;
 };
 
-export type Giving = {
+type Giving = {
   readonly system: System;
   readonly scrubber: Scrubber;
   readonly workflow: WorkflowTarget;
@@ -159,7 +159,10 @@ function givenForeach(at: GivenAt<ForeachStep>): GivenRecord | string {
   if (typeof items === "string") {
     return items;
   }
-  const count = Array.isArray(items) ? items.length : 0;
+  if (!Array.isArray(items)) {
+    return `Step ${at.step.id} runs over ${at.step.foreach}, which is not a list, so it cannot be given.`;
+  }
+  const count = items.length;
   const check = itemCheck(at.giving, at.step);
   if (typeof check === "string") {
     return check;

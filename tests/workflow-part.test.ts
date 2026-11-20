@@ -521,6 +521,10 @@ test("a given foreach has one output for each item, each checked against the out
         "output is missing the required field open.",
     );
     assert.equal(
+      await refusal({ items: { n: 1 }, each: counts }),
+      "Step each runs over $steps.items.output, which is not a list, so it cannot be given.",
+    );
+    assert.equal(
       await refusal({ items, each: counts, pause: null }),
       "Step pause is a wait, which a test cannot give; give only the steps before it.",
     );

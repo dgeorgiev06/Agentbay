@@ -15,6 +15,8 @@ const heldByLine = /^Held by:\s*(.*?)(?:\.\s+Source:.*)?$/;
 
 const reviewersWords = ["review", "planned check", "check planned"];
 
+const checkWords = ["check", "compiler", "the compiler", "linter", "the feature map", "dead-code check"];
+
 const designWords = ["design"];
 
 const planWords = ["plan"];
@@ -62,17 +64,24 @@ function isHeldBy(heldBy: string, holders: readonly string[]): boolean {
   return parts.some((part) => holders.some((words) => startsWith(part, words)));
 }
 
-function practicesHeldBy(text: string, holders: readonly string[]): readonly Practice[] {
+function rowsOf(text: string): readonly Row[] {
   const lines = text.split("\n");
-  const rows = lines.map((line, at) => tableRow(line) ?? headedRow(lines, at));
-  return rows
-    .filter((row) => row !== undefined)
+  return lines.map((line, at) => tableRow(line) ?? headedRow(lines, at)).filter((row) => row !== undefined);
+}
+
+function practicesHeldBy(text: string, holders: readonly string[]): readonly Practice[] {
+  return rowsOf(text)
     .filter((row) => isHeldBy(row.heldBy, holders))
     .map((row) => ({ id: row.id, says: row.says }));
 }
 
 export function reviewersPractices(text: string): readonly Practice[] {
   return practicesHeldBy(text, reviewersWords);
+}
+
+export function checksPractices(text: string): readonly Practice[] {
+  const reviewers = reviewersPractices(text).map((practice) => practice.id);
+  return practicesHeldBy(text, checkWords).filter((practice) => !reviewers.includes(practice.id));
 }
 
 export function designPractices(text: string): readonly Practice[] {

@@ -1,6 +1,8 @@
 import type { Built } from "./builder-answer.ts";
 import { counted, joined } from "./card-lines.ts";
+import { interfaceClauses, type InterfaceChange } from "./interface-pins.ts";
 import { addedIds } from "./item-lines.ts";
+import { mustClause } from "./practices-block.ts";
 import type { Verdict } from "./proof-answer.ts";
 import type { Level, Slice } from "./slice-form.ts";
 
@@ -11,6 +13,8 @@ export type Standing = {
   readonly verdicts: readonly Verdict[];
   readonly built: Built;
   readonly leaked: boolean;
+  readonly mustNotHeld: readonly string[];
+  readonly interfaceChanges: readonly InterfaceChange[];
 };
 
 type Unmet = {
@@ -60,6 +64,8 @@ export function mergeReason(standing: Standing): string | undefined {
     ...(standing.leaked ? ["the builder's work holds text from the tests"] : []),
     ...unmetClause(unmet.failed, { one: "failed", many: "failed" }),
     ...unmetClause(unmet.notKnown, { one: "is not known", many: "are not known" }),
+    ...mustClause(standing.mustNotHeld),
+    ...interfaceClauses(standing.interfaceChanges),
   ];
   return clauses.length === 0 ? undefined : `${clauses.join("; ")}.`;
 }

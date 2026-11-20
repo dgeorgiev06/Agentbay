@@ -196,8 +196,9 @@ function buildingOf(context: ScriptContext, round: Round, plan: RoundPlan): Prom
   return Promise.resolve(builtAt === undefined ? { built, builder } : { built, builder, builtAt });
 }
 
-function reviewedAtOf(before: RoundsState | undefined): { readonly reviewedAt?: string } {
-  return before?.reviewedAt === undefined ? {} : { reviewedAt: before.reviewedAt };
+function lastReviewOf(before: RoundsState | undefined): Pick<RoundsState, "practices" | "reviewedAt"> {
+  const practices = before?.practices === undefined ? {} : { practices: before.practices };
+  return before?.reviewedAt === undefined ? practices : { ...practices, reviewedAt: before.reviewedAt };
 }
 
 async function ranRound(context: ScriptContext, round: Round, plan: RoundPlan): Promise<RoundsState> {
@@ -228,7 +229,7 @@ async function ranRound(context: ScriptContext, round: Round, plan: RoundPlan): 
     conditions: round.before?.conditions ?? [],
     remaining: [],
     leaks: head.leaks,
-    ...reviewedAtOf(round.before),
+    ...lastReviewOf(round.before),
   };
 }
 

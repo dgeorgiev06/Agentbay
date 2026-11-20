@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { reviewersPractices } from "../scripts/lib/practices.ts";
+import { checksPractices, reviewersPractices } from "../scripts/lib/practices.ts";
 
 const kit = fileURLToPath(new URL("../../../..", import.meta.url));
 
@@ -70,4 +70,42 @@ test("the kit's practices files give the reviewer the rows review holds and none
     assert.ok(!ids.includes(tool), tool);
   }
   assert.equal(new Set(ids).size, ids.length);
+});
+
+test("a row a check, the compiler or the linter holds, and review does not, is one the checks hold", () => {
+  const rows = [
+    "| P-04 | Readable before short. | check: format; review |",
+    "| P-12 | The same code lives in one place. | planned check: copy-paste detector |",
+    "| P-33 | A plan is broken into slices. | plan |",
+  ];
+  const ids = checksPractices(`${table}\n${rows.join("\n")}\n`).map((practice) => practice.id);
+  assert.deepEqual(ids, ["P-01"]);
+});
+
+test("the kit's practices files hold twelve practices by a check alone, none of them the reviewer's", async () => {
+  const texts = [
+    await readFile(`${kit}/framework/practices.md`, "utf8"),
+    await readFile(`${kit}/components/base/typescript/practices.md`, "utf8"),
+  ];
+  const ids = texts.flatMap((text) => checksPractices(text)).map((practice) => practice.id);
+  assert.deepEqual(ids, [
+    "P-01",
+    "P-08",
+    "P-09",
+    "P-39",
+    "P-41",
+    "TS-01",
+    "TS-03",
+    "TS-06",
+    "TS-07",
+    "TS-08",
+    "TS-09",
+    "TS-13",
+  ]);
+  const reviewers = texts.flatMap((text) => reviewersPractices(text)).map((practice) => practice.id);
+  assert.deepEqual(
+    reviewers.filter((id) => ids.includes(id)),
+    [],
+  );
+  assert.equal(reviewers.length, 65);
 });

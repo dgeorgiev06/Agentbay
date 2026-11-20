@@ -24,6 +24,11 @@ steps:
     input:
       slice: $steps.slice.output.slice.name
       base: $steps.slice.output.base
+  - id: pin
+    action: pin
+    input:
+      interface: $steps.slice.output.interface
+      folder: $steps.cut.output.folder
   - id: declare
     action: declare
     input:
@@ -48,6 +53,7 @@ steps:
       slice: $steps.slice.output.slice
       fixed: $steps.slice.output.fixed
       practices: $settings.practices
+      interface: $steps.slice.output.interface
       state: $steps.round-1.output
   - id: round-2
     action: round
@@ -66,6 +72,7 @@ steps:
       slice: $steps.slice.output.slice
       fixed: $steps.slice.output.fixed
       practices: $settings.practices
+      interface: $steps.slice.output.interface
       state: $steps.round-2.output
   - id: round-3
     action: round
@@ -84,6 +91,7 @@ steps:
       slice: $steps.slice.output.slice
       fixed: $steps.slice.output.fixed
       practices: $settings.practices
+      interface: $steps.slice.output.interface
       state: $steps.round-3.output
   - id: bugs
     action: bugs
@@ -96,7 +104,7 @@ steps:
   - id: prove
     action: final-proof
     input:
-      slice: $steps.slice.output.slice
+      slice: $steps.slice.output.proved
       base: $steps.cut.output.commit
       head: $steps.review-3.output.head
       declared: $steps.review-3.output.declared
@@ -104,7 +112,7 @@ steps:
   - id: draw
     action: draw
     input:
-      slice: $steps.slice.output.slice
+      slice: $steps.slice.output.proved
       proof: $steps.prove.output
       built: $steps.review-3.output.built
       work: $steps.review-3.output.branch
@@ -112,6 +120,7 @@ steps:
       caseMessages: filtered
       into: $settings.into
       rounds: $steps.review-3.output
+      pinned: $steps.pin.output.pinned
       bugs: $steps.bugs.output.bugs
       planted: $steps.bugs.output.planted
   - id: card

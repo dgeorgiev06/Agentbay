@@ -24,6 +24,7 @@
     },
     "fixed": ["components/modes/todo/tests/todo.test.ts"],
     "practices": ["framework/practices.md"],
+    "interface": [],
     "state": {
       "round": 2,
       "stage": "proved",

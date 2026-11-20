@@ -61,9 +61,12 @@ const passedProof = {
 
 const keptTexts = ['test("a quill is counted", () => true);'];
 
+const allHeld = { tally: { held: 3, notHeld: 0, doesNotApply: 0 }, notHeld: [], checks: 2 };
+
 function reviewed(state: RoundsState, findings: readonly Finding[]): RoundsState {
-  const review = { conditions: [held, notHeld], findings };
-  return reviewedState(state, { plan: "review", review, remaining: findingsLeft(findings, keptTexts) }, "review-1");
+  const review = { conditions: [held, notHeld], findings, practices: [] };
+  const remaining = findingsLeft(findings, keptTexts);
+  return reviewedState(state, { plan: "review", review, remaining, practices: allHeld }, "review-1");
 }
 
 test("round 1 asks the test writer and the builder; a done review asks no one", () => {
@@ -137,6 +140,7 @@ test("the card counts the rounds and gives the reviewer's verdicts and what rema
         "for the builder, P-05: Count once.",
         "for the test writer, Q2, a quill is counted: Assert all.",
       ],
+      practices: allHeld,
     },
   });
 });
@@ -235,7 +239,7 @@ test("a long reason is one judged line, its words whole and in order", () => {
   const long = { item: "DOD-P1-2", held: false as const, why: `${"word ".repeat(30)}end.` };
   const state = reviewedState(
     proved,
-    { plan: "review", review: { conditions: [long], findings: [] }, remaining: [] },
+    { plan: "review", review: { conditions: [long], findings: [], practices: [] }, remaining: [], practices: allHeld },
     "review-1",
   );
   const judged = judgedOf(cardOf(roundsOnCard(state)).card.lines);

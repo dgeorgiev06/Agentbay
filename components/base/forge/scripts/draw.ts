@@ -1,6 +1,8 @@
 import { defineScript, fieldsOf } from "../../../../bay/sdk.ts";
 import { bugsOnCard } from "./lib/bug-card.ts";
 import { builtOf } from "./lib/builder-answer.ts";
+import { pinsOf } from "./lib/interface-pins.ts";
+import { textsOf } from "./lib/json-values.ts";
 import { drawn } from "./lib/merge-card.ts";
 import { provedOf } from "./lib/proof-answer.ts";
 import { sliceOf } from "./lib/slice-form.ts";
@@ -8,7 +10,7 @@ import { bugsOf } from "./lib/planting.ts";
 import { roundsOnCard } from "./lib/round-card.ts";
 import { roundsStateOf } from "./lib/rounds.ts";
 
-export const run = defineScript((input) => {
+export const run = defineScript((input, context) => {
   const fields = fieldsOf(input);
   const branch = (key: "work" | "into"): string => {
     const value = fields[key];
@@ -28,6 +30,8 @@ export const run = defineScript((input) => {
     caseMessages: fields.caseMessages === "filtered" ? "filtered" : "unfiltered",
     into: branch("into"),
     ...(rounds === undefined ? {} : { rounds: roundsOnCard(rounds), leaks: rounds.leaks }),
+    ...(rounds === undefined ? {} : { pins: { base: pinsOf(fields.pinned), head: rounds.pinnedAtHead ?? [] } }),
+    mustPractices: textsOf(context.settings.mustPractices),
     ...bugs,
   });
   return Promise.resolve(merge);

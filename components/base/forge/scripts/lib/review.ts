@@ -1,6 +1,9 @@
 import { fieldsOf, type Json, type JsonFields } from "../../../../../bay/sdk.ts";
 import type { HandedTest } from "./handed-tests.ts";
+import { practiceAnswersOf, type PracticeAnswer } from "./practice-answers.ts";
 import { quotesAny } from "./quoting.ts";
+import { isOneSentence, notQuoting } from "./review-sentences.ts";
+import { reviewedPracticeProblems } from "./reviewer-practices.ts";
 import { listOf, textOf } from "./json-values.ts";
 
 export const addressees = ["test-writer", "builder"] as const;
@@ -21,6 +24,7 @@ export type Condition =
 export type Review = {
   readonly conditions: readonly Condition[];
   readonly findings: readonly Finding[];
+  readonly practices: readonly PracticeAnswer[];
 };
 
 export type Reviewing = {
@@ -28,6 +32,7 @@ export type Reviewing = {
   readonly tests: readonly HandedTest[];
   readonly failing: readonly string[];
   readonly practices: readonly string[];
+  readonly code: readonly string[];
 };
 
 type Numbered = {
@@ -35,21 +40,17 @@ type Numbered = {
   readonly number: number;
 };
 
-const reviewFields = ["conditions", "findings"];
+const reviewFields = ["conditions", "findings", "practices"];
 
 const findingFields = ["to", "case", "question", "fix"];
 
 const conditionFields = ["item", "held", "cases", "why"];
-
-const longestSentence = 200;
 
 const question = /^(Q([1-9]|10)|negative-paths|condition)$/;
 
 const practiceId = /^[A-Z]{1,4}-\d{1,3}$/;
 
 const caseCall = /\b(?:test|it|describe)\s*\(\s*(["'`])((?:\\.|(?!\1)[^\\])*)\1/g;
-
-const notQuoting = "say it in your own words; the builder never reads a line of a test.";
 
 function strays(fields: JsonFields, allowed: readonly string[]): readonly string[] {
   return Object.keys(fields).filter((field) => !allowed.includes(field));
@@ -70,16 +71,6 @@ export function caseNamesOf(text: string): readonly string[] {
 function isCaseName(name: string, reviewing: Reviewing): boolean {
   const names = reviewing.tests.flatMap((test) => caseNamesOf(test.text));
   return name !== "" && (reviewing.failing.includes(name) || names.some((each) => each.includes(name)));
-}
-
-export function isOneSentence(text: string): boolean {
-  const trimmed = text.trim();
-  return (
-    trimmed !== "" &&
-    Array.from(text).length <= longestSentence &&
-    !/[\r\n]/.test(text) &&
-    !/[.!?]["')\]]*\s+\S/.test(trimmed)
-  );
 }
 
 function quotesTests(text: string, reviewing: Reviewing): boolean {
@@ -187,7 +178,7 @@ export function refusedReview(review: Json, reviewing: Reviewing): readonly stri
   const fields = fieldsOf(review);
   const stray = strays(fields, reviewFields);
   if (stray.length > 0) {
-    return [`The review has the field ${stray.join(", ")}; it has conditions and findings only.`];
+    return [`The review has the field ${stray.join(", ")}; it has conditions, findings and practices only.`];
   }
   const conditions = numbered(fields.conditions);
   return [
@@ -197,6 +188,11 @@ export function refusedReview(review: Json, reviewing: Reviewing): readonly stri
     ),
     ...conditions.flatMap((condition) => conditionProblems(condition, reviewing)),
     ...numbered(fields.findings).flatMap((finding) => findingProblems(finding, reviewing)),
+    ...reviewedPracticeProblems(practiceAnswersOf(fields.practices), {
+      ids: reviewing.practices,
+      code: reviewing.code,
+      tests: reviewing.tests,
+    }),
   ];
 }
 
@@ -216,5 +212,9 @@ function findingOf(value: Json): Finding {
 
 export function reviewOf(value: Json): Review {
   const fields = fieldsOf(value);
-  return { conditions: listOf(fields.conditions).map(conditionOf), findings: listOf(fields.findings).map(findingOf) };
+  return {
+    conditions: listOf(fields.conditions).map(conditionOf),
+    findings: listOf(fields.findings).map(findingOf),
+    practices: practiceAnswersOf(fields.practices),
+  };
 }

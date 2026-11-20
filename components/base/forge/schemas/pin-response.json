@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PinResponse",
+  "description": "A hash of each interface file's content at the base, or none for a file the base does not hold; the merge card compares them with the same files at the head.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["pinned"],
+  "properties": {
+    "pinned": {
+      "$ref": "#/$defs/pinned"
+    }
+  },
+  "$defs": {
+    "pinned": {
+      "type": "array",
+      "maxItems": 200,
+      "description": "One entry for each interface file, in the slice's order.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path"],
+        "properties": {
+          "path": {
+            "$ref": "proof@1/prove-request.json#/$defs/path"
+          },
+          "hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{16}$",
+            "description": "The toolbox's short hash of the file's whole text; left out when the file is not there."
+          }
+        }
+      }
+    }
+  }
+}

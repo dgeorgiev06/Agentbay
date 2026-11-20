@@ -2,8 +2,10 @@ import { defineScript, fieldsOf, type Json, type ScriptContext } from "../../../
 import { answerOf } from "./lib/called.ts";
 import { codeAt, readIn } from "./lib/code.ts";
 import { keepFindings, keptTests } from "./lib/kept-tests.ts";
-import { reviewersPractices, type Practice } from "./lib/practices.ts";
+import { pinnedFiles } from "./lib/pinned-files.ts";
+import { checksPractices, reviewersPractices, type Practice } from "./lib/practices.ts";
 import { reviewOf } from "./lib/review.ts";
+import { judgedPractices } from "./lib/reviewer-practices.ts";
 import {
   afterRoundOf,
   findingsLeft,
@@ -17,16 +19,26 @@ import { textsOf } from "./lib/json-values.ts";
 
 type Asked = AfterRound & {
   readonly practices: readonly string[];
+  readonly interface: readonly string[];
 };
 
 function askedOf(input: Json): Asked {
   const fields = fieldsOf(input);
-  return { ...afterRoundOf(fields, "review-round"), practices: textsOf(fields.practices) };
+  const after = afterRoundOf(fields, "review-round");
+  return { ...after, practices: textsOf(fields.practices), interface: textsOf(fields.interface) };
 }
 
-async function practicesOf(context: ScriptContext, asked: Asked, folder: string): Promise<readonly Practice[]> {
+type PracticesRead = {
+  readonly reviewers: readonly Practice[];
+  readonly checks: number;
+};
+
+async function practicesOf(context: ScriptContext, asked: Asked, folder: string): Promise<PracticesRead> {
   const files = await Promise.all(asked.practices.map((path) => readIn(context, folder, path)));
-  return files.flatMap((file) => reviewersPractices(file.text));
+  return {
+    reviewers: files.flatMap((file) => reviewersPractices(file.text)),
+    checks: files.flatMap((file) => checksPractices(file.text)).length,
+  };
 }
 
 async function reviewed(context: ScriptContext, asked: Asked, folder: string): Promise<Reviewed> {
@@ -41,17 +53,20 @@ async function reviewed(context: ScriptContext, asked: Asked, folder: string): P
     code: [...code],
     verdicts: [...state.verdicts],
     failing: state.failing,
-    practices: [...practices],
+    practices: [...practices.reviewers],
   });
   await answerOf(context, "worktrees.remove", { folder, branchAfter: "kept" });
   const review = reviewOf(answer);
   const forTests = review.findings.filter((finding) => finding.to === "test-writer");
   await keepFindings(context, asked.name, forTests);
-  const remaining = findingsLeft(
-    review.findings,
-    tests.map((test) => test.text),
-  );
-  return { plan: "review", review, remaining };
+  const texts = tests.map((test) => test.text);
+  const remaining = findingsLeft(review.findings, texts);
+  const judged = judgedPractices(review.practices, {
+    practices: practices.reviewers,
+    tests: texts,
+    checks: practices.checks,
+  });
+  return { plan: "review", review, remaining, practices: judged };
 }
 
 async function reviewedOrNot(
@@ -73,5 +88,7 @@ export const run = defineScript(async (input, context) => {
   if (plan === "pass-on") {
     return asked.state;
   }
-  return reviewedState(asked.state, await reviewedOrNot(context, asked, plan), `review-${String(asked.state.round)}`);
+  const pinnedAtHead = await pinnedFiles(context, asked.state.folder ?? "", asked.interface);
+  const reviewed = await reviewedOrNot(context, asked, plan);
+  return { ...reviewedState(asked.state, reviewed, `review-${String(asked.state.round)}`), pinnedAtHead };
 });

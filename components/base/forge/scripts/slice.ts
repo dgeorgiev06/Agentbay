@@ -3,6 +3,7 @@ import { namedTests } from "./lib/handed-tests.ts";
 import { sliceOf, type Slice } from "./lib/slice-form.ts";
 import { startCard, type InterfaceFiles } from "./lib/start-card.ts";
 import { startChoices } from "./lib/start-choices.ts";
+import { withToolChecks } from "./lib/tool-checks.ts";
 
 type Asked = {
   readonly request: JsonFields;
@@ -38,11 +39,11 @@ function oneSliceCard(starting: Starting): JsonFields {
   return { card };
 }
 
-function roundsCard(starting: Starting): JsonFields {
+function roundsCard(starting: Starting, slice: Json): JsonFields {
   const agreed: InterfaceFiles = starting.interface.length > 0 ? "named" : "none";
   const choices = startChoices(starting.interface);
   const card = startCard({ ...starting, planter: "runs", interface: agreed });
-  return { card: { ...card, withheld: choices.withheld }, offered: choices.offered };
+  return { card: { ...card, withheld: choices.withheld }, offered: choices.offered, proved: withToolChecks(slice) };
 }
 
 export const run = defineScript((input) => {
@@ -57,7 +58,7 @@ export const run = defineScript((input) => {
     bugs: bugNames(request.bugs),
     interface: pathsOf(request.interface),
   };
-  const shown = planter ? roundsCard(starting) : oneSliceCard(starting);
+  const shown = planter ? roundsCard(starting, slice) : oneSliceCard(starting);
   const fixed = namedTests(starting.slice);
   const bugs = request.bugs ?? [];
   return Promise.resolve({ slice, base, bugs, interface: [...starting.interface], fixed, ...shown });

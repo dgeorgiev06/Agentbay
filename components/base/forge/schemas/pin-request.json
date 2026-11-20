@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PinRequest",
+  "description": "The interface files to pin, and the slice's worktree as it was cut at the base, before anyone works in it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["interface", "folder"],
+  "properties": {
+    "interface": {
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "The interface files the slice builds against, relative to the project."
+    },
+    "folder": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "description": "The slice's worktree, cut at the base, such as .forge/worktrees/TD1."
+    }
+  }
+}

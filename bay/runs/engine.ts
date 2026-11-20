@@ -15,15 +15,30 @@ import {
 import type { Json, RunEvent, Spend, Submission } from "../contracts.ts";
 import type { Budget, Keeping } from "../generated/mode.ts";
 import { byteSize } from "../json.ts";
-import { lockStaleMilliseconds, type RunTarget, type RunWithSteps, type Writer } from "./run-store.ts";
+import {
+  lockStaleMilliseconds,
+  type RecordedAnswer,
+  type Recording,
+  type RunTarget,
+  type RunWithSteps,
+  type Writer,
+} from "./run-store.ts";
 import type { ApprovalDecision, RunStatus } from "./run-state.ts";
-import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
+import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
 import { keepingOf } from "./packed-output.ts";
 import { scrubbedStore } from "./scrubbed-store.ts";
-import { submissionProblems } from "./skill-steps.ts";
+import { submissionProblems, type StartedSkill } from "./skill-steps.ts";
 import type { ActionTarget } from "../manifests/manifests.ts";
 import { runUndo } from "./undo.ts";
-import { answeredApproval, endedRefusal, refusal, refusalOf, verdictOf, waitingSkill } from "./run-answers.ts";
+import {
+  answerableSkill,
+  answeredApproval,
+  endedRefusal,
+  refusal,
+  refusalOf,
+  verdictOf,
+  waitingSkill,
+} from "./run-answers.ts";
 import { endingEvents, isDueAt, storedStateOf } from "./run-ending.ts";
 import { failed, type Progress, type Services, type Walk } from "./walk.ts";
 import { givenRecords, type GivenRecord } from "./given-steps.ts";
@@ -62,6 +77,10 @@ type ResumeOptions = {
   readonly rerunUnfinished?: boolean;
 };
 
+type RunBody = (run: RunWithSteps, writer: Writer, now: Date) => Promise<Outcome<AdvancedRun>>;
+
+export type Submitted = AdvancedRun | { readonly id: string; readonly recorded: string };
+
 type Cause = "submit" | "approve" | "resume" | "tick" | "extend" | "stop" | "charge";
 
 type Advance = {
@@ -93,6 +112,10 @@ type GivenPart = {
 };
 
 const stopReason = "The owner stopped the run.";
+
+const answerRecordedKind = "answer.recorded";
+
+const answerDroppedKind = "answer.dropped";
 
 const staleMinutes = String(lockStaleMilliseconds / 60_000);
 
@@ -135,6 +158,13 @@ async function driveRun(walk: Walk, run: RunWithSteps): Promise<Ending> {
   }
   const undo = await runUndo(walk, progress.reason);
   return { status: undo.status, spent: addSpend(budget.spent, undo.spent) };
+}
+
+function busyRefusal(runId: string): Outcome<never> {
+  return refusal(runId, {
+    message: `Another engine is writing run ${runId}; try again.`,
+    fix: "Try again in a moment.",
+  });
 }
 
 function notReadOnlyRefusal(target: ActionTarget, action: string): Outcome<never> | undefined {
@@ -220,25 +250,50 @@ export class Engine {
     return this.#start(plan, { mark: partMarkOf(part), records: records.value });
   }
 
-  submit(runId: string, stepKey: string, submission: Submission): Promise<Outcome<AdvancedRun>> {
-    return this.#withRun(runId, this.#services.clock.now(), async (run, writer, now) => {
-      const found = waitingSkill(run, stepKey);
-      if (!found.ok) {
-        return found;
-      }
-      const spendProblems = budgetProblems(submission.spent);
-      if (spendProblems.length > 0) {
-        return refusal(run.id, { message: `The submission's spend is not valid: ${spendProblems.join(" ")}` });
-      }
-      const problems = await submissionProblems(this.#services, found.value, submission);
-      if (problems.length > 0) {
-        return failedWith(problems);
-      }
-      const detail = { ...found.value.detail, submission };
-      const change = { key: found.value.key, kind: "skill" as const, detail, at: now.toISOString() };
-      await this.#services.store.saveStepDetail(writer, change, []);
-      return this.#continue(writer, { now, cause: "submit", rerunUnfinished: false }, {});
-    });
+  async submit(runId: string, stepKey: string, submission: Submission): Promise<Outcome<Submitted>> {
+    const now = this.#services.clock.now();
+    const store = this.#services.store;
+    const rule = (run: RunWithSteps | undefined, recorded: ReadonlySet<string>): Outcome<StartedSkill> =>
+      answerableSkill(run, stepKey, recorded);
+    const found = rule(await store.readRun(runId), await this.#answeredKeys(runId));
+    if (!found.ok) {
+      return found;
+    }
+    const problems = await this.#answerProblems(found.value, submission);
+    if (problems.length > 0) {
+      return failedWith(problems);
+    }
+    const answer = { runId, stepKey, submission, at: now.toISOString() };
+    const recording = await store.recordAnswer(answer, { owner: this.#owner, now }, rule);
+    return this.#afterRecording(answer, recording);
+  }
+
+  async #answerProblems(record: StartedSkill, submission: Submission): Promise<readonly Problem[]> {
+    const spendProblems = budgetProblems(submission.spent);
+    if (spendProblems.length > 0) {
+      return [unplacedProblem(`The submission's spend is not valid: ${spendProblems.join(" ")}`)];
+    }
+    return submissionProblems(this.#services, record, submission);
+  }
+
+  async #answeredKeys(runId: string): Promise<ReadonlySet<string>> {
+    const answers = await this.#services.store.recordedAnswers(runId);
+    return new Set(answers.map((answer) => answer.stepKey));
+  }
+
+  async #afterRecording(answer: RecordedAnswer, recording: Recording): Promise<Outcome<Submitted>> {
+    const { runId, stepKey, at } = answer;
+    switch (recording.status) {
+      case "refused":
+        return failedWith(recording.problems);
+      case "busy":
+        return busyRefusal(runId);
+      case "recorded":
+        await this.#services.store.append({ at, runId, kind: answerRecordedKind, detail: { stepKey } });
+        return succeededWith({ id: runId, recorded: stepKey });
+      case "taken":
+        return this.#heldRun(recording.writer, this.#services.clock.now(), () => this.#takeAnswers(recording.writer));
+    }
   }
 
   approve(runId: string, stepKey: string, decision: ApprovalDecision): Promise<Outcome<AdvancedRun>> {
@@ -358,20 +413,13 @@ export class Engine {
     }
   }
 
-  async #withRun(
-    runId: string,
-    now: Date,
-    body: (run: RunWithSteps, writer: Writer, now: Date) => Promise<Outcome<AdvancedRun>>,
-  ): Promise<Outcome<AdvancedRun>> {
+  async #withRun(runId: string, now: Date, body: RunBody): Promise<Outcome<AdvancedRun>> {
     const lock = await this.#services.store.acquire(runId, this.#owner, now);
     switch (lock.status) {
       case "missing":
         return refusal(runId, { message: `There is no run ${runId}.` });
       case "busy":
-        return refusal(runId, {
-          message: `Another engine is writing run ${runId}; try again.`,
-          fix: "Try again in a moment.",
-        });
+        return busyRefusal(runId);
       case "held":
         return refusal(runId, {
           message:
@@ -380,11 +428,15 @@ export class Engine {
           fix: `Try again when it is done, or after ${staleMinutes} minutes without a heartbeat.`,
         });
       case "acquired":
-        return this.#holding(lock.writer, async () => {
-          const run = await this.#read(runId);
-          return this.#targetRefusal(run) ?? body(run, lock.writer, now);
-        });
+        return this.#heldRun(lock.writer, now, body);
     }
+  }
+
+  #heldRun(writer: Writer, now: Date, body: RunBody): Promise<Outcome<AdvancedRun>> {
+    return this.#holding(writer, async () => {
+      const run = await this.#read(writer.runId);
+      return this.#targetRefusal(run) ?? body(run, writer, now);
+    });
   }
 
   #targetRefusal(run: RunWithSteps): Outcome<AdvancedRun> | undefined {
@@ -396,17 +448,47 @@ export class Engine {
 
   async #holding(writer: Writer, body: () => Promise<Outcome<AdvancedRun>>): Promise<Outcome<AdvancedRun>> {
     try {
-      return await body();
+      return await this.#takingAnswers(writer, await body());
     } catch (error) {
+      await this.#services.store.release(writer);
       return refusal(writer.runId, {
         message: this.#services.scrubber.redact(
           `Run ${writer.runId} stopped at an unexpected error: ${errorLine(error)}`,
         ),
         fix: `Fix the cause, then continue it with bay resume ${writer.runId}.`,
       });
-    } finally {
-      await this.#services.store.release(writer);
     }
+  }
+
+  async #takingAnswers(writer: Writer, result: Outcome<AdvancedRun>): Promise<Outcome<AdvancedRun>> {
+    let latest = result;
+    while (!(await this.#services.store.releaseUnlessAnswered(writer))) {
+      const taken = await this.#takeAnswers(writer);
+      latest = result.ok && taken.ok ? taken : latest;
+    }
+    return latest;
+  }
+
+  async #takeAnswers(writer: Writer): Promise<Outcome<AdvancedRun>> {
+    const now = this.#services.clock.now();
+    for (const answer of await this.#services.store.recordedAnswers(writer.runId)) {
+      await this.#takeAnswer(writer, answer, now.toISOString());
+    }
+    const run = await this.#read(writer.runId);
+    return endedRefusal(run) ?? this.#continue(writer, { now, cause: "submit", rerunUnfinished: false }, {});
+  }
+
+  async #takeAnswer(writer: Writer, answer: RecordedAnswer, at: string): Promise<void> {
+    const store = this.#services.store;
+    const found = answerableSkill(await this.#read(writer.runId), answer.stepKey, new Set());
+    if (!found.ok) {
+      const detail = { stepKey: answer.stepKey, recordedAt: answer.at, reason: problemText(found.problems) };
+      await store.forgetAnswer(writer, answer.stepKey, [{ at, runId: writer.runId, kind: answerDroppedKind, detail }]);
+      return;
+    }
+    const detail = { ...found.value.detail, submission: answer.submission };
+    await store.saveStepDetail(writer, { key: found.value.key, kind: "skill", detail, at }, []);
+    await store.forgetAnswer(writer, answer.stepKey, []);
   }
 
   async #read(runId: string): Promise<RunWithSteps> {

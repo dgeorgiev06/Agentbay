@@ -247,7 +247,10 @@ in the order of the items. Without the field the items run one after another, as
 An item's step may wait for a skill, an approval or a time. The run then waits on every such step at once: `bay
 runs <run>` shows the first as `waiting` and `task`, and the others under `alsoWaiting`, each with its own task and
 token. `bay submit` answers the step its token names, and `bay approve` the step it names. `bay runs <run>
---new-token --step <step key>` replaces the token of that one task and leaves the others working.
+--new-token --step <step key>` replaces the token of that one task and leaves the others working. A submit that
+arrives while another call advances the run is recorded and answered as accepted; the run takes it once, when that
+call ends or at the next `bay resume <run>`. A submit the kernel cannot record is refused with its reason, and its
+token still works.
 
 When items fail, the others still run to their end or to their wait, and are recorded. The run then waits for the
 owner with one sentence that names every failed item, its position, its key and its reason, each reason cut to 200

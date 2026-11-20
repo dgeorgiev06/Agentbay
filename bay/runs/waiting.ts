@@ -23,7 +23,7 @@ function recordOf(run: RunWithSteps, key: string): StepRecord | undefined {
   return run.steps.find((step) => step.key === key);
 }
 
-function skillWaiting(context: WaitingContext, stored: Stored, waitingKey: string): Waiting | undefined {
+export function skillWaiting(context: WaitingContext, stored: Stored, waitingKey: string): Waiting | undefined {
   const { run, events } = stored;
   const round = skillRoundOf(waitingKey);
   const record = startedSkillOf(round === undefined ? undefined : recordOf(run, round.step));

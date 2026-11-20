@@ -22,7 +22,9 @@ import { toolCalledKind, toolCallsAt } from "./skill-steps.ts";
 import { SqliteRunStore } from "./sqlite-run-store.ts";
 import { skillRoundOf } from "./step-key.ts";
 import { checkTaskToken, type TaskPlace } from "./task-tokens.ts";
-import { storedWaiting } from "./waiting.ts";
+import { skillWaiting, storedWaiting } from "./waiting.ts";
+import { answerableSkill } from "./run-answers.ts";
+import { isLockedError } from "../database-lock.ts";
 import { markIn, type PartMark } from "./workflow-part.ts";
 
 type RunsNeeds = {
@@ -67,6 +69,7 @@ export type Run = {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly askedBy?: { readonly runId: string; readonly stepKey: string };
+  readonly recordedAnswers?: readonly string[];
   readonly steps: readonly RunStep[];
   readonly events: readonly RunEvent[];
 };
@@ -250,6 +253,11 @@ function askedByOf(events: readonly RunEvent[]): Pick<Run, "askedBy"> {
   return runId === undefined || stepKey === undefined ? {} : { askedBy: { runId, stepKey } };
 }
 
+async function recordedKeys(opened: Opened, runId: string): Promise<ReadonlySet<string>> {
+  const answers = await opened.store.recordedAnswers(runId);
+  return new Set(answers.map((answer) => answer.stepKey));
+}
+
 async function shownRun(opened: Opened, runId: string, showing: Showing): Promise<Outcome<Run>> {
   const run = await opened.store.readRun(runId);
   if (run === undefined) {
@@ -261,6 +269,7 @@ async function shownRun(opened: Opened, runId: string, showing: Showing): Promis
     return refusal(state);
   }
   const { id, target, spent, createdAt, updatedAt } = run;
+  const recorded = await recordedKeys(opened, runId);
   return succeededWith({
     id,
     target: { kind: target.kind, mode: target.mode, name: target.name, ...partOf(events) },
@@ -270,6 +279,7 @@ async function shownRun(opened: Opened, runId: string, showing: Showing): Promis
     createdAt,
     updatedAt,
     ...askedByOf(events),
+    ...(recorded.size === 0 ? {} : { recordedAnswers: [...recorded] }),
     steps: run.steps.map(shownStepOf),
     events,
   });
@@ -328,7 +338,7 @@ async function submitted(opened: Opened, token: string, submission: Submission):
     return place;
   }
   const { runId, stepKey } = place.value;
-  const task = await taskAt(opened, place.value);
+  const task = await taskAt(opened, place.value, "submit");
   if (!task.ok) {
     return task;
   }
@@ -340,10 +350,47 @@ async function submitted(opened: Opened, token: string, submission: Submission):
   const at = opened.needs.clock.now().toISOString();
   await opened.events.append({ at, runId, kind: hookNoteKind, detail: note.value });
   const result = await opened.engine.submit(runId, stepKey, submission);
-  return resultOf(opened, result, (waitingKey) => sameStep(waitingKey, stepKey));
+  if (!result.ok) {
+    return result;
+  }
+  const value = result.value;
+  if ("recorded" in value) {
+    return shownRun(opened, value.id, shownOnly);
+  }
+  return resultOf(opened, succeededWith(value), (waitingKey) => sameStep(waitingKey, stepKey));
 }
 
-async function taskAt(opened: Opened, place: TaskPlace): Promise<Outcome<Task>> {
+async function advancingTask(opened: Opened, place: TaskPlace, run: RunWithSteps): Promise<Outcome<Task>> {
+  const found = answerableSkill(run, place.stepKey, await recordedKeys(opened, run.id));
+  if (!found.ok) {
+    return found;
+  }
+  const events = await opened.store.readEvents(run.id);
+  const waiting = skillWaiting(opened.needs, { run, events }, place.stepKey);
+  return waiting?.reason === "skill"
+    ? succeededWith(waiting.task)
+    : refusal(`Run ${run.id} cannot give the task of step ${place.stepKey} while another call advances it.`);
+}
+
+async function unlessBusy(submitting: Promise<Outcome<Run>>): Promise<Outcome<Run>> {
+  try {
+    return await submitting;
+  } catch (error) {
+    if (!isLockedError(error)) {
+      throw error;
+    }
+    return refusal(
+      "kernel.db stayed busy longer than a submit waits, so the answer was not recorded; its token still works.",
+      "Submit again in a moment, with the same token.",
+    );
+  }
+}
+
+async function taskAt(opened: Opened, place: TaskPlace, tool: string): Promise<Outcome<Task>> {
+  const stored = await opened.store.readRun(place.runId);
+  if (tool === "submit" && stored?.state.status === "running") {
+    return advancingTask(opened, place, stored);
+  }
   const run = await shownRun(opened, place.runId, shownOnly);
   if (!run.ok) {
     return run;
@@ -358,7 +405,7 @@ async function taskAt(opened: Opened, place: TaskPlace): Promise<Outcome<Task>> 
 async function toolTask(opened: Opened, token: string, tool: string): Promise<Outcome<Task>> {
   const countedWhereMade = toolsCountedWhereMade.includes(tool);
   const place = countedWhereMade ? await placeOf(opened, token) : await countedCall(opened, token, tool);
-  return place.ok ? taskAt(opened, place.value) : place;
+  return place.ok ? taskAt(opened, place.value, tool) : place;
 }
 
 function calledOf(result: Outcome<AdvancedRun>, action: string): Outcome<Called> {
@@ -389,7 +436,7 @@ async function calledAction(
   if (!place.ok) {
     return place;
   }
-  const found = await taskAt(opened, place.value);
+  const found = await taskAt(opened, place.value, "call_action");
   if (!found.ok) {
     return found;
   }
@@ -468,7 +515,7 @@ function runsOf(opened: Opened): Runs {
     reissueTask: (runId, stepKey) =>
       shownRun(opened, runId, { waits: undefined, issue: (key) => stepKey === undefined || key === stepKey }),
     task: (token, tool) => toolTask(opened, token, tool),
-    submit: (token, submission) => submitted(opened, token, submission),
+    submit: (token, submission) => unlessBusy(submitted(opened, token, submission)),
     callAction: (token, action, input) => calledAction(opened, token, { action, input }),
     events,
     close: () => {

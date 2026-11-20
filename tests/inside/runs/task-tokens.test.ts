@@ -134,7 +134,8 @@ test("a kernel.db of the first version gains the token table and keeps its runs"
   first.close();
   const database = new DatabaseSync(file);
   database.exec(
-    "drop table task_tokens; alter table runs drop column target_caller; alter table runs drop column kept; " +
+    "drop table answers; drop table task_tokens; alter table runs drop column target_caller; " +
+      "alter table runs drop column kept; " +
       "alter table steps drop column kept; alter table runs drop column waiting_also; pragma user_version = 1;",
   );
   database.close();

@@ -106,7 +106,10 @@ function scriptDetailOf(value: Json, kind: StepKind): ScriptDetail {
 }
 
 function submissionOf(value: Json): Submission | undefined {
-  const submission = fieldOf(value, "submission");
+  return submissionFrom(fieldOf(value, "submission"));
+}
+
+export function submissionFrom(submission: Json | undefined): Submission | undefined {
   const output = submission === undefined ? undefined : fieldOf(submission, "output");
   if (submission === undefined || output === undefined) {
     return undefined;

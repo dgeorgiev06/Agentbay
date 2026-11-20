@@ -74,7 +74,7 @@ export async function checkTaskToken(stores: TokenStores, token: string): Promis
   if (run === undefined) {
     return refusedToken(unknownToken);
   }
-  if (!isWaitingAt(run.state, place.stepKey)) {
+  if (run.state.status !== "running" && !isWaitingAt(run.state, place.stepKey)) {
     await stores.tokens.removeTaskToken(presentedHash(token));
     return refusedToken(deadReason(place, run.state));
   }

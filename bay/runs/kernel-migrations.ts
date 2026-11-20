@@ -56,4 +56,12 @@ export const migrations: readonly string[] = [
   `alter table runs add column kept text not null default 'as-text' check (kept in ('as-text', 'kept-packed'));
   alter table steps add column kept text not null default 'as-text' check (kept in ('as-text', 'kept-packed'));`,
   "alter table runs add column waiting_also text;",
+  `create table answers (
+    run_id text not null references runs (id),
+    step_key text not null,
+    kept text not null default 'as-text' check (kept in ('as-text', 'kept-packed')),
+    submission text not null,
+    recorded_at text not null,
+    primary key (run_id, step_key)
+  );`,
 ];

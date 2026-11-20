@@ -1,4 +1,7 @@
 {
+  "look": {
+    "leftovers": []
+  },
   "slice": {
     "slice": {
       "name": "B1",
@@ -25,7 +28,7 @@
         }
       ]
     },
-    "base": "1c19f6d",
+    "base": "c101908",
     "bugs": [],
     "interface": ["components/base/interfaces/proof.yaml"],
     "fixed": ["components/modes/b1/tests/quill.test.ts"],
@@ -41,7 +44,7 @@
         },
         {
           "mark": "computed",
-          "words": "kind mode; base 1c19f6d",
+          "words": "kind mode; base c101908",
           "source": {
             "step": "slice"
           }
@@ -104,12 +107,16 @@
         }
       ],
       "withheld": {
-        "build-without-interface": "The slice names its interface files."
+        "build-without-interface": "The slice names its interface files.",
+        "build-over": "No earlier run left a branch of this slice.",
+        "build-over-without-interface": "No earlier run left a branch of this slice."
       }
     },
     "offered": {
       "build": true,
-      "build-without-interface": false
+      "build-without-interface": false,
+      "build-over": false,
+      "build-over-without-interface": false
     },
     "proved": {
       "name": "B1",
@@ -151,7 +158,7 @@
         },
         {
           "mark": "computed",
-          "words": "kind mode; base 1c19f6d",
+          "words": "kind mode; base c101908",
           "source": {
             "step": "slice"
           }
@@ -214,7 +221,9 @@
         }
       ],
       "withheld": {
-        "build-without-interface": "The slice names its interface files."
+        "build-without-interface": "The slice names its interface files.",
+        "build-over": "No earlier run left a branch of this slice.",
+        "build-over-without-interface": "No earlier run left a branch of this slice."
       }
     }
   },
@@ -224,7 +233,7 @@
   "cut": {
     "folder": ".forge/worktrees/B1",
     "branch": "forge/B1",
-    "commit": "1c19f6d4ff4b657f2bbfb977b94be26a843ad21a"
+    "commit": "c101908ecb3bfb86003871ddc8f164707f0a53b5"
   },
   "pin": {
     "pinned": [
@@ -246,16 +255,16 @@
     "round": 1,
     "stage": "proved",
     "done": false,
-    "base": "1c19f6d4ff4b657f2bbfb977b94be26a843ad21a",
+    "base": "c101908ecb3bfb86003871ddc8f164707f0a53b5",
     "built": {
       "outcome": "built"
     },
     "builder": {
       "branch": "forge/B1",
-      "commit": "9b13f2507d544de4a094f44c3ec1eb5d5aac4d0e"
+      "commit": "f856dca0a556e23711a9c0ff3052c4a740cf1db7"
     },
     "builtAt": "round-1",
-    "head": "05986eda7e80e8d4ff3f0f7a9df068d3365f51f9",
+    "head": "687c3ed1c4de7aa56fbb91c1ae117b4ca0906432",
     "branch": "forge/B1-tests-1",
     "folder": ".forge/worktrees/B1-tests-1",
     "declared": {
@@ -312,15 +321,15 @@
     "round": 1,
     "stage": "reviewed",
     "done": false,
-    "base": "1c19f6d4ff4b657f2bbfb977b94be26a843ad21a",
+    "base": "c101908ecb3bfb86003871ddc8f164707f0a53b5",
     "built": {
       "outcome": "built"
     },
     "builder": {
       "branch": "forge/B1",
-      "commit": "9b13f2507d544de4a094f44c3ec1eb5d5aac4d0e"
+      "commit": "f856dca0a556e23711a9c0ff3052c4a740cf1db7"
     },
-    "head": "05986eda7e80e8d4ff3f0f7a9df068d3365f51f9",
+    "head": "687c3ed1c4de7aa56fbb91c1ae117b4ca0906432",
     "branch": "forge/B1-tests-1",
     "declared": {
       "files": [
@@ -383,16 +392,16 @@
     "round": 2,
     "stage": "proved",
     "done": false,
-    "base": "1c19f6d4ff4b657f2bbfb977b94be26a843ad21a",
+    "base": "c101908ecb3bfb86003871ddc8f164707f0a53b5",
     "built": {
       "outcome": "built"
     },
     "builder": {
       "branch": "forge/B1-2",
-      "commit": "f9ee2d31364d54d61adc0ef2348cf2c16cd516f9"
+      "commit": "488336f97b02e8e4f5a2a60c55d9acd2b05996ac"
     },
     "builtAt": "round-2",
-    "head": "762dcc5ae5f30b7e033440c6d79b202fc4756cb0",
+    "head": "b3a40b3ca09b799feca47ed3bb7764d48e223522",
     "branch": "forge/B1-tests-2",
     "folder": ".forge/worktrees/B1-tests-2",
     "declared": {
@@ -449,15 +458,15 @@
     "round": 2,
     "stage": "reviewed",
     "done": false,
-    "base": "1c19f6d4ff4b657f2bbfb977b94be26a843ad21a",
+    "base": "c101908ecb3bfb86003871ddc8f164707f0a53b5",
     "built": {
       "outcome": "built"
     },
     "builder": {
       "branch": "forge/B1-2",
-      "commit": "f9ee2d31364d54d61adc0ef2348cf2c16cd516f9"
+      "commit": "488336f97b02e8e4f5a2a60c55d9acd2b05996ac"
     },
-    "head": "762dcc5ae5f30b7e033440c6d79b202fc4756cb0",
+    "head": "b3a40b3ca09b799feca47ed3bb7764d48e223522",
     "branch": "forge/B1-tests-2",
     "declared": {
       "files": [
@@ -520,16 +529,16 @@
     "round": 3,
     "stage": "proved",
     "done": false,
-    "base": "1c19f6d4ff4b657f2bbfb977b94be26a843ad21a",
+    "base": "c101908ecb3bfb86003871ddc8f164707f0a53b5",
     "built": {
       "outcome": "built"
     },
     "builder": {
       "branch": "forge/B1-3",
-      "commit": "859ed4f149773922f2f57ee94acdba1666623648"
+      "commit": "1f507abc9fbe9062078c28abaa2a8271ceb2048e"
     },
     "builtAt": "round-3",
-    "head": "2e0b55e6f6a8c7afe7b1f15b7c5a7281c7952c7b",
+    "head": "5c4e55176ae57289e241a5b891ef914a9069d3c2",
     "branch": "forge/B1-tests-3",
     "folder": ".forge/worktrees/B1-tests-3",
     "declared": {
@@ -586,15 +595,15 @@
     "round": 3,
     "stage": "reviewed",
     "done": true,
-    "base": "1c19f6d4ff4b657f2bbfb977b94be26a843ad21a",
+    "base": "c101908ecb3bfb86003871ddc8f164707f0a53b5",
     "built": {
       "outcome": "built"
     },
     "builder": {
       "branch": "forge/B1-3",
-      "commit": "859ed4f149773922f2f57ee94acdba1666623648"
+      "commit": "1f507abc9fbe9062078c28abaa2a8271ceb2048e"
     },
-    "head": "2e0b55e6f6a8c7afe7b1f15b7c5a7281c7952c7b",
+    "head": "5c4e55176ae57289e241a5b891ef914a9069d3c2",
     "branch": "forge/B1-tests-3",
     "declared": {
       "files": [
@@ -688,7 +697,8 @@
   },
   "bugs": {
     "bugs": [],
-    "planted": 0
+    "planted": 0,
+    "stayed": []
   },
   "prove": {
     "verdicts": [

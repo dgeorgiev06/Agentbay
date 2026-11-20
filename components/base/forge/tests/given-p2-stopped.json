@@ -1,4 +1,7 @@
 {
+  "look": {
+    "leftovers": []
+  },
   "slice": {
     "slice": {
       "name": "P2",
@@ -25,7 +28,7 @@
         }
       ]
     },
-    "base": "ccb94ce",
+    "base": "e24a3b1",
     "bugs": [
       {
         "name": "the count is one too many",
@@ -52,7 +55,7 @@
         },
         {
           "mark": "computed",
-          "words": "kind mode; base ccb94ce",
+          "words": "kind mode; base e24a3b1",
           "source": {
             "step": "slice"
           }
@@ -129,12 +132,16 @@
         }
       ],
       "withheld": {
-        "build": "The slice names no interface files."
+        "build": "The slice names no interface files.",
+        "build-over": "No earlier run left a branch of this slice.",
+        "build-over-without-interface": "No earlier run left a branch of this slice."
       }
     },
     "offered": {
       "build": false,
-      "build-without-interface": true
+      "build-without-interface": true,
+      "build-over": false,
+      "build-over-without-interface": false
     },
     "proved": {
       "name": "P2",
@@ -184,7 +191,7 @@
         },
         {
           "mark": "computed",
-          "words": "kind mode; base ccb94ce",
+          "words": "kind mode; base e24a3b1",
           "source": {
             "step": "slice"
           }
@@ -261,7 +268,9 @@
         }
       ],
       "withheld": {
-        "build": "The slice names no interface files."
+        "build": "The slice names no interface files.",
+        "build-over": "No earlier run left a branch of this slice.",
+        "build-over-without-interface": "No earlier run left a branch of this slice."
       }
     }
   },
@@ -271,7 +280,7 @@
   "cut": {
     "folder": ".forge/worktrees/P2",
     "branch": "forge/P2",
-    "commit": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc"
+    "commit": "e24a3b143698e091cacf3309219ee5df9b74fe61"
   },
   "pin": {
     "pinned": []
@@ -288,7 +297,7 @@
     "round": 1,
     "stage": "proved",
     "done": false,
-    "base": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc",
+    "base": "e24a3b143698e091cacf3309219ee5df9b74fe61",
     "built": {
       "outcome": "stopped",
       "missing": {
@@ -298,10 +307,10 @@
     },
     "builder": {
       "branch": "forge/P2",
-      "commit": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc"
+      "commit": "e24a3b143698e091cacf3309219ee5df9b74fe61"
     },
     "builtAt": "round-1",
-    "head": "1abbf6a3609ed78fb73e004de99466f468dcb413",
+    "head": "d9f6fbd501991aa2bc271f59d17dfc82128b8d96",
     "branch": "forge/P2-tests-1",
     "folder": ".forge/worktrees/P2-tests-1",
     "declared": {
@@ -350,7 +359,7 @@
     "round": 1,
     "stage": "reviewed",
     "done": true,
-    "base": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc",
+    "base": "e24a3b143698e091cacf3309219ee5df9b74fe61",
     "built": {
       "outcome": "stopped",
       "missing": {
@@ -360,9 +369,9 @@
     },
     "builder": {
       "branch": "forge/P2",
-      "commit": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc"
+      "commit": "e24a3b143698e091cacf3309219ee5df9b74fe61"
     },
-    "head": "1abbf6a3609ed78fb73e004de99466f468dcb413",
+    "head": "d9f6fbd501991aa2bc271f59d17dfc82128b8d96",
     "branch": "forge/P2-tests-1",
     "declared": {
       "files": ["components/modes/p2/scripts/quill.ts", "components/modes/p2/tests/quill.test.ts"],
@@ -412,7 +421,7 @@
     "round": 1,
     "stage": "reviewed",
     "done": true,
-    "base": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc",
+    "base": "e24a3b143698e091cacf3309219ee5df9b74fe61",
     "built": {
       "outcome": "stopped",
       "missing": {
@@ -422,9 +431,9 @@
     },
     "builder": {
       "branch": "forge/P2",
-      "commit": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc"
+      "commit": "e24a3b143698e091cacf3309219ee5df9b74fe61"
     },
-    "head": "1abbf6a3609ed78fb73e004de99466f468dcb413",
+    "head": "d9f6fbd501991aa2bc271f59d17dfc82128b8d96",
     "branch": "forge/P2-tests-1",
     "declared": {
       "files": ["components/modes/p2/scripts/quill.ts", "components/modes/p2/tests/quill.test.ts"],
@@ -474,7 +483,7 @@
     "round": 1,
     "stage": "reviewed",
     "done": true,
-    "base": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc",
+    "base": "e24a3b143698e091cacf3309219ee5df9b74fe61",
     "built": {
       "outcome": "stopped",
       "missing": {
@@ -484,9 +493,9 @@
     },
     "builder": {
       "branch": "forge/P2",
-      "commit": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc"
+      "commit": "e24a3b143698e091cacf3309219ee5df9b74fe61"
     },
-    "head": "1abbf6a3609ed78fb73e004de99466f468dcb413",
+    "head": "d9f6fbd501991aa2bc271f59d17dfc82128b8d96",
     "branch": "forge/P2-tests-1",
     "declared": {
       "files": ["components/modes/p2/scripts/quill.ts", "components/modes/p2/tests/quill.test.ts"],
@@ -536,7 +545,7 @@
     "round": 1,
     "stage": "reviewed",
     "done": true,
-    "base": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc",
+    "base": "e24a3b143698e091cacf3309219ee5df9b74fe61",
     "built": {
       "outcome": "stopped",
       "missing": {
@@ -546,9 +555,9 @@
     },
     "builder": {
       "branch": "forge/P2",
-      "commit": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc"
+      "commit": "e24a3b143698e091cacf3309219ee5df9b74fe61"
     },
-    "head": "1abbf6a3609ed78fb73e004de99466f468dcb413",
+    "head": "d9f6fbd501991aa2bc271f59d17dfc82128b8d96",
     "branch": "forge/P2-tests-1",
     "declared": {
       "files": ["components/modes/p2/scripts/quill.ts", "components/modes/p2/tests/quill.test.ts"],
@@ -598,7 +607,7 @@
     "round": 1,
     "stage": "reviewed",
     "done": true,
-    "base": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc",
+    "base": "e24a3b143698e091cacf3309219ee5df9b74fe61",
     "built": {
       "outcome": "stopped",
       "missing": {
@@ -608,9 +617,9 @@
     },
     "builder": {
       "branch": "forge/P2",
-      "commit": "ccb94cecac9fcf50d2d2782d17988a423a4bfecc"
+      "commit": "e24a3b143698e091cacf3309219ee5df9b74fe61"
     },
-    "head": "1abbf6a3609ed78fb73e004de99466f468dcb413",
+    "head": "d9f6fbd501991aa2bc271f59d17dfc82128b8d96",
     "branch": "forge/P2-tests-1",
     "declared": {
       "files": ["components/modes/p2/scripts/quill.ts", "components/modes/p2/tests/quill.test.ts"],

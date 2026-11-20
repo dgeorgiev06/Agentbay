@@ -138,16 +138,8 @@ function mismatchReason(frame: ActionFrame, side: "input" | "output", problems: 
   }
 }
 
-type LeafEnd = {
-  readonly key: string;
-  readonly what: string;
-  readonly progress: Progress;
-};
-
-function handedUp(walk: Walk, frame: ActionFrame, end: LeafEnd): Progress {
-  const { key, what, progress } = end;
-  const failedHere = progress.status === "failed" && walk.records.get(key)?.status === "failed";
-  return failedHere && frame.within === "kept-packed" ? failed(withheldReason(what)) : progress;
+function handedUp(frame: ActionFrame, what: string, progress: Progress): Progress {
+  return progress.status === "failed" && frame.within === "kept-packed" ? failed(withheldReason(what)) : progress;
 }
 
 function stepOf(step: Step): StepOf {
@@ -548,12 +540,12 @@ async function runActionStep(walk: Walk, frame: ActionFrame, at: ActionStepAt): 
     case "script": {
       const leaf = { key, kind: "script" as const, script: step.script, input: at.input, place, kept: frame.within };
       const what = `The script ${step.script} of ${frameLabel(frame)}`;
-      return handedUp(walk, frame, { key, what, progress: await runScript(walk, frame, leaf) });
+      return handedUp(frame, what, await runScript(walk, frame, leaf));
     }
     case "skill": {
       const skill = { ...step, key, input: at.input, place, last: at.index === run.length - 1 };
       const what = `The skill ${step.skill} of ${frameLabel(frame)}`;
-      return handedUp(walk, frame, { key, what, progress: await runSkill(walk, frame, skill) });
+      return handedUp(frame, what, await runSkill(walk, frame, skill));
     }
     case "call":
       return runCall(walk, frame, { key, call: step.call, input: at.input });

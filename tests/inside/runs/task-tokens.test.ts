@@ -46,13 +46,13 @@ async function moveTo(context: Opened, runId: string, state: StoredState): Promi
 }
 
 function stores(context: Opened): Parameters<typeof checkTaskToken>[0] {
-  return { tokens: context.store, runs: context.store };
+  return { tokens: context.store.tokens, runs: context.store };
 }
 
 test("a token is 32 random bytes, shown once, and kernel.db keeps only its SHA-256 with the run, step and round", async () => {
   const context = opened();
   await runWaitingAt(context, "run-1", "1#1");
-  const token = await issueTaskToken(context.store, { runId: "run-1", stepKey: "1#1", round: 1 }, now);
+  const token = await issueTaskToken(context.store.tokens, { runId: "run-1", stepKey: "1#1", round: 1 }, now);
   assert.equal(Buffer.from(token, "base64url").length, 32);
   const database = new DatabaseSync(context.file);
   const rows = database.prepare("select * from task_tokens").all();
@@ -81,10 +81,11 @@ test("kernel.db keeps one token row per run: issuing again replaces it, and a de
   await runWaitingAt(context, "run-1", "1#1");
   await runWaitingAt(context, "run-2", "0#1");
   const place = { runId: "run-1", stepKey: "1#1", round: 1 };
-  await issueTaskToken(context.store, place, now);
-  const first = await issueTaskToken(context.store, place, now);
-  await issueTaskToken(context.store, { runId: "run-2", stepKey: "0#1", round: 1 }, now);
-  const rows = async (): Promise<readonly string[]> => (await context.store.taskTokens()).map((row) => row.runId);
+  await issueTaskToken(context.store.tokens, place, now);
+  const first = await issueTaskToken(context.store.tokens, place, now);
+  await issueTaskToken(context.store.tokens, { runId: "run-2", stepKey: "0#1", round: 1 }, now);
+  const rows = async (): Promise<readonly string[]> =>
+    (await context.store.tokens.taskTokens()).map((row) => row.runId);
   assert.deepEqual(await rows(), ["run-1", "run-2"]);
   await moveTo(context, "run-1", { status: "done", output: {} });
   assert.ok(!(await checkTaskToken(stores(context), first)).ok);
@@ -106,7 +107,7 @@ test("a kernel.db of the first version gains the token table and keeps its runs"
   database.close();
   const reopened = new SqliteRunStore(file);
   assert.equal((await reopened.readRun("old-run"))?.id, "old-run");
-  assert.deepEqual(await reopened.taskTokens(), []);
+  assert.deepEqual(await reopened.tokens.taskTokens(), []);
   reopened.close();
   remove();
 });

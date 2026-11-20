@@ -1,20 +1,15 @@
-import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqlite";
-import { budgetFromJson, spendFromJson } from "./budget.ts";
-import type { Json, RunEvent, Spend } from "../contracts.ts";
+import { DatabaseSync } from "node:sqlite";
+import type { RunEvent } from "../contracts.ts";
 import { databaseLockWaitMilliseconds, isLockedError } from "../database-lock.ts";
-import { parseJson } from "../json.ts";
 import { narrowSideFiles } from "../owner-only.ts";
 import type { Folders } from "../ports.ts";
 import {
   lockStaleMilliseconds,
-  runStatuses,
-  waitingReasons,
   type LockResult,
   type NewRun,
   type RunPatch,
   type RunStatusName,
   type RunStore,
-  type RunTarget,
   type RunWithSteps,
   type StepChange,
   type StepEnd,
@@ -22,258 +17,36 @@ import {
   type StepRefusal,
   type StepStart,
   type StoredRun,
-  type StoredState,
-  type StoredTaskToken,
-  type TaskTokenStore,
   type Writer,
 } from "./run-store.ts";
-import { keepings, storedText, unpackedText } from "./packed-output.ts";
-import type { Keeping } from "../generated/mode.ts";
-import { decodedStepDetail, stepDetailJson, stepKinds } from "./step-detail.ts";
+import { storedText } from "./packed-output.ts";
+import {
+  answered,
+  eventOf,
+  inTransaction,
+  integerColumn,
+  keepingGiven,
+  optionalText,
+  runOf,
+  stateColumns,
+  stepOf,
+  storedJson,
+} from "./sqlite-rows.ts";
+import { SqliteTaskTokens } from "./sqlite-task-tokens.ts";
+import { migrations } from "./kernel-migrations.ts";
+import { stepDetailJson } from "./step-detail.ts";
 
 type SqliteOptions = {
   readonly busyMilliseconds?: number;
 };
 
-type Row = Readonly<Record<string, SQLOutputValue>>;
-
-const migrations: readonly string[] = [
-  `create table runs (
-    id text primary key,
-    target_kind text not null check (target_kind in ('action', 'workflow')),
-    target_mode text not null,
-    target_name text not null,
-    input text not null,
-    status text not null check (status in ('running', 'waiting', 'done', 'failed', 'undone')),
-    waiting_reason text check (waiting_reason in ('skill', 'approval', 'time', 'budget', 'owner')),
-    waiting_step text,
-    waiting_until text,
-    output text,
-    reason text,
-    limits text not null,
-    extra text not null,
-    spent text not null,
-    stop_reason text,
-    lock_owner text,
-    lock_heartbeat text,
-    created_at text not null,
-    updated_at text not null
-  );
-  create index runs_by_status on runs (status, created_at);
-  create table steps (
-    run_id text not null references runs (id),
-    key text not null,
-    kind text not null,
-    status text not null check (status in ('started', 'done', 'failed')),
-    input text not null,
-    output text,
-    reason text,
-    detail text not null,
-    spent text not null,
-    finish_order integer,
-    started_at text not null,
-    finished_at text,
-    primary key (run_id, key)
-  );
-  create table events (
-    id integer primary key autoincrement,
-    run_id text not null,
-    at text not null,
-    kind text not null,
-    detail text not null
-  );
-  create index events_by_run on events (run_id, id);`,
-  `create table task_tokens (
-    hash text primary key,
-    run_id text not null references runs (id),
-    step_key text not null,
-    round integer not null,
-    issued_at text not null
-  );
-  create index task_tokens_by_run on task_tokens (run_id);`,
-  "alter table runs add column target_caller text;",
-  `alter table runs add column kept text not null default 'as-text' check (kept in ('as-text', 'kept-packed'));
-  alter table steps add column kept text not null default 'as-text' check (kept in ('as-text', 'kept-packed'));`,
-];
-
-function textColumn(row: Row, name: string): string {
-  const value = row[name];
-  if (typeof value !== "string") {
-    throw new Error(`The column ${name} of kernel.db holds ${typeof value}, not text.`);
-  }
-  return value;
-}
-
-function optionalText(row: Row, name: string): string | undefined {
-  return row[name] === null ? undefined : textColumn(row, name);
-}
-
-function jsonColumn(row: Row, name: string): Json {
-  return parseJson(textColumn(row, name));
-}
-
-function keptTextColumn(row: Row, name: string, keeping: Keeping): string {
-  return unpackedText(textColumn(row, name), keeping);
-}
-
-function keptJsonColumn(row: Row, name: string, keeping: Keeping): Json {
-  return parseJson(keptTextColumn(row, name, keeping));
-}
-
-function storedJson(value: Json, keeping: Keeping): string {
-  return storedText(JSON.stringify(value), keeping);
-}
-
-function integerColumn(row: Row, name: string): number {
-  const value = row[name];
-  if (typeof value !== "number") {
-    throw new Error(`The column ${name} of kernel.db holds ${typeof value}, not a number.`);
-  }
-  return value;
-}
-
-function literalOf<T extends string>(choices: readonly T[], value: string): T {
-  const found = choices.find((choice) => choice === value);
-  if (found === undefined) {
-    throw new Error(`kernel.db holds ${value}, which is not one of ${choices.join(", ")}.`);
-  }
-  return found;
-}
-
-function targetOf(row: Row): RunTarget {
-  const kind = literalOf(["action", "workflow"], textColumn(row, "target_kind"));
-  const target = { kind, mode: textColumn(row, "target_mode"), name: textColumn(row, "target_name") };
-  const caller = optionalText(row, "target_caller");
-  return kind === "action" && caller !== undefined ? { ...target, kind, caller } : target;
-}
-
-function waitingStateOf(row: Row): StoredState {
-  const reason = literalOf(waitingReasons, textColumn(row, "waiting_reason"));
-  const stepKey = textColumn(row, "waiting_step");
-  const until = optionalText(row, "waiting_until");
-  return { status: "waiting", reason, stepKey, ...(until === undefined ? {} : { until }) };
-}
-
-function keepingOf(row: Row): Keeping {
-  return literalOf(keepings, textColumn(row, "kept"));
-}
-
-function keepingGiven(kept: { readonly kept?: Keeping }): Keeping {
-  return kept.kept ?? "as-text";
-}
-
-function keptField(keeping: Keeping): { readonly kept?: Keeping } {
-  return keeping === "as-text" ? {} : { kept: keeping };
-}
-
-function stateOf(row: Row): StoredState {
-  const status = literalOf(runStatuses, textColumn(row, "status"));
-  const keeping = keepingOf(row);
-  switch (status) {
-    case "running":
-      return { status };
-    case "waiting":
-      return waitingStateOf(row);
-    case "done":
-      return { status, output: keptJsonColumn(row, "output", keeping) };
-    case "failed":
-      return { status, reason: textColumn(row, "reason") };
-    case "undone":
-      return { status, reason: textColumn(row, "reason"), undo: keptJsonColumn(row, "output", keeping) };
-  }
-}
-
-function runOf(row: Row): StoredRun {
-  return {
-    id: textColumn(row, "id"),
-    target: targetOf(row),
-    ...keptField(keepingOf(row)),
-    input: keptJsonColumn(row, "input", keepingOf(row)),
-    state: stateOf(row),
-    limit: budgetFromJson(jsonColumn(row, "limits")),
-    extra: budgetFromJson(jsonColumn(row, "extra")),
-    spent: spendFromJson(jsonColumn(row, "spent")),
-    stopReason: optionalText(row, "stop_reason"),
-    createdAt: textColumn(row, "created_at"),
-    updatedAt: textColumn(row, "updated_at"),
-  };
-}
-
-const storedStepStatuses = ["started", "done", "failed"] as const;
-
-function stepEndOf(row: Row): { readonly spent: Spend; readonly finishOrder: number; readonly finishedAt: string } {
-  return {
-    spent: spendFromJson(jsonColumn(row, "spent")),
-    finishOrder: integerColumn(row, "finish_order"),
-    finishedAt: textColumn(row, "finished_at"),
-  };
-}
-
-function stepOf(row: Row): StepRecord {
-  const kept = keepingOf(row);
-  const start = {
-    key: textColumn(row, "key"),
-    input: keptJsonColumn(row, "input", kept),
-    startedAt: textColumn(row, "started_at"),
-    ...keptField(kept),
-  };
-  const kind = literalOf(stepKinds, textColumn(row, "kind"));
-  const detail = keptJsonColumn(row, "detail", kept);
-  const status = literalOf(storedStepStatuses, textColumn(row, "status"));
-  if (status === "failed" && detail === null) {
-    return { ...start, kind, detail, ...stepEndOf(row), status, reason: keptTextColumn(row, "reason", kept) };
-  }
-  const typed = decodedStepDetail(kind, detail);
-  switch (status) {
-    case "started":
-      return { ...start, ...typed, status };
-    case "done":
-      return { ...start, ...typed, ...stepEndOf(row), status, output: keptJsonColumn(row, "output", kept) };
-    case "failed":
-      return { ...start, ...typed, ...stepEndOf(row), status, reason: keptTextColumn(row, "reason", kept) };
-  }
-}
-
-function eventOf(row: Row): RunEvent {
-  return {
-    at: textColumn(row, "at"),
-    runId: textColumn(row, "run_id"),
-    kind: textColumn(row, "kind"),
-    detail: jsonColumn(row, "detail"),
-  };
-}
-
-function taskTokenOf(row: Row): StoredTaskToken {
-  return {
-    hash: textColumn(row, "hash"),
-    runId: textColumn(row, "run_id"),
-    stepKey: textColumn(row, "step_key"),
-    round: integerColumn(row, "round"),
-    issuedAt: textColumn(row, "issued_at"),
-  };
-}
-
-function stateColumns(state: StoredState, keeping: Keeping): readonly SQLInputValue[] {
-  switch (state.status) {
-    case "running":
-      return [state.status, null, null, null, null, null];
-    case "waiting":
-      return [state.status, state.reason, state.stepKey, state.until ?? null, null, null];
-    case "done":
-      return [state.status, null, null, null, storedJson(state.output, keeping), null];
-    case "failed":
-      return [state.status, null, null, null, null, state.reason];
-    case "undone":
-      return [state.status, null, null, null, storedJson(state.undo, keeping), state.reason];
-  }
-}
-
 function isStale(heartbeatAt: string, now: Date): boolean {
   return now.getTime() - new Date(heartbeatAt).getTime() > lockStaleMilliseconds;
 }
 
-export class SqliteRunStore implements RunStore, TaskTokenStore {
+export class SqliteRunStore implements RunStore {
   readonly #database: DatabaseSync;
+  readonly tokens: SqliteTaskTokens;
 
   static async open(folders: Folders, file: string): Promise<SqliteRunStore> {
     await folders.ensureOwnerOnlyFile(file);
@@ -285,6 +58,7 @@ export class SqliteRunStore implements RunStore, TaskTokenStore {
     this.#database.exec("pragma journal_mode = wal; pragma foreign_keys = on;");
     this.#migrate();
     narrowSideFiles(file);
+    this.tokens = new SqliteTaskTokens(this.#database);
   }
 
   close(): void {
@@ -491,24 +265,6 @@ export class SqliteRunStore implements RunStore, TaskTokenStore {
         .run(writer.runId, writer.owner);
     });
 
-  readonly replaceTaskToken = (token: StoredTaskToken): Promise<void> =>
-    this.#write(() => {
-      this.#database.prepare("delete from task_tokens where run_id = ?").run(token.runId);
-      this.#database
-        .prepare("insert into task_tokens (hash, run_id, step_key, round, issued_at) values (?, ?, ?, ?, ?)")
-        .run(token.hash, token.runId, token.stepKey, token.round, token.issuedAt);
-    });
-
-  readonly taskTokens = (): Promise<readonly StoredTaskToken[]> =>
-    this.#read(() =>
-      this.#database.prepare("select * from task_tokens order by issued_at, run_id").all().map(taskTokenOf),
-    );
-
-  readonly removeTaskTokens = (runId: string): Promise<void> =>
-    this.#write(() => {
-      this.#database.prepare("delete from task_tokens where run_id = ?").run(runId);
-    });
-
   #migrate(): void {
     if (this.#version() >= migrations.length) {
       return;
@@ -530,25 +286,15 @@ export class SqliteRunStore implements RunStore, TaskTokenStore {
   }
 
   #transaction<T>(body: () => T): T {
-    this.#database.exec("begin immediate");
-    try {
-      const result = body();
-      this.#database.exec("commit");
-      return result;
-    } catch (error) {
-      this.#database.exec("rollback");
-      throw error;
-    }
+    return inTransaction(this.#database, body);
   }
 
   #write<T>(body: () => T): Promise<T> {
-    return this.#read(() => this.#transaction(body));
+    return answered(() => this.#transaction(body));
   }
 
   #read<T>(body: () => T): Promise<T> {
-    return new Promise((resolve) => {
-      resolve(body());
-    });
+    return answered(body);
   }
 
   #run(runId: string): StoredRun {

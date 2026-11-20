@@ -198,7 +198,7 @@ async function waitingOf(opened: Opened, stored: Stored, showing: Showing): Prom
     return waiting;
   }
   const place = { runId: run.id, stepKey: waiting.stepKey, round: waiting.task.round };
-  const token = await issueTaskToken(opened.store, place, opened.needs.clock.now());
+  const token = await issueTaskToken(opened.store.tokens, place, opened.needs.clock.now());
   return { ...waiting, task: { ...waiting.task, token } };
 }
 
@@ -276,7 +276,7 @@ function sameStep(waitingKey: string, submittedKey: string): boolean {
 }
 
 function placeOf(opened: Opened, token: string): Promise<Outcome<TaskPlace>> {
-  return checkTaskToken({ tokens: opened.store, runs: opened.store }, token);
+  return checkTaskToken({ tokens: opened.store.tokens, runs: opened.store }, token);
 }
 
 async function countedCall(opened: Opened, token: string, tool: string): Promise<Outcome<TaskPlace>> {

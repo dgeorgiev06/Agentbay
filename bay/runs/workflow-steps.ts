@@ -1,19 +1,17 @@
 import { nestedTarget, runNestedAction } from "./action-steps.ts";
-import { noSpend, subtractSpend, type BudgetFrame } from "./budget.ts";
+import { noSpend } from "./budget.ts";
 import type { Json, Settled } from "../contracts.ts";
 import type { Step as WorkflowStep } from "../generated/workflow.ts";
-import { toJson } from "../json.ts";
 import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
-import type { ReferenceScope, WorkflowTarget } from "../manifests/manifests.ts";
 import type { StepRecord } from "./run-store.ts";
 import { checkedCard, type StepSeen } from "./card.ts";
 import { evaluatedChoices, reasonProblems, shownChoices, type ChoiceStatus } from "./choices.ts";
 import { approvalContentOf, type ApprovalContent } from "./scrubbed-store.ts";
 import type { ApprovalDetail, ApprovalVerdict } from "./step-detail.ts";
-import { foreachItemKey, workflowStepKey } from "./step-key.ts";
+import { runForeach } from "./foreach-steps.ts";
+import { workflowStepKey } from "./step-key.ts";
 import {
   changeDetail,
-  concludeComposite,
   done,
   endRecord,
   eventOf,
@@ -26,16 +24,13 @@ import {
   type Progress,
   type Walk,
 } from "./walk.ts";
-
-type WorkflowScope = {
-  readonly workflow: WorkflowTarget;
-  readonly budget: BudgetFrame;
-  readonly within: string;
-  readonly trigger: Json;
-  readonly outputs: Map<string, Json>;
-  readonly keys: Map<string, string>;
-  readonly item: Json | undefined;
-};
+import {
+  referenceScope,
+  type StepAt,
+  type StepList,
+  type UnsettledStep,
+  type WorkflowScope,
+} from "./workflow-scope.ts";
 
 type ActionStep = Extract<WorkflowStep, { readonly action: string }>;
 
@@ -50,16 +45,6 @@ type WorkflowStepOf =
   | { readonly kind: "approval"; readonly step: ApprovalStep }
   | { readonly kind: "wait"; readonly step: WaitStep }
   | { readonly kind: "foreach"; readonly step: ForeachStep };
-
-type StepAt<T> = {
-  readonly step: T;
-  readonly key: string;
-  readonly previous: Json;
-};
-
-type UnsettledStep<T> = StepAt<T> & {
-  readonly record: StepRecord | undefined;
-};
 
 type Shown = ApprovalContent & {
   readonly detail: ApprovalDetail;
@@ -83,11 +68,6 @@ const unitMilliseconds: ReadonlyMap<string, number> = new Map([
   ["h", 3_600_000],
   ["d", 86_400_000],
 ]);
-
-function referenceScope(scope: WorkflowScope): ReferenceScope {
-  const base = { trigger: scope.trigger, outputs: scope.outputs };
-  return scope.item === undefined ? base : { ...base, item: scope.item };
-}
 
 function durationMilliseconds(text: string): number {
   const unit = unitMilliseconds.get(text.slice(-1)) ?? 0;
@@ -267,60 +247,6 @@ async function runWait(walk: Walk, at: UnsettledStep<WaitStep>): Promise<Progres
   return waiting({ reason: "time", stepKey: at.key, until: due });
 }
 
-function describeValue(value: Json): string {
-  if (value === null || typeof value !== "object") {
-    return `the value ${JSON.stringify(value)}`;
-  }
-  return "a mapping";
-}
-
-async function runForeach(walk: Walk, scope: WorkflowScope, at: UnsettledStep<ForeachStep>): Promise<Progress> {
-  const { record } = at;
-  const start = { key: at.key, kind: "foreach" as const, input: at.previous };
-  const list =
-    record === undefined ? scope.workflow.resolve(at.step.foreach, referenceScope(scope)) : succeededWith(record.input);
-  if (!list.ok) {
-    return refuse(walk, start, `Step ${at.step.id} has no list: ${problemText(list.problems)}`);
-  }
-  if (!Array.isArray(list.value)) {
-    const reason =
-      `Step ${at.step.id} runs over ${at.step.foreach}, ` + `which is ${describeValue(list.value)}, not a list.`;
-    return refuse(walk, start, reason);
-  }
-  const items: readonly Json[] = list.value.map((item: unknown) => toJson(item));
-  if (record === undefined) {
-    await startRecord(walk, { key: at.key, kind: "foreach", input: items, detail: null });
-  }
-  return runItems(walk, scope, { at, items });
-}
-
-async function runItems(
-  walk: Walk,
-  scope: WorkflowScope,
-  loop: { readonly at: StepAt<ForeachStep>; readonly items: readonly Json[] },
-): Promise<Progress> {
-  const before = scope.budget.spent;
-  const outputs: Json[] = [];
-  for (const [index, item] of loop.items.entries()) {
-    const within = foreachItemKey(loop.at.key, index);
-    const inner = { ...scope, within, outputs: new Map(scope.outputs), keys: new Map(scope.keys), item };
-    const progress = await runWorkflowSteps(walk, inner, { steps: loop.at.step.steps, start: item });
-    if (progress.status !== "done") {
-      return concludeComposite(walk, {
-        key: loop.at.key,
-        progress: progress,
-        spent: subtractSpend(scope.budget.spent, before),
-      });
-    }
-    outputs.push(progress.output);
-  }
-  return concludeComposite(walk, {
-    key: loop.at.key,
-    progress: done(outputs),
-    spent: subtractSpend(scope.budget.spent, before),
-  });
-}
-
 function workflowStepOf(step: WorkflowStep): WorkflowStepOf {
   if ("action" in step) {
     return { kind: "action", step };
@@ -344,7 +270,7 @@ function runUnsettledStep(walk: Walk, scope: WorkflowScope, at: UnsettledStep<Wo
     case "wait":
       return runWait(walk, { ...at, step: of.step });
     case "foreach":
-      return runForeach(walk, scope, { ...at, step: of.step });
+      return runForeach(walk, scope, { ...at, step: of.step, runSteps: runWorkflowSteps });
   }
 }
 
@@ -353,11 +279,7 @@ async function runWorkflowStep(walk: Walk, scope: WorkflowScope, at: StepAt<Work
   return replayed(scope.budget, record) ?? runUnsettledStep(walk, scope, { ...at, record });
 }
 
-export async function runWorkflowSteps(
-  walk: Walk,
-  scope: WorkflowScope,
-  list: { readonly steps: readonly WorkflowStep[]; readonly start: Json },
-): Promise<Progress> {
+export async function runWorkflowSteps(walk: Walk, scope: WorkflowScope, list: StepList): Promise<Progress> {
   let previous = list.start;
   for (const step of list.steps) {
     const key = workflowStepKey(scope.within, step.id);

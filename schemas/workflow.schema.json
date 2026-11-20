@@ -57,7 +57,7 @@
       "pattern": "^(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*$"
     },
     "reference": {
-      "description": "Resolved whole: $trigger, $steps.<id>.output[.path], $item in a foreach, $settings.<key>.",
+      "description": "Resolved whole: $trigger, $steps.<id>.output[.path], $item[.path] in a foreach, $settings.<key>.",
       "type": "string",
       "pattern": "^\\$"
     },

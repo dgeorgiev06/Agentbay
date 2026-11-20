@@ -276,9 +276,21 @@ lock, so two items that write it both land.
 An approval after a foreach may quote a step the foreach runs in each item: `quotes` lists the step's id, and a
 card's line cites it with its item, counted from 0, as `source: { step: <id>, item: <n> }`. The kernel takes that
 item's last attempt, after `--rerun` the one that finished, and holds the step to the rules of a plain one. To a
-judged line it adds the skill and its tier and the foreach, and the card says `by <mode> <skill>, tier <tier>, in
-item <n> of <foreach>`. A line that cites a step in the items without its item, an item the foreach did not run,
-or a step of a foreach inside an item is not shown, and the approval fails with that line's sentence.
+judged line it adds the skill and its tier and the foreach, and the card says `by <mode> <skill>, tier <tier>, for
+<the item>`. A line that cites a step in the items without its item, an item the foreach did not run, or a step of
+a foreach inside an item is not shown, and the approval fails with that line's sentence.
+
+The foreach says how its items are named with `itemName: { id: <ref>, title: <ref> }`, the title optional, each
+`$item` or `$item.<path>`; forge's wave names a slice `{ id: $item.planned.slice.name, title: $item.planned.title
+}`, and its card says `for TD1 (The td1 mode counts what was added)`. The kernel reads both from the item as the
+foreach recorded it, already scrubbed of secrets, so neither a card's script nor a skill can give or change the
+name: a line that brings `itemName` or `itemCount` is refused as one that brings `foreach` is. Each part is made
+one line, control characters and line breaks turned to spaces and parentheses to brackets, and cut with `…`, the
+id to 40 characters and the title to 80. The name stands only in the row that says by whom a line was judged or
+run, never as a line's words. Without `itemName`, or when its id reads no text, the card names the item by its
+place: `for the 1st of 3 items of step slices`; a title that reads no text leaves the id alone. A stored card is
+read back with the same name, and one whose name the kernel could not have written is refused. `bay check` refuses
+an `itemName` part that is not a reference or that reads anything but the item.
 
 ## Checking a value against a schema
 

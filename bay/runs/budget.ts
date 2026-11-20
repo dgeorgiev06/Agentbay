@@ -1,6 +1,7 @@
 import { measures, type Json, type Spend } from "../contracts.ts";
 import type { Budget } from "../generated/mode.ts";
 import { numberField } from "../json.ts";
+import { DrawTurns } from "./draw-turns.ts";
 
 type Measure = (typeof measures)[number];
 
@@ -14,7 +15,15 @@ export type BudgetFrame = {
   readonly limit: Budget;
   spent: Spend;
   readonly parent: BudgetFrame | undefined;
+  readonly turns?: DrawTurns;
 };
+
+export type Turn = {
+  readonly turns: DrawTurns;
+  readonly holder: BudgetFrame;
+};
+
+const drawnBySpending: readonly Measure[] = ["items", "usd", "tokens"];
 
 export const noSpend: Spend = { items: 0, usd: 0, tokens: 0, minutes: 0 };
 
@@ -137,4 +146,27 @@ export function budgetProblems(budget: Budget): readonly string[] {
     }
     return [`${measure} must be a number of at least 0, but it is ${String(value)}.`];
   });
+}
+
+export function sharedFrame(parent: BudgetFrame): BudgetFrame {
+  return { limit: {}, spent: noSpend, parent, turns: new DrawTurns() };
+}
+
+export function itemFrame(shared: BudgetFrame): BudgetFrame {
+  return { limit: {}, spent: noSpend, parent: shared };
+}
+
+function limitsSpending(frame: BudgetFrame): boolean {
+  return chainOf(frame).some((member) => drawnBySpending.some((measure) => member.limit[measure] !== undefined));
+}
+
+export function turnsToTake(frame: BudgetFrame, spends: boolean): readonly Turn[] {
+  if (!spends || !limitsSpending(frame)) {
+    return [];
+  }
+  const turns = chainOf(frame).flatMap((holder) => {
+    const shared = holder.parent?.turns;
+    return shared === undefined || shared.isHeldBy(holder) ? [] : [{ turns: shared, holder }];
+  });
+  return turns.reverse();
 }

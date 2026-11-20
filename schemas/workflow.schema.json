@@ -167,8 +167,14 @@
           "required": ["foreach", "id", "steps"],
           "properties": {
             "foreach": {
-              "description": "A reference that resolves to a list; the steps run once per element, in order.",
+              "description": "A reference that resolves to a list; the steps run once per element, in order unless sideBySide is given.",
               "$ref": "#/$defs/reference"
+            },
+            "sideBySide": {
+              "description": "How many elements may run at the same time, from 2 to 8. The output stays in the order of the list. When an element fails, the others still run to their end, then the run waits for the owner with every failure named; resume --rerun runs the failed ones again.",
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 8
             },
             "id": {
               "description": "The step's id, unique in the whole file; its output is saved under it.",

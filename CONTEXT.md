@@ -15,6 +15,8 @@ One meaning per word. Briefs, plans, code names and reviews use these words and 
 | **Skill** | A `SKILL.md` with the seven sections. An agent does the work; the kernel checks the output. | prompt, playbook, role |
 | **Workflow** | A named list of workflow steps (action, approval, wait, foreach) that the kernel runs durably. | pipeline, flow |
 | **Run** | One execution of an action or workflow, recorded in the kernel database. It can wait, resume and be undone. | job, session |
+| **Side by side** (a foreach's items) | Items of one `foreach` that run at the same time, at most its `sideBySide` of them, in one kernel process. Their output stays in item order. A run may then wait on several steps at once, its first under `waiting` and the others under `alsoWaiting`. | in parallel, concurrently (fine in prose), fan-out, matrix |
+| **Attempt** (of an item) | One run of a side-by-side foreach's item. A rerun of a failed item is its next attempt, whose steps carry the attempt in their key, as `each[2]~2`; the first attempt's keys carry none. | retry, try |
 | **Interface** | A set of action signatures with no code, named `name@major`. A mode implements it; another mode requires it. | API, contract (see below) |
 | **Binding** | The project's choice of which mode serves an interface for a requiring mode. | wiring, injection |
 | **Brought mode** | A base mode active in a project because forge is: proof, bound to `proof@1`, git-worktrees, bound to `worktrees@1`, and requirements, bound to `requirements@1`, each only while the config binds no mode to that interface. The kernel brings them; forge brings no toolchain, and `bay check` names each mode it brought. | default mode, implicit dependency, auto-install |

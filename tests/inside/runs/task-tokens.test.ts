@@ -46,13 +46,13 @@ async function moveTo(context: Opened, runId: string, state: StoredState): Promi
 }
 
 function stores(context: Opened): Parameters<typeof checkTaskToken>[0] {
-  return { tokens: context.store, runs: context.store };
+  return { tokens: context.store.tokens, runs: context.store };
 }
 
 test("a token is 32 random bytes, shown once, and kernel.db keeps only its SHA-256 with the run, step and round", async () => {
   const context = opened();
   await runWaitingAt(context, "run-1", "1#1");
-  const token = await issueTaskToken(context.store, { runId: "run-1", stepKey: "1#1", round: 1 }, now);
+  const token = await issueTaskToken(context.store.tokens, { runId: "run-1", stepKey: "1#1", round: 1 }, now);
   assert.equal(Buffer.from(token, "base64url").length, 32);
   const database = new DatabaseSync(context.file);
   const rows = database.prepare("select * from task_tokens").all();
@@ -76,19 +76,53 @@ test("a token is 32 random bytes, shown once, and kernel.db keeps only its SHA-2
   context.remove();
 });
 
-test("kernel.db keeps one token row per run: issuing again replaces it, and a dead token takes only its run's rows", async () => {
+test("kernel.db keeps one token row per waiting step: issuing again replaces it, and a dead token takes only its row", async () => {
   const context = opened();
   await runWaitingAt(context, "run-1", "1#1");
   await runWaitingAt(context, "run-2", "0#1");
   const place = { runId: "run-1", stepKey: "1#1", round: 1 };
-  await issueTaskToken(context.store, place, now);
-  const first = await issueTaskToken(context.store, place, now);
-  await issueTaskToken(context.store, { runId: "run-2", stepKey: "0#1", round: 1 }, now);
-  const rows = async (): Promise<readonly string[]> => (await context.store.taskTokens()).map((row) => row.runId);
+  await issueTaskToken(context.store.tokens, place, now);
+  const first = await issueTaskToken(context.store.tokens, place, now);
+  await issueTaskToken(context.store.tokens, { runId: "run-2", stepKey: "0#1", round: 1 }, now);
+  const rows = async (): Promise<readonly string[]> =>
+    (await context.store.tokens.taskTokens()).map((row) => row.runId);
   assert.deepEqual(await rows(), ["run-1", "run-2"]);
   await moveTo(context, "run-1", { status: "done", output: {} });
   assert.ok(!(await checkTaskToken(stores(context), first)).ok);
   assert.deepEqual(await rows(), ["run-2"]);
+  context.remove();
+});
+
+test("two steps of one run each keep a token; a new round's token replaces its step's only, and each dies alone", async () => {
+  const context = opened();
+  await runWaitingAt(context, "run-1", "w[0].a/0#1");
+  const writer = context.writers.get("run-1");
+  assert.ok(writer);
+  const also = [{ reason: "skill" as const, stepKey: "w[1].a/0#1" }];
+  await context.store.updateRun(
+    writer,
+    { state: { status: "waiting", reason: "skill", stepKey: "w[0].a/0#1", also }, at },
+    [],
+  );
+  const first = await issueTaskToken(context.store.tokens, { runId: "run-1", stepKey: "w[0].a/0#1", round: 1 }, now);
+  const second = await issueTaskToken(context.store.tokens, { runId: "run-1", stepKey: "w[1].a/0#1", round: 1 }, now);
+  const keys = async (): Promise<readonly string[]> =>
+    (await context.store.tokens.taskTokens()).map((row) => row.stepKey).sort();
+  assert.deepEqual(await keys(), ["w[0].a/0#1", "w[1].a/0#1"]);
+  assert.ok((await checkTaskToken(stores(context), first)).ok);
+  assert.ok((await checkTaskToken(stores(context), second)).ok);
+  await issueTaskToken(context.store.tokens, { runId: "run-1", stepKey: "w[0].a/0#2", round: 2 }, now);
+  assert.deepEqual(await keys(), ["w[0].a/0#2", "w[1].a/0#1"]);
+  assert.ok(!(await checkTaskToken(stores(context), first)).ok);
+  await context.store.updateRun(
+    writer,
+    { state: { status: "waiting", reason: "skill", stepKey: "w[0].a/0#2" }, at },
+    [],
+  );
+  const dead = await checkTaskToken(stores(context), second);
+  assert.ok(!dead.ok);
+  assert.match(dead.problems[0]?.message ?? "", /the run is waiting for skill at w\[0\]\.a\/0#2/);
+  assert.deepEqual(await keys(), ["w[0].a/0#2"]);
   context.remove();
 });
 
@@ -101,12 +135,12 @@ test("a kernel.db of the first version gains the token table and keeps its runs"
   const database = new DatabaseSync(file);
   database.exec(
     "drop table task_tokens; alter table runs drop column target_caller; alter table runs drop column kept; " +
-      "alter table steps drop column kept; pragma user_version = 1;",
+      "alter table steps drop column kept; alter table runs drop column waiting_also; pragma user_version = 1;",
   );
   database.close();
   const reopened = new SqliteRunStore(file);
   assert.equal((await reopened.readRun("old-run"))?.id, "old-run");
-  assert.deepEqual(await reopened.taskTokens(), []);
+  assert.deepEqual(await reopened.tokens.taskTokens(), []);
   reopened.close();
   remove();
 });

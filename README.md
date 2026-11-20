@@ -237,3 +237,29 @@ by this field.
 Packing is not secrecy. It keeps the text from a search and from anyone who reads the files. It does not stop
 code that can open the database and unpack it, such as a script run as the same user. With the hook, a step's
 agent cannot read `.agentbay` at all; without it, packing is what keeps the text out of reach of a plain read.
+
+## A foreach's items side by side
+
+A workflow's `foreach` may say `sideBySide: <2 to 8>`. Up to that many of its items then run at the same time, in
+the one kernel process: their scripts and called actions run as two `bay call`s would. The output is still a list
+in the order of the items. Without the field the items run one after another, as before.
+
+An item's step may wait for a skill, an approval or a time. The run then waits on every such step at once: `bay
+runs <run>` shows the first as `waiting` and `task`, and the others under `alsoWaiting`, each with its own task and
+token. `bay submit` answers the step its token names, and `bay approve` the step it names. `bay runs <run>
+--new-token --step <step key>` replaces the token of that one task and leaves the others working.
+
+When items fail, the others still run to their end or to their wait, and are recorded. The run then waits for the
+owner with one sentence that names every failed item, its position, its key and its reason, each reason cut to 200
+characters. `bay resume <run> --rerun` runs only the failed items again, under a new key such as `each[2]~2`;
+items that finished are not run again and keep their outputs. `bay resume <run> --stop` fails the foreach with that
+sentence, and the run is undone as any failed run.
+
+Every item draws from the run's one budget. While the budget limits items, dollars or tokens, a script whose
+action may spend runs only when no other item's such script runs, so a step never starts on a budget another
+item has spent. Minutes are counted per step and added up, so items side by side use the minutes faster.
+
+`bay check` refuses a `sideBySide` below 2 or above 8. It does not warn when items write the same place: an
+action's effects say it may write, and its mode's grants say where, but which file or row an item writes depends
+on its input, so the manifests cannot tell two items apart. A mode's database waits on its lock, so two items
+that write it both land.

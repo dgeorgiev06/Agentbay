@@ -13,27 +13,18 @@ import {
 } from "./budget.ts";
 import type { Json, RunEvent, Spend, Submission } from "../contracts.ts";
 import type { Budget, Keeping } from "../generated/mode.ts";
-import { byteSize, toJson } from "../json.ts";
-import {
-  kernelDatabaseFile,
-  lockStaleMilliseconds,
-  type RunTarget,
-  type RunWithSteps,
-  type StepRecord,
-  type StoredState,
-  type Writer,
-} from "./run-store.ts";
+import { byteSize } from "../json.ts";
+import { lockStaleMilliseconds, type RunTarget, type RunWithSteps, type Writer } from "./run-store.ts";
 import type { ApprovalDecision, RunStatus } from "./run-state.ts";
-import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
-import { decisionRefusal } from "./choices.ts";
-import type { ApprovalVerdict } from "./step-detail.ts";
+import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
 import { keepingOf } from "./packed-output.ts";
 import { scrubbedStore } from "./scrubbed-store.ts";
-import { startedSkillOf, submissionProblems, type StartedSkill } from "./skill-steps.ts";
-import { skillRoundOf } from "./step-key.ts";
+import { submissionProblems } from "./skill-steps.ts";
 import type { ActionTarget } from "../manifests/manifests.ts";
-import { hasUndoRecords, runUndo } from "./undo.ts";
-import { eventOf, failed, type Progress, type Services, type Walk } from "./walk.ts";
+import { runUndo } from "./undo.ts";
+import { answeredApproval, endedRefusal, refusal, refusalOf, verdictOf, waitingSkill } from "./run-answers.ts";
+import { endingEvents, isDueAt, storedStateOf } from "./run-ending.ts";
+import { failed, type Progress, type Services, type Walk } from "./walk.ts";
 import { runWorkflowSteps } from "./workflow-steps.ts";
 
 type EngineOptions = Services & {
@@ -93,176 +84,9 @@ type Ending = {
   readonly spent: Spend;
 };
 
-type StartedApproval = Extract<StepRecord, { readonly kind: "approval"; readonly status: "started" }>;
-
 const stopReason = "The owner stopped the run.";
 
 const staleMinutes = String(lockStaleMilliseconds / 60_000);
-
-function refusal(runId: string, wording: { readonly message: string; readonly fix?: string }): Outcome<never> {
-  const problem: Problem = { file: kernelDatabaseFile, path: `/runs/${runId}`, ...wording };
-  return failedWith([problem]);
-}
-
-function refusalOf(runId: string, problems: readonly Problem[]): Outcome<never> {
-  return failedWith(
-    problems.map(({ message, fix }) => ({
-      file: kernelDatabaseFile,
-      path: `/runs/${runId}`,
-      message,
-      ...(fix === undefined ? {} : { fix }),
-    })),
-  );
-}
-
-function describeState(state: StoredState): string {
-  switch (state.status) {
-    case "running":
-      return "running (resume it if no engine is advancing it)";
-    case "waiting":
-      return `waiting for ${state.reason} at step ${state.stepKey}`;
-    case "done":
-    case "failed":
-    case "undone":
-      return state.status;
-  }
-}
-
-function endedRefusal(run: RunWithSteps): Outcome<never> | undefined {
-  const status = run.state.status;
-  if (status !== "done" && status !== "failed" && status !== "undone") {
-    return undefined;
-  }
-  return refusal(run.id, { message: `Run ${run.id} has ended (${status}); nothing more can be done with it.` });
-}
-
-function waitingRefusal(run: RunWithSteps, expected: { reason: string; stepKey: string }): Outcome<never> | undefined {
-  const state = run.state;
-  if (state.status === "waiting" && state.reason === expected.reason && state.stepKey === expected.stepKey) {
-    return undefined;
-  }
-  return refusal(run.id, {
-    message:
-      `Run ${run.id} is not waiting for ${expected.reason} at step ${expected.stepKey}; ` +
-      `it is ${describeState(state)}.`,
-    fix: "Act on the step the run is waiting for, as resume shows it.",
-  });
-}
-
-function recordAt(run: RunWithSteps, key: string): StepRecord | undefined {
-  return run.steps.find((step) => step.key === key);
-}
-
-function waitingSkill(run: RunWithSteps, stepKey: string): Outcome<StartedSkill> {
-  const refused = endedRefusal(run) ?? waitingRefusal(run, { reason: "skill", stepKey });
-  if (refused !== undefined) {
-    return refused;
-  }
-  const round = skillRoundOf(stepKey);
-  const record = startedSkillOf(round === undefined ? undefined : recordAt(run, round.step));
-  if (record !== undefined && record.detail.submission === undefined && record.detail.round === round?.round) {
-    return succeededWith(record);
-  }
-  return refusal(run.id, {
-    message: `Run ${run.id} already has a submission for ${stepKey}; it is applied once.`,
-    fix: "Submit once per round, to the step key the waiting run shows.",
-  });
-}
-
-function startedApprovalOf(record: StepRecord | undefined): StartedApproval | undefined {
-  return record?.kind === "approval" && record.status === "started" ? record : undefined;
-}
-
-function verdictOf(decision: ApprovalDecision): ApprovalVerdict {
-  const { by } = decision;
-  switch (decision.decision) {
-    case "approve":
-    case "reject":
-      return { decision: decision.decision, by };
-    case "choice":
-      return { decision: decision.decision, choice: decision.choice, by };
-  }
-}
-
-function answeredApproval(run: RunWithSteps, stepKey: string, decision: ApprovalDecision): Outcome<StartedApproval> {
-  const found = waitingApproval(run, stepKey, decision.hash);
-  if (!found.ok) {
-    return found;
-  }
-  const { detail, input } = found.value;
-  const refused = decisionRefusal(stepKey, detail.choices, { answer: decision, shown: detail.shown ?? input });
-  return refused === undefined ? found : refusal(run.id, { message: refused });
-}
-
-function waitingApproval(run: RunWithSteps, stepKey: string, hash: string): Outcome<StartedApproval> {
-  const refused = endedRefusal(run) ?? waitingRefusal(run, { reason: "approval", stepKey });
-  const record = startedApprovalOf(recordAt(run, stepKey));
-  if (refused !== undefined || record === undefined) {
-    return refused ?? refusal(run.id, { message: `Run ${run.id} has no waiting approval ${stepKey}.` });
-  }
-  if (record.detail.verdict !== undefined) {
-    return refusal(run.id, {
-      message: `Step ${stepKey} of run ${run.id} already has a decision; it is applied once.`,
-      fix: "Resume the run to apply the recorded decision.",
-    });
-  }
-  const shownHash = record.detail.hash;
-  if (shownHash === hash) {
-    return succeededWith(record);
-  }
-  return refusal(run.id, {
-    message: `The hash ${hash} is not the hash of what step ${stepKey} showed (${shownHash}).`,
-    fix:
-      record.detail.choices === undefined
-        ? "Approve or reject exactly what the waiting approval shows, naming its hash."
-        : "Take one of the choices the waiting approval offers, naming the hash it shows.",
-  });
-}
-
-function storedStateOf(status: RunStatus): StoredState {
-  switch (status.status) {
-    case "waiting": {
-      const waiting = status.waiting;
-      const until = waiting.reason === "time" ? { until: waiting.until } : {};
-      return { status: "waiting", reason: waiting.reason, stepKey: waiting.stepKey, ...until };
-    }
-    case "done":
-      return { status: "done", output: status.output };
-    case "failed":
-      return { status: "failed", reason: status.reason };
-    case "undone":
-      return { status: "undone", reason: status.reason, undo: toJson(status.undo) };
-  }
-}
-
-function endingEvents(walk: Walk, status: RunStatus): readonly RunEvent[] {
-  switch (status.status) {
-    case "waiting": {
-      const waiting = status.waiting;
-      const waited = eventOf(walk, "run.waiting", { reason: waiting.reason, stepKey: waiting.stepKey });
-      if (waiting.reason !== "budget") {
-        return [waited];
-      }
-      return [eventOf(walk, "budget.exceeded", { stepKey: waiting.stepKey, ...waiting.overrun }), waited];
-    }
-    case "done":
-    case "failed":
-      return [eventOf(walk, "run.finished", { status: status.status })];
-    case "undone":
-      return undoneEvents(walk, status);
-  }
-}
-
-function undoneEvents(walk: Walk, status: RunStatus & { readonly status: "undone" }): readonly RunEvent[] {
-  const counts = {
-    undone: status.undo.undone.length,
-    failed: status.undo.failed.length,
-    noUndo: status.undo.noUndo.length,
-    deleteNotUndone: status.undo.deleteNotUndone.length,
-  };
-  const started = hasUndoRecords(walk.records) ? [] : [eventOf(walk, "undo.started", {})];
-  return [...started, eventOf(walk, "undo.finished", counts), eventOf(walk, "run.finished", { status: status.status })];
-}
 
 function mainProgress(walk: Walk, run: RunWithSteps, budget: BudgetFrame): Promise<Progress> {
   const system = walk.services.system;
@@ -314,15 +138,6 @@ function notReadOnlyRefusal(target: ActionTarget, action: string): Outcome<never
     `The action ${action} has the effects ${effects.join(", ")}; a skill may call only actions whose effects ` +
     "are read only.";
   return failedWith([unplacedProblem(message)]);
-}
-
-function isDueAt(state: StoredState, now: Date): boolean {
-  return (
-    state.status === "waiting" &&
-    state.reason === "time" &&
-    state.until !== undefined &&
-    new Date(state.until).getTime() <= now.getTime()
-  );
 }
 
 export class Engine {

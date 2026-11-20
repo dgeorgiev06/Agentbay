@@ -5,7 +5,7 @@ import { byteSize } from "../json.ts";
 import type { Clock } from "../ports.ts";
 import type { ActionTarget, System } from "../manifests/manifests.ts";
 import { settledOf, type RunStore, type StepRecord, type Writer } from "./run-store.ts";
-import type { Waiting } from "./run-state.ts";
+import type { RunStatus, Waiting } from "./run-state.ts";
 import type { StepDetail, StepKind } from "./step-detail.ts";
 
 export type Services = {
@@ -28,7 +28,7 @@ export type Walk = {
   readonly phase: "main" | "undo";
 };
 
-export type Progress = Settled | { readonly status: "waiting"; readonly waiting: Waiting };
+export type Progress = Settled | Extract<RunStatus, { readonly status: "waiting" }>;
 
 export type ActionFrame = ActionTarget & {
   readonly key: string;
@@ -77,6 +77,10 @@ export function failed(reason: string): Settled {
 
 export function waiting(state: Waiting): Progress {
   return { status: "waiting", waiting: state };
+}
+
+export function waitingOn(lead: Waiting, others: readonly Waiting[]): Progress {
+  return others.length === 0 ? waiting(lead) : { status: "waiting", waiting: lead, alsoWaiting: others };
 }
 
 export function eventOf(walk: Walk, kind: EventKind, detail: Json): RunEvent {
@@ -139,7 +143,7 @@ export async function concludeComposite(walk: Walk, end: CompositeEnd): Promise<
   const { key, progress: outcome, spent } = end;
   switch (outcome.status) {
     case "waiting":
-      return waiting(outcome.waiting);
+      return outcome;
     case "done":
       return endRecord(walk, { key, status: "done", output: outcome.output, spent });
     case "failed":

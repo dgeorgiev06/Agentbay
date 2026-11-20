@@ -42,6 +42,7 @@ export type Opening = {
   readonly changes?: Changes;
   readonly toolCallsPerRound?: number;
   readonly secretHandedOut?: "at open" | "later";
+  readonly hook?: Parameters<typeof openRuns>[0]["hook"];
 };
 
 export type OpenedRuns = FixtureSystem & {
@@ -405,7 +406,7 @@ export async function openedRuns(opening: Opening = {}): Promise<OpenedRuns> {
       system,
       scrubber,
       toolCallsPerRound: opening.toolCallsPerRound ?? 200,
-      hook: withoutTheHook(system.config),
+      hook: opening.hook ?? withoutTheHook(system.config),
       runner: (events) => {
         createdBeforeRunner.push(...folders.created);
         sinks.push(events);

@@ -28,4 +28,9 @@ export type Step =
       readonly id: Name;
     }
   | { readonly wait: string; readonly id: Name }
-  | { readonly foreach: Reference; readonly id: Name; readonly steps: ReadonlyArray<Step> };
+  | {
+      readonly foreach: Reference;
+      readonly sideBySide?: number;
+      readonly id: Name;
+      readonly steps: ReadonlyArray<Step>;
+    };

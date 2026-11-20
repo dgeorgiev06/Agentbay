@@ -11,7 +11,8 @@ async function listRuns(kernel: Kernel): Promise<CommandResult> {
 
 async function showRun(kernel: Kernel, invocation: Invocation, runId: string): Promise<CommandResult> {
   const newToken = invocation.flags.has("new-token");
-  const shown = newToken ? await kernel.runs.reissueTask(runId) : await kernel.runs.show(runId);
+  const step = invocation.values.get("step");
+  const shown = newToken ? await kernel.runs.reissueTask(runId, step) : await kernel.runs.show(runId);
   const options = { steps: true, full: invocation.flags.has("full"), events: invocation.flags.has("events") };
   return runResult(kernel.layout, shown, newToken ? { ...options, after: "reissue" } : options);
 }
@@ -27,10 +28,11 @@ export const runsCommand: Command = {
   name: "runs",
   summary:
     "List the runs, newest first; or show one run with its steps and task; --events adds events, " +
-    "--new-token replaces the task's token.",
-  usage: "runs [<run> [--full] [--events] [--new-token]]",
+    "--new-token replaces the token of every task, or with --step only of that step's task.",
+  usage: "runs [<run> [--full] [--events] [--new-token [--step <step key>]]]",
   options: [
     { name: "new-token", takesValue: false },
+    { name: "step", takesValue: true },
     { name: "full", takesValue: false },
     { name: "events", takesValue: false },
   ],

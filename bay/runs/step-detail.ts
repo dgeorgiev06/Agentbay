@@ -51,13 +51,19 @@ type WaitDetail = {
   readonly until: string;
 };
 
+export type ForeachDetail = {
+  readonly attempts: readonly number[];
+  readonly earlierSpent: Spend;
+  readonly question?: string;
+};
+
 export type StepDetail =
   | { readonly kind: "script" | "check"; readonly detail: ScriptDetail }
   | { readonly kind: "skill"; readonly detail: SkillDetail }
   | { readonly kind: "call" | "action" | "undo"; readonly detail: NestedDetail }
   | { readonly kind: "approval"; readonly detail: ApprovalDetail }
   | { readonly kind: "wait"; readonly detail: WaitDetail }
-  | { readonly kind: "foreach"; readonly detail: null };
+  | { readonly kind: "foreach"; readonly detail: ForeachDetail | null };
 
 export type RefusedDetail = {
   readonly kind: StepKind;
@@ -196,6 +202,19 @@ function approvalDetailOf(value: Json): ApprovalDetail {
   };
 }
 
+function foreachDetailOf(value: Json): ForeachDetail | null {
+  if (value === null) {
+    return null;
+  }
+  const attempts = fieldOf(value, "attempts");
+  const question = textField(value, "question");
+  return {
+    attempts: Array.isArray(attempts) ? attempts.map((attempt: unknown) => Number(attempt)) : [],
+    earlierSpent: optionalSpend(value, "earlierSpent") ?? noSpend,
+    ...(question === undefined ? {} : { question }),
+  };
+}
+
 export function decodedStepDetail(kind: StepKind, value: Json): StepDetail {
   switch (kind) {
     case "script":
@@ -212,7 +231,7 @@ export function decodedStepDetail(kind: StepKind, value: Json): StepDetail {
     case "wait":
       return { kind, detail: { until: requiredText(value, "until", kind) } };
     case "foreach":
-      return { kind, detail: null };
+      return { kind, detail: foreachDetailOf(value) };
   }
 }
 

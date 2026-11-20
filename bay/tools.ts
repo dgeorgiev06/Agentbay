@@ -4,7 +4,7 @@ import type { Json } from "./contracts.ts";
 import { byteSize, fieldOf, numberField, textField, isRecord } from "./json.ts";
 import type { Kernel } from "./kernel.ts";
 import { loadSystem, type ListingQuestion, type SkillUse, type System } from "./manifests/manifests.ts";
-import type { Run, Task } from "./runs/runs.ts";
+import { waitsOf, type Run, type Task } from "./runs/runs.ts";
 import { failedWith, unplacedProblem, type Outcome, type Problem } from "./outcome.ts";
 import { isToolName, skillToolsOf, type SkillTools, type ToolName } from "./skill-tools.ts";
 import { actionsToolName } from "./tool-definitions.ts";
@@ -142,7 +142,7 @@ function submittedResult(call: ToolCall, result: Outcome<Run>): Json {
     return { accepted: false, problems: result.problems.map((problem) => problem.message) };
   }
   const run = result.value;
-  const waiting = run.state.status === "waiting" ? run.state.waiting : undefined;
+  const waiting = waitsOf(run.state).find((each) => each.reason === "skill" && each.task.token !== undefined);
   if (waiting?.reason === "skill" && waiting.task.token !== undefined) {
     const { round, feedback, token } = waiting.task;
     return { accepted: false, round, feedback: [...feedback], stepKey: waiting.stepKey, token };

@@ -142,6 +142,18 @@ features:
       - bay/runs/card.ts
       - bay/runs/hook-seen.ts
       - bay/runs/packed-output.ts
+      - bay/runs/foreach-steps.ts
+      - bay/runs/workflow-scope.ts
+      - bay/runs/script-steps.ts
+      - bay/runs/run-answers.ts
+      - bay/runs/run-ending.ts
+      - bay/runs/sqlite-rows.ts
+      - bay/runs/sqlite-task-tokens.ts
+      - bay/runs/kernel-migrations.ts
+      - bay/runs/side-by-side.ts
+      - bay/runs/side-by-side-steps.ts
+      - bay/runs/draw-turns.ts
+      - bay/runs/issued-tasks.ts
     may_import:
       - vocabulary
       - manifests
@@ -234,6 +246,7 @@ features:
       - bay/commands/secret.ts
       - bay/commands/submit.ts
       - bay/run-report.ts
+      - bay/waiting-report.ts
       - bay/approval-card.ts
       - bay/terminal.ts
       - bay/trust-card.ts

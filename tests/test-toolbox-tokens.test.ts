@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { test } from "node:test";
+import { parse, stringify } from "yaml";
 import type { Json } from "../bay/contracts.ts";
+import { isRecord, textsField, toJson } from "../bay/json.ts";
 import { makeProject, type Project } from "./project-fixture.ts";
 import { openModeProject, type ModeProject, type Run } from "./test-toolbox.ts";
 
@@ -171,6 +175,47 @@ test("a token given after the kernel opens again answers, and the one given befo
     assert.equal(await project.answerRefusal(old, { text: note }), replacedToken);
     const done = await project.answer(tokenOf(given), { text: note });
     assert.deepEqual([done.id, done.state], [started.id, { status: "done", output: composed }]);
+  } finally {
+    await project.close();
+    await beside.remove();
+  }
+});
+
+test("the toolbox drives two side-by-side tasks: each has its own token, and answering one leaves the other's working", async () => {
+  const beside = await makeProject();
+  const modeFile = join(beside.root, "components/modes/writer/mode.yaml");
+  const manifest = toJson(parse(await readFile(modeFile, "utf8")));
+  const workflows = [...textsField(manifest, "workflows"), "workflows/both.yaml"];
+  const changed = isRecord(manifest) ? { ...manifest, workflows } : {};
+  await beside.write("components/modes/writer/mode.yaml", stringify(changed));
+  const both = {
+    name: "both",
+    steps: [
+      {
+        id: "each",
+        foreach: "$trigger",
+        sideBySide: 2,
+        steps: [{ id: "write", action: "compose", input: { name: "$item" } }],
+      },
+    ],
+  };
+  await beside.write("components/modes/writer/workflows/both.yaml", stringify(both));
+  const project = await opened(beside);
+  try {
+    const started = await project.runWorkflow("writer", "workflows/both.yaml", ["Ada", "Bea"]);
+    assert.ok(started.state.status === "waiting");
+    const waits = [started.state.waiting, ...(started.state.alsoWaiting ?? [])];
+    const tasks = waits.flatMap((waiting) => (waiting.reason === "skill" ? [waiting] : []));
+    assert.deepEqual(
+      tasks.map((waiting) => waiting.stepKey),
+      ["each[0].write/1#1", "each[1].write/1#1"],
+    );
+    const [first, second] = tasks.map((waiting) => waiting.task.token ?? "");
+    assert.ok(first !== undefined && second !== undefined && first !== second);
+    const one = await project.answer(second, { text: "Hello, Bea, and welcome back." });
+    assert.ok(one.state.status === "waiting" && one.state.alsoWaiting === undefined);
+    const done = await project.answer(first, { text: "Hello, Ada, and welcome back." });
+    assert.equal(done.state.status, "done");
   } finally {
     await project.close();
     await beside.remove();

@@ -15,12 +15,13 @@ import {
   type StepRecord,
   type WaitingReason,
 } from "./run-store.ts";
-import type { RunState, SkillTask, UndoEntry, UndoReport, Waiting } from "./run-state.ts";
+import { waitsIn, type RunState, type SkillTask, type UndoEntry, type UndoReport, type Waiting } from "./run-state.ts";
+import { issuedWaits, skillKeysOf, taskAtKey } from "./issued-tasks.ts";
 import { scrubbedStore } from "./scrubbed-store.ts";
 import { toolCalledKind, toolCallsAt } from "./skill-steps.ts";
 import { SqliteRunStore } from "./sqlite-run-store.ts";
 import { skillRoundOf } from "./step-key.ts";
-import { checkTaskToken, issueTaskToken, type TaskPlace } from "./task-tokens.ts";
+import { checkTaskToken, type TaskPlace } from "./task-tokens.ts";
 import { storedWaiting } from "./waiting.ts";
 
 type RunsNeeds = {
@@ -67,8 +68,17 @@ export type Run = {
 export type RunSummary = Pick<Run, "id" | "target" | "createdAt" | "updatedAt"> &
   (
     | { readonly status: Exclude<Run["state"]["status"], "waiting"> }
-    | { readonly status: "waiting"; readonly waitingFor: WaitingReason; readonly stepKey: string }
+    | {
+        readonly status: "waiting";
+        readonly waitingFor: WaitingReason;
+        readonly stepKey: string;
+        readonly alsoWaiting?: readonly { readonly waitingFor: WaitingReason; readonly stepKey: string }[];
+      }
   );
+
+export function waitsOf(state: RunState<Task>): readonly Waiting<Task>[] {
+  return waitsIn(state);
+}
 
 type Start = { readonly action: string } | { readonly workflow: { readonly mode: string; readonly path: string } };
 
@@ -89,7 +99,7 @@ export type Runs = {
   readonly extend: (runId: string, extra: Budget) => Promise<Outcome<Run>>;
   readonly stop: (runId: string) => Promise<Outcome<Run>>;
   readonly wakeDue: () => Promise<readonly Outcome<Run>[]>;
-  readonly reissueTask: (runId: string) => Promise<Outcome<Run>>;
+  readonly reissueTask: (runId: string, stepKey?: string) => Promise<Outcome<Run>>;
   readonly task: (token: string, tool: string) => Promise<Outcome<Task>>;
   readonly submit: (token: string, submission: Submission) => Promise<Outcome<Run>>;
   readonly callAction: (token: string, action: string, input: Json) => Promise<Outcome<Called>>;
@@ -105,7 +115,7 @@ type Opened = {
 };
 
 type Showing = {
-  readonly waiting: Waiting | undefined;
+  readonly waits: readonly Waiting[] | undefined;
   readonly issue: (waitingKey: string) => boolean;
 };
 
@@ -118,7 +128,7 @@ const askedByKind = "run.asked-by";
 
 const toolsCountedWhereMade: readonly string[] = ["call_action", "submit"];
 
-const shownOnly: Showing = { waiting: undefined, issue: () => false };
+const shownOnly: Showing = { waits: undefined, issue: () => false };
 
 function refusal(message: string, fix?: string): Outcome<never> {
   return failedWith([unplacedProblem(message, fix)]);
@@ -187,21 +197,6 @@ function undoReportOf(undo: Json): UndoReport {
   };
 }
 
-async function waitingOf(opened: Opened, stored: Stored, showing: Showing): Promise<Waiting<Task> | string> {
-  const { run } = stored;
-  const waiting = showing.waiting ?? storedWaiting(opened.needs, stored);
-  if (waiting === undefined) {
-    const stepKey = run.state.status === "waiting" ? run.state.stepKey : "";
-    return `Run ${run.id} waits at step ${stepKey}, but kernel.db does not hold what the step waits for.`;
-  }
-  if (waiting.reason !== "skill" || !showing.issue(waiting.stepKey)) {
-    return waiting;
-  }
-  const place = { runId: run.id, stepKey: waiting.stepKey, round: waiting.task.round };
-  const token = await issueTaskToken(opened.store, place, opened.needs.clock.now());
-  return { ...waiting, task: { ...waiting.task, token } };
-}
-
 async function stateOf(opened: Opened, stored: Stored, showing: Showing): Promise<RunState<Task> | string> {
   const state = stored.run.state;
   switch (state.status) {
@@ -212,11 +207,21 @@ async function stateOf(opened: Opened, stored: Stored, showing: Showing): Promis
       return stored.run.kept === "kept-packed" ? { status: state.status, output: keptPackedNote } : state;
     case "undone":
       return { ...state, undo: undoReportOf(state.undo) };
-    case "waiting": {
-      const waiting = await waitingOf(opened, stored, showing);
-      return typeof waiting === "string" ? waiting : { status: state.status, waiting };
-    }
+    case "waiting":
+      return waitingStateOf(opened, stored, showing);
   }
+}
+
+async function waitingStateOf(opened: Opened, stored: Stored, showing: Showing): Promise<RunState<Task> | string> {
+  const { run } = stored;
+  const waits = showing.waits ?? storedWaiting(opened.needs, stored);
+  const issuing = { tokens: opened.store.tokens, clock: opened.needs.clock, issue: showing.issue };
+  const [waiting, ...others] = waits === undefined ? [] : await issuedWaits(issuing, waits);
+  if (waiting === undefined) {
+    const stepKey = run.state.status === "waiting" ? run.state.stepKey : "";
+    return `Run ${run.id} waits at step ${stepKey}, but kernel.db does not hold what the step waits for.`;
+  }
+  return others.length === 0 ? { status: "waiting", waiting } : { status: "waiting", waiting, alsoWaiting: others };
 }
 
 function askedByOf(events: readonly RunEvent[]): Pick<Run, "askedBy"> {
@@ -256,8 +261,8 @@ function resultOf(opened: Opened, result: Outcome<AdvancedRun>, issue: Showing["
     return Promise.resolve(result);
   }
   const state = result.value.state;
-  const waiting = state.status === "waiting" ? state.waiting : undefined;
-  return shownRun(opened, result.value.id, { waiting, issue });
+  const waits = state.status === "waiting" ? waitsIn(state) : undefined;
+  return shownRun(opened, result.value.id, { waits, issue });
 }
 
 async function changed(
@@ -266,8 +271,8 @@ async function changed(
   change: () => Promise<Outcome<AdvancedRun>>,
 ): Promise<Outcome<Run>> {
   const state = (await opened.store.readRun(runId))?.state;
-  const before = state?.status === "waiting" && state.reason === "skill" ? state.stepKey : undefined;
-  return resultOf(opened, await change(), (waitingKey) => waitingKey !== before);
+  const before = skillKeysOf(state);
+  return resultOf(opened, await change(), (waitingKey) => !before.has(waitingKey));
 }
 
 function sameStep(waitingKey: string, submittedKey: string): boolean {
@@ -276,7 +281,7 @@ function sameStep(waitingKey: string, submittedKey: string): boolean {
 }
 
 function placeOf(opened: Opened, token: string): Promise<Outcome<TaskPlace>> {
-  return checkTaskToken({ tokens: opened.store, runs: opened.store }, token);
+  return checkTaskToken({ tokens: opened.store.tokens, runs: opened.store }, token);
 }
 
 async function countedCall(opened: Opened, token: string, tool: string): Promise<Outcome<TaskPlace>> {
@@ -324,11 +329,11 @@ async function taskAt(opened: Opened, place: TaskPlace): Promise<Outcome<Task>> 
   if (!run.ok) {
     return run;
   }
-  const state = run.value.state;
-  if (state.status !== "waiting" || state.waiting.reason !== "skill") {
-    return refusal(`Run ${run.value.id} does not wait for a skill.`);
+  const task = taskAtKey(waitsIn(run.value.state), place.stepKey);
+  if (task === undefined) {
+    return refusal(`Run ${run.value.id} does not wait for a skill at step ${place.stepKey}.`);
   }
-  return succeededWith(state.waiting.task);
+  return succeededWith(task);
 }
 
 async function toolTask(opened: Opened, token: string, tool: string): Promise<Outcome<Task>> {
@@ -391,7 +396,9 @@ async function summaries(store: SqliteRunStore): Promise<readonly RunSummary[]> 
     if (state.status !== "waiting") {
       return { id, target, createdAt, updatedAt, status: state.status };
     }
-    return { id, target, createdAt, updatedAt, status: state.status, waitingFor: state.reason, stepKey: state.stepKey };
+    const also = (state.also ?? []).map((wait) => ({ waitingFor: wait.reason, stepKey: wait.stepKey }));
+    const waiting = { status: state.status, waitingFor: state.reason, stepKey: state.stepKey };
+    return { id, target, createdAt, updatedAt, ...waiting, ...(also.length === 0 ? {} : { alsoWaiting: also }) };
   });
 }
 
@@ -426,7 +433,8 @@ function runsOf(opened: Opened): Runs {
       const woken = await engine.tick(needs.clock.now());
       return Promise.all(woken.map((result) => resultOf(opened, result, shownOnly.issue)));
     },
-    reissueTask: (runId) => shownRun(opened, runId, { waiting: undefined, issue: always }),
+    reissueTask: (runId, stepKey) =>
+      shownRun(opened, runId, { waits: undefined, issue: (key) => stepKey === undefined || key === stepKey }),
     task: (token, tool) => toolTask(opened, token, tool),
     submit: (token, submission) => submitted(opened, token, submission),
     callAction: (token, action, input) => calledAction(opened, token, { action, input }),

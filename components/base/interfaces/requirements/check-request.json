@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CheckRequest",
+  "description": "The requirements file to check.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["file"],
+  "properties": {
+    "file": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*\\.yaml$",
+      "maxLength": 1000,
+      "description": "The file, relative to the project, such as docs/requirements/todo.yaml. It ends in .yaml and holds no .."
+    }
+  }
+}

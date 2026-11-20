@@ -5,6 +5,7 @@ bindings:
   toolchain: typescript
   worktrees: git-worktrees
   proof: proof
+  requirements: requirements
 adapter: claude-code
 approvals:
   from: [terminal, chat]

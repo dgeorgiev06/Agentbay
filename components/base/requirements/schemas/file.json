@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RequirementsFile",
+  "description": "The form of a requirements file, as requirements@1 gives it.",
+  "$ref": "requirements@1/check-response.json#/$defs/requirements"
+}

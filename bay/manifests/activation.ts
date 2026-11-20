@@ -26,6 +26,7 @@ const forge = "forge";
 const broughtByForge: readonly Brought[] = [
   { reference: "proof@1", mode: "proof" },
   { reference: "worktrees@1", mode: "git-worktrees" },
+  { reference: "requirements@1", mode: "requirements" },
 ];
 
 const toolchain = "toolchain@1";
@@ -103,7 +104,7 @@ function noToolchainProblems(context: Context, active: ReadonlySet<string>): rea
   }
   const problem = problemAt(config, ["bindings"], {
     message:
-      `Forge is active and no mode is bound to ${toolchain}: forge brings proof and git-worktrees, ` +
+      `Forge is active and no mode is bound to ${toolchain}: forge brings proof, git-worktrees and requirements, ` +
       "but not a toolchain, since a project names its own.",
     fix:
       `Add ${interfaceName(toolchain)}: <mode> under bindings, naming the mode for the project's language; ` +

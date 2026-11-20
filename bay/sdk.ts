@@ -150,6 +150,14 @@ export function fieldsOf(value: Json): JsonFields {
   return typeof value === "object" && value !== null && !isList(value) ? value : {};
 }
 
+export function segmentsOfPointer(pointer: string): readonly (string | number)[] {
+  return pointer
+    .split("/")
+    .slice(1)
+    .map((segment) => segment.replaceAll("~1", "/").replaceAll("~0", "~"))
+    .map((segment) => (/^\d+$/.test(segment) ? Number(segment) : segment));
+}
+
 export function canonicalJson(value: Json): string {
   if (typeof value === "number" && !Number.isFinite(value)) {
     throw new Error(`${String(value)} is not a finite number, so it has no JSON form.`);

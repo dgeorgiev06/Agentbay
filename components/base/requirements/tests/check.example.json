@@ -1,0 +1,14 @@
+{
+  "input": { "file": "docs/requirements/lamp.yaml" },
+  "output": {
+    "answer": "refused",
+    "file": "docs/requirements/lamp.yaml",
+    "problems": [
+      {
+        "rule": "no literal in then",
+        "line": 17,
+        "sentence": "O1-C1's then holds no literal value. Write the value a person sees, in double quotes or as a number, such as 0 todos are listed in place of the list is empty."
+      }
+    ]
+  }
+}

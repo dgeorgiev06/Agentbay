@@ -267,10 +267,10 @@ action may spend runs only when no other item's such script runs, so a step neve
 item has spent. Minutes are counted per step and added up, so items side by side use the minutes faster.
 
 `bay check` refuses a `sideBySide` below 2 or above 8, and a reference that is not one or that names a step not
-before the foreach; what a reference resolves to is known only when the run gets there. It does not warn when items write the same place: an
-action's effects say it may write, and its mode's grants say where, but which file or row an item writes depends
-on its input, so the manifests cannot tell two items apart. A mode's database waits on its lock, so two items
-that write it both land.
+before the foreach; what a reference resolves to is known only when the run gets there. It does not warn when items
+write the same place: an action's effects say it may write, and its mode's grants say where, but which file or row
+an item writes depends on its input, so the manifests cannot tell two items apart. A mode's database waits on its
+lock, so two items that write it both land.
 
 An approval after a foreach may quote a step the foreach runs in each item: `quotes` lists the step's id, and a
 card's line cites it with its item, counted from 0, as `source: { step: <id>, item: <n> }`. The kernel takes that

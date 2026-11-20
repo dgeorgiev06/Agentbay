@@ -1,7 +1,7 @@
-import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
-import type { Slice } from "./cards.ts";
+import { fieldsOf, type Json, type JsonFields } from "../../../../../bay/sdk.ts";
+import type { Slice } from "./slice-form.ts";
 import type { HandedTest } from "./handed-tests.ts";
-import { quotesAny } from "./quoting.ts";
+import { mayQuoteAny } from "./quoting.ts";
 import { listOf, textOf } from "./json-values.ts";
 
 export type FailingCase = {
@@ -31,6 +31,8 @@ type Told = {
 
 const longestName = 200;
 
+const keptReason = "Proof's reason is kept from the card: it quotes a test.";
+
 const unsafe = /[\p{Cc}\p{Cf}]/gu;
 
 function plain(text: string): string {
@@ -57,6 +59,10 @@ function onceEach(reported: readonly Reported[]): readonly Reported[] {
   return reported.filter((_, at) => keys.indexOf(keys[at] ?? "") === at);
 }
 
+function messageQuotes(message: string, texts: readonly string[]): boolean {
+  return mayQuoteAny(message, texts) || mayQuoteAny(plain(message), texts);
+}
+
 function toldOf(reported: Reported, tests: readonly HandedTest[]): Told {
   const name = plain(reported.name);
   const file = namedFile(
@@ -68,8 +74,10 @@ function toldOf(reported: Reported, tests: readonly HandedTest[]): Told {
   if (message === "") {
     return { told: named, withheld: false };
   }
-  const texts = tests.map((test) => test.text);
-  const quoting = quotesAny(reported.message, texts) || quotesAny(message, texts);
+  const quoting = messageQuotes(
+    reported.message,
+    tests.map((test) => test.text),
+  );
   return quoting ? { told: named, withheld: true } : { told: { ...named, message }, withheld: false };
 }
 
@@ -103,4 +111,41 @@ export function withoutCases(verdicts: readonly Json[]): readonly Json[] {
   return verdicts.map((verdict) =>
     Object.fromEntries(Object.entries(fieldsOf(verdict)).filter(([field]) => field !== "cases")),
   );
+}
+
+function saidSafely(fields: JsonFields, texts: readonly string[]): JsonFields {
+  const said = (key: "detail" | "reason"): JsonFields => {
+    const text = fields[key];
+    return typeof text === "string" && mayQuoteAny(text, texts) ? { [key]: keptReason } : {};
+  };
+  return { ...fields, ...said("detail"), ...said("reason") };
+}
+
+function filteredFailure(value: Json, texts: readonly string[]): Json {
+  const fields = fieldsOf(value);
+  return messageQuotes(textOf(fields.message), texts) ? { ...fields, message: "", charactersCut: 0 } : fields;
+}
+
+function filteredCases(value: Json, texts: readonly string[]): Json {
+  const fields = fieldsOf(value);
+  if (fields.failures === undefined) {
+    return fields;
+  }
+  return { ...fields, failures: listOf(fields.failures).map((failure) => filteredFailure(failure, texts)) };
+}
+
+export function safeVerdicts(verdicts: readonly Json[], tests: readonly HandedTest[]): readonly Json[] {
+  const texts = tests.map((test) => test.text);
+  return verdicts.map((verdict) => saidSafely(fieldsOf(verdict), texts));
+}
+
+export function filteredProof(answer: Json, tests: readonly HandedTest[]): Json {
+  const fields = fieldsOf(answer);
+  const texts = tests.map((test) => test.text);
+  const verdicts = safeVerdicts(listOf(fields.verdicts), tests).map((verdict) => {
+    const verdictFields = fieldsOf(verdict);
+    const { cases } = verdictFields;
+    return cases === undefined ? verdict : { ...verdictFields, cases: filteredCases(cases, texts) };
+  });
+  return { ...fields, verdicts };
 }

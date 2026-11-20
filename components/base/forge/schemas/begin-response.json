@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BeginResponse",
+  "description": "The go-ahead the owner took; a stop is never an answer, since it ends the run.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["choice"],
+  "properties": {
+    "choice": {
+      "enum": ["build", "build-without-interface"],
+      "description": "The go-ahead choice taken on the start card."
+    }
+  }
+}

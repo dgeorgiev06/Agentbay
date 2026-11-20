@@ -1,8 +1,7 @@
 import { defineScript, fieldsOf, type Json, type ScriptContext } from "../../../../bay/sdk.ts";
 import { answerOf } from "./lib/called.ts";
-import { sliceOf } from "./lib/cards.ts";
+import { sliceOf } from "./lib/slice-form.ts";
 import { codeAt } from "./lib/code.ts";
-import { forgetKept } from "./lib/kept-tests.ts";
 import { bugsHanded, bugsOf, plants, type Bug } from "./lib/planting.ts";
 import { afterRoundOf, type AfterRound } from "./lib/rounds.ts";
 import { textOf, textsOf } from "./lib/json-values.ts";
@@ -35,6 +34,5 @@ export const run = defineScript(async (input, context) => {
   const asked = askedOf(input);
   const planting = plants(sliceOf(asked.slice), asked.state);
   const planted = planting ? await plantedBugs(context, asked) : [];
-  await forgetKept(context, asked.name);
   return { bugs: bugsHanded(asked.owner, planted), planted: planted.length };
 });

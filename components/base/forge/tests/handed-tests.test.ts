@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Slice } from "../scripts/lib/cards.ts";
+import type { Slice } from "../scripts/lib/slice-form.ts";
 import { handedTestsOf, namedTests, refusedTests, type HandedTest } from "../scripts/lib/handed-tests.ts";
 
 const first = "components/modes/todo/tests/add.test.ts";

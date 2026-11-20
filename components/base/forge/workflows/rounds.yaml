@@ -10,6 +10,15 @@ steps:
   - id: start
     approval: Build this slice?
     show: $steps.slice.output.card
+    choices:
+      build: { does: Cut the worktree and start round 1, when: $steps.slice.output.offered.build }
+      build-without-interface:
+        { does: Go ahead with no agreed interface, when: $steps.slice.output.offered.build-without-interface }
+      stop: { does: Stop; nothing is cut }
+  - id: begin
+    action: begin
+    input:
+      choice: $steps.start.output.choice
   - id: cut
     action: worktrees.cut
     input:
@@ -85,7 +94,7 @@ steps:
       bugs: $steps.slice.output.bugs
       state: $steps.review-3.output
   - id: prove
-    action: proof.prove
+    action: final-proof
     input:
       slice: $steps.slice.output.slice
       base: $steps.cut.output.commit
@@ -100,6 +109,7 @@ steps:
       built: $steps.review-3.output.built
       work: $steps.review-3.output.branch
       kept: with-tests
+      caseMessages: filtered
       into: $settings.into
       rounds: $steps.review-3.output
       bugs: $steps.bugs.output.bugs

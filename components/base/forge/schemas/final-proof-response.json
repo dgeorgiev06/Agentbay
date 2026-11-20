@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FinalProofResponse",
+  "description": "Proof's answer in proof@1's form, with what of it quotes a test left out: a failing case's message that shares a run of 20 characters with a kept test is empty, and a detail or reason that does is replaced by a sentence saying so.",
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "proof@1/prove-response.json"
+    }
+  ]
+}

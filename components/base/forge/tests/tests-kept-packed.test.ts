@@ -8,14 +8,17 @@ import { packed, unpacked } from "../scripts/lib/kept-tests.ts";
 import { marked, markOf } from "../scripts/lib/mark.ts";
 import {
   allHeld,
+  bay,
   askedOf,
   builderWrites,
   declared,
   filesHolding,
   git,
   keptRows,
+  listOf,
   kitTemplate,
   playedTo,
+  printedCard,
   project,
   provedIn,
   removeAll,
@@ -277,4 +280,85 @@ test("after a round whose proof quotes a test, no table of kernel.db and no othe
   assert.deepEqual(heads, [head("forge/K2-tests-1"), head("forge/K2-tests-2"), head("forge/K2-tests-2")]);
   waitingOf(await shown(root, start.id), "card");
   assert.deepEqual(await quotedIn(root), nothingFound);
+});
+
+test("after a final proof whose failing cases quote a test, kernel.db holds no line or 20-character run of it, the kept tests are forgotten, and the card shows only the message that quotes nothing", async () => {
+  const root = await project(template);
+  const start = await started(root, {
+    planned: { title: "K3", slice: { ...fieldsOf(quotedSlice()), name: "K3" } },
+    base: shortHead(root),
+    bugs: [],
+  });
+  await declared(root, start, [quotedCode]);
+  await provedIn(root, "K3", quotedProof("failed"));
+  await playedTo(root, start.id, {
+    tests: () => Promise.resolve({ tests: [quoted] }),
+    builder: async (given) => {
+      await builderWrites(root, textAt(fieldsOf(given).input ?? null, "folder"), [quotedCode]);
+      return { outcome: "built" };
+    },
+    reviewer: (given) => Promise.resolve(allHeld(given)),
+  });
+  waitingOf(await shown(root, start.id), "card");
+  assert.deepEqual(await quotedIn(root), nothingFound);
+  assert.deepEqual(keptRows(root), []);
+  const printed = await printedCard(root, start.id);
+  const failing = printed.indexOf("  failing: counts once");
+  assert.deepEqual(printed.slice(failing, failing + 4), [
+    "  failing: counts once",
+    "  failing: counts twice",
+    "  failing: counts thrice",
+    `  its message: ${plainMessage}`,
+  ]);
+});
+
+function forgetRows(root: string): void {
+  const database = new DatabaseSync(join(root, ".agentbay/data/forge--kept-tests.db"));
+  try {
+    database.prepare("delete from kept_tests").run();
+  } finally {
+    database.close();
+  }
+}
+
+test("when the kept tests are gone before the final proof, it fails closed: no message and no reason of proof reaches the card or kernel.db", async () => {
+  const root = await project(template);
+  const done = listOf(fieldsOf(quotedSlice()).done);
+  const caught = { id: "DOD-K4-2", says: "Planted bugs are caught.", level: "must", proof: { kind: "bugs-caught" } };
+  const start = await started(root, {
+    planned: { title: "K4", slice: { ...fieldsOf(quotedSlice()), name: "K4", done: [...done, caught] } },
+    base: shortHead(root),
+    bugs: [],
+  });
+  await declared(root, start, [quotedCode]);
+  await provedIn(root, "K4", quotedProof("failed"));
+  const builderLine = "Written by the builder in .forge/worktrees/K4.";
+  const patch = [`--- a/${quotedCode}`, `+++ b/${quotedCode}`, "@@ -1 +1 @@", `-${builderLine}`, "+Nothing.", ""];
+  await playedTo(root, start.id, {
+    tests: () => Promise.resolve({ tests: [quoted] }),
+    builder: async (given) => {
+      await builderWrites(root, textAt(fieldsOf(given).input ?? null, "folder"), [quotedCode]);
+      return { outcome: "built" };
+    },
+    reviewer: (given) => Promise.resolve(allHeld(given)),
+    planter: () => {
+      forgetRows(root);
+      return Promise.resolve({ bugs: [{ name: "the quill is lost", patch: patch.join("\n"), tests: [quotedFile] }] });
+    },
+  });
+  waitingOf(await shown(root, start.id), "card");
+  assert.deepEqual(keptRows(root), []);
+  assert.deepEqual(await quotedIn(root), nothingFound);
+  const printed = (await printedCard(root, start.id)).join("\n");
+  assert.ok(!printed.includes(plainMessage), printed);
+  assert.ok(!printed.includes("its message:"), printed);
+  assert.ok(printed.includes("  failing: counts thrice"), printed);
+  assert.ok(printed.includes("proof's reason: Proof's reason is kept"), printed);
+  const full = await bay(root, ["runs", start.id, "--full"]);
+  const steps = listOf(fieldsOf(fieldsOf(full).run ?? null).steps);
+  const prove = steps.find((step) => textAt(step, "key") === "prove") ?? null;
+  const said = JSON.stringify(fieldsOf(prove).output ?? null);
+  assert.ok(said.includes('"message":""'), said);
+  assert.ok(!said.includes(plainMessage), said);
+  assert.ok(!said.includes("The named tests fail on the head."), said);
 });

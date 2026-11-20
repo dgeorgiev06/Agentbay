@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import type { Json } from "../../../../bay/sdk.ts";
 import { bugsOnCard } from "../scripts/lib/bug-card.ts";
-import { drawn, sliceOf, type MergeCardInput, type Verdict } from "../scripts/lib/cards.ts";
+import { drawn, type MergeCardInput } from "../scripts/lib/merge-card.ts";
+import type { Verdict } from "../scripts/lib/proof-answer.ts";
+import { sliceOf } from "../scripts/lib/slice-form.ts";
 import { bugsHanded, bugsOf, patchedFiles, plants, refusedBugs, type Bug } from "../scripts/lib/planting.ts";
 
 const codePath = "components/modes/p1/scripts/quill.ts";
@@ -216,6 +218,7 @@ describe("the merge card's lines for the bugs", () => {
       builtAt: "round-1",
       work: "forge/P1-tests-3",
       kept: "with-tests",
+      caseMessages: "filtered",
       into: "integration",
       bugs: bugsOnCard(bugs, said, planted),
     };

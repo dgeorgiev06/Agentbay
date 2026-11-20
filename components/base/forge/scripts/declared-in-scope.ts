@@ -1,5 +1,5 @@
 import { defineScript, fieldsOf } from "../../../../bay/sdk.ts";
-import { sliceOf } from "./lib/cards.ts";
+import { sliceOf } from "./lib/slice-form.ts";
 import { checkAnswer } from "./lib/check-answer.ts";
 import { refusedDeclaration } from "./lib/declared.ts";
 import { textsOf } from "./lib/json-values.ts";

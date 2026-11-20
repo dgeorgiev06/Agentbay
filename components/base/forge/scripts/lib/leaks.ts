@@ -1,7 +1,12 @@
 import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
-import type { Leak, Slice } from "./cards.ts";
 import type { HandedTest } from "./handed-tests.ts";
 import { listOf, textOf } from "./json-values.ts";
+import type { Slice } from "./slice-form.ts";
+
+export type Leak =
+  | { readonly kind: "shared-text"; readonly path: string; readonly lines: number }
+  | { readonly kind: "mark"; readonly path: string }
+  | { readonly kind: "mark-in-answer" };
 
 export type Compared = {
   readonly code: readonly HandedTest[];

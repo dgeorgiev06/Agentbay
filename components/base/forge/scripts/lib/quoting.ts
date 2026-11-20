@@ -9,3 +9,7 @@ function runsOf(text: string): readonly string[] {
 export function quotesAny(text: string, tests: readonly string[]): boolean {
   return runsOf(text).some((run) => tests.some((test) => test.includes(run)));
 }
+
+export function mayQuoteAny(text: string, tests: readonly string[]): boolean {
+  return tests.length === 0 ? text.trim() !== "" : quotesAny(text, tests);
+}

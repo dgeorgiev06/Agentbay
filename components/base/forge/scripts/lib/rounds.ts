@@ -1,9 +1,11 @@
 import { fail, fieldsOf, type Json, type JsonFields } from "../../../../../bay/sdk.ts";
-import { builtOf, sliceOf, type Built, type Leak } from "./cards.ts";
+import { builtOf, type Built } from "./builder-answer.ts";
+import { sliceOf } from "./slice-form.ts";
 import type { Failing, FailingCase } from "./failing.ts";
-import { leaksOf } from "./leaks.ts";
+import { leaksOf, type Leak } from "./leaks.ts";
+import { mayQuoteAny } from "./quoting.ts";
 import { reviewOf, type Condition, type Finding, type Review } from "./review.ts";
-import { listOf, textOf, textsOf } from "./json-values.ts";
+import { listOf, numberOf, textOf, textsOf } from "./json-values.ts";
 
 export const lastRound = 3;
 
@@ -12,7 +14,7 @@ export type Work = {
   readonly commit: string;
 };
 
-export type Remaining = Pick<Finding, "to" | "case" | "question">;
+export type Remaining = Pick<Finding, "to" | "case" | "question"> & { readonly fix?: string };
 
 export type RoundsState = {
   readonly round: number;
@@ -52,11 +54,8 @@ export type RoundPlan = {
 export type ReviewPlan = "pass-on" | "leaked" | "stopped" | "failing" | "review";
 
 export type Reviewed =
-  { readonly plan: "leaked" | "stopped" | "failing" } | { readonly plan: "review"; readonly review: Review };
-
-function countOf(value: Json | undefined): number {
-  return typeof value === "number" ? value : 0;
-}
+  | { readonly plan: "leaked" | "stopped" | "failing" }
+  | { readonly plan: "review"; readonly review: Review; readonly remaining: readonly Remaining[] };
 
 function workOf(value: Json | undefined): Work {
   const fields = fieldsOf(value ?? null);
@@ -76,15 +75,28 @@ function failingOf(value: Json | undefined): Failing {
   return {
     items: listOf(fields.items).map(textOf),
     cases: listOf(fields.cases).map(failingCaseOf),
-    withheld: countOf(fields.withheld),
-    notListed: countOf(fields.notListed),
+    withheld: numberOf(fields.withheld),
+    notListed: numberOf(fields.notListed),
     notLoaded: listOf(fields.notLoaded).map(textOf),
   };
 }
 
+function keptOf(finding: Finding): Remaining {
+  return { to: finding.to, case: finding.case, question: finding.question };
+}
+
 function remainingOf(value: Json): Remaining {
   const [finding] = reviewOf({ findings: [value] }).findings;
-  return { to: finding?.to ?? "builder", case: finding?.case ?? "", question: finding?.question ?? "" };
+  if (finding === undefined) {
+    return { to: "builder", case: "", question: "" };
+  }
+  return finding.fix === "" ? keptOf(finding) : { ...keptOf(finding), fix: finding.fix };
+}
+
+export function findingsLeft(findings: readonly Finding[], tests: readonly string[]): readonly Remaining[] {
+  return findings.map((finding) =>
+    mayQuoteAny(finding.fix, tests) ? keptOf(finding) : { ...keptOf(finding), fix: finding.fix },
+  );
 }
 
 function optionalText(
@@ -101,7 +113,7 @@ export function roundsStateOf(value: Json | undefined): RoundsState | undefined 
   }
   const fields = fieldsOf(value);
   return {
-    round: countOf(fields.round),
+    round: numberOf(fields.round),
     stage: fields.stage === "reviewed" ? "reviewed" : "proved",
     done: fields.done === true,
     base: textOf(fields.base),
@@ -115,7 +127,7 @@ export function roundsStateOf(value: Json | undefined): RoundsState | undefined 
     verdicts: listOf(fields.verdicts),
     failing: failingOf(fields.failing),
     toBuilder: reviewOf({ findings: fields.toBuilder ?? [] }).findings,
-    toTests: countOf(fields.toTests),
+    toTests: numberOf(fields.toTests),
     conditions: reviewOf({ conditions: fields.conditions ?? [] }).conditions,
     remaining: listOf(fields.remaining).map(remainingOf),
     leaks: leaksOf(fields.leaks),
@@ -156,14 +168,14 @@ function withoutFolder(state: RoundsState): RoundsState {
   return folder === undefined ? state : rest;
 }
 
-function afterReview(state: RoundsState, review: Review, at: string): RoundsState {
+function afterReview(
+  state: RoundsState,
+  reviewed: Extract<Reviewed, { readonly plan: "review" }>,
+  at: string,
+): RoundsState {
+  const { review, remaining } = reviewed;
   const done = state.round >= lastRound || review.findings.length === 0;
   const toBuilder = review.findings.filter((finding) => finding.to === "builder");
-  const remaining = review.findings.map((finding) => ({
-    to: finding.to,
-    case: finding.case,
-    question: finding.question,
-  }));
   return {
     ...state,
     done,
@@ -184,7 +196,7 @@ export function reviewedState(state: RoundsState, reviewed: Reviewed, at: string
     case "failing":
       return { ...cleared, done: false };
     case "review":
-      return afterReview(cleared, reviewed.review, at);
+      return afterReview(cleared, reviewed, at);
   }
 }
 

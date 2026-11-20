@@ -6,7 +6,6 @@ import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
 import {
   allHeld,
   askedOf,
-  bayRan,
   branches,
   builderWrites,
   decided,
@@ -30,6 +29,7 @@ import {
   type Asked,
   type Handed,
   type Proved,
+  printedCard,
 } from "./kit-copy.ts";
 
 const sample = "PLANTERNEVERSAWTHISSAMPLE";
@@ -126,13 +126,6 @@ function stepsOf(asked: readonly Asked[]): readonly string[] {
 
 function inputOf(task: Json): Json {
   return fieldsOf(task).input ?? null;
-}
-
-async function printedCard(root: string, runId: string): Promise<readonly string[]> {
-  const printed = (await bayRan(root, ["runs", runId])).stdout.split("\n");
-  const first = printed.findIndex((line) => line.startsWith("Merge "));
-  const last = printed.findIndex((line) => line.startsWith("hash "));
-  return printed.slice(first, last);
 }
 
 type Request = {

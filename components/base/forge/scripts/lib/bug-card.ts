@@ -1,5 +1,15 @@
-import type { BugsOnCard, Verdict } from "./cards.ts";
 import { patchedFiles, type Bug } from "./planting.ts";
+import type { Verdict } from "./proof-answer.ts";
+
+type SurvivedBug = {
+  readonly name: string;
+  readonly files: readonly string[];
+};
+
+export type BugsOnCard = {
+  readonly planted: number;
+  readonly survived: readonly SurvivedBug[];
+};
 
 function survived(bug: Bug, verdicts: readonly Verdict[]): boolean {
   return verdicts.some(

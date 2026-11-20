@@ -1,5 +1,5 @@
 import { fieldsOf, pathMatch, type Json } from "../../../../../bay/sdk.ts";
-import type { Slice } from "./cards.ts";
+import type { Slice } from "./slice-form.ts";
 
 export type HandedTest = {
   readonly path: string;

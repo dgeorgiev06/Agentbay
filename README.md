@@ -244,6 +244,10 @@ A workflow's `foreach` may say `sideBySide: <2 to 8>`. Up to that many of its it
 the one kernel process: their scripts and called actions run as two `bay call`s would. The output is still a list
 in the order of the items. Without the field the items run one after another, as before.
 
+`sideBySide` may also be a reference, such as `$settings.<key>` or `$steps.<id>.output.<path>`. The kernel
+resolves it each time the foreach starts or resumes, before any item runs; a value that is not a whole number from
+2 to 8 fails the step with a sentence that names the step, the reference and the value.
+
 An item's step may wait for a skill, an approval or a time. The run then waits on every such step at once: `bay
 runs <run>` shows the first as `waiting` and `task`, and the others under `alsoWaiting`, each with its own task and
 token. `bay submit` answers the step its token names, and `bay approve` the step it names. `bay runs <run>
@@ -262,10 +266,18 @@ Every item draws from the run's one budget. While the budget limits items, dolla
 action may spend runs only when no other item's such script runs, so a step never starts on a budget another
 item has spent. Minutes are counted per step and added up, so items side by side use the minutes faster.
 
-`bay check` refuses a `sideBySide` below 2 or above 8. It does not warn when items write the same place: an
+`bay check` refuses a `sideBySide` below 2 or above 8, and a reference that is not one or that names a step not
+before the foreach; what a reference resolves to is known only when the run gets there. It does not warn when items write the same place: an
 action's effects say it may write, and its mode's grants say where, but which file or row an item writes depends
 on its input, so the manifests cannot tell two items apart. A mode's database waits on its lock, so two items
 that write it both land.
+
+An approval after a foreach may quote a step the foreach runs in each item: `quotes` lists the step's id, and a
+card's line cites it with its item, counted from 0, as `source: { step: <id>, item: <n> }`. The kernel takes that
+item's last attempt, after `--rerun` the one that finished, and holds the step to the rules of a plain one. To a
+judged line it adds the skill and its tier and the foreach, and the card says `by <mode> <skill>, tier <tier>, in
+item <n> of <foreach>`. A line that cites a step in the items without its item, an item the foreach did not run,
+or a step of a foreach inside an item is not shown, and the approval fails with that line's sentence.
 
 ## Checking a value against a schema
 
@@ -300,7 +312,7 @@ Given steps are the steps from the first up to where the walk begins, each at th
 cannot be given, and neither can what a step does to the world: a worktree it cuts, a branch it commits, rows it
 writes. A later step that needs such a thing finds it missing, so the test makes it itself, as forge's tests make
 a slice's branches before they give its rounds, or gives fewer steps and lets that one run. A card's line marked
-judged may cite a given step; it names no skill, since none ran. A line marked ran cannot cite one, since no
+judged may cite a given step, or a step in an item of a given foreach; it names no skill, since none ran. A line marked ran cannot cite one, since no
 command ran there.
 
 A run started this way says so. `bay runs <run> --json` shows its target with `part`, the given steps and

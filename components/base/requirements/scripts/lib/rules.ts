@@ -256,7 +256,7 @@ function unknownIdProblems(change: Change, ids: ReadonlySet<string>, version: nu
     const sentence =
       `Version ${String(version)} lists ${listed(strangers.map((entry) => entry.id))} as ${key}, ` +
       `but no condition of the file has ${strangers.length === 1 ? "that id" : "those ids"}. ` +
-      `Remove ${strangers.length === 1 ? "it" : "them"} from ${key}, or add the conditions.`;
+      `Remove ${strangers.length === 1 ? "it" : "them"} from ${key}, or add ${strangers.length === 1 ? "the condition" : "the conditions"}.`;
     return [{ rule: "changes do not match the version", at: first.at, sentence }];
   };
   return [...unknown(change.added, "added"), ...unknown(change.changed, "changed")];
@@ -264,7 +264,7 @@ function unknownIdProblems(change: Change, ids: ReadonlySet<string>, version: nu
 
 function firstVersionProblems(change: Change, ids: readonly string[]): readonly Found[] {
   const added = new Set(change.added.map((entry) => entry.id));
-  const left = ids.filter((id) => !added.has(id));
+  const left = [...new Set(ids)].filter((id) => !added.has(id));
   const leftFound: readonly Found[] =
     left.length === 0
       ? []

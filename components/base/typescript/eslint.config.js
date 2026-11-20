@@ -140,6 +140,7 @@ export default defineConfig(
       "@typescript-eslint/max-params": ["error", { max: 3 }],
       complexity: ["error", 10],
       "no-nested-ternary": "error",
+      "no-empty": ["error", { allowEmptyCatch: false }],
       "no-param-reassign": "error",
       "no-restricted-syntax": ["error", ...bannedSyntax],
     },

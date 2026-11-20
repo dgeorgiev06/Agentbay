@@ -112,3 +112,18 @@ FC2 is merged: forge's cards in the clearer form. Seventeen slices of this plan 
 - `scripts/lib/cards.ts` is about 700 lines and should be split.
 - The pinned cards in `cards.test.ts` come from the test's own copy of the kernel's print layout; the end-to-end tests go through the real print.
 - What is left needs the owner: RQ1 waits for the PM mode's first question; TDX, EX1 and TDW are live runs.
+
+## The first live run of the rounds (TD1, 19 November, evening)
+
+The owner set `skillSteps.run: without-the-hook` in his own words; the run was relayed step by step (the kit's own step agents have no `submit` tool in this cloud session). Three rounds ran with real models; the final proof did not pass; the card offers only keep and still waits (run 773f1ac3, step card).
+
+Causes found:
+
+- **A kernel bug the hidden test found.** Two actions started at the same moment that both open a mode's database for the first time: `bay/broker/database.ts` opens the file and sets `journal_mode = wal` with no wait on a lock, so one fails with "database is locked". The todo test fails 3 runs in 8. Slice KB1: wait on a busy database when opening, with a test of two first uses at once.
+- **The whole-suite run did not finish within the toolchain's 1,000 seconds** in proof's copy. The card printed only "the test run is not known" and dropped that reason. To fix: the limit or the suite's time in a copy, and the card keeps proof's reason.
+- **The slice had no interface.** Plan 0023 was written by hand for the old flow. The rounds must not start on a slice with no interface files unless the owner says so on the start card.
+- **The card:** the reviewer's "held by" lines stand beside proof's failed verdict with no word that they were judged earlier; each remaining finding prints its case's name, not what was asked, so three findings read the same.
+- **No round after the card:** a test added in round three is proved once in that round and once in the final proof; a flaky one fails only at the end.
+- **A long step outlives the coordinator's turn here:** the final proof died once with the turn and was run again with `bay resume --rerun`.
+
+The owner then asked for the missing pipeline to be built (requirements, design, planning, waves) and chose the shared interface `requirements@1` for the requirements file's form. RQ1 and KP2 (called answers kept packed) are building.

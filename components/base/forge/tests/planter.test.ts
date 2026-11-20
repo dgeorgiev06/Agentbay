@@ -11,7 +11,6 @@ import {
   decided,
   declared,
   filesHolding,
-  git,
   keptRows,
   kitTemplate,
   listOf,
@@ -116,10 +115,6 @@ function provedWith(name: string, bugsCaught: Json): Proved {
 const notKnown = { verdict: "inconclusive", reason: "No bugs were given to inject, so nothing is known." };
 
 const survived = { verdict: "failed", detail: `A bug survived: ${survivorName}.` };
-
-function rev(root: string, name: string): string {
-  return git(root, ["rev-parse", name]).trim();
-}
 
 function stepsOf(asked: readonly Asked[]): readonly string[] {
   return asked.map((each) => `${each.action} ${each.step}`);
@@ -250,8 +245,7 @@ describe(
       ]);
       assert.ok(printed.every((line) => Array.from(line).length <= 44));
       await decided(root, card, { step: "card", choice: "keep" });
-      assert.deepEqual(branches(root), ["forge/P1", "forge/P1-planter", "forge/P1-tests-1"]);
-      assert.equal(rev(root, "forge/P1-planter"), rev(root, "forge/P1"));
+      assert.deepEqual(branches(root), ["forge/P1", "forge/P1-tests-1"]);
       assert.deepEqual(worktrees(root), []);
       assert.deepEqual(keptRows(root), []);
       assert.deepEqual(await filesHolding(root, "", lines), []);
@@ -292,6 +286,7 @@ describe(
         ),
         "done",
       );
+      assert.deepEqual(branches(root), ["forge/P2", "forge/P2-tests-1"]);
       assert.deepEqual(worktrees(root), []);
     });
 
@@ -328,7 +323,7 @@ describe(
       assert.ok(!(await printedCard(root, runId)).some((line) => line.includes("planter")));
       assert.deepEqual(keptRows(root), []);
       assert.deepEqual(worktrees(root), []);
-      assert.ok(!branches(root).includes("forge/P3-planter"));
+      assert.deepEqual(branches(root), ["forge/P3", "forge/P3-tests-1"]);
     });
 
     test("a builder that writes a fixed test file against its rules: neither the reviewer's code nor the planter's holds it", async () => {

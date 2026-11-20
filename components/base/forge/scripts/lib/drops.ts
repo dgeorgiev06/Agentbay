@@ -1,7 +1,7 @@
 import { fail, type JsonFields, type ScriptContext } from "../../../../../bay/sdk.ts";
 import { branchOf, type Branches, type Dropped, type Stayed } from "./branch-endings.ts";
 import { answerOf } from "./called.ts";
-import { textOf } from "./json-values.ts";
+import { textOf, textsOf } from "./json-values.ts";
 
 export type Drops = {
   readonly dropped: readonly Dropped[];
@@ -73,8 +73,7 @@ export async function leftOver(context: ScriptContext, branches: readonly string
 }
 
 async function foldersLeft(context: ScriptContext): Promise<readonly string[]> {
-  const listed = await context.files.list(worktreesFolder);
-  return listed.ok ? listed.value : [];
+  return textsOf((await answerOf(context, "worktrees-left", {})).folders);
 }
 
 async function setAsideAndRemoved(context: ScriptContext, name: string): Promise<readonly string[]> {

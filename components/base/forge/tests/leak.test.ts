@@ -218,7 +218,7 @@ function holding(texts: readonly string[], within: string): readonly string[] {
 async function assertNothingLeft(root: string, name: string, ran: Ran): Promise<void> {
   assert.deepEqual(worktrees(root), []);
   assert.deepEqual(keptRows(root), []);
-  assert.ok(!branches(root).some((branch) => branch.includes("-base-")));
+  assert.deepEqual(branches(root), [`forge/${name}`, `forge/${name}-tests-1`]);
   assert.equal(git(root, ["show", `forge/${name}-tests-1:${testPath(name)}`]), testsOf(name).text);
   assert.deepEqual(await filesHolding(root, "", [ran.mark]), []);
 }

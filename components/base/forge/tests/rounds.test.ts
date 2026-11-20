@@ -13,6 +13,7 @@ import {
   declared,
   filesHolding,
   git,
+  into,
   keptRows,
   kitTemplate,
   listOf,
@@ -248,11 +249,9 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
     const card = waitingOf(await shown(root, start.id), "card");
     assert.equal(listOf(card.choices).map((choice) => textAt(choice, "status"))[0], "offered");
     const heads = (await askedOf(root, name)).map((each) => textAt(each, "head"));
-    assert.deepEqual(heads, [
-      rev(root, "forge/A1-tests-1"),
-      rev(root, "forge/A1-tests-2"),
-      rev(root, "forge/A1-tests-2"),
-    ]);
+    assert.deepEqual(heads.slice(1), [rev(root, "forge/A1-tests-2"), rev(root, "forge/A1-tests-2")]);
+    assert.notEqual(heads[0], heads[1]);
+    assert.deepEqual(branches(root), ["forge/A1-2", "forge/A1-tests-2"]);
     assert.equal(rev(root, "forge/A1-tests-2^"), rev(root, "forge/A1-2"));
     assert.equal(git(root, ["show", `forge/A1-2:${codeOf(name)}`]), `${builderLine(".forge/worktrees/A1-2")}\n`);
     assert.deepEqual(await printedCard(root, start.id), [
@@ -266,7 +265,8 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "    round 2: 65; 65 held, 0 not held, 0 do",
       "    not apply; a check holds 12 more",
       "  1 file changed; the work and the tests are",
-      "    on forge/A1-tests-2",
+      "    on forge/A1-tests-2, the builder's work",
+      "    alone on forge/A1-2",
       "  size in lines: components/ +1",
       "  rounds: 2 of at most 3; the reviewer had",
       "    no findings",
@@ -290,18 +290,10 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "checked: 0 ran, 8 computed, 3 judged",
     ]);
     await decided(root, card, { step: "card", choice: "merge" });
-    assert.deepEqual(branches(root), [
-      "forge/A1",
-      "forge/A1-2",
-      "forge/A1-merge",
-      "forge/A1-tests-1",
-      "forge/A1-tests-2",
-    ]);
-    assert.deepEqual(worktrees(root), [".forge/worktrees/A1-merge"]);
+    assert.deepEqual(branches(root), []);
+    assert.deepEqual(worktrees(root), []);
     assert.deepEqual(keptRows(root), []);
-    assert.deepEqual(await filesHolding(root, ".forge/worktrees/A1-merge", lines), [
-      `.forge/worktrees/A1-merge/${testPath(name)}`,
-    ]);
+    assert.equal(git(root, ["show", `${into}:${testPath(name)}`]), tests[0]?.text);
     assert.deepEqual(await filesHolding(root, ".agentbay", lines), []);
   });
 
@@ -377,7 +369,8 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "    round 3: 65; 65 held, 0 not held, 0 do",
       "    not apply; a check holds 12 more",
       "  1 file changed; the work and the tests are",
-      "    on forge/B1-tests-3",
+      "    on forge/B1-tests-3, the builder's work",
+      "    alone on forge/B1-3",
       "  size in lines: components/ +1",
       "  interface file changed during the rounds:",
       "    components/base/interfaces/proof.yaml",
@@ -417,15 +410,8 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
     const kernel = await readFile(join(root, ".agentbay/kernel.db"));
     assert.ok(!kernel.toString("latin1").includes(alphabet));
     const kept = runOf(await decided(root, card, { step: "card", choice: "keep" }));
-    assert.deepEqual(fieldsOf(kept).output, { choice: "keep", kept: ["forge/B1", "forge/B1-tests-3"] });
-    assert.deepEqual(branches(root), [
-      "forge/B1",
-      "forge/B1-2",
-      "forge/B1-3",
-      "forge/B1-tests-1",
-      "forge/B1-tests-2",
-      "forge/B1-tests-3",
-    ]);
+    assert.deepEqual(fieldsOf(kept).output, { choice: "keep", kept: ["forge/B1-3", "forge/B1-tests-3"] });
+    assert.deepEqual(branches(root), ["forge/B1-3", "forge/B1-tests-3"]);
     assert.deepEqual(worktrees(root), []);
     assert.deepEqual(keptRows(root), []);
     assert.deepEqual(await filesHolding(root, "", lines), []);
@@ -491,10 +477,10 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "write-tests round-1/0.call0/0#1",
       "build-without-tests round-1/0.call1/0#1",
       "review review-1/0.call1/0#1",
-      "write-tests round-2/0.call1/0#1",
-      "build-without-tests round-2/0.call4/0#1",
+      "write-tests round-2/0.call3/0#1",
+      "build-without-tests round-2/0.call7/0#1",
       "review review-2/0.call1/0#1",
-      "write-tests round-3/0.call1/0#1",
+      "write-tests round-3/0.call3/0#1",
       "review review-3/0.call1/0#1",
     ]);
     assert.deepEqual(writerSaw, [
@@ -547,7 +533,7 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "judged      balanced; forge",
     ]);
     assert.equal(printed[decided + 4], "judged      skills/build-without-tests, tier");
-    assert.ok(!branches(root).some((branch) => branch.includes("writer")));
+    assert.deepEqual(branches(root), ["forge/C1-2", "forge/C1-tests-3"]);
     assert.deepEqual(worktrees(root), []);
     assert.deepEqual(keptRows(root), []);
   });

@@ -234,6 +234,12 @@ export async function shown(root: string, runId: string): Promise<Json> {
   return runOf(await bay(root, ["runs", runId]));
 }
 
+export async function stepOutput(root: string, runId: string, stepId: string): Promise<Json> {
+  const run = runOf(await bay(root, ["runs", runId, "--full"]));
+  const step = listOf(fieldsOf(run).steps).find((each) => textAt(each, "key").startsWith(`${stepId}/`));
+  return fieldsOf(step ?? null).output ?? null;
+}
+
 export async function task(root: string, runId: string): Promise<Json> {
   return fieldsOf(runOf(await bay(root, ["runs", runId, "--new-token"]))).task ?? null;
 }

@@ -155,6 +155,13 @@ actions:
     effects: [read, write, delete]
     run:
       - script: scripts/attempt.ts
+  worktrees-left:
+    description: When a script must know which worktree folders are left under .forge/worktrees before it removes one, it lists them, and its answer holds the list, so a replay of the calling script makes the same calls.
+    input: schemas/worktrees-left-request.json
+    output: schemas/worktrees-left-response.json
+    effects: [read]
+    run:
+      - script: scripts/worktrees-left.ts
   read-on-branch:
     description: When a script needs files as they are at a commit, it reads them in a worktree of their own and removes it, and its answer holds the texts, so a replay of the calling script reads the same texts after the worktree is gone.
     input: schemas/read-on-branch-request.json

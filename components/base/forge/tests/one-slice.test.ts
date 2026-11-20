@@ -462,14 +462,15 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
       { name: "keep", status: "offered", does: "Stop; the branches stay" },
       { name: "discard", status: "withheld", does: "Stop; the worktree goes", reason: discardWithheld },
     ]);
+    const work = git(root, ["rev-parse", "forge/wip/A1/1"]).trim();
     const done = runOf(await decided(root, card, { step: "card", choice: "merge" }));
     const merged = git(root, ["rev-parse", into]).trim();
     assert.deepEqual(fieldsOf(done).output, { choice: "merge", merged, into });
-    assert.deepEqual(branches(root), ["forge/A1", "forge/A1-merge", "forge/wip/A1/1"]);
-    assert.deepEqual(worktrees(root), [".forge/worktrees/A1", ".forge/worktrees/A1-merge"]);
+    assert.deepEqual(branches(root), []);
+    assert.deepEqual(worktrees(root), []);
     assert.deepEqual(changedOn(root, into), ["components/base/a1/mode.yaml", "docs/a1/notes.md"]);
     assert.equal(git(root, ["show", `${into}:docs/a1/notes.md`]), "Written by the builder of A1.\n");
-    assert.equal(git(root, ["rev-parse", `${into}^2`]).trim(), git(root, ["rev-parse", "forge/wip/A1/1"]).trim());
+    assert.equal(git(root, ["rev-parse", `${into}^2`]).trim(), work);
     assertTheMainCheckoutIsUntouched(root);
   });
 

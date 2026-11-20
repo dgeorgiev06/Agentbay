@@ -77,7 +77,7 @@ test("an answer of a step kept packed is stored packed and read back whole", asy
   await store.recordAnswer(recorded("a#1", "a secret note"), { owner: "submitter", now }, allowing("kept-packed"));
   const [row] = rows(file);
   assert.equal(row?.["kept"], "kept-packed");
-  assert.ok(!String(row?.["submission"]).includes("a secret note"));
+  assert.ok(!String(row["submission"]).includes("a secret note"));
   assert.deepEqual((await store.recordedAnswers("run-1"))[0]?.submission.output, { text: "a secret note" });
   store.close();
   remove();

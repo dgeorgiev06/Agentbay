@@ -6,6 +6,7 @@
     "bay/cli.ts!",
     "bay/mcp.ts!",
     "tests/inside/runs/race-driver.ts",
+    "tests/inside/runs/answer-driver.ts",
     "bay/sdk.ts!",
     "bay/broker/script-host.ts!",
     "bay/broker/script-preload.ts!",

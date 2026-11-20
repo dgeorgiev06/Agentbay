@@ -5,7 +5,6 @@ import type { ScriptRequest } from "../bay/contracts.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
 import { textField } from "../bay/json.ts";
 import type { Run, Runs } from "../bay/runs/runs.ts";
-import { SqliteRunStore } from "../bay/runs/sqlite-run-store.ts";
 import {
   answer,
   eventKinds,
@@ -54,7 +53,10 @@ function gateOn(topic: string): Gate {
     }
     return finished(text.length >= 10 ? { passed: true } : { passed: false, feedback: `too short: ${text}` });
   };
-  return { script, reached: reached.promise, open: () => held.resolve(undefined) };
+  const open = (): void => {
+    held.resolve(undefined);
+  };
+  return { script, reached: reached.promise, open };
 }
 
 function waitsOf(run: Run): Waits {
@@ -195,10 +197,11 @@ type Stranded = {
 async function strandedAnswer(): Promise<Stranded> {
   const opened = await openedRuns({ changes: withFlow(drafts(2)) });
   const started = runOf(await opened.runs.start(flow, ["tea", "coffee"]));
-  const store = new SqliteRunStore(opened.database);
-  const lock = await store.acquire(started.id, "engine-that-died", opened.clock.now());
-  store.close();
-  assert.equal(lock.status, "acquired");
+  const database = new DatabaseSync(opened.database);
+  database
+    .prepare("update runs set lock_owner = ?, lock_heartbeat = ? where id = ?")
+    .run("engine-that-died", opened.clock.now().toISOString(), started.id);
+  database.close();
   const coffee = tokensOf(started)[1] ?? "";
   const recorded = runOf(await opened.runs.submit(coffee, said("coffee is long enough")));
   assert.deepEqual(recorded.recordedAnswers, ["each[1].write/0#1"]);

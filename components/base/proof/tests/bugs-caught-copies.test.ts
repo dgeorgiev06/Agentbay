@@ -174,7 +174,12 @@ test("bugs-caught: with no time left the test is not asked, the run could not st
       name: "the value is not raised",
       run: {
         how: "ran",
-        run: { ran: "not started", reason: "Proof's own step had no time left for it, so it was not made." },
+        run: {
+          ran: "not started",
+          reason:
+            "Proof's own step of 1800 seconds had no time left for it, so it was not made;" +
+            " settings.proof.stepSeconds in agentbay.config.yaml raises the step.",
+        },
       },
     },
   ]);

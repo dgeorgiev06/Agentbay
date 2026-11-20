@@ -232,10 +232,10 @@
           "$ref": "#/$defs/keeping"
         },
         "scriptTimeLimitSeconds": {
-          "description": "How long each script step in run may take, in whole seconds, at most 1800; left out, 480. When it passes, the kernel stops the script and the run fails. The run's budget of minutes still applies: when fewer minutes are left, the script is stopped when they run out.",
+          "description": "How long each script step in run may take, in whole seconds, at most 7200; left out, 480. When it passes, the kernel stops the script and the run fails. The run's budget of minutes still applies: when fewer minutes are left, the script is stopped when they run out.",
           "type": "integer",
           "minimum": 1,
-          "maximum": 1800
+          "maximum": 7200
         }
       }
     },

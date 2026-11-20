@@ -1,10 +1,22 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ProofSettings",
-  "description": "What a project declares for proof, under settings in agentbay.config.yaml, by the name of the mode that implements proof@1. Every such mode reads these settings in this shape; its own settings schema is a copy of this file.",
+  "description": "What a project declares for the mode proof, under settings.proof in agentbay.config.yaml. links, sameOutput and noRise are the settings of proof@1, as that interface's settings.json gives them, which every mode that implements it reads in this shape; stepSeconds and longestCallSeconds are this mode's own.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "stepSeconds": {
+      "type": "integer",
+      "minimum": 120,
+      "maximum": 7200,
+      "description": "The seconds proof counts for one call of prove, every toolchain call and command in it together; left out, 1800. At most 7200, the limit proof's mode.yaml declares for the step, and at least 120. Proof keeps 60 of them to remove its copies and answer, so no call is asked for more than what is left."
+    },
+    "longestCallSeconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3600,
+      "description": "The most seconds proof asks for one toolchain call, such as one whole test run, or one command it runs; left out, 1000. At most 3600, the most toolchain@1 lets a call ask. A project whose whole test run takes longer in a throwaway copy sets it higher, and stepSeconds with it."
+    },
     "links": {
       "type": "array",
       "maxItems": 50,

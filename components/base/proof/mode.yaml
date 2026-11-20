@@ -28,6 +28,6 @@ actions:
   prove:
     description: When a slice's items of its definition of done need a verdict each, passed, failed or inconclusive, with the size of each changed file.
     effects: [read, write, network, spend, delete]
-    scriptTimeLimitSeconds: 1800
+    scriptTimeLimitSeconds: 7200
     run:
       - script: scripts/prove.ts

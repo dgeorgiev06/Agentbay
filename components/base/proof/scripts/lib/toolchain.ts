@@ -1,5 +1,5 @@
 import { fieldsOf, type Json, type JsonFields } from "../../../../../bay/sdk.ts";
-import type { ProofStep } from "./step.ts";
+import { noTimeLeftSentence, reasonWithTheLimit, type ProofStep, type TimeLimits } from "./step.ts";
 
 export type FailingCase = {
   readonly name: string;
@@ -27,8 +27,6 @@ export type CheckVerdict =
 export type CheckRun =
   | { readonly ran: "ended"; readonly verdicts: readonly CheckVerdict[] }
   | { readonly ran: "not started"; readonly reason: string };
-
-const noTimeLeft = "Proof's own step had no time left for it, so it was not made.";
 
 function textOf(fields: JsonFields, name: string): string {
   const value = fields[name];
@@ -67,31 +65,38 @@ function casesOf(fields: JsonFields): Cases {
   };
 }
 
-function testRunOf(value: Json): TestRun {
-  const fields = fieldsOf(value);
+type Answered = { readonly value: Json; readonly askedSeconds: number };
+
+function unknownReason(fields: JsonFields, limits: TimeLimits, askedSeconds: number): string {
+  const timed = { askedSeconds, tookSeconds: numberOf(fields, "seconds") };
+  return reasonWithTheLimit(textOf(fields, "reason"), limits, timed);
+}
+
+function testRunOf(answered: Answered, limits: TimeLimits): TestRun {
+  const fields = fieldsOf(answered.value);
   if (fields.verdict === "passed") {
     return { ran: "passed", passed: numberOf(fields, "passed") };
   }
   if (fields.verdict === "failed") {
     return { ran: "failed", failed: numberOf(fields, "failed"), cases: casesOf(fields) };
   }
-  return { ran: "inconclusive", reason: textOf(fields, "reason") };
+  return { ran: "inconclusive", reason: unknownReason(fields, limits, answered.askedSeconds) };
 }
 
-function checkVerdictOf(value: Json): CheckVerdict {
-  const fields = fieldsOf(value);
+function checkVerdictOf(answered: Answered, limits: TimeLimits): CheckVerdict {
+  const fields = fieldsOf(answered.value);
   const name = textOf(fields, "name");
   const verdict = fields.verdict;
   if (verdict === "passed" || verdict === "failed") {
     return { name, verdict };
   }
-  return { name, verdict: "inconclusive", reason: textOf(fields, "reason") };
+  return { name, verdict: "inconclusive", reason: unknownReason(fields, limits, answered.askedSeconds) };
 }
 
 export async function testRun(step: ProofStep, folder: string, files?: readonly string[]): Promise<TestRun> {
   const seconds = step.secondsLeft(1);
   if (seconds < 1) {
-    return { ran: "not started", reason: noTimeLeft };
+    return { ran: "not started", reason: noTimeLeftSentence(step.limits, "made") };
   }
   const asked =
     files === undefined ? { folder, timeLimitSeconds: seconds } : { folder, files, timeLimitSeconds: seconds };
@@ -101,13 +106,13 @@ export async function testRun(step: ProofStep, folder: string, files?: readonly 
     return { ran: "not started", reason: answer.reason };
   }
   step.spend(numberOf(fieldsOf(answer.value), "seconds"));
-  return testRunOf(answer.value);
+  return testRunOf({ value: answer.value, askedSeconds: seconds }, step.limits);
 }
 
 export async function checkRun(step: ProofStep, folder: string, checks: number): Promise<CheckRun> {
   const seconds = step.secondsLeft(checks);
   if (seconds < 1) {
-    return { ran: "not started", reason: noTimeLeft };
+    return { ran: "not started", reason: noTimeLeftSentence(step.limits, "made") };
   }
   const answer = await step.called("toolchain.check", { folder, timeLimitSeconds: seconds });
   if (!answer.ok) {
@@ -116,7 +121,8 @@ export async function checkRun(step: ProofStep, folder: string, checks: number):
   }
   const verdicts = listOf(fieldsOf(answer.value).verdicts);
   step.spend(verdicts.reduce((total: number, verdict) => total + numberOf(fieldsOf(verdict), "seconds"), 0));
-  return { ran: "ended", verdicts: verdicts.map(checkVerdictOf) };
+  const verdictOfCheck = (value: Json): CheckVerdict => checkVerdictOf({ value, askedSeconds: seconds }, step.limits);
+  return { ran: "ended", verdicts: verdicts.map(verdictOfCheck) };
 }
 
 export async function checkCount(step: ProofStep): Promise<number | undefined> {

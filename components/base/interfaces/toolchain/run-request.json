@@ -33,8 +33,8 @@
     "timeLimitSeconds": {
       "type": "integer",
       "minimum": 1,
-      "maximum": 1000,
-      "description": "How long the command may take before it is stopped; left out, 90 seconds."
+      "maximum": 3600,
+      "description": "How long the command may take before it is stopped; left out, 90 seconds, and at most 3600."
     }
   }
 }

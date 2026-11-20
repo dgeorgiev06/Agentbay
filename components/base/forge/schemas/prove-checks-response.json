@@ -35,11 +35,7 @@
           "maxItems": 50,
           "description": "The solo proofs to run, the request's whenFailed when a checks item failed, and none otherwise.",
           "items": {
-            "type": "array",
-            "maxItems": 8,
-            "items": {
-              "type": "object"
-            }
+            "type": "object"
           }
         }
       }

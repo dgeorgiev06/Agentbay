@@ -24,13 +24,11 @@ function mergedNames(joined: Joined): readonly string[] {
 function waveOf(fields: Readonly<Record<string, Json>>): Wave {
   const wave = fieldsOf(fields.wave ?? null);
   const joined = joinedOf(fieldsOf(fields.combined ?? null).joined ?? null);
-  const slices = listOf(fields.slices)
-    .flatMap(listOf)
-    .map((value) => {
-      const settledSlice = fieldsOf(value);
-      const merged = mergedNames(joined).includes(textOf(settledSlice.name));
-      return { builder: textOf(settledSlice.builder), head: textOf(settledSlice.work), merged };
-    });
+  const slices = listOf(fields.slices).map((value) => {
+    const settledSlice = fieldsOf(value);
+    const merged = mergedNames(joined).includes(textOf(settledSlice.name));
+    return { builder: textOf(settledSlice.builder), head: textOf(settledSlice.work), merged };
+  });
   return { name: textOf(wave.name), into: textOf(wave.into), joined, slices };
 }
 

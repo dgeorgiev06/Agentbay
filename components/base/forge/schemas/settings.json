@@ -32,7 +32,7 @@
       "type": "integer",
       "minimum": 2,
       "maximum": 8,
-      "description": "How many builders the workflow wave runs at the same time, from 2 to 8. A wave with more slices than this builds them in batches of this many, each batch after the one before; the solo proofs run the same way. Left out, 2."
+      "description": "How many builders the workflow wave runs at the same time, from 2 to 8. A wave with more slices than this starts the next slice as soon as one ends; the solo proofs run the same way. Left out, 2."
     },
     "mustPractices": {
       "type": "array",

@@ -7,10 +7,6 @@ import { joinedOf, type Alone, type WaveChecks } from "./lib/wave-answer.ts";
 import { waveDrawn } from "./lib/wave-card.ts";
 import { settledOf } from "./lib/wave-standing.ts";
 
-function flat(batches: Json | undefined): readonly Json[] {
-  return listOf(batches).flatMap(listOf);
-}
-
 function checksOf(asked: Json, proved: Json | undefined): WaveChecks {
   const answer = fieldsOf(proved ?? null);
   if (answer.kind !== "asked") {
@@ -34,10 +30,10 @@ export const run = defineScript((input, context) => {
   const drawn = waveDrawn({
     wave: numberOf(wave.wave),
     into: textOf(wave.into),
-    slices: flat(fields.slices).map(settledOf),
+    slices: listOf(fields.slices).map(settledOf),
     joined: joinedOf(combined.joined),
     checks: checksOf(proving.asked ?? null, fields.proved),
-    alone: aloneOf(flat(proving.whenFailed), flat(fields.alone)),
+    alone: aloneOf(listOf(proving.whenFailed), listOf(fields.alone)),
     must: textsOf(context.settings.mustPractices),
   });
   return Promise.resolve(withStayedLines(drawn, stayedOf(combined.stayed)));

@@ -170,7 +170,7 @@ actions:
     run:
       - script: scripts/read-on-branch.ts
   wave:
-    description: When the owner asks for a wave of a committed plan, it reads the plan at the head of the integration branch, works out its waves as forge.waves does, refuses with every reason a wave that cannot be built, finds the branches an earlier run of the wave left, and draws the wave's start card and its slice requests in batches.
+    description: When the owner asks for a wave of a committed plan, it reads the plan at the head of the integration branch, works out its waves as forge.waves does, refuses with every reason a wave that cannot be built, finds the branches an earlier run of the wave left, and draws the wave's start card and its slice requests, with how many are built side by side.
     input: schemas/wave-request.json
     output: schemas/wave-response.json
     effects: [read, write, delete]

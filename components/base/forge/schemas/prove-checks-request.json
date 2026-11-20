@@ -42,13 +42,9 @@
             "whenFailed": {
               "type": "array",
               "maxItems": 50,
-              "description": "The solo proofs to run when the checks fail, in batches of at most the setting sideBySide.",
+              "description": "The solo proofs to run when the checks fail, one for each slice in the combined head.",
               "items": {
-                "type": "array",
-                "maxItems": 8,
-                "items": {
-                  "type": "object"
-                }
+                "type": "object"
               }
             }
           }

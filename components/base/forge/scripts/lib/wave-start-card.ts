@@ -4,7 +4,6 @@ import { modulesReached, type DesignSummary } from "./design-summary.ts";
 import { leftoverWords } from "./start-card.ts";
 import type { PlannedSlice } from "./plan.ts";
 import { lastRound } from "./rounds.ts";
-import { batchesOf } from "./wave-batches.ts";
 
 export type WaveStart = {
   readonly plan: string;
@@ -55,15 +54,16 @@ function sliceWords(slice: PlannedSlice, design: DesignSummary | undefined): rea
   ];
 }
 
-function batchWords(start: WaveStart): readonly string[] {
+function sideBySideWords(start: WaveStart): readonly string[] {
   const names = start.slices.map((slice) => slice.name);
   const said = `side by side: at most ${String(start.sideBySide)} builders, the setting sideBySide`;
-  if (names.length <= start.sideBySide) {
+  const later = names.slice(start.sideBySide);
+  if (later.length === 0) {
     return [said];
   }
-  const batches = batchesOf(names, start.sideBySide).map(joined);
-  const many = `${String(batches.length)} ${batches.length === 1 ? "batch" : "batches"}`;
-  return [said, `in ${many}, each after the one before: ${batches.join("; then ")}`];
+  const starts = later.length === 1 ? "which starts" : "each starting";
+  const first = joined(names.slice(0, start.sideBySide));
+  return [said, `first ${first}; then ${joined(later)}, ${starts} as soon as a slice ends`];
 }
 
 function costWords(start: WaveStart): string {
@@ -77,7 +77,7 @@ export function waveStartCard(start: WaveStart): Card {
     `${counted(start.slices.length, "slice")} of wave ${String(start.wave)} of ${String(start.waves)} in ${start.plan}`,
     `base ${start.base}, the head of ${start.into}`,
     ...start.slices.flatMap((slice) => sliceWords(slice, start.design)),
-    ...batchWords(start),
+    ...sideBySideWords(start),
     costWords(start),
     "each slice's own proof leaves out the checks; they and the whole test run go once, on the slices combined",
     ...leftoverWords(start.leftovers),

@@ -128,8 +128,8 @@ describe("the wave's start card", () => {
     );
   });
 
-  test("a wave with more slices than the setting says which batches run one after another", () => {
-    const plan = planOf({ title: "A wave", slices: ["A1", "A2", "A3"].map(plannedSlice) });
+  test("a wave with more slices than the setting says which start first and that the rest start as slices end", () => {
+    const plan = planOf({ title: "A wave", slices: ["A1", "A2", "A3", "A4"].map(plannedSlice) });
     const start = {
       plan: "p.yaml",
       wave: 1,
@@ -140,7 +140,12 @@ describe("the wave's start card", () => {
       leftovers: [],
     };
     const words = waveStartCard({ ...start, slices: plan.slices }).lines.map((line) => line.words);
-    assert.ok(words.includes("in 2 batches, each after the one before: A1 and A2; then A3"), words.join("\n"));
+    assert.ok(
+      words.includes("first A1 and A2; then A3 and A4, each starting as soon as a slice ends"),
+      words.join("\n"),
+    );
+    const three = waveStartCard({ ...start, slices: plan.slices.slice(0, 3) }).lines.map((line) => line.words);
+    assert.ok(three.includes("first A1 and A2; then A3, which starts as soon as a slice ends"), three.join("\n"));
     assert.ok(waveStartCard({ ...start, slices: plan.slices }).lines.every((line) => line.source.step === "wave"));
   });
 });

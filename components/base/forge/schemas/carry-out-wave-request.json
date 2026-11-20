@@ -20,14 +20,10 @@
     "slices": {
       "type": "array",
       "maxItems": 50,
-      "description": "The slices as settle answered for each.",
+      "description": "The slices as settle answered for each, in plan order.",
       "items": {
-        "type": "array",
-        "maxItems": 8,
-        "items": {
-          "type": "object",
-          "description": "A slice of the wave as the step settle handed it on, the last step of the slice's item."
-        }
+        "type": "object",
+        "description": "A slice of the wave as the step settle handed it on, the last step of the slice's item."
       }
     }
   }

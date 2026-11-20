@@ -3,7 +3,6 @@ import { branchesSaid, type Dropped, type Stayed } from "./lib/branch-endings.ts
 import { answerOf } from "./lib/called.ts";
 import { cutAfresh, intoOf, removedThenDropped } from "./lib/drops.ts";
 import { textOf } from "./lib/json-values.ts";
-import { sideBySideOf } from "./lib/wave-batches.ts";
 import { proving, slicesToJoin, type ToJoin, type WaveNamed } from "./lib/wave-join.ts";
 
 type Combining = {
@@ -66,8 +65,6 @@ export const run = defineScript(async (input, context) => {
     return { joined: joinedOf(nothing, []), proving: { kind: "not asked" } };
   }
   const at = await combined(context, wave, included);
-  const sideBySide = sideBySideOf(context.settings.sideBySide);
-  const asked =
-    at.conflict === undefined ? proving(wave, included, { head: at.head, sideBySide }) : { kind: "not asked" };
+  const asked = at.conflict === undefined ? proving(wave, included, at.head) : { kind: "not asked" };
   return { joined: joinedOf(at, included), proving: asked, ...branchesSaid(at.dropped, at.stayed) };
 });

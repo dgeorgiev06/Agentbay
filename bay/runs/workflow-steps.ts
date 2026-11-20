@@ -109,7 +109,15 @@ async function runWorkflowAction(walk: Walk, scope: WorkflowScope, at: Unsettled
     return refuse(walk, start, target);
   }
   const caller = target.caller;
-  return runNestedAction(walk, scope.budget, { key: at.key, kind: "action", target, input: input.value, caller });
+  const nested = {
+    key: at.key,
+    kind: "action" as const,
+    target,
+    input: input.value,
+    caller,
+    within: "as-text" as const,
+  };
+  return runNestedAction(walk, scope.budget, nested);
 }
 
 function approvalWaiting(at: StepAt<ApprovalStep>, detail: ApprovalDetail, content: Json): Progress {

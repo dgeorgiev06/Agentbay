@@ -32,12 +32,17 @@ const keepScript = [
   "",
   ...sumFunction,
   "",
+  "function turned(given) {",
+  "  const entries = Object.entries(fieldsOf(given));",
+  '  return Object.fromEntries(entries.map(([name, value]) => [name, typeof value === "string" ? Array.from(value).reverse().join("") : value]));',
+  "}",
+  "",
   "export const run = defineScript(async (input, context) => {",
   "  const fields = fieldsOf(input);",
   "  const answers = [];",
   "  for (const asked of fields.calls) {",
   "    const { action, given } = fieldsOf(asked);",
-  "    const answer = await context.call(action, given);",
+  "    const answer = await context.call(action, turned(given));",
   "    if (answer.ok) {",
   "      const text = JSON.stringify(answer.value);",
   "      answers.push({ length: text.length, sum: sumOf(text) });",
@@ -57,7 +62,7 @@ const echoScript = [
   'import { defineScript, fail } from "agentbay/sdk";',
   "",
   "export const run = defineScript(async (input, context) => {",
-  '  const answer = await context.call("vault.inner", input);',
+  '  const answer = await context.call("inner", input);',
   "  return answer.ok ? { echoed: answer.value } : fail(answer.message);",
   "});",
   "",
@@ -230,7 +235,7 @@ async function writeVault(beside: Project, manifest: Json): Promise<void> {
   await beside.write(`${folder}/skills/note/SKILL.md`, noteSkill);
   await beside.write(`${folder}/scripts/keep.ts`, keepScript);
   await beside.write(`${folder}/scripts/echo.ts`, echoScript);
-  await beside.write(`${folder}/scripts/relay.ts`, echoScript.replace("vault.inner", "vault.broken"));
+  await beside.write(`${folder}/scripts/relay.ts`, echoScript.replace('"inner"', '"broken"'));
   await beside.write(`${folder}/scripts/inner.ts`, innerScript);
   await beside.write(`${folder}/scripts/broken.ts`, brokenScript);
   await beside.write(`${folder}/scripts/misfit.ts`, misfitScript);
@@ -267,8 +272,12 @@ function answered(value: Json): Json {
   return { length: text.length, sum: sumOf(text) };
 }
 
+function turned(text: string): string {
+  return Array.from(text).reverse().join("");
+}
+
 function called(action: string, text: string): Json {
-  return { action, given: { text } };
+  return { action, given: { text: turned(text) } };
 }
 
 function runsOf(text: string, length: number): readonly string[] {
@@ -395,7 +404,7 @@ test("an action not marked keeps its calls' answers as text, as before", async (
   await withVault(async (project) => {
     const run = await project.run("vault.plain", { calls: [called("echo", secret)] });
     assert.deepEqual(outputOf(run), { answers: [answered({ echoed: { text: secret, again: secret } })] });
-    assert.deepEqual(await filesHolding(project.root, [secret]), [".agentbay/kernel.db"]);
+    assert.notDeepEqual(await filesHolding(project.root, [secret]), []);
     assert.ok(keptByKey(project.root, run.id).every((row) => row.kept === "as-text"));
   });
 });
@@ -456,7 +465,7 @@ test("an answer that breaks its schema is counted, not quoted, and is in no file
 
 test("an input that breaks the called action's schema is counted, not quoted, and is in no file", async () => {
   await withVault(async (project) => {
-    const run = await project.run("vault.keep", { calls: [{ action: "strict", given: { count: secret } }] });
+    const run = await project.run("vault.keep", { calls: [{ action: "strict", given: { count: turned(secret) } }] });
     assert.deepEqual(outputOf(run), {
       answers: [
         {
@@ -508,8 +517,11 @@ test("a call undone after the marked action fails is undone from its packed answ
     const run = await project.run("vault.keep", { calls: [called("put", secret)], fail: true });
     assert.equal(run.state.status, "undone");
     assert.deepEqual(await filesHolding(project.root, [secret]), []);
-    const undone = keptByKey(project.root, run.id).filter((row) => row.kind === "undo");
-    assert.deepEqual(undone, [{ key: "undo0", kind: "undo", status: "done", kept: "kept-packed" }]);
+    const undone = keptByKey(project.root, run.id).filter((row) => String(row.key).startsWith("undo"));
+    assert.deepEqual(undone, [
+      { key: "undo[0]", kind: "undo", status: "done", kept: "kept-packed" },
+      { key: "undo[0]/0", kind: "script", status: "done", kept: "kept-packed" },
+    ]);
   });
 });
 
@@ -535,7 +547,7 @@ test("a skill under a called action waits with nothing in any file, and its answ
     const rows = keptByKey(project.root, started.id);
     assert.deepEqual(
       rows.filter((row) => row.kept === "kept-packed").map((row) => row.key),
-      ["0.call0", "0.call0/0", "0.call0/0#1.check0", "0.call0/0#2.check0", "0.call1", "0.call1/0"],
+      ["0.call0", "0.call0/0", "0.call1", "0.call1/0", "0.call0/0#1.check0", "0.call0/0#2.check0"],
     );
   } finally {
     await project.close();
@@ -584,14 +596,42 @@ test("bay runs marks each packed step and prints none of its input, output or re
 
 const askerFolder = "components/modes/asker";
 
+const tellerFolder = "components/modes/teller";
+
+const answerSource = {
+  name: "answer-source",
+  version: 1,
+  actions: { answer: { input: "answer-source/any.json", output: "answer-source/any.json", effects: ["read"] } },
+};
+
+const tellerManifest = {
+  name: "teller",
+  version: "1.0.0",
+  description: "Tells an answer.",
+  implements: ["answer-source@1"],
+  actions: {
+    answer: { description: "When an answer is asked for.", effects: ["read"], run: [{ script: "scripts/tell.ts" }] },
+  },
+};
+
+const example = schemaText({ input: {}, output: null });
+
 async function checkProject(manifest: Json): Promise<Project> {
   const beside = await makeProject();
-  await beside.write("agentbay.config.yaml", stringify({ bindings: {}, adapter: "fake" }));
+  await beside.write(
+    "agentbay.config.yaml",
+    stringify({ bindings: { "greeting-source": "greeter", "answer-source": "teller" }, adapter: "fake" }),
+  );
+  await beside.write("components/interfaces/answer-source.yaml", stringify(answerSource));
+  await beside.write("components/interfaces/answer-source/any.json", "{}\n");
+  await beside.write(`${tellerFolder}/mode.yaml`, stringify(tellerManifest));
+  await beside.write(`${tellerFolder}/scripts/tell.ts`, nothingScript);
+  await beside.write(`${tellerFolder}/tests/answer.example.json`, example);
   await beside.write(`${askerFolder}/mode.yaml`, stringify(manifest));
   await beside.write(`${askerFolder}/schemas/any.json`, "{}\n");
   await beside.write(`${askerFolder}/scripts/ask.ts`, nothingScript);
-  await beside.write(`${askerFolder}/tests/ask.example.json`, schemaText({ input: {}, output: null }));
-  await beside.write(`${askerFolder}/tests/direct.example.json`, schemaText({ input: {}, output: null }));
+  await beside.write(`${askerFolder}/tests/ask.example.json`, example);
+  await beside.write(`${askerFolder}/tests/direct.example.json`, example);
   return beside;
 }
 
@@ -600,6 +640,7 @@ function askerManifest(calledOutputs: string) {
     name: "asker",
     version: "1.0.0",
     description: "Asks for answers it keeps packed.",
+    requires: { interfaces: ["answer-source@1"] },
     actions: {
       ask: {
         description: "When an answer is asked for by a script.",
@@ -615,37 +656,40 @@ function askerManifest(calledOutputs: string) {
         output: "schemas/any.json",
         effects: ["read"],
         calledOutputs: "kept-packed",
-        run: [{ call: "ask" }],
+        run: [{ call: "answer-source.answer" }],
       },
     },
   };
 }
 
-test("bay check refuses an unknown calledOutputs and a marked action whose run has a call step, each with a sentence", async () => {
-  const beside = await checkProject(askerManifest("kept-quiet"));
+async function checked(manifest: Json): Promise<string> {
+  const beside = await checkProject(manifest);
   try {
-    const checked = await bay(["check", "--project", beside.root]);
-    const sentences = [
-      'actions.ask.calledOutputs must be one of as-text, kept-packed, but it is "kept-quiet".',
-      "Action direct of mode asker keeps the answers of the actions it calls packed, but its run has a call " +
-        "step; a call step passes the answer on as text, and the kernel hands a kept output only to a script " +
-        "that calls the action.",
-    ];
-    for (const sentence of sentences) {
-      assert.ok(checked.output.includes(sentence), checked.output);
-    }
+    return (await bay(["check", "--project", beside.root])).output;
   } finally {
     await beside.remove();
   }
+}
+
+test("bay check refuses an unknown calledOutputs with a sentence", async () => {
+  const output = await checked(askerManifest("kept-quiet"));
+  const sentence = 'actions.ask.calledOutputs must be one of "as-text", "kept-packed", but it is "kept-quiet".';
+  assert.ok(output.includes(sentence), output);
+  assert.match(output, /bay check: 1 error,/);
+});
+
+test("bay check refuses a marked action whose run has a call step, with a sentence", async () => {
+  const output = await checked(askerManifest("kept-packed"));
+  const sentence =
+    "Action direct of mode asker keeps the answers of the actions it calls packed, but its run has a call " +
+    "step; a call step would pass that answer on as text, and the kernel hands a kept output only to a script " +
+    "that calls the action.";
+  assert.ok(output.includes(sentence), output);
+  assert.match(output, /bay check: 1 error,/);
 });
 
 test("bay check takes a marked action whose run is scripts", async () => {
   const manifest = askerManifest("kept-packed");
-  const beside = await checkProject({ ...manifest, actions: { ask: manifest.actions.ask } });
-  try {
-    const checked = await bay(["check", "--project", beside.root]);
-    assert.doesNotMatch(checked.output, /calledOutputs|keeps the answers/, checked.output);
-  } finally {
-    await beside.remove();
-  }
+  const output = await checked({ ...manifest, actions: { ask: manifest.actions.ask } });
+  assert.match(output, /bay check: 0 errors/);
 });

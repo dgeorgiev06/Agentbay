@@ -1,7 +1,7 @@
 import { runNestedAction } from "./action-steps.ts";
 import { noSpend, rootFrame, type BudgetFrame } from "./budget.ts";
 import type { Json, Spend } from "../contracts.ts";
-import type { Action } from "../generated/mode.ts";
+import type { Action, Keeping } from "../generated/mode.ts";
 import type { ActionTarget, System } from "../manifests/manifests.ts";
 import type { StepRecord } from "./run-store.ts";
 import type { RunStatus, UndoEntry, UndoReport } from "./run-state.ts";
@@ -14,6 +14,7 @@ type FinishedAction = {
   readonly caller: string | undefined;
   readonly key: string;
   readonly output: Json;
+  readonly kept: Keeping;
   readonly finishOrder: number;
   readonly action: Action | undefined;
   readonly target: Outcome<ActionTarget>;
@@ -52,6 +53,7 @@ function finishedActionOf(system: System, record: StepRecord): FinishedAction | 
     caller,
     key: record.key,
     output: record.output,
+    kept: record.kept ?? "as-text",
     finishOrder: record.finishOrder,
     action,
     target: undoTargetOf(system, modeName, action),
@@ -106,11 +108,13 @@ function undoOne(
     readonly target: ActionTarget;
     readonly input: Json;
     readonly caller: string | undefined;
+    readonly within: Keeping;
   },
 ): Promise<Progress> {
   const key = undoStepKey(at.index);
   const events = hasUndoRecords(walk.records) ? [] : [eventOf(walk, "undo.started", {})];
-  const nested = { key, kind: "undo" as const, target: at.target, input: at.input, caller: at.caller, events };
+  const { target, input, caller, within } = at;
+  const nested = { key, kind: "undo" as const, target, input, caller, within, events };
   return runNestedAction(walk, budget, nested);
 }
 
@@ -128,7 +132,8 @@ export async function runUndo(walk: Walk, reason: string): Promise<UndoOutcome> 
       failedUndos.push({ ...finished.entry, reason: problemText(finished.target.problems) });
       continue;
     }
-    const at = { index, target: finished.target.value, input: finished.output, caller: finished.caller };
+    const { output: input, caller, kept: within } = finished;
+    const at = { index, target: finished.target.value, input, caller, within };
     const progress = await undoOne(undoWalk, budget, at);
     switch (progress.status) {
       case "waiting":

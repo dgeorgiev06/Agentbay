@@ -26,7 +26,8 @@ import {
   type TaskTokenStore,
   type Writer,
 } from "./run-store.ts";
-import { skillOutputKeepings, storedText, unpackedText, type SkillOutputKeeping } from "./packed-output.ts";
+import { keepings, storedText, unpackedText } from "./packed-output.ts";
+import type { Keeping } from "../generated/mode.ts";
 import { decodedStepDetail, stepDetailJson, stepKinds } from "./step-detail.ts";
 
 const defaultBusyMilliseconds = 3000;
@@ -112,11 +113,15 @@ function jsonColumn(row: Row, name: string): Json {
   return parseJson(textColumn(row, name));
 }
 
-function keptJsonColumn(row: Row, name: string, keeping: SkillOutputKeeping): Json {
-  return parseJson(unpackedText(textColumn(row, name), keeping));
+function keptTextColumn(row: Row, name: string, keeping: Keeping): string {
+  return unpackedText(textColumn(row, name), keeping);
 }
 
-function storedJson(value: Json, keeping: SkillOutputKeeping): string {
+function keptJsonColumn(row: Row, name: string, keeping: Keeping): Json {
+  return parseJson(keptTextColumn(row, name, keeping));
+}
+
+function storedJson(value: Json, keeping: Keeping): string {
   return storedText(JSON.stringify(value), keeping);
 }
 
@@ -150,15 +155,15 @@ function waitingStateOf(row: Row): StoredState {
   return { status: "waiting", reason, stepKey, ...(until === undefined ? {} : { until }) };
 }
 
-function keepingOf(row: Row): SkillOutputKeeping {
-  return literalOf(skillOutputKeepings, textColumn(row, "kept"));
+function keepingOf(row: Row): Keeping {
+  return literalOf(keepings, textColumn(row, "kept"));
 }
 
-function keepingGiven(kept: { readonly kept?: SkillOutputKeeping }): SkillOutputKeeping {
+function keepingGiven(kept: { readonly kept?: Keeping }): Keeping {
   return kept.kept ?? "as-text";
 }
 
-function keptField(keeping: SkillOutputKeeping): { readonly kept?: SkillOutputKeeping } {
+function keptField(keeping: Keeping): { readonly kept?: Keeping } {
   return keeping === "as-text" ? {} : { kept: keeping };
 }
 
@@ -217,7 +222,7 @@ function stepOf(row: Row): StepRecord {
   const detail = keptJsonColumn(row, "detail", kept);
   const status = literalOf(storedStepStatuses, textColumn(row, "status"));
   if (status === "failed" && detail === null) {
-    return { ...start, kind, detail, ...stepEndOf(row), status, reason: textColumn(row, "reason") };
+    return { ...start, kind, detail, ...stepEndOf(row), status, reason: keptTextColumn(row, "reason", kept) };
   }
   const typed = decodedStepDetail(kind, detail);
   switch (status) {
@@ -226,7 +231,7 @@ function stepOf(row: Row): StepRecord {
     case "done":
       return { ...start, ...typed, ...stepEndOf(row), status, output: keptJsonColumn(row, "output", kept) };
     case "failed":
-      return { ...start, ...typed, ...stepEndOf(row), status, reason: textColumn(row, "reason") };
+      return { ...start, ...typed, ...stepEndOf(row), status, reason: keptTextColumn(row, "reason", kept) };
   }
 }
 
@@ -249,7 +254,7 @@ function taskTokenOf(row: Row): StoredTaskToken {
   };
 }
 
-function stateColumns(state: StoredState, keeping: SkillOutputKeeping): readonly SQLInputValue[] {
+function stateColumns(state: StoredState, keeping: Keeping): readonly SQLInputValue[] {
   switch (state.status) {
     case "running":
       return [state.status, null, null, null, null, null];
@@ -348,8 +353,9 @@ export class SqliteRunStore implements RunStore, TaskTokenStore {
     this.#write(() => {
       this.#claim(writer, end.at);
       const started = this.#checkStarted(writer.runId, end.key);
-      const output = end.status === "done" ? storedJson(end.output, keepingGiven(started)) : null;
-      const reason = end.status === "failed" ? end.reason : null;
+      const keeping = keepingGiven(started);
+      const output = end.status === "done" ? storedJson(end.output, keeping) : null;
+      const reason = end.status === "failed" ? storedText(end.reason, keeping) : null;
       this.#database
         .prepare(
           `update steps set status = ?, output = ?, reason = ?, spent = ?, finished_at = ?,
@@ -380,19 +386,22 @@ export class SqliteRunStore implements RunStore, TaskTokenStore {
   readonly saveRefusal = (writer: Writer, refusal: StepRefusal, events: readonly RunEvent[]): Promise<StepRecord> =>
     this.#write(() => {
       this.#claim(writer, refusal.at);
+      const keeping = keepingGiven(refusal);
       this.#database
         .prepare(
-          `insert into steps (run_id, key, kind, status, input, reason, detail, spent, finish_order, started_at,
+          `insert into steps (run_id, key, kind, status, kept, input, reason, detail, spent, finish_order, started_at,
             finished_at)
-           values (?, ?, ?, 'failed', ?, ?, 'null', ?,
+           values (?, ?, ?, 'failed', ?, ?, ?, ?, ?,
             (select coalesce(max(finish_order), 0) + 1 from steps where run_id = ?), ?, ?)`,
         )
         .run(
           writer.runId,
           refusal.key,
           refusal.kind,
-          JSON.stringify(refusal.input),
-          refusal.reason,
+          keeping,
+          storedJson(refusal.input, keeping),
+          storedText(refusal.reason, keeping),
+          storedJson(null, keeping),
           JSON.stringify({ items: 0, usd: 0, tokens: 0, minutes: 0 }),
           writer.runId,
           refusal.at,

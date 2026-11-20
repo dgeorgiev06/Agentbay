@@ -12,7 +12,7 @@ import {
   type BudgetFrame,
 } from "./budget.ts";
 import type { Json, RunEvent, Spend, Submission } from "../contracts.ts";
-import type { Budget } from "../generated/mode.ts";
+import type { Budget, Keeping } from "../generated/mode.ts";
 import { byteSize, toJson } from "../json.ts";
 import {
   kernelDatabaseFile,
@@ -27,7 +27,7 @@ import type { ApprovalDecision, RunStatus } from "./run-state.ts";
 import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome, type Problem } from "../outcome.ts";
 import { decisionRefusal } from "./choices.ts";
 import type { ApprovalVerdict } from "./step-detail.ts";
-import { keepingOf, type SkillOutputKeeping } from "./packed-output.ts";
+import { keepingOf } from "./packed-output.ts";
 import { scrubbedStore } from "./scrubbed-store.ts";
 import { startedSkillOf, submissionProblems, type StartedSkill } from "./skill-steps.ts";
 import { skillRoundOf } from "./step-key.ts";
@@ -83,7 +83,7 @@ type ControlPatch = {
 
 type NewRunPlan = {
   readonly target: RunTarget;
-  readonly kept: SkillOutputKeeping;
+  readonly kept: Keeping;
   readonly input: Json;
   readonly limit: Budget;
 };
@@ -272,7 +272,8 @@ function mainProgress(walk: Walk, run: RunWithSteps, budget: BudgetFrame): Promi
       if (!target.ok) {
         return Promise.resolve(failed(problemText(target.problems)));
       }
-      return runActionFrame(walk, { ...target.value, key: "", budget, caller: run.target.caller }, run.input);
+      const frame = { ...target.value, key: "", budget, caller: run.target.caller, within: "as-text" as const };
+      return runActionFrame(walk, frame, run.input);
     }
     case "workflow": {
       const found = system.workflow(run.target.mode, run.target.name);

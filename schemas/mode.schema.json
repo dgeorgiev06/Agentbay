@@ -107,6 +107,11 @@
       "type": "string",
       "enum": ["read", "write", "network", "spend", "delete"]
     },
+    "keeping": {
+      "description": "How the kernel keeps a value in its database: as-text, or kept-packed, gzipped and in base64.",
+      "type": "string",
+      "enum": ["as-text", "kept-packed"]
+    },
     "budget": {
       "description": "Limits for a run; every nested call draws from the same budget.",
       "type": "object",
@@ -220,8 +225,11 @@
         "budget": { "description": "Limits for a run of this action.", "$ref": "#/$defs/budget" },
         "skillOutput": {
           "description": "How the kernel keeps the output of the action's skill. as-text, as when left out: in its database as text, shown by bay runs. kept-packed: compressed, so no line of it is in any file as text; bay runs says it is kept packed and never prints it; the kernel unpacks it only for the script that called the action, and for the skill's own checks. A kept-packed action's run is one skill step and nothing more, and only a script may call it.",
-          "type": "string",
-          "enum": ["as-text", "kept-packed"]
+          "$ref": "#/$defs/keeping"
+        },
+        "calledOutputs": {
+          "description": "How the kernel keeps every call made under the action: the calls its scripts make, and the calls those make, at any depth. as-text, as when left out: as each called action says. kept-packed: each such call's input, output and reason, and every step under it, are compressed, so no line of them is in any file as text; bay runs says they are kept packed and never prints them; the kernel unpacks them only for the script that made the call and for the skill checks under it. When a script or a skill under it fails, the calling script is told which one failed and not its reason, and a schema's problems there are counted, not quoted. The action's own steps and output are kept as text, and its run has no call step.",
+          "$ref": "#/$defs/keeping"
         },
         "scriptTimeLimitSeconds": {
           "description": "How long each script step in run may take, in whole seconds, at most 1800; left out, 480. When it passes, the kernel stops the script and the run fails. The run's budget of minutes still applies: when fewer minutes are left, the script is stopped when they run out.",

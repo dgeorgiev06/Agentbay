@@ -21,6 +21,8 @@ export type ListedCommand = { readonly run: string; readonly effects: ReadonlyAr
 
 export type Effect = "read" | "write" | "network" | "spend" | "delete";
 
+export type Keeping = "as-text" | "kept-packed";
+
 export type Budget = {
   readonly items?: number;
   readonly usd?: number;
@@ -49,7 +51,8 @@ export type Action = {
   readonly run: ReadonlyArray<Step>;
   readonly undo?: Name;
   readonly budget?: Budget;
-  readonly skillOutput?: "as-text" | "kept-packed";
+  readonly skillOutput?: Keeping;
+  readonly calledOutputs?: Keeping;
   readonly scriptTimeLimitSeconds?: number;
 };
 

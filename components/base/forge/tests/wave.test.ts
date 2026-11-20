@@ -16,7 +16,7 @@ import {
   removeAll,
   runOf,
   shown,
-  stepOutput,
+  actionOutputs,
   textAt,
   waitingOf,
   worktrees,
@@ -155,7 +155,7 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     assert.ok(printed.includes("Merge is not offered: no slice passed its own proof; left out: NA"), printed);
     assert.ok(printed.includes("no combined head: no slice passed its own proof"), printed);
     await decided(root, card, { step: "card", choice: "keep" });
-    assert.deepEqual(branches(root), ["forge/NA", "forge/NA-tests-1"]);
+    assert.deepEqual(branches(root), ["forge/NA-3", "forge/NA-tests-3"]);
     assert.deepEqual(worktrees(root), []);
     assert.deepEqual(keptRows(root), []);
   });
@@ -179,11 +179,8 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     assert.ok(said.includes(`an earlier run left forge/SA-tests-1 at ${short[1] ?? ""}`), said);
     assert.ok(said.includes("why: An earlier run left branches of this wave; build over them or stop."), said);
     await decided(root, again, { step: "start", choice: "build-over" });
-    assert.deepEqual(await stepOutput(root, again.id, "begin"), {
-      choice: "build-over",
-      slices: ["SA"],
-      dropped: left,
-    });
+    assert.deepEqual(await actionOutputs(root, again.id, "wave-begin"), [{ choice: "build-over", slices: ["SA"] }]);
+    assert.deepEqual(await actionOutputs(root, again.id, "attempt"), [{ dropped: left }]);
     assert.deepEqual(branches(root), ["forge/SA"]);
   });
 });

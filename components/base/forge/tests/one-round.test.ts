@@ -27,7 +27,7 @@ import {
   shortHead,
   shown,
   started,
-  stepOutput,
+  actionOutputs,
   submitted,
   task,
   textAt,
@@ -328,7 +328,7 @@ describe(
         { branch: "forge/R4", commit: left[0] },
         { branch: "forge/R4-tests-1", commit: left[1] },
       ];
-      assert.deepEqual(await stepOutput(root, again.id, "begin"), { choice: "build-over", dropped });
+      assert.deepEqual(await actionOutputs(root, again.id, "begin"), [{ choice: "build-over", dropped }]);
       assert.deepEqual(branches(root), ["forge/R4"]);
       assert.equal(rev(root, "forge/R4"), rev(root, "main"));
     });
@@ -445,6 +445,30 @@ describe(
         does: "Merge into the integration branch",
         reason: "1 must item failed.",
       });
+    });
+
+    test("9. a run that fails leaves its branch, and the next start card names it and drops nothing on stop", async () => {
+      const root = await project(template);
+      const named = testPath("R9", "quill.test.ts");
+      const start = await started(root, trigger(root, "R9", [named]));
+      await begun(root, start);
+      await submitted(root, start.id, { files: [codeOf("R9")], names: noNames });
+      const outside = { path: "bay/quill.test.ts", text: handed("R9", "quill.test.ts").text };
+      for (let tries = 0; tries < 3; tries += 1) {
+        await submitted(root, start.id, { tests: [outside] });
+      }
+      assert.ok(["failed", "undone"].includes(textAt(await shown(root, start.id), "status")));
+      assert.deepEqual(branches(root), ["forge/R9"]);
+      const left = rev(root, "forge/R9");
+      const again = await started(root, trigger(root, "R9", [named]));
+      assert.ok(
+        wordsOf(again).includes(`an earlier run left forge/R9 at ${left.slice(0, 7)}`),
+        wordsOf(again).join("\n"),
+      );
+      const stopped = runOf(await decided(root, again, { step: "start", choice: "stop" }));
+      assert.equal(textAt(stopped, "reason"), "The owner chose stop on the start card, so nothing is cut.");
+      assert.deepEqual(branches(root), ["forge/R9"]);
+      assert.equal(rev(root, "forge/R9"), left);
     });
 
     test("8. the test writer's and the reviewer's agents have no tool that writes, and the builder's none that runs a command", async () => {

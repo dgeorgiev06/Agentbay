@@ -234,10 +234,11 @@ export async function shown(root: string, runId: string): Promise<Json> {
   return runOf(await bay(root, ["runs", runId]));
 }
 
-export async function stepOutput(root: string, runId: string, stepId: string): Promise<Json> {
+export async function actionOutputs(root: string, runId: string, action: string): Promise<readonly Json[]> {
   const run = runOf(await bay(root, ["runs", runId, "--full"]));
-  const step = listOf(fieldsOf(run).steps).find((each) => textAt(each, "key").startsWith(`${stepId}/`));
-  return fieldsOf(step ?? null).output ?? null;
+  const steps = listOf(fieldsOf(run).steps).filter((each) => textAt(each, "kind") === "action");
+  const asked = steps.filter((each) => textAt(fieldsOf(each).detail ?? null, "action") === action);
+  return asked.map((each) => fieldsOf(each).output ?? null);
 }
 
 export async function task(root: string, runId: string): Promise<Json> {

@@ -23,8 +23,6 @@ steps:
     input:
       choice: $steps.start.output.choice
       slices: $steps.wave.output.slices
-      leftovers: $steps.wave.output.leftovers
-      into: $settings.into
   - id: batches
     foreach: $steps.wave.output.batches
     steps:

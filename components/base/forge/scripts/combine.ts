@@ -1,5 +1,5 @@
 import { defineScript, fieldsOf, type Json, type ScriptContext } from "../../../../bay/sdk.ts";
-import { branchesSaid, type Stayed } from "./lib/branch-endings.ts";
+import { branchesSaid, type Dropped, type Stayed } from "./lib/branch-endings.ts";
 import { answerOf } from "./lib/called.ts";
 import { cutAfresh, intoOf, removedThenDropped } from "./lib/drops.ts";
 import { textOf } from "./lib/json-values.ts";
@@ -10,6 +10,7 @@ type Combining = {
   readonly branch: string;
   readonly head: string;
   readonly merged: readonly string[];
+  readonly dropped: readonly Dropped[];
   readonly stayed: readonly Stayed[];
 };
 
@@ -18,9 +19,9 @@ type Combined = Combining & {
 };
 
 async function startedAt(context: ScriptContext, wave: WaveNamed): Promise<Combining> {
-  const cut = await answerOf(context, "worktrees.cut", { slice: wave.name, base: wave.base });
-  await answerOf(context, "worktrees.remove", { folder: textOf(cut.folder), branchAfter: "kept" });
-  return { branch: textOf(cut.branch), head: textOf(cut.commit), merged: [], stayed: [] };
+  const cut = await cutAfresh(context, { slice: wave.name, base: wave.base }, intoOf(context));
+  await answerOf(context, "worktrees.remove", { folder: cut.folder, branchAfter: "kept" });
+  return { branch: cut.branch, head: cut.commit, merged: [], dropped: cut.over.dropped, stayed: cut.over.stayed };
 }
 
 async function joinedOnto(context: ScriptContext, at: Combining & { wave: string }, slice: ToJoin): Promise<Combined> {
@@ -61,12 +62,12 @@ export const run = defineScript(async (input, context) => {
   const wave = { name: textOf(started.name), base: textOf(started.base) };
   const included = slicesToJoin(fields.slices ?? null).filter((slice) => slice.included);
   if (included.length === 0) {
-    const nothing = { branch: "", head: wave.base, merged: [], stayed: [] };
+    const nothing = { branch: "", head: wave.base, merged: [], dropped: [], stayed: [] };
     return { joined: joinedOf(nothing, []), proving: { kind: "not asked" } };
   }
   const at = await combined(context, wave, included);
   const sideBySide = sideBySideOf(context.settings.sideBySide);
   const asked =
     at.conflict === undefined ? proving(wave, included, { head: at.head, sideBySide }) : { kind: "not asked" };
-  return { joined: joinedOf(at, included), proving: asked, ...branchesSaid([], at.stayed) };
+  return { joined: joinedOf(at, included), proving: asked, ...branchesSaid(at.dropped, at.stayed) };
 });

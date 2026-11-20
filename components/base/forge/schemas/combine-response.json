@@ -80,6 +80,28 @@
           }
         }
       }
+    },
+    "dropped": {
+      "type": "array",
+      "maxItems": 100,
+      "description": "The combined branch an earlier run left, dropped before the cut since the owner chose build-over, with its commit so its work can be found again; left out when there was none.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["branch", "commit"],
+        "properties": {
+          "branch": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "The branch that was dropped."
+          },
+          "commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+            "description": "The commit it pointed at, in full."
+          }
+        }
+      }
     }
   }
 }

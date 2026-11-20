@@ -149,7 +149,7 @@ actions:
     run:
       - script: scripts/carry-out.ts
   attempt:
-    description: When a slice's item of a wave starts, or starts again after the owner chose a rerun, it sets aside and removes the worktrees an earlier attempt left and drops the slice's branches, answering each commit, so the slice is cut under its own name.
+    description: When a slice's item of a wave starts, or starts again after the owner chose a rerun, it sets aside and removes the worktrees an earlier attempt or run left and drops the slice's branches, answering each commit, so the slice is cut under its own name; a branch an earlier run left is there only when the owner chose build-over on the start card.
     input: schemas/attempt-request.json
     output: schemas/attempt-response.json
     effects: [read, write, delete]
@@ -177,10 +177,10 @@ actions:
     run:
       - script: scripts/wave.ts
   wave-begin:
-    description: When the owner has answered the wave's start card, the run goes on to build the slices on build, drops an earlier run's branches first and answers each commit on build-over, and ends on stop; if the run fails later, the kernel undoes it by forgetting every slice's kept tests.
+    description: When the owner has answered the wave's start card, the run goes on to build the slices on build or build-over and ends on stop; if the run fails later, the kernel undoes it by forgetting every slice's kept tests. It changes nothing itself, so that undo runs.
     input: schemas/wave-begin-request.json
     output: schemas/wave-begin-response.json
-    effects: [read, write, delete]
+    effects: [read]
     undo: forget-wave
     run:
       - script: scripts/wave-begin.ts

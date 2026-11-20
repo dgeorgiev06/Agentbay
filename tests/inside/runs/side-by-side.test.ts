@@ -10,6 +10,7 @@ import {
   itemsToStart,
   type ItemEnd,
 } from "../../../bay/runs/side-by-side.ts";
+import { isDueAt } from "../../../bay/runs/run-ending.ts";
 import { foreachItemKey, isInsideFrame, skillRoundOf } from "../../../bay/runs/step-key.ts";
 
 const place = { stepId: "builds", key: "builds", stopped: false };
@@ -125,4 +126,20 @@ test("a step that spends under a limit on dollars takes the turn of each side-by
   assert.deepEqual(turnsToTake(innerItem, false), []);
   const unlimited = itemFrame(sharedFrame({ ...root, limit: { minutes: 5 } }));
   assert.deepEqual(turnsToTake(unlimited, true), []);
+});
+
+test("a run whose second wait is a time that has come is due, and one whose times are all ahead is not", () => {
+  const now = new Date("2026-11-20T10:00:00.000Z");
+  const waiting = {
+    status: "waiting" as const,
+    reason: "skill" as const,
+    stepKey: "each[0].write/0#1",
+    also: [{ reason: "time" as const, stepKey: "each[1].pause", until: "2026-11-20T09:59:00.000Z" }],
+  };
+  assert.equal(isDueAt(waiting, now), true);
+  const ahead = {
+    ...waiting,
+    also: [{ reason: "time" as const, stepKey: "each[1].pause", until: "2026-11-20T11:00:00.000Z" }],
+  };
+  assert.equal(isDueAt(ahead, now), false);
 });

@@ -399,3 +399,37 @@ test("waiting items' keys are shown in the run's steps under the item they belon
   assert.equal(textField(skillStep?.detail ?? null, "skill"), "skills/draft");
   close();
 });
+
+test("the spend of a failed attempt stays counted in the run after the rerun has moved on", async () => {
+  const failing = new Set([0]);
+  const pay: Script = (request) =>
+    failing.has(itemOf(request)) ? failure("item 0 broke") : finished(request.input, { usd: 1 });
+  const notesActions = {
+    pay: {
+      description: "When a test spends a dollar and may then fail.",
+      input: "schemas/anything.json",
+      output: "schemas/anything.json",
+      effects: ["read" as const, "spend" as const],
+      run: [{ script: "scripts/spend.ts" }, { script: "scripts/log.ts" }],
+    },
+  };
+  const steps: Workflow["steps"] = [
+    { id: "each", foreach: "$trigger", sideBySide: 2, steps: [{ id: "do", action: "pay", input: { n: "$item" } }] },
+    { id: "keep", approval: "Keep?", show: "$steps.each.output" },
+  ];
+  const spend: Script = (request) => finished(request.input, { usd: 1 });
+  const scripts = { "notes:scripts/spend.ts": spend, "notes:scripts/log.ts": pay };
+  const { runs, close } = await openedRuns({ scripts, changes: { ...withFlow(steps), notesActions } });
+  const started = runOf(await runs.start(flow, [0, 1]));
+  assert.equal(started.spent.usd, 3);
+  failing.clear();
+  const rerun = runOf(await runs.resume(started.id, { rerun: true }));
+  assert.equal(rerun.spent.usd, 5);
+  const [approval] = waitsOf(rerun);
+  assert.ok(approval?.reason === "approval");
+  const decision = { stepKey: "keep", hash: approval.hash, verdict: "approve" as const, by: "me" };
+  const done = runOf(await runs.approve(started.id, decision));
+  assert.equal(done.state.status, "done");
+  assert.equal(done.spent.usd, 5);
+  close();
+});

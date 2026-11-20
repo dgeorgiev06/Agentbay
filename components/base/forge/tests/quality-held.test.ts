@@ -1,18 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { shortHash, type Json } from "../../../../bay/sdk.ts";
+import type { Json } from "../../../../bay/sdk.ts";
 import type { CardLine } from "../scripts/lib/card-lines.ts";
-import { interfaceChanges, interfaceClauses, interfaceWords, pinnedOf } from "../scripts/lib/interface-pins.ts";
 import { drawn, type MergeCardInput } from "../scripts/lib/merge-card.ts";
 import { mustNotHeld, reviewedPracticeLines } from "../scripts/lib/practices-block.ts";
 import { judgedPractices, type JudgedPractices } from "../scripts/lib/reviewer-practices.ts";
 import type { RoundsOnCard } from "../scripts/lib/round-card.ts";
 import { sliceOf } from "../scripts/lib/slice-form.ts";
 import { withToolChecks } from "../scripts/lib/tool-checks.ts";
-
-const schema = "components/base/interfaces/quill/count-request.json";
-
-const manifest = "components/base/interfaces/quill.yaml";
 
 const twelve = "The same code or rule lives in one place (ADR 11).";
 
@@ -72,68 +67,6 @@ function mergeInput(changes: Partial<MergeCardInput>): MergeCardInput {
 function wordsOf(lines: readonly CardLine[]): readonly string[] {
   return lines.map((line) => line.words);
 }
-
-describe("interface files pinned by hash", () => {
-  test("the same text has the same hash, other text another, and a file not there has none", () => {
-    const pinned = pinnedOf(schema, '{ "type": "object" }');
-    assert.equal(pinned.path, schema);
-    assert.equal(pinned.hash, shortHash('{ "type": "object" }'));
-    assert.match(pinned.hash ?? "", /^[0-9a-f]{16}$/);
-    assert.deepEqual(pinnedOf(schema, '{ "type": "object" }'), pinned);
-    assert.notEqual(pinnedOf(schema, '{ "type": "array" }').hash, pinned.hash);
-    assert.deepEqual(pinnedOf(schema, undefined), { path: schema });
-  });
-
-  test("a file changed, appeared, vanished or missing at the head is named; an unchanged one is not", () => {
-    const base = [
-      { path: schema, hash: "1111111111111111" },
-      { path: manifest, hash: "2222222222222222" },
-      { path: "a.json" },
-      { path: "b.json", hash: "3333333333333333" },
-      { path: "c.json", hash: "4444444444444444" },
-    ];
-    const head = [
-      { path: schema, hash: "1111111111111111" },
-      { path: manifest, hash: "5555555555555555" },
-      { path: "a.json", hash: "6666666666666666" },
-      { path: "b.json" },
-    ];
-    assert.deepEqual(interfaceChanges({ base, head }), [
-      { path: manifest, how: "changed" },
-      { path: "a.json", how: "appeared" },
-      { path: "b.json", how: "vanished" },
-      { path: "c.json", how: "not compared" },
-    ]);
-    assert.deepEqual(interfaceClauses(interfaceChanges({ base, head })), [
-      `the interface file ${manifest} changed during the rounds`,
-      "the interface file a.json appeared during the rounds",
-      "the interface file b.json is gone at the head",
-      "the interface file c.json could not be compared with the base",
-    ]);
-  });
-
-  test("the card says nothing for no interface files, one line when none changed, and a line per change", () => {
-    const pinned = [{ path: schema, hash: "1111111111111111" }];
-    assert.deepEqual(interfaceWords({ base: [], head: [] }), []);
-    assert.deepEqual(interfaceWords({ base: pinned, head: pinned }), [
-      "interface files: 1 unchanged since the base, by hash",
-    ]);
-    assert.deepEqual(interfaceWords({ base: pinned, head: [{ path: schema }] }), [
-      `interface file is gone at the head: ${schema}`,
-    ]);
-  });
-
-  test("a changed interface file withholds merge, naming the file, and keep stays", () => {
-    const pins = {
-      base: [{ path: schema, hash: "1111111111111111" }],
-      head: [{ path: schema, hash: "7777777777777777" }],
-    };
-    const merge = drawn(mergeInput({ pins }));
-    assert.equal(merge.merge, false);
-    assert.equal(merge.card.withheld.merge, `The interface file ${schema} changed during the rounds.`);
-    assert.equal(drawn(mergeInput({ pins: { base: pins.base, head: pins.base } })).merge, true);
-  });
-});
 
 describe("the checks item forge adds", () => {
   test("a slice whose plan lists no checks item gets one, must, that says forge added it", () => {

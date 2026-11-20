@@ -1,6 +1,10 @@
+import type { CutProblem } from "./cut-from-design.ts";
+import type { FixedFileProblem } from "./fixed-files.ts";
+import type { ConditionProblem } from "./plan-conditions.ts";
+import type { SourceProblem } from "./plan-sources.ts";
 import type { SharedPath } from "./scopes.ts";
 
-export type Problem =
+type WaveProblem =
   | {
       readonly kind: "after names no slice";
       readonly level: "error";
@@ -32,6 +36,8 @@ export type Problem =
       readonly sentence: string;
     }
   | { readonly kind: "one after another"; readonly level: "error"; readonly sentence: string };
+
+export type Problem = WaveProblem | SourceProblem | ConditionProblem | CutProblem | FixedFileProblem;
 
 const narrowOrOrder = "Narrow a scope, or order the two with an after.";
 

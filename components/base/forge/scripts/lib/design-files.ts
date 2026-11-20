@@ -1,12 +1,8 @@
 import type { Json } from "../../../../../bay/sdk.ts";
+import type { Written } from "./commit-files.ts";
 import type { Action, Design, Example, Interface, Module } from "./design-form.ts";
 
 export type Side = "request" | "response";
-
-export type Written = {
-  readonly path: string;
-  readonly text: string;
-};
 
 export type Designed = {
   readonly job: string;

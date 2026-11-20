@@ -3,6 +3,7 @@ import { challengeOf, refusedChallenge, type Challenge } from "./lib/challenge-a
 import { checkAnswer } from "./lib/check-answer.ts";
 import { designOf } from "./lib/design-form.ts";
 import { designProblems } from "./lib/design-rules.ts";
+import { askedPractices } from "./lib/practice-answers.ts";
 import { listOf, textOf } from "./lib/json-values.ts";
 import { conditionsOf, requirementsOf } from "./lib/requirements-form.ts";
 
@@ -29,7 +30,7 @@ async function mergedProblems(context: ScriptContext, asked: Json, challenge: Ch
 export const run = defineScript(async (input, context) => {
   const asked = context.skillInput ?? null;
   const challenge = challengeOf(input);
-  const practices = listOf(fieldsOf(asked).practices).map((practice) => textOf(fieldsOf(practice).id));
+  const practices = askedPractices(asked);
   const designs = listOf(fieldsOf(asked).designs).length;
   const merged = await mergedProblems(context, asked, challenge);
   return checkAnswer(refusedChallenge(challenge, { designs, practices }, merged));

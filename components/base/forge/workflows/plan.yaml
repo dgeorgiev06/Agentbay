@@ -1,0 +1,61 @@
+name: plan
+trigger: { manual: true }
+budget: { minutes: 90 }
+steps:
+  - id: start
+    action: plan-start
+    input:
+      asked: $trigger
+      practices: $settings.practices
+      into: $settings.into
+  - id: plan-1
+    action: plan
+    input:
+      file: $steps.start.output.file
+      requirements: $steps.start.output.requirements
+      design: $steps.start.output.design
+      document: $steps.start.output.document
+      practices: $steps.start.output.practices
+  - id: challenge-1
+    action: challenge-plan
+    input:
+      file: $steps.start.output.file
+      requirements: $steps.start.output.requirements
+      design: $steps.start.output.design
+      document: $steps.start.output.document
+      practices: $steps.start.output.practices
+      plan: $steps.plan-1.output
+  - id: plan-2
+    action: plan-again
+    input:
+      start: $steps.start.output
+      first: $steps.plan-1.output
+      challenge: $steps.challenge-1.output
+  - id: challenge-2
+    action: challenge-again
+    input:
+      start: $steps.start.output
+      again: $steps.plan-2.output
+      first: $steps.challenge-1.output
+  - id: draw
+    action: draw-plan
+    input:
+      start: $steps.start.output
+      first: $steps.plan-1.output
+      again: $steps.plan-2.output
+      challenged: $steps.challenge-2.output
+      into: $settings.into
+  - id: card
+    approval: Commit this plan?
+    show: $steps.draw.output.card
+    quotes: [challenge-1, challenge-2]
+    choices:
+      approve: { does: Commit the plan, when: $steps.draw.output.offered.approve }
+      stop: { does: Stop; nothing is committed }
+  - id: commit
+    action: commit-plan
+    input:
+      choice: $steps.card.output.choice
+      start: $steps.start.output
+      again: $steps.plan-2.output
+      into: $settings.into

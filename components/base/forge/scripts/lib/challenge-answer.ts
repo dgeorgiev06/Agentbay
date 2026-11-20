@@ -1,14 +1,6 @@
 import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
-import { joined } from "./card-lines.ts";
-import { listOf, oneOf, textOf } from "./json-values.ts";
-
-export type Held = "held" | "not-held" | "does-not-apply";
-
-export type PracticeAnswer = {
-  readonly id: string;
-  readonly answer: Held;
-  readonly sentence: string;
-};
+import { oneOf, textOf } from "./json-values.ts";
+import { practiceAnswersOf, practiceProblems, type PracticeAnswer } from "./practice-answers.ts";
 
 export type Chosen = "first" | "second" | "merged";
 
@@ -24,15 +16,7 @@ export type Asked = {
   readonly practices: readonly string[];
 };
 
-const helds: readonly Held[] = ["held", "not-held", "does-not-apply"];
-
 const chosens: readonly Chosen[] = ["first", "second", "merged"];
-
-function practiceAnswerOf(value: Json): PracticeAnswer {
-  const fields = fieldsOf(value);
-  const answer = oneOf(helds, fields.answer) ?? "not-held";
-  return { id: textOf(fields.id), answer, sentence: textOf(fields.sentence) };
-}
 
 export function challengeOf(value: Json): Challenge {
   const fields = fieldsOf(value);
@@ -40,28 +24,8 @@ export function challengeOf(value: Json): Challenge {
     chosen: oneOf(chosens, fields.chosen) ?? "first",
     design: fields.design,
     because: textOf(fields.because),
-    practices: listOf(fields.practices).map(practiceAnswerOf),
+    practices: practiceAnswersOf(fields.practices),
   };
-}
-
-function practiceProblems(challenge: Challenge, asked: Asked): readonly string[] {
-  const answered = challenge.practices.map((practice) => practice.id);
-  const left = asked.practices.filter((id) => !answered.includes(id));
-  const unknown = answered.filter((id) => !asked.practices.includes(id));
-  const twice = [...new Set(answered.filter((id, at) => answered.indexOf(id) !== at))];
-  return [
-    ...left.map(
-      (id) =>
-        `The challenge leaves out the practice ${id}; answer every practice held by design, ` +
-        "each held, not-held or does-not-apply, with its sentence.",
-    ),
-    ...unknown.map(
-      (id) =>
-        `The challenge answers ${id}, which is not a practice held by design; ` +
-        `answer only ${joined(asked.practices)}.`,
-    ),
-    ...twice.map((id) => `The challenge answers ${id} more than once; answer each practice once.`),
-  ];
 }
 
 function choiceProblems(challenge: Challenge, asked: Asked): readonly string[] {
@@ -79,5 +43,6 @@ function choiceProblems(challenge: Challenge, asked: Asked): readonly string[] {
 
 export function refusedChallenge(challenge: Challenge, asked: Asked, merged: readonly string[]): readonly string[] {
   const designProblems = merged.map((problem) => `The merged design is refused: ${problem}`);
-  return [...practiceProblems(challenge, asked), ...choiceProblems(challenge, asked), ...designProblems];
+  const practices = practiceProblems({ heldBy: "design", asked: asked.practices, answers: challenge.practices });
+  return [...practices, ...choiceProblems(challenge, asked), ...designProblems];
 }

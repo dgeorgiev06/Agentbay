@@ -10,7 +10,7 @@ settings: schemas/settings.json
 resources:
   db: { migrations: migrations }
   files:
-    read: [docs/plans/, framework/features.yaml]
+    read: [docs/plans/, docs/designs/, framework/features.yaml]
     write: [.forge/worktrees/]
 
 actions:
@@ -188,8 +188,62 @@ actions:
     effects: [read, write, delete]
     run:
       - script: scripts/commit-design.ts
+  plan-start:
+    description: When a committed design is to be planned, it reads the design and the practices held by a plan from the integration branch, checks the design's requirements file, and stops the run on a refused one with every problem and its line.
+    input: schemas/plan-start-request.json
+    output: schemas/plan-start-response.json
+    effects: [read, write, delete]
+    run:
+      - script: scripts/plan-start.ts
+  plan:
+    description: When a plan is to be cut from a committed design and its requirements, as slices handed in as data, each meeting conditions and naming the interface files it builds against; or when a challenger's findings are to be answered.
+    input: schemas/plan-request.json
+    output: schemas/plan.json
+    effects: [read]
+    run:
+      - skill: skills/plan
+        tier: balanced
+        checks: [scripts/plan-checked.ts]
+  challenge-plan:
+    description: When a plan is to be judged practice by practice for the practices held by a plan, with findings for its planner.
+    input: schemas/plan-challenge-request.json
+    output: schemas/plan-challenge.json
+    effects: [read]
+    run:
+      - skill: skills/challenge-plan
+        tier: deep
+        checks: [scripts/plan-challenge-checked.ts]
+  plan-again:
+    description: When the first challenge of a plan is in, it asks the planner to answer its findings, only when there are any, and hands on the plan as it then stands.
+    input: schemas/plan-again-request.json
+    output: schemas/plan-again-response.json
+    effects: [read]
+    run:
+      - script: scripts/plan-again.ts
+  challenge-again:
+    description: When the planner has answered a challenge's findings, it asks the challenger to read the answer, only when the planner was asked, and hands on the challenge as it then stands.
+    input: schemas/challenge-again-request.json
+    output: schemas/challenge-again-response.json
+    effects: [read]
+    run:
+      - script: scripts/challenge-again.ts
+  draw-plan:
+    description: When a plan has been challenged and the owner needs the plan card, with its waves, the conditions met, the fixed files, what was checked by script and judged by whom, and whether approve is offered.
+    input: schemas/draw-plan-request.json
+    output: schemas/draw-plan-response.json
+    effects: [read]
+    run:
+      - script: scripts/draw-plan.ts
+  commit-plan:
+    description: When the owner has answered the plan card, it commits the plan under docs/plans/ with the next free number in a worktree of its own and merges it into the integration branch on approve, naming the slice requests of its first wave, and ends the run on stop.
+    input: schemas/commit-plan-request.json
+    output: schemas/commit-plan-response.json
+    effects: [read, write, delete]
+    run:
+      - script: scripts/commit-plan.ts
 
 workflows:
   - workflows/one-slice.yaml
   - workflows/rounds.yaml
   - workflows/design.yaml
+  - workflows/plan.yaml

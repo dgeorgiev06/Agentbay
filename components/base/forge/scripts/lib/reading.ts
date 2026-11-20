@@ -1,13 +1,7 @@
-import {
-  fail,
-  fieldsOf,
-  readYaml,
-  segmentsOfPointer,
-  type Json,
-  type JsonFields,
-  type ScriptContext,
-} from "../../../../../bay/sdk.ts";
-import type { After, Feature, Plan, PlannedSlice, SliceKind } from "./plan.ts";
+import { fail, fieldsOf, readYaml, segmentsOfPointer, type Json, type ScriptContext } from "../../../../../bay/sdk.ts";
+import type { Feature, Plan } from "./plan.ts";
+import { planOf, twiceNamed } from "./plan-form.ts";
+import { textsOf } from "./json-values.ts";
 
 export type Refusal = {
   readonly at: string;
@@ -24,65 +18,12 @@ const planSchema = "schemas/plan.json";
 
 const featureMapSchema = "schemas/feature-map.json";
 
-const sliceKinds: readonly SliceKind[] = ["interface", "capability", "mode"];
-
-function isList(value: Json | undefined): value is readonly Json[] {
-  return Array.isArray(value);
-}
-
-function textAt(fields: JsonFields, key: string): string {
-  const value = fields[key];
-  return typeof value === "string" ? value : "";
-}
-
-function listAt(fields: JsonFields, key: string): readonly Json[] {
-  const value = fields[key];
-  return isList(value) ? value : [];
-}
-
-function textsAt(fields: JsonFields, key: string): readonly string[] {
-  return listAt(fields, key).filter((value) => typeof value === "string");
-}
-
-function afterOf(value: Json): After {
-  const fields = fieldsOf(value);
-  return { slice: textAt(fields, "slice"), because: textAt(fields, "because") };
-}
-
-function plannedSliceOf(value: Json): PlannedSlice {
-  const planned = fieldsOf(value);
-  const slice = fieldsOf(planned.slice ?? null);
-  return {
-    name: textAt(slice, "name"),
-    title: textAt(planned, "title"),
-    kind: sliceKinds.find((kind) => kind === slice.kind) ?? "mode",
-    scope: textsAt(slice, "scope"),
-    after: listAt(slice, "after").map(afterOf),
-  };
-}
-
-function planOf(value: Json): Plan {
-  const fields = fieldsOf(value);
-  const plan = { title: textAt(fields, "title"), slices: listAt(fields, "slices").map(plannedSliceOf) };
-  const because = fields.oneAfterAnotherBecause;
-  return typeof because === "string" ? { ...plan, oneAfterAnotherBecause: because } : plan;
-}
-
 function refusalAt(lineOf: LineOf, at: string, sentence: string): Refusal {
   return { at, line: lineOf(segmentsOfPointer(at)), sentence };
 }
 
 function namedTwice(plan: Plan, lineOf: LineOf): readonly Refusal[] {
-  return plan.slices.flatMap((slice, at) => {
-    const first = plan.slices.findIndex((other) => other.name === slice.name);
-    if (first === at) {
-      return [];
-    }
-    const sentence =
-      `Slices ${String(first + 1)} and ${String(at + 1)} are both named ${slice.name}. ` +
-      "Give each slice a name of its own, since an after names a slice by it.";
-    return [refusalAt(lineOf, `/slices/${String(at)}/slice/name`, sentence)];
-  });
+  return twiceNamed(plan).map((named) => refusalAt(lineOf, `/slices/${String(named.at)}/slice/name`, named.sentence));
 }
 
 export async function readPlan(context: ScriptContext, path: string): Promise<PlanRead> {
@@ -118,7 +59,7 @@ export async function readPlan(context: ScriptContext, path: string): Promise<Pl
 function featuresOf(value: Json): readonly Feature[] {
   return Object.entries(fieldsOf(fieldsOf(value).features ?? null)).map(([name, feature]) => ({
     name,
-    private: textsAt(fieldsOf(feature), "private"),
+    private: textsOf(fieldsOf(feature).private),
   }));
 }
 

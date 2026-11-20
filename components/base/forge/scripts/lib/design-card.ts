@@ -1,8 +1,9 @@
-import type { PracticeAnswer, Chosen } from "./challenge-answer.ts";
+import type { Chosen } from "./challenge-answer.ts";
 import { computed, counted, joined, judged, type Card, type CardLine } from "./card-lines.ts";
 import { actionsOf, type Action, type Design, type Interface, type Module } from "./design-form.ts";
 import { heldByRules, ruleCount } from "./design-rules.ts";
 import type { DesignPath } from "./path-card.ts";
+import { notHeldReason, practiceLines, type PracticeAnswer } from "./practice-answers.ts";
 import { conditionsOf, type Requirements } from "./requirements-form.ts";
 
 export type DesignCardInput = {
@@ -39,12 +40,9 @@ function answerWords(input: DesignCardInput): string {
 }
 
 function withheldReason(input: DesignCardInput): string | undefined {
-  const notHeld = input.practices.filter((practice) => practice.answer === "not-held").map((practice) => practice.id);
   const reasons = [
     ...(input.problems.length === 0 ? [] : [`The design check found ${counted(input.problems.length, "problem")}.`]),
-    ...(notHeld.length === 0
-      ? []
-      : [`The challenger answered ${joined(notHeld)} not held, and a practice held by design must be held.`]),
+    ...notHeldReason(input.practices, "design"),
   ];
   return reasons.length === 0 ? undefined : reasons.join(" ");
 }
@@ -104,20 +102,6 @@ function checkLines(input: DesignCardInput): readonly CardLine[] {
   ];
 }
 
-function practiceLines(practices: readonly PracticeAnswer[]): readonly CardLine[] {
-  const count = (answer: PracticeAnswer["answer"]): number =>
-    practices.filter((practice) => practice.answer === answer).length;
-  const tally =
-    `practices answered by the challenger: ${String(practices.length)}; ${String(count("held"))} held, ` +
-    `${String(count("not-held"))} not held, ${String(count("does-not-apply"))} do not apply`;
-  const notHeld = practices.filter((practice) => practice.answer === "not-held");
-  return [
-    computed("draw", `practices held by the script's rules: ${joined(heldByRules)}`),
-    computed("draw", tally),
-    ...notHeld.map((practice) => judged(challenger, `${practice.id}, not held: ${practice.sentence}`)),
-  ];
-}
-
 function differenceLines(input: DesignCardInput): readonly CardLine[] {
   if (input.path === "light") {
     return [computed("draw", "one design was written, so none was compared")];
@@ -146,7 +130,7 @@ export function designCard(input: DesignCardInput): DesignCard {
     ...input.design.modules.flatMap((module) => moduleLines(module, by)),
     ...input.design.interfaces.flatMap(interfaceLines),
     ...checkLines(input),
-    ...practiceLines(input.practices),
+    ...practiceLines({ answers: input.practices, heldByRules, challenger }),
     ...differenceLines(input),
   ];
   const title = `Commit the design of ${input.requirements.job}?`;

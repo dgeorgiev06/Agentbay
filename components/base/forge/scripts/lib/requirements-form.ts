@@ -1,4 +1,4 @@
-import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
+import { fail, fieldsOf, type Json } from "../../../../../bay/sdk.ts";
 import { counted } from "./card-lines.ts";
 import { listOf, numberOf, textOf } from "./json-values.ts";
 
@@ -43,11 +43,26 @@ function problemWords(value: Json): string {
   return `${line}${textOf(fields.sentence)}`;
 }
 
-export function refusedReason(checked: Json): string {
+export type Work = "design" | "plan";
+
+export type Accepted = {
+  readonly file: string;
+  readonly requirements: Json;
+};
+
+function refusedReason(checked: Json, work: Work): string {
   const fields = fieldsOf(checked);
   const problems = listOf(fields.problems);
   const opening =
     `requirements.check refused ${textOf(fields.file)} for ${counted(problems.length, "problem")}, ` +
-    "so no design is written; correct each and run the design again:";
+    `so no ${work} is written; correct each and run the ${work} again:`;
   return [opening, ...problems.map(problemWords)].join(" ");
+}
+
+export function acceptedOrStopped(checked: Json, work: Work): Accepted {
+  const answer = fieldsOf(checked);
+  if (answer.answer !== "accepted") {
+    return fail(refusedReason(checked, work));
+  }
+  return { file: textOf(answer.file), requirements: answer.requirements ?? null };
 }

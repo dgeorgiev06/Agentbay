@@ -13,7 +13,7 @@ bay call forge.waves '{"plan":"docs/plans/0022-forge-in-waves.yaml"}'
 - **The table of slices**: each slice's name, title, kind, write scope, and the slices it comes after with the reason.
 - **The waves**: slices in one wave have no order between them and scopes that share no path. Each wave can use one builder per slice. A slice goes in the first wave after every slice it comes after, and later still when its scope shares a path with a slice already in that wave.
 - **The longest chain**, by names. The plan takes at least that many waves.
-- **Every problem**, each with its sentence: an after that names no slice; a cycle, with the names in it; two slices that nothing orders whose scopes share a path, with the pattern of each and an example path; two such slices where forge cannot tell, with both patterns; a scope that admits every private file of a kernel feature, as a warning; a plan in which every slice waits for the one before and gives no reason in `oneAfterAnotherBecause`.
+- **Every problem**, each with its sentence: an after that names no slice; a cycle, with the names in it; two slices that nothing orders whose scopes share a path, with the pattern of each and an example path; two such slices where forge cannot tell, with both patterns; a scope that admits every private file of a kernel feature, as a warning; a plan in which every slice waits for the one before and gives no reason in `oneAfterAnotherBecause`; a slice that changes a fixed file of a slice it does not come after. A plan that names its `requirements` is also checked for a condition no slice meets and a slice that meets a condition the file does not hold; one that names its `design`, for a slice with no interface file, one with a file the design did not commit, one that reaches two modules with no reason, and one of kind mode that meets no condition. `docs/plans/README.md` gives the form and each rule.
 
 A file that is not YAML, or not in the form of a plan, is refused with every reason, each with its line. A slice with no write scope is refused this way, since `proof@1`'s slice requires one.
 
@@ -103,9 +103,26 @@ The steps: `read` (`requirements.check`), `start`, the approval `path`, `designs
 
 What it does not hold: a worked example is not checked against its schemas, since the toolbox's `schemas.check` takes only a schema file of the mode, never a schema given as a value; the card says so. A run that fails while the challenger works leaves the worktree `<job>-practices`. The branches `forge/<job>-practices` and `forge/<job>-design` stay after the run (WB1). The leak check counts every string of the interface files at the slice's base, a design's worked examples among them, as words both sides were given.
 
+## Plan: from a committed design to a plan whose first wave can start
+
+```
+bay call --workflow forge:workflows/plan.yaml '{"design":"docs/designs/todo/design.yaml"}'
+```
+
+The steps: `start`, `plan-1`, `challenge-1`, `plan-2`, `challenge-2`, `draw`, the approval `card`, `commit`. No step repeats.
+
+1. `start` (`scripts/plan-start.ts`) cuts `<job>-plan-reading` at the setting `into`, reads the design file and the practices held by a plan (rows whose holder is `plan`: P-33, P-34 and P-35 in the kit), removes the worktree, and checks the requirements file the design names with `requirements.check`. A refused file ends the run with every problem and its line, by the same code as the design's first step.
+2. `plan-1` is the skill `plan` (tier balanced). The planner hands in a plan as data in `schemas/plan.json`. Its check, `scripts/plan-checked.ts`, sets `requirements` and `design` from the run and sends back every error `forge.waves` would name, at most three rounds.
+3. `challenge-1` is the skill `challenge-plan` (tier deep, another model than the planner, P-27). It answers each practice held by a plan, held, not-held or does-not-apply with a sentence, and gives findings. Its check, `scripts/plan-challenge-checked.ts`, is the design challenger's check of the answers by practice.
+4. `plan-2` (`scripts/plan-again.ts`) asks the planner again with its first plan and the findings, only when there are findings. `challenge-2` (`scripts/challenge-again.ts`) asks the challenger to read the answer, only when the planner was asked.
+5. `draw` (`scripts/lib/plan-card.ts`) draws the plan card: the answer first, how many slices in how many waves, the longest chain, and whether approve is offered; each wave with its slices, each with its module, its title cut to 60 characters and the conditions it meets; the afters; coverage; whether every fixed file is made first; what the script checked and each problem; the practices the script's rules hold and the challenger's counts, each not held as a judged line; the findings left after the planner's answer as judged lines; and what the planner changed, worked out by script. Approve is withheld while the check finds an error or a practice held by a plan is answered not held.
+6. `commit` (`scripts/commit-plan.ts`) ends the run on `stop`. On approve it cuts `<job>-plan` at `into`, writes `docs/plans/<number>-<job>.yaml` with the next free four-digit number in that folder, commits, merges and removes the worktree, keeping its branch. Its output names the commit, the merge commit, `into`, the plan file, and as `wave` the slice request of each slice of the first wave, in the form the workflow `rounds` takes, with the plan's commit as `base`.
+
+What it does not hold: `forge.waves` reads the design from the project's folder, the workflow from `into`. The branches `forge/<job>-plan-reading` and `forge/<job>-plan` stay after the run (WB1), so a second plan of one job is cut only after they are deleted. The design's version of the requirements is not compared with the file's version now.
+
 ## The plan's form
 
-`schemas/plan.json`: a title, and a list of slices, each a title and a slice. The slice is `proof@1`'s slice, held by reference to `proof@1/prove-request.json#/$defs/slice`, so the two cannot drift. That is why forge requires `proof@1`, and why the kit's config binds `proof`.
+`schemas/plan.json`: a title, and a list of slices, each a title and a slice, with the optional fields `docs/plans/README.md` gives. The slice is `proof@1`'s slice, held by reference to `proof@1/prove-request.json#/$defs/slice`, so the two cannot drift. That is why forge requires `proof@1`, and why the kit's config binds `proof`.
 
 Whether two scopes share a path is one pure function, `scripts/lib/scopes.ts`. It matches paths with the toolbox's `pathMatch`, the matching `proof@1`'s kind `in-scope` uses, and it confirms every example path with it. A pattern `pathMatch` refuses is never answered "share no path".
 

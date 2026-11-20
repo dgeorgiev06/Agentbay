@@ -17,6 +17,8 @@ const reviewersWords = ["review", "planned check", "check planned"];
 
 const designWords = ["design"];
 
+const planWords = ["plan"];
+
 function cellsOf(line: string): readonly string[] {
   return line
     .trim()
@@ -55,7 +57,9 @@ function isHeldBy(heldBy: string, holders: readonly string[]): boolean {
     .replace(/\([^()]*\)/g, "")
     .split(/[;,]/)
     .map((part) => part.trim().toLowerCase());
-  return parts.some((part) => holders.some((words) => part.startsWith(words)));
+  const startsWith = (part: string, words: string): boolean =>
+    part === words || part.startsWith(`${words} `) || part.startsWith(`${words}:`);
+  return parts.some((part) => holders.some((words) => startsWith(part, words)));
 }
 
 function practicesHeldBy(text: string, holders: readonly string[]): readonly Practice[] {
@@ -73,4 +77,8 @@ export function reviewersPractices(text: string): readonly Practice[] {
 
 export function designPractices(text: string): readonly Practice[] {
   return practicesHeldBy(text, designWords);
+}
+
+export function planPractices(text: string): readonly Practice[] {
+  return practicesHeldBy(text, planWords);
 }

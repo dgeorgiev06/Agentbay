@@ -181,8 +181,8 @@ function givenLine(line: Json): GivenLine | string {
   const stray = strayField(line, lineFields);
   if (stray !== undefined) {
     return (
-      `has the field ${stray}, which a line does not take; ` +
-      "a line has mark, words and source, and the kernel adds the skill and tier of a judged line."
+      `has the field ${stray}, which a line does not take; a line has mark, words and source, ` +
+      "and the kernel adds the skill and tier of a judged line and the foreach of a step in an item."
     );
   }
   const mark = fieldOf(line, "mark");

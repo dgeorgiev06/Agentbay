@@ -186,8 +186,8 @@ describe(
         "write-tests round-1/0.call0/0#1",
         "build-without-tests round-1/0.call1/0#1",
         "review review-1/0.call1/0#1",
-        "plant bugs/0.call2/0#1",
-        "plant bugs/0.call2/0#2",
+        "plant bugs/0.call4/0#1",
+        "plant bugs/0.call4/0#2",
       ]);
       const [first, second] = planterTasks;
       assert.deepEqual(inputOf(first ?? null), {

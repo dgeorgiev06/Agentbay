@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { stringify } from "yaml";
 import type { Json } from "../bay/contracts.ts";
+import { fieldOf, parseJson, textField } from "../bay/json.ts";
 import { makeProject, kit, type Project } from "./project-fixture.ts";
 import { openModeProject, type ModeProject, type Run, type WorkflowPart } from "./test-toolbox.ts";
 
@@ -542,4 +544,77 @@ test("the shipped command line knows nothing of given or until, and no kernel fi
     ['"given"', '"until"'].filter((field) => schema.includes(field)),
     [],
   );
+});
+
+function partStarted(
+  root: string,
+  words: readonly string[],
+): { readonly status: number | null; readonly answer: Json } {
+  const ran = spawnSync(process.execPath, [join(kit, "tests/start-part.ts"), ...words], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  return { status: ran.status, answer: parseJson(ran.stdout) };
+}
+
+test("a test that drives bay in its own process starts a part with tests/start-part.ts, and the shipped command line shows the run and its part", async () => {
+  const beside = await projectWithParts();
+  try {
+    const part = JSON.stringify({ given: { first: firstGiven, pick: { choice: "go" } }, until: "second" });
+    const started = partStarted(beside.root, [`parts:${workflow}`, "{}", part]);
+    assert.equal(started.status, 0, JSON.stringify(started.answer));
+    const run = fieldOf(started.answer, "run") ?? null;
+    const id = textField(run, "id") ?? "";
+    assert.equal(textField(run, "status"), "waiting");
+    const report = fieldOf(parseJson(bayRan(beside.root, ["runs", id, "--json"]).stdout), "run") ?? null;
+    assert.deepEqual(fieldOf(report, "target"), {
+      kind: "workflow",
+      mode: "parts",
+      name: workflow,
+      part: { given: ["first", "pick"], until: "second" },
+    });
+    assert.deepEqual(fieldOf(report, "waiting"), { reason: "owner", stepKey: "second", question: untilQuestion });
+    const text = bayRan(beside.root, ["runs", id]).stdout;
+    assert.ok(text.includes(`waiting for owner at second`), text);
+  } finally {
+    await beside.remove();
+  }
+});
+
+test("tests/start-part.ts refuses a project outside the temporary folder, such as the kit, and a part that breaks a schema", async () => {
+  const outside = partStarted(kit, [`forge:workflows/rounds.yaml`, "{}", "{}"]);
+  assert.equal(outside.status, 1);
+  assert.deepEqual(outside.answer, {
+    ok: false,
+    problems: [
+      {
+        message:
+          `tests/start-part.ts starts a part of a workflow only in a test's project, under ${tmpdir()}; ` +
+          `${kit} is not under it.`,
+        fix: "node tests/start-part.ts <mode>:<path> '<trigger json>' '<part json>'",
+      },
+    ],
+  });
+  const beside = await projectWithParts();
+  try {
+    const broken = partStarted(beside.root, [
+      `parts:${workflow}`,
+      "{}",
+      JSON.stringify({ given: { first: { count: 1 } } }),
+    ]);
+    assert.equal(broken.status, 1);
+    assert.deepEqual(broken.answer, {
+      ok: false,
+      problems: [
+        {
+          message:
+            "The output given for step first does not match the output schema of parts.first: " +
+            "output is missing the required field open.",
+          fix: "",
+        },
+      ],
+    });
+  } finally {
+    await beside.remove();
+  }
 });

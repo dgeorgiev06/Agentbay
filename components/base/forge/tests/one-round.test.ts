@@ -379,9 +379,9 @@ describe(
         "checked: 0 ran, 11 computed, 0 judged",
       ]);
       const stopped = runOf(await decided(root, start, { step: "start", choice: "stop" }));
-      assert.equal(textAt(stopped, "status"), "undone");
+      assert.equal(textAt(stopped, "status"), "failed");
       assert.equal(textAt(stopped, "reason"), "The owner chose stop on the start card, so nothing is cut.");
-      assert.deepEqual(fieldsOf(fieldsOf(stopped).undo ?? null).undone, []);
+      assert.equal(fieldsOf(stopped).undo, undefined);
       assert.deepEqual(branches(root), []);
       assert.deepEqual(worktrees(root), []);
       assert.deepEqual(keptRows(root), []);

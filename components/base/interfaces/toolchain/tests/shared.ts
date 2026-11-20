@@ -98,7 +98,7 @@ const stopAfterSeconds = 2;
 
 const waitedSeconds = 30;
 
-const longestSeconds = 1000;
+const longestSeconds = 3600;
 
 const unknownCheck = "no-such-check";
 
@@ -757,7 +757,7 @@ const cases: readonly Case[] = [
     },
   },
   {
-    name: "check and test accept a time limit of up to 1000 seconds and refuse 1001 before anything runs",
+    name: "check and test accept a time limit of up to 3600 seconds and refuse 3601 before anything runs",
     run: async (toolchain) => {
       const description = await toolchain.describe();
       const longest = { folder: missingFolder, timeLimitSeconds: longestSeconds };
@@ -767,8 +767,8 @@ const cases: readonly Case[] = [
       assert.deepEqual(
         [await toolchain.refusal("check", tooLong), await toolchain.refusal("test", tooLong)],
         [
-          "input.timeLimitSeconds must be at most 1000, but it is 1001.",
-          "input.timeLimitSeconds must be at most 1000, but it is 1001.",
+          "input.timeLimitSeconds must be at most 3600, but it is 3601.",
+          "input.timeLimitSeconds must be at most 3600, but it is 3601.",
         ],
       );
     },
@@ -1023,7 +1023,7 @@ const cases: readonly Case[] = [
     },
   },
   {
-    name: "run in a folder that does not exist could not start, and run accepts a time limit of up to 1000 seconds",
+    name: "run in a folder that does not exist could not start, and run accepts a time limit of up to 3600 seconds",
     run: async (toolchain) => {
       const outputs = [
         await toolchain.run({ folder: missingFolder, name: "greet" }),
@@ -1036,7 +1036,7 @@ const cases: readonly Case[] = [
     },
   },
   {
-    name: "run refuses before anything runs a time limit of 1001 seconds, a name that is a command line, and a word with a new line",
+    name: "run refuses before anything runs a time limit of 3601 seconds, a name that is a command line, and a word with a new line",
     run: async (toolchain) => {
       const asked = { folder: missingFolder, name: "greet" };
       const refusals = [
@@ -1044,7 +1044,7 @@ const cases: readonly Case[] = [
         await toolchain.refusal("run", { ...asked, name: "greet; touch made-by-a-shell" }),
         await toolchain.refusal("run", { ...asked, arguments: ["one line\ntwo lines"] }),
       ];
-      assert.equal(refusals[0], "input.timeLimitSeconds must be at most 1000, but it is 1001.");
+      assert.equal(refusals[0], "input.timeLimitSeconds must be at most 3600, but it is 3601.");
       assert.deepEqual(
         refusals.map((refusal) => refusal.trim() !== ""),
         [true, true, true],

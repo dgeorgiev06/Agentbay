@@ -180,7 +180,12 @@ test("same-output: a project that declares no commands makes no copy and runs no
 
 test("a run with no time left is not made and is not known, and the copies are removed", async () => {
   const { asked, step } = stepWith(1735, []);
-  const notRun = { ran: "not known", reason: "Proof's own step had no time left for it, so it was not run." };
+  const notRun = {
+    ran: "not known",
+    reason:
+      "Proof's own step of 1800 seconds had no time left for it, so it was not run;" +
+      " settings.proof.stepSeconds in agentbay.config.yaml raises the step.",
+  };
   assert.deepEqual(await sameOutputEvidence(step, request), {
     found: "ran",
     commands: [{ name: "sound-check", base: notRun, head: notRun }],
@@ -205,7 +210,12 @@ test("real-thing: a run that failed, was stopped at its limit, was signalled or 
     found: "ran",
     runs: [
       { ran: "not known", reason: "It could not be run: The command could not start." },
-      { ran: "not known", reason: "It did not finish within 735 seconds." },
+      {
+        ran: "not known",
+        reason:
+          "It did not finish within 735 seconds. Proof asked for 735 seconds, what its step of 1800 seconds had left for it;" +
+          " settings.proof.stepSeconds in agentbay.config.yaml raises the step.",
+      },
       { ran: "not known", reason: "It was stopped by the signal SIGKILL." },
       { ran: "not known", reason: "It printed more than proof reads." },
     ],
@@ -273,7 +283,12 @@ test("real-thing: a run through the toolchain that was stopped, signalled, not s
     {
       found: "ran",
       runs: [
-        { ran: "not known", reason: "It did not finish within 1000 seconds." },
+        {
+          ran: "not known",
+          reason:
+            "It did not finish within 1000 seconds. Proof asked for 1000 seconds, the most it asks for one call;" +
+            " settings.proof.longestCallSeconds in agentbay.config.yaml raises it.",
+        },
         { ran: "not known", reason: "It was stopped by the signal SIGTERM." },
         {
           ran: "not known",

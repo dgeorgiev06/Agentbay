@@ -1,6 +1,6 @@
 import { fieldsOf, type CommandRan, type Json, type JsonFields } from "../../../../../bay/sdk.ts";
 import type { Command } from "../lib/request.ts";
-import { inCopy, type ProofStep } from "../lib/step.ts";
+import { askedSentence, inCopy, noTimeLeftSentence, type ProofStep, type TimeLimits } from "../lib/step.ts";
 
 export type CommandRun =
   | {
@@ -21,18 +21,21 @@ function notKnown(reason: string): CommandRun {
   return { ran: "not known", reason };
 }
 
-function stoppedAfter(seconds: number): CommandRun {
-  return notKnown(`It did not finish within ${String(seconds)} seconds.`);
+type Asked = { readonly seconds: number; readonly limits: TimeLimits };
+
+function stoppedAfter(asked: Asked): CommandRun {
+  const said = `It did not finish within ${String(asked.seconds)} seconds.`;
+  return notKnown(`${said} ${askedSentence(asked.limits, asked.seconds)}`);
 }
 
 function signalledBy(signal: string): CommandRun {
   return notKnown(`It was stopped by the signal ${signal}.`);
 }
 
-function bayRunOf(ran: CommandRan, seconds: number): CommandRun {
+function bayRunOf(ran: CommandRan, asked: Asked): CommandRun {
   switch (ran.end.how) {
     case "timed-out":
-      return stoppedAfter(seconds);
+      return stoppedAfter(asked);
     case "signalled":
       return signalledBy(ran.end.signal);
     case "exited":
@@ -63,14 +66,14 @@ function exitedRunOf(fields: JsonFields): CommandRun {
   return { ran: "ended", exitCode, stdout };
 }
 
-function toolchainRunOf(value: Json, seconds: number): CommandRun {
+function toolchainRunOf(value: Json, asked: Asked): CommandRun {
   const fields = fieldsOf(value);
   const reason = textOf(fields, "reason");
   switch (textOf(fields, "ended")) {
     case "exited":
       return exitedRunOf(fields);
     case "timed-out":
-      return stoppedAfter(seconds);
+      return stoppedAfter(asked);
     case "signalled":
       return signalledBy(textOf(fields, "signal"));
     case "not set up":
@@ -83,7 +86,7 @@ function toolchainRunOf(value: Json, seconds: number): CommandRun {
 async function bayRun(step: ProofStep, folder: string, words: readonly string[]): Promise<CommandRun> {
   const seconds = step.secondsLeft(1);
   if (seconds < 1) {
-    return notKnown("Proof's own step had no time left for it, so it was not run.");
+    return notKnown(noTimeLeftSentence(step.limits, "run"));
   }
   const answer = await step.context.commands.run({
     name: bay,
@@ -96,7 +99,7 @@ async function bayRun(step: ProofStep, folder: string, words: readonly string[])
     return notKnown(`It could not be run: ${answer.message}`);
   }
   step.spend(answer.value.milliseconds / 1000);
-  return bayRunOf(answer.value, seconds);
+  return bayRunOf(answer.value, { seconds, limits: step.limits });
 }
 
 async function toolchainRun(
@@ -106,7 +109,7 @@ async function toolchainRun(
 ): Promise<CommandRun> {
   const seconds = step.secondsLeft(1);
   if (seconds < 1) {
-    return notKnown("Proof's own step had no time left for it, so it was not run.");
+    return notKnown(noTimeLeftSentence(step.limits, "run"));
   }
   const asked = { folder, name: command.name, arguments: command.arguments, timeLimitSeconds: seconds };
   const answer = await step.called("toolchain.run", asked);
@@ -116,7 +119,7 @@ async function toolchainRun(
   }
   const spent = fieldsOf(answer.value).seconds;
   step.spend(typeof spent === "number" ? spent : seconds);
-  return toolchainRunOf(answer.value, seconds);
+  return toolchainRunOf(answer.value, { seconds, limits: step.limits });
 }
 
 function commandRun(step: ProofStep, folder: string, command: Command): Promise<CommandRun> {

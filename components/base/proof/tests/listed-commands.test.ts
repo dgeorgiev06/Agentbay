@@ -55,8 +55,8 @@ test("bay check on the kit warns once for each command the proof mode lists and 
     [
       "warning",
       31,
-      "Action prove of mode proof declares scriptTimeLimitSeconds: 1800, so each of its script steps may run " +
-        "unattended for 1800 seconds, longer than the kernel's 480.",
+      "Action prove of mode proof declares scriptTimeLimitSeconds: 7200, so each of its script steps may run " +
+        "unattended for 7200 seconds, longer than the kernel's 480.",
     ],
   ]);
 });

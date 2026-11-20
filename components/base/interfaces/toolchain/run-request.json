@@ -33,7 +33,7 @@
     "timeLimitSeconds": {
       "type": "integer",
       "minimum": 1,
-      "maximum": 1000,
+      "maximum": 3600,
       "description": "How long the command may take before it is stopped; left out, 90 seconds."
     }
   }

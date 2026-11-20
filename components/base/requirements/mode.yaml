@@ -1,0 +1,16 @@
+name: requirements
+version: 1.0.0
+description: Checks a requirements file by script, naming every problem with its line, and hands back its outcomes and conditions as data.
+
+implements: [requirements@1]
+
+resources:
+  files:
+    read: [docs/requirements/]
+
+actions:
+  check:
+    description: When a requirements file must be checked before anyone designs, plans or builds from it, and what it holds is needed as data.
+    effects: [read]
+    run:
+      - script: scripts/check.ts

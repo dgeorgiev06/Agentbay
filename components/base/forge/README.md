@@ -1,6 +1,6 @@
 # forge
 
-The mode `forge` builds a piece of work in slices that run side by side. It runs no command and uses no model of its own. It keeps a slice's tests in a database partition of its own while a builder works. It may be active in any project: a project that lists forge gets proof and git-worktrees with it, bound, and the toolchain is the project's own.
+The mode `forge` builds a piece of work in slices that run side by side. It runs no command and uses no model of its own. It keeps a slice's tests in a database partition of its own while a builder works. It may be active in any project: a project that lists forge gets proof, git-worktrees and requirements with it, bound, and the toolchain is the project's own. Forge requires `requirements@1`: its design step, still to be built, is to read a requirements file only through `requirements.check`, which answers with every problem and its line, or with the file's outcomes and conditions as data.
 
 ## What it does today
 

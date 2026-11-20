@@ -29,13 +29,16 @@ const projects: string[] = [];
 const withoutTheHook = "Skill steps run without the hook";
 
 const noToolchain =
-  "Forge is active and no mode is bound to toolchain@1: forge brings proof and git-worktrees, " +
+  "Forge is active and no mode is bound to toolchain@1: forge brings proof, git-worktrees and requirements, " +
   "but not a toolchain, since a project names its own.";
 
 const broughtProof = "Forge brings the mode proof, bound to proof@1, since the config binds no mode to proof.";
 
 const broughtWorktrees =
   "Forge brings the mode git-worktrees, bound to worktrees@1, since the config binds no mode to worktrees.";
+
+const broughtRequirements =
+  "Forge brings the mode requirements, bound to requirements@1, since the config binds no mode to requirements.";
 
 const shelfUntrusted =
   "Mode shelf lists 1 command, and the owner does not trust the list of mode shelf, so none of it is granted.";
@@ -157,24 +160,29 @@ test("a project that lists only forge and binds a toolchain checks with no error
   assert.deepEqual(fieldOf(output, "waves"), [{ wave: 1, slices: ["A"], builders: 1 }]);
 });
 
-test("forge brings proof and git-worktrees, active and bound, though the config names neither, and says so", async () => {
+test("forge brings proof, git-worktrees and requirements, active and bound, though the config names none of them, and says so", async () => {
   const folder = await projectWith({ modes: ["forge"], bindings: { toolchain: "typescript" } });
-  assert.deepEqual(activeModes(folder), ["forge", "git-worktrees", "proof", "typescript"]);
+  assert.deepEqual(activeModes(folder), ["forge", "git-worktrees", "proof", "requirements", "typescript"]);
   const brought = messages(checked(folder)).filter((message) => message.startsWith("Forge brings"));
-  assert.deepEqual(brought, [broughtProof, broughtWorktrees]);
+  assert.deepEqual(brought, [broughtProof, broughtWorktrees, broughtRequirements]);
   const uses = listField(parseJson(bay(folder, ["config"])), "bindings");
   const bound = uses
     .map((use) => `${textField(use, "interfaceName") ?? ""} ${textField(use, "servedBy") ?? ""}`)
     .sort();
-  assert.deepEqual(bound, ["proof proof", "toolchain typescript", "worktrees git-worktrees"]);
+  assert.deepEqual(bound, [
+    "proof proof",
+    "requirements requirements",
+    "toolchain typescript",
+    "worktrees git-worktrees",
+  ]);
 });
 
 test("a config that binds another mode to worktrees@1 wins, and git-worktrees is then not brought", async () => {
   const bindings = { toolchain: "typescript", worktrees: "shelf" };
   const folder = await projectWith({ modes: ["forge"], bindings }, await shelfFiles());
-  assert.deepEqual(activeModes(folder), ["forge", "proof", "shelf", "typescript"]);
+  assert.deepEqual(activeModes(folder), ["forge", "proof", "requirements", "shelf", "typescript"]);
   const brought = messages(checked(folder)).filter((message) => message.startsWith("Forge brings"));
-  assert.deepEqual(brought, [broughtProof]);
+  assert.deepEqual(brought, [broughtProof, broughtRequirements]);
 });
 
 test("with no mode bound to toolchain@1, bay check says plainly that forge does not bring one", async () => {
@@ -184,7 +192,7 @@ test("with no mode bound to toolchain@1, bay check says plainly that forge does 
   assert.ok(!messages(report).some((message) => message.startsWith("Mode typescript lists")));
 });
 
-test("a project that does not list forge gets none of forge, proof and git-worktrees", async () => {
+test("a project that does not list forge gets none of forge, proof, git-worktrees and requirements", async () => {
   const folder = await projectWith({ modes: ["typescript"], bindings: {} });
   assert.deepEqual(activeModes(folder), ["typescript"]);
   const report = checked(folder);

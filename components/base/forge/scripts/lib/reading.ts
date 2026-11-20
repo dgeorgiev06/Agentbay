@@ -1,4 +1,12 @@
-import { fail, fieldsOf, readYaml, type Json, type JsonFields, type ScriptContext } from "../../../../../bay/sdk.ts";
+import {
+  fail,
+  fieldsOf,
+  readYaml,
+  segmentsOfPointer,
+  type Json,
+  type JsonFields,
+  type ScriptContext,
+} from "../../../../../bay/sdk.ts";
 import type { After, Feature, Plan, PlannedSlice, SliceKind } from "./plan.ts";
 
 export type Refusal = {
@@ -60,16 +68,8 @@ function planOf(value: Json): Plan {
   return typeof because === "string" ? { ...plan, oneAfterAnotherBecause: because } : plan;
 }
 
-function segmentsOf(pointer: string): readonly (string | number)[] {
-  return pointer
-    .split("/")
-    .slice(1)
-    .map((segment) => segment.replaceAll("~1", "/").replaceAll("~0", "~"))
-    .map((segment) => (/^\d+$/.test(segment) ? Number(segment) : segment));
-}
-
 function refusalAt(lineOf: LineOf, at: string, sentence: string): Refusal {
-  return { at, line: lineOf(segmentsOf(at)), sentence };
+  return { at, line: lineOf(segmentsOfPointer(at)), sentence };
 }
 
 function namedTwice(plan: Plan, lineOf: LineOf): readonly Refusal[] {

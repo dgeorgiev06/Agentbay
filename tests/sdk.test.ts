@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { canonicalJson, defineScript, fail, fieldsOf, isWithinWindow, parseIsoTime, shortHash } from "../bay/sdk.ts";
+import {
+  canonicalJson,
+  defineScript,
+  fail,
+  fieldsOf,
+  isWithinWindow,
+  parseIsoTime,
+  segmentsOfPointer,
+  shortHash,
+} from "../bay/sdk.ts";
 
 test("canonical JSON sorts keys by UTF-16 code units at every level and has no whitespace", () => {
   assert.equal(canonicalJson({ b: 1, a: [true, null, "x"], é: 2, Z: 0 }), '{"Z":0,"a":[true,null,"x"],"b":1,"é":2}');
@@ -75,4 +84,11 @@ test("the fields of a request are its object's own fields, and anything else has
   assert.deepEqual(fieldsOf("folder"), {});
   assert.deepEqual(fieldsOf(null), {});
   assert.deepEqual(fieldsOf(3), {});
+});
+
+test("a JSON pointer's segments are its keys unescaped and its indexes as numbers", () => {
+  assert.deepEqual(segmentsOfPointer(""), []);
+  assert.deepEqual(segmentsOfPointer("/outcomes/0/conditions/12/then"), ["outcomes", 0, "conditions", 12, "then"]);
+  assert.deepEqual(segmentsOfPointer("/a~1b/c~0d/~01"), ["a/b", "c~d", "~1"]);
+  assert.deepEqual(segmentsOfPointer("/v1/0x"), ["v1", "0x"]);
 });

@@ -314,6 +314,7 @@ const pinnedSurface: readonly string[] = [
   "function parseIsoTime(text: string): Date | undefined",
   "function pathMatch(pattern: string, path: string): PathMatch",
   "function readYaml(text: string): YamlRead",
+  "function segmentsOfPointer(pointer: string): readonly (string | number)[]",
   "function shortHash(value: Json): string",
   "reached type Answer<T> = { readonly ok: true; readonly value: T; } | Refusal | Failure",
   "reached type Failure = {",

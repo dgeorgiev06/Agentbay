@@ -3,7 +3,7 @@ version: 1.0.0
 description: Builds a piece of work in slices that run side by side. It reads a plan file and works out its waves, and it carries one slice through a builder in a worktree, proof and the merge card, or through up to three rounds of a test writer, a builder who never has the tests, proof and a reviewer, and then a planter who never saw the tests.
 
 requires:
-  interfaces: [proof@1, worktrees@1]
+  interfaces: [proof@1, worktrees@1, requirements@1]
 
 settings: schemas/settings.json
 

@@ -329,7 +329,7 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
           ],
           findings: [
             { to: "builder", case: caseName(name), question: "condition", fix: "Count each quill once." },
-            { to: "test-writer", case: caseName(name), question: "Q3", fix: "State the count literally." },
+            { to: "test-writer", case: caseName(name), question: "Q3", fix: `Compare with "${alphabet}" literally.` },
           ],
         }),
     });
@@ -376,8 +376,8 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "judged   for the builder, condition: Count",
       "judged     each quill once.",
       "judged   for the test writer, Q3, b1 quill",
-      "judged     that was added is counted: State",
-      "judged     the count literally.",
+      "judged     that was added is counted: kept",
+      "judged     from the card: it quotes a test",
       "judged    by forge skills/review, tier deep",
       "Unmarked lines were worked out by script.",
       "You can:",
@@ -394,6 +394,8 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "             slice WD1.",
       "checked: 0 ran, 12 computed, 5 judged",
     ]);
+    const kernel = await readFile(join(root, ".agentbay/kernel.db"));
+    assert.ok(!kernel.toString("latin1").includes(alphabet));
     const kept = runOf(await decided(root, card, { step: "card", choice: "keep" }));
     assert.deepEqual(fieldsOf(kept).output, { choice: "keep", kept: ["forge/B1", "forge/B1-tests-3"] });
     assert.deepEqual(branches(root), [

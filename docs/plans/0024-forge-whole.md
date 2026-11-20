@@ -158,3 +158,13 @@ Two lanes from here, one builder each: forge's folder (S0 fixes, DS1, PL1, QL1, 
 - **Stopped in S0, now their own slices:** TL1 (building): the whole-suite run's 1,000 seconds is capped in three places (the toolchain interface, proof's longest call, the kernel's 1,800 maximum for a script); WB1 (queued): `worktrees@1` cannot delete a named unmerged branch, so earlier rounds' branches stay after keep and merge, and the planter's branch too.
 - Kernel lane order now: TL1, then KW2, KW1, WB1, KW3, KW4.
 - 03:10 owner's time: S0 merged and pushed (full check 2,232 of 2,233, the one failure a pinned warning count in the broken-overlay fixture that S0's long final-proof step moved from 38 to 39; fixed, verified alone, pushed). The filters fail closed when no kept tests are found. DS1 and TL1 are building (both were stopped by a server restart at about 07:19 UTC and resumed on their own). With two builders running tests, a full check takes about 45 minutes on this 2-core machine: start one only when a batch is ready.
+
+## After DS1 (20 November, about 04:10 owner's time)
+
+DS1 is merged locally (the full check runs with TL1's batch): forge's `design` workflow. Open from it:
+
+- **Worked examples are not checked against their schemas.** The toolbox checks a value only against a schema file of the mode or an interface, and a design hands its schemas in as data. Kernel slice SV1: a toolbox call that checks a value against a schema given as a value, with the kernel's own validator; then forge's design check uses it and the card's line changes. The owner chose this idea, so SV1 goes first in the kernel lane after TL1.
+- No practice is marked must in the practice files; the design step treats every practice held by design (P-32, P-35, P-52) as must. For the owner to confirm.
+- The first step takes the trigger whole (`$trigger.file` waits on KW2). A failed challenge leaves the worktree `<job>-practices`; the branches `forge/<job>-practices` and `forge/<job>-design` stay after every run (WB1).
+- `design.yaml` is written as JSON, which is valid YAML: the toolbox has no YAML writer.
+- PL1 (planning) is building from this head.

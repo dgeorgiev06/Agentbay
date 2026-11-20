@@ -17,33 +17,6 @@ slices:
       level: must
       proof:
         kind: checks
-- title: 'System design: one design or two written apart, compared, the design card, and the design committed with its schema files'
-  slice:
-    name: DS1
-    kind: mode
-    scope:
-    - components/base/forge/**
-    after: []
-    done:
-    - id: DOD-DS1-1
-      says: From the todo requirements, the workflow design shows the design card with each line as printed in design A, and approve commits design.yaml and the schema files.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/base/forge/tests/design.test.ts
-    - id: DOD-DS1-2
-      says: The second designer's task holds nothing of the first design, and no file of the first design is on disk while it works.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/base/forge/tests/designs-apart.test.ts
-    - id: DOD-DS1-3
-      says: The kit's checks and its whole test run pass.
-      level: must
-      proof:
-        kind: checks
 - title: 'Planning: slices cut from the design, each meeting conditions; a challenge by another model; waves checks that every condition is met and every fixed file is made first'
   slice:
     name: PL1
@@ -51,9 +24,7 @@ slices:
     scope:
     - components/base/forge/**
     - docs/plans/README.md
-    after:
-    - slice: DS1
-      because: A plan is cut from the design DS1 commits, in the same folder.
+    after: []
     done:
     - id: DOD-PL1-1
       says: forge.waves names a condition no slice meets and a slice that changes a fixed file, and still accepts plans 0022 and 0023 as they are.

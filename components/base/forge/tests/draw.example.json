@@ -3,9 +3,7 @@
     "slice": {
       "name": "A1",
       "kind": "mode",
-      "scope": [
-        "components/base/forge/**"
-      ],
+      "scope": ["components/base/forge/**"],
       "after": [],
       "done": [
         {

@@ -134,7 +134,62 @@ actions:
     effects: [read, write, delete]
     run:
       - script: scripts/carry-out.ts
+  design-start:
+    description: When a requirements file has been checked for a design, it stops the run on a refused file with every problem and its line, and draws the first card, on which the owner chooses the light or the full path.
+    input: schemas/design-start-request.json
+    output: schemas/design-start-response.json
+    effects: [read]
+    run:
+      - script: scripts/design-start.ts
+  design:
+    description: When a design is to be written from checked requirements, as modules and interfaces handed in as data, each action with its schemas, the conditions it serves and worked examples.
+    input: schemas/design-request.json
+    output: schemas/design.json
+    effects: [read]
+    skillOutput: kept-packed
+    run:
+      - skill: skills/design
+        tier: deep
+        checks: [scripts/design-checked.ts]
+  designs:
+    description: When the owner has chosen a path on the design's first card, one designer writes the design, or two write apart, the second given nothing of the first.
+    input: schemas/designs-request.json
+    output: schemas/designs-response.json
+    effects: [read]
+    run:
+      - script: scripts/designs.ts
+  challenge:
+    description: When a design, or two written apart, are to be judged practice by practice for the practices held by design, and one design chosen or a merged one given.
+    input: schemas/challenge-request.json
+    output: schemas/challenge.json
+    effects: [read]
+    run:
+      - skill: skills/challenge
+        tier: deep
+        checks: [scripts/challenge-checked.ts]
+  challenge-designs:
+    description: When the designs are written, it lists where two differ, reads the practices held by design from the integration branch and asks the challenger.
+    input: schemas/challenge-designs-request.json
+    output: schemas/challenge-designs-response.json
+    effects: [read, write, delete]
+    run:
+      - script: scripts/challenge-designs.ts
+  draw-design:
+    description: When the challenger has answered and the owner needs the design card, with what was checked by script and judged by whom, and whether approve is offered.
+    input: schemas/draw-design-request.json
+    output: schemas/draw-design-response.json
+    effects: [read]
+    run:
+      - script: scripts/draw-design.ts
+  commit-design:
+    description: When the owner has answered the design card, it commits the design and its schema files in a worktree of its own and merges them into the integration branch on approve, and ends the run on stop.
+    input: schemas/commit-design-request.json
+    output: schemas/commit-design-response.json
+    effects: [read, write, delete]
+    run:
+      - script: scripts/commit-design.ts
 
 workflows:
   - workflows/one-slice.yaml
   - workflows/rounds.yaml
+  - workflows/design.yaml

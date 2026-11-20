@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CommitDesignRequest",
+  "description": "The owner's choice on the design card, and what to commit.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "choice",
+    "file",
+    "requirements",
+    "design",
+    "into"
+  ],
+  "properties": {
+    "choice": {
+      "enum": [
+        "approve",
+        "stop"
+      ],
+      "description": "approve commits the design; stop ends the run."
+    },
+    "file": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+      "maxLength": 1000,
+      "description": "The requirements file, relative to the project, as requirements.check named it."
+    },
+    "requirements": {
+      "$ref": "requirements@1/check-response.json#/$defs/requirements",
+      "description": "The requirements file whole, as requirements.check accepted it."
+    },
+    "design": {
+      "type": "object",
+      "description": "The chosen design."
+    },
+    "into": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The branch the design is committed into: the setting into."
+    }
+  }
+}

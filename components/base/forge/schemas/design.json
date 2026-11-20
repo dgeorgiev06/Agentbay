@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Design",
+  "description": "A system design handed in as data: the modules, each with what it hides and owns and the interfaces it implements, then each interface with its actions, each action's request and response schemas, the conditions it serves and its worked examples. Forge writes the schema files from it; the designer writes no file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["modules", "interfaces"],
+  "properties": {
+    "modules": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 30,
+      "items": { "$ref": "#/$defs/module" },
+      "description": "The modules, each named for what it does."
+    },
+    "interfaces": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 30,
+      "items": { "$ref": "#/$defs/interface" },
+      "description": "The interfaces between the modules and their callers."
+    }
+  },
+  "$defs": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "maxLength": 40,
+      "description": "Lower-case letters, digits and dashes, starting with a letter."
+    },
+    "sentence": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "One plain sentence."
+    },
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "hides", "implements"],
+      "properties": {
+        "name": { "$ref": "#/$defs/name" },
+        "hides": {
+          "$ref": "#/$defs/sentence",
+          "description": "What the module hides from its callers, in one sentence."
+        },
+        "implements": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/name" },
+          "description": "The interfaces the module offers, by name."
+        },
+        "owns": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tables": {
+              "type": "array",
+              "maxItems": 50,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/name" },
+              "description": "The tables only this module reads and writes."
+            },
+            "files": {
+              "type": "array",
+              "maxItems": 50,
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1, "maxLength": 300 },
+              "description": "The files only this module reads and writes, relative to the project."
+            }
+          },
+          "description": "What the module keeps; the others ask it."
+        }
+      }
+    },
+    "interface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "actions"],
+      "properties": {
+        "name": { "$ref": "#/$defs/name" },
+        "actions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": { "$ref": "#/$defs/action" },
+          "description": "The interface's actions."
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "request", "response", "serves", "examples"],
+      "properties": {
+        "name": { "$ref": "#/$defs/name" },
+        "request": {
+          "type": "object",
+          "description": "The request's JSON Schema, draft 2020-12, as data. A $ref names a part of itself or another schema file of the same interface, such as add-request.json."
+        },
+        "response": {
+          "type": "object",
+          "description": "The response's JSON Schema, as the request's."
+        },
+        "serves": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": { "$ref": "requirements@1/check-response.json#/$defs/conditionId" },
+          "description": "The conditions of the requirements this action serves, by id."
+        },
+        "because": {
+          "$ref": "#/$defs/sentence",
+          "description": "Why the action exists when it serves no condition, such as an operator's action."
+        },
+        "examples": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/example" },
+          "description": "Worked examples, at least one."
+        }
+      }
+    },
+    "example": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input"],
+      "oneOf": [{ "required": ["answer"] }, { "required": ["refusal"] }],
+      "properties": {
+        "earlier": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/call" },
+          "description": "Calls made before, in order, that the example starts from."
+        },
+        "input": { "description": "The request, which the request schema takes." },
+        "answer": { "description": "The exact response, which the response schema takes." },
+        "refusal": {
+          "$ref": "#/$defs/sentence",
+          "description": "The exact sentence of the refusal."
+        }
+      }
+    },
+    "call": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "input"],
+      "properties": {
+        "action": { "$ref": "#/$defs/name" },
+        "input": { "description": "The request of that earlier call." }
+      }
+    }
+  }
+}

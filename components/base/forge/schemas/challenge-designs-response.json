@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ChallengeDesignsResponse",
+  "description": "The design chosen, the challenger's answers, and where two designs differed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "path",
+    "chosen",
+    "because",
+    "design",
+    "practices",
+    "differences"
+  ],
+  "properties": {
+    "path": {
+      "enum": [
+        "light",
+        "full"
+      ],
+      "description": "light: one designer. full: two designers who wrote apart."
+    },
+    "chosen": {
+      "enum": [
+        "first",
+        "second",
+        "merged"
+      ],
+      "description": "The design chosen: first or second as written, or merged, given in design."
+    },
+    "because": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "design": {
+      "type": "object",
+      "description": "The chosen design, as schemas/design.json gives it."
+    },
+    "practices": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "answer",
+          "sentence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Z]{1,4}-\\d{1,3}$",
+            "description": "The practice's id, such as P-35."
+          },
+          "answer": {
+            "enum": [
+              "held",
+              "not-held",
+              "does-not-apply"
+            ],
+            "description": "Whether the design holds the practice."
+          },
+          "sentence": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "Why, in one sentence; for not-held, where the design breaks it."
+          }
+        }
+      },
+      "description": "One answer for each practice held by design, by id."
+    },
+    "differences": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+      },
+      "description": "Where the two designs differ, one line each, worked out by script; empty with one design."
+    }
+  }
+}

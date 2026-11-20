@@ -4,9 +4,7 @@
     "slice": {
       "name": "TD1",
       "kind": "mode",
-      "scope": [
-        "components/modes/todo/**"
-      ],
+      "scope": ["components/modes/todo/**"],
       "after": [],
       "done": [
         {
@@ -15,9 +13,7 @@
           "level": "must",
           "proof": {
             "kind": "fails-first",
-            "tests": [
-              "components/modes/todo/tests/todo.test.ts"
-            ]
+            "tests": ["components/modes/todo/tests/todo.test.ts"]
           }
         },
         {
@@ -66,9 +62,7 @@
       {
         "item": "DOD-TD1-1",
         "held": true,
-        "cases": [
-          "a todo that was added is listed"
-        ]
+        "cases": ["a todo that was added is listed"]
       },
       {
         "item": "DOD-TD1-2",

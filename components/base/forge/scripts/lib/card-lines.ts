@@ -1,8 +1,10 @@
+type ComputedBy = "slice" | "start" | "prove" | "draw";
+
 export type CardLine =
   | {
       readonly mark: "computed";
       readonly words: string;
-      readonly source: { readonly step: "slice" | "prove" | "draw" };
+      readonly source: { readonly step: ComputedBy };
     }
   | {
       readonly mark: "judged";
@@ -75,7 +77,7 @@ function fitted(text: string, room: number): string {
     .join(" ");
 }
 
-export function computed(step: "slice" | "prove" | "draw", words: string): CardLine {
+export function computed(step: ComputedBy, words: string): CardLine {
   return { mark: "computed", words: fitted(words, computedRoom), source: { step } };
 }
 

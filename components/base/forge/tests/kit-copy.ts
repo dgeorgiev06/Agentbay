@@ -322,10 +322,12 @@ export type Handed = {
 export type Played = (task: Json) => Promise<Json>;
 
 export type Players = {
-  readonly tests: Played;
-  readonly builder: Played;
+  readonly tests?: Played;
+  readonly builder?: Played;
   readonly reviewer?: Played;
   readonly planter?: Played;
+  readonly designer?: Played;
+  readonly challenger?: Played;
 };
 
 export type Asked = {
@@ -348,6 +350,10 @@ function playerOf(players: Players, action: string): Played | undefined {
       return players.reviewer;
     case "plant":
       return players.planter;
+    case "design":
+      return players.designer;
+    case "challenge":
+      return players.challenger;
     default:
       throw new Error(`No player answers the action ${action}.`);
   }
@@ -371,7 +377,8 @@ export async function playedTo(root: string, runId: string, players: Players): P
     const output = await player(given);
     const token = textAt(await task(root, runId), "token");
     const answer = await bay(root, ["submit", JSON.stringify(output), "--token", token]);
-    if (fieldsOf(answer).ok !== true && textAt(runOf(answer), "status") !== "undone") {
+    const ended = ["undone", "failed"].includes(textAt(runOf(answer), "status"));
+    if (fieldsOf(answer).ok !== true && !ended) {
       throw new Error(`The kernel did not take the output of ${action}: ${JSON.stringify(answer)}`);
     }
   }

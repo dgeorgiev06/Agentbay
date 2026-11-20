@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ChallengeDesignsRequest",
+  "description": "The designs as written, the requirements, the practices files and the branch the design goes into.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "file",
+    "requirements",
+    "designs",
+    "practices",
+    "into"
+  ],
+  "properties": {
+    "file": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+      "maxLength": 1000,
+      "description": "The requirements file, relative to the project, as requirements.check named it."
+    },
+    "requirements": {
+      "$ref": "requirements@1/check-response.json#/$defs/requirements",
+      "description": "The requirements file whole, as requirements.check accepted it."
+    },
+    "designs": {
+      "type": "object",
+      "description": "The designs step's answer, as designs-response.json gives it."
+    },
+    "practices": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "string",
+        "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+        "maxLength": 1000
+      },
+      "description": "The practices files, the setting practices."
+    },
+    "into": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The branch the design is committed into: the setting into."
+    }
+  }
+}

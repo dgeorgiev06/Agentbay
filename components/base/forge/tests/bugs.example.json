@@ -3,9 +3,7 @@
     "slice": {
       "name": "TD1",
       "kind": "mode",
-      "scope": [
-        "components/modes/todo/**"
-      ],
+      "scope": ["components/modes/todo/**"],
       "after": [],
       "done": [
         {
@@ -14,9 +12,7 @@
           "level": "must",
           "proof": {
             "kind": "fails-first",
-            "tests": [
-              "components/modes/todo/tests/todo.test.ts"
-            ]
+            "tests": ["components/modes/todo/tests/todo.test.ts"]
           }
         },
         {
@@ -34,19 +30,13 @@
         }
       ]
     },
-    "interface": [
-      "components/modes/todo/schemas/list-response.json"
-    ],
-    "fixed": [
-      "components/modes/todo/tests/todo.test.ts"
-    ],
+    "interface": ["components/modes/todo/schemas/list-response.json"],
+    "fixed": ["components/modes/todo/tests/todo.test.ts"],
     "bugs": [
       {
         "name": "an added todo is not saved",
         "patch": "diff --git a/components/modes/todo/scripts/add.ts b/components/modes/todo/scripts/add.ts\n--- a/components/modes/todo/scripts/add.ts\n+++ b/components/modes/todo/scripts/add.ts\n@@ -6 +6 @@\n-  await saved(todo);\n+  void todo;\n",
-        "tests": [
-          "components/modes/todo/tests/todo.test.ts"
-        ]
+        "tests": ["components/modes/todo/tests/todo.test.ts"]
       }
     ],
     "state": {
@@ -70,16 +60,12 @@
           "components/modes/todo/tests/todo.test.ts"
         ],
         "names": {
-          "gained": [
-            "todo.add"
-          ],
+          "gained": ["todo.add"],
           "lost": [],
           "changed": []
         }
       },
-      "tests": [
-        "components/modes/todo/tests/todo.test.ts"
-      ],
+      "tests": ["components/modes/todo/tests/todo.test.ts"],
       "verdicts": [
         {
           "item": "DOD-TD1-1",
@@ -101,16 +87,12 @@
         {
           "item": "DOD-TD1-1",
           "held": true,
-          "cases": [
-            "a todo that was added is listed"
-          ]
+          "cases": ["a todo that was added is listed"]
         },
         {
           "item": "DOD-TD1-2",
           "held": true,
-          "cases": [
-            "the mode has the actions add and list"
-          ]
+          "cases": ["the mode has the actions add and list"]
         }
       ],
       "remaining": [],
@@ -123,16 +105,12 @@
       {
         "name": "an added todo is not saved",
         "patch": "diff --git a/components/modes/todo/scripts/add.ts b/components/modes/todo/scripts/add.ts\n--- a/components/modes/todo/scripts/add.ts\n+++ b/components/modes/todo/scripts/add.ts\n@@ -6 +6 @@\n-  await saved(todo);\n+  void todo;\n",
-        "tests": [
-          "components/modes/todo/tests/todo.test.ts"
-        ]
+        "tests": ["components/modes/todo/tests/todo.test.ts"]
       },
       {
         "name": "a todo marked done is still listed as open",
         "patch": "diff --git a/components/modes/todo/scripts/list.ts b/components/modes/todo/scripts/list.ts\n--- a/components/modes/todo/scripts/list.ts\n+++ b/components/modes/todo/scripts/list.ts\n@@ -4 +4 @@\n-  return todos.filter((todo) => todo.status === \"open\");\n+  return todos;\n",
-        "tests": [
-          "components/modes/todo/tests/todo.test.ts"
-        ]
+        "tests": ["components/modes/todo/tests/todo.test.ts"]
       }
     ],
     "planted": 1

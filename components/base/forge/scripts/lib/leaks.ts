@@ -1,4 +1,4 @@
-import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
+import { fieldsOf, readYaml, type Json } from "../../../../../bay/sdk.ts";
 import type { HandedTest } from "./handed-tests.ts";
 import { listOf, textOf } from "./json-values.ts";
 import type { Slice } from "./slice-form.ts";
@@ -65,6 +65,22 @@ export function phrasesOf(slice: Slice, paths: readonly string[]): readonly stri
   return [...new Set(phrases)].filter((phrase) => phrase.length >= shortestPhrase);
 }
 
+function stringsIn(value: Json): readonly string[] {
+  if (typeof value === "string") {
+    return [value];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap(stringsIn);
+  }
+  return value !== null && typeof value === "object" ? Object.values(fieldsOf(value)).flatMap(stringsIn) : [];
+}
+
+function givenPhrases(files: readonly HandedTest[]): readonly string[] {
+  const read = files.map((file) => readYaml(file.text));
+  const strings = read.flatMap((each) => (each.ok ? stringsIn(each.value) : []));
+  return strings.map((phrase) => normalized(phrase).toLowerCase()).filter((phrase) => phrase.length >= shortestPhrase);
+}
+
 function withoutPhrases(line: string, phrases: readonly string[]): string {
   const lower = line.toLowerCase().replace(address, " ");
   return phrases.reduce((left, phrase) => left.split(phrase).join(" "), lower);
@@ -79,9 +95,11 @@ function standingLines(files: readonly HandedTest[]): ReadonlySet<string> {
 }
 
 export function sharedText(compared: Compared): readonly SharedText[] {
-  const tests = compared.tests.flatMap(linesOf).filter((line) => telling(line, compared.phrases));
+  const interfaceFiles = compared.base.filter((file) => compared.interface.includes(file.path));
+  const phrases = [...compared.phrases, ...givenPhrases(interfaceFiles)];
+  const tests = compared.tests.flatMap(linesOf).filter((line) => telling(line, phrases));
   const told = new Set(tests);
-  const interfaceLines = standingLines(compared.base.filter((file) => compared.interface.includes(file.path)));
+  const interfaceLines = standingLines(interfaceFiles);
   return compared.code.flatMap((file) => {
     const before = standingLines(compared.base.filter((each) => each.path === file.path));
     const lines = linesOf(file.text).filter((line) => told.has(line));

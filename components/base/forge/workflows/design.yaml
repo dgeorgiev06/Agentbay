@@ -1,0 +1,52 @@
+name: design
+trigger: { manual: true }
+budget: { minutes: 90 }
+steps:
+  - id: read
+    action: requirements.check
+  - id: start
+    action: design-start
+    input:
+      checked: $steps.read.output
+  - id: path
+    approval: Which path for the design?
+    show: $steps.start.output.card
+    choices:
+      light: { does: "One designer, then a challenger" }
+      full: { does: "Two designers apart, then a comparison" }
+      stop: { does: Stop; nothing is designed }
+  - id: designs
+    action: designs
+    input:
+      choice: $steps.path.output.choice
+      file: $steps.start.output.file
+      requirements: $steps.start.output.requirements
+  - id: challenge
+    action: challenge-designs
+    input:
+      file: $steps.start.output.file
+      requirements: $steps.start.output.requirements
+      designs: $steps.designs.output
+      practices: $settings.practices
+      into: $settings.into
+  - id: draw
+    action: draw-design
+    input:
+      file: $steps.start.output.file
+      requirements: $steps.start.output.requirements
+      challenged: $steps.challenge.output
+  - id: card
+    approval: Commit this design?
+    show: $steps.draw.output.card
+    quotes: [designs, challenge]
+    choices:
+      approve: { does: Commit the design and its schema files, when: $steps.draw.output.offered.approve }
+      stop: { does: Stop; nothing is committed }
+  - id: commit
+    action: commit-design
+    input:
+      choice: $steps.card.output.choice
+      file: $steps.start.output.file
+      requirements: $steps.start.output.requirements
+      design: $steps.challenge.output.design
+      into: $settings.into

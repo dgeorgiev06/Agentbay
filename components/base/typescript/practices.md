@@ -73,9 +73,11 @@ if (typeof task.round === "number") { ... }
 
 ## TS-05 A problem the caller can act on is a value
 
-Held by: review. Source: ours.
+Held by: review. Source: ours; Google TypeScript style guide (`cause`); Go best practices (error handling).
 
 Return `Outcome<T>` from `bay/outcome.ts`. Throw only when the process cannot go on. Return every problem found, not the first.
+
+When a caught error becomes a problem, keep the error as its cause. Add words only when they tell the caller something the cause does not.
 
 ```ts
 // good
@@ -200,7 +202,7 @@ function calcRem(l: Budget, s: Spend): Budget
 
 Held by: linter (`complexity` 10, `no-nested-ternary`); review. Source: ours.
 
-When a function passes ten branches, name a part and move it. Do not split a function only to pass the linter: each part must have a name that makes sense on its own. Small private functions inside a feature are fine; they must not become things another feature imports (P-08).
+When a function passes ten branches, name a part and move it. A function past about 40 lines is read for a part with a name of its own: a prompt to look, never a reason to split. Do not split a function only to pass the linter: each part must have a name that makes sense on its own. Small private functions inside a feature are fine; they must not become things another feature imports (P-08).
 
 ## TS-17 The outside world comes in as an argument
 
@@ -335,4 +337,98 @@ function openTodos(todos: readonly Todo[]): readonly Todo[] | undefined {
   const open = todos.filter((todo) => todo.status === "open");
   return open.length === 0 ? undefined : open;
 }
+```
+
+## TS-23 A problem's text says what failed, on what, and what was wanted
+
+Held by: review. Source: Deno style guide (error messages); Go Code Review Comments (error strings).
+
+The text names the action that failed, quotes the value, and gives the state found and the state wanted. A person can act on it without reading the code.
+
+```ts
+// good
+failedWith([unplacedProblem(`The plan "${file}" names the slice "${name}" twice; each slice needs its own name.`)]);
+
+// bad
+failedWith([unplacedProblem("Invalid plan.")]);
+```
+
+## TS-24 A try holds only the call that may throw
+
+Held by: review. Source: Google TypeScript style guide (keep try blocks focused; empty catch blocks); PEP 8.
+
+Where throwing is allowed, the `try` wraps the one call that may throw, so a bug in the lines around it is not caught by accident. A `catch` is never empty.
+
+```ts
+// good
+function parsed(text: string): Outcome<Json> {
+  try {
+    return succeededWith(JSON.parse(text));
+  } catch (error) {
+    return failedWith([unplacedProblem(`The text is not JSON: ${String(error)}`)]);
+  }
+}
+
+// bad: a mistake in shapeOf or stored is reported as bad JSON
+function loaded(text: string): Outcome<Plan> {
+  try {
+    const plan = shapeOf(JSON.parse(text));
+    stored(plan);
+    return succeededWith(plan);
+  } catch {
+    return failedWith([unplacedProblem("The text is not JSON.")]);
+  }
+}
+```
+
+## TS-25 A module keeps no state
+
+Held by: review; linter (`prefer-const`) for part. Source: Google TypeScript style guide (mutable exports); Go best practices (global state).
+
+No `export let`. No variable at the top of a module that changes after the module loads. State lives in a value that is passed in (TS-17).
+
+```ts
+// good
+function counted(tally: Tally, word: string): Tally {
+  return { ...tally, [word]: (tally[word] ?? 0) + 1 };
+}
+
+// bad
+let tally: Record<string, number> = {};
+export function count(word: string): void {
+  tally[word] = (tally[word] ?? 0) + 1;
+}
+```
+
+## TS-26 Plain types first
+
+Held by: review. Source: TypeScript handbook (generics); Google TypeScript style guide (mapped and conditional types); Go style decisions (generics).
+
+A generic, a mapped type or a conditional type appears when a second real caller needs it, as a port does under P-10. No type parameter that is used once.
+
+```ts
+// good
+function firstOpen(todos: readonly Todo[]): Todo | undefined {
+  return todos.find((todo) => todo.status === "open");
+}
+
+// bad: one caller, and the type parameters tell the reader nothing
+function firstWhere<T extends { status: string }, K extends T["status"]>(items: readonly T[], status: K): T | undefined {
+  return items.find((item) => item.status === status);
+}
+```
+
+## TS-27 No code that writes code
+
+Held by: review. Source: Deno style guide; Google TypeScript style guide (getters); Google Python style guide (power features).
+
+No `Proxy`. No call found by building a property's name from text. No getter that changes something. Say it out, even when it is longer.
+
+```ts
+// good
+const handlers = { add: addTodo, list: listTodos };
+const handler = name === "add" ? handlers.add : handlers.list;
+
+// bad
+const handler = actions[`${name}Todo` as keyof typeof actions];
 ```

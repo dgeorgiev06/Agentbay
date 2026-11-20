@@ -22,7 +22,7 @@ Held by: **check** (fails `npm run check`), **review** (the reviewer verifies it
 |---|---|---|
 | P-08 | A kernel feature is a deep module: a folder with one entry file. Other features import only that file (ADR 6). | check: `tests/feature-map.test.ts` |
 | P-09 | Mode code imports only the toolbox. An adapter imports only the harness interface. | check: feature map test, `bay check` |
-| P-10 | A port exists only when two adapters exist. | review |
+| P-10 | A port exists only when two adapters exist. The module that calls a port declares it, and the port holds only what that module uses. | review |
 | P-11 | Replace and delete, never layer. Callers move and the old thing goes in the same slice. No shim, alias or re-export (ADR 9). | check: two dead-code runs; review of line counts |
 | P-12 | The same code or rule lives in one place (ADR 11). | planned check: copy-paste detector with a threshold |
 | P-13 | Before adding, remove what is in the way. Size is reported before and after every slice and a rise is explained, but size is never a target: quality and readability decide. | review: line counts in every report |
@@ -33,6 +33,7 @@ Held by: **check** (fails `npm run check`), **review** (the reviewer verifies it
 | P-39 | Dependencies point one way. No cycle, and the core never imports the edges: commands, adapters, whatever talks to the outside. | check: feature map test |
 | P-40 | What changes together lives together. A change that must touch five folders says the boundaries are wrong. | review: the paths a slice changed |
 | P-41 | A module's tests sit with it and use only its entry file. | check: feature map test (the list of tests that reach in only shrinks) |
+| P-52 | The rules of the work, what is allowed, what comes next, what a thing costs, are pure functions: values in, a value out, nothing read or written on the way. Reading and writing happen in a thin function around them. | review; design |
 
 ## Data
 
@@ -54,7 +55,7 @@ Held by: **check** (fails `npm run check`), **review** (the reviewer verifies it
 | Id | Practice | Held by |
 |---|---|---|
 | P-15 | The interface is the test surface. A feature's tests import its entry file and assert what a caller observes. | planned check: test imports against the feature map |
-| P-16 | A test asserts literal expected values. A test that still passes when the code under test returns nothing is rewritten or deleted. | planned check: a script that stubs imports; review by bug injection |
+| P-16 | A test asserts literal expected values. A test that still passes when the code under test returns nothing is rewritten or deleted. A failing assertion shows the input, what came back and what was wanted. Checks in one test that do not depend on each other all run. | planned check: a script that stubs imports; review by bug injection |
 | P-17 | The builder writes the test first and sees it fail. | review: the report says how it failed |
 | P-18 | The reviewer injects bugs of their own, in code the builder's injections did not reach. | review |
 | P-31 | Bugs are injected in a throwaway copy of the tree, never in the working tree, and each test run has a time limit. A run that dies leaves nothing behind. Whoever picks up a worktree checks it is clean first. | review |
@@ -96,6 +97,9 @@ Held by: **check** (fails `npm run check`), **review** (the reviewer verifies it
 | A sandbox library under forge | Sandcastle | Owner decision (ADR 8). The pattern is used; the dependency is not. |
 | An agent framework under the kernel | Mastra, Deep Agents | The kernel never drives a model (ADR 2). They are harnesses behind adapters. |
 | An in-memory copy of the store for tests | own earlier design | It tested the copy. Tests use the real store with a fault injector (ADR 10). |
+| A doc comment on every export | Google, Deno, PEP 8, Rust guides | Owner rule: no comments. A name and its types say what an export is; the why goes in a decision record. |
+| An entry file that only forwards names | Deno, Python, Rust | A feature's entry file is its interface and is written out (P-08, P-39). A forwarding file hides which names are meant to be used. |
+| `private` in place of `#` | Google TypeScript guide | `#` is kept at run time and needs no build step (TS-01). |
 
 ## Sources
 

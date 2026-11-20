@@ -1,4 +1,4 @@
-import type { RunEvent, Tier } from "../contracts.ts";
+import type { Json, RunEvent, Tier } from "../contracts.ts";
 import { foreachItemKey, workflowStepKey } from "./step-key.ts";
 import { isGivenStep } from "./workflow-part.ts";
 
@@ -19,6 +19,7 @@ export type StepSeen = {
   readonly status: string;
   readonly skill: SkillSeen | undefined;
   readonly attempts?: readonly number[];
+  readonly items?: readonly Json[];
 };
 
 export type Records = {

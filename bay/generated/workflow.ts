@@ -31,6 +31,7 @@ export type Step =
   | {
       readonly foreach: Reference;
       readonly sideBySide?: number | string;
+      readonly itemName?: { readonly id: Reference; readonly title?: Reference };
       readonly id: Name;
       readonly steps: ReadonlyArray<Step>;
     };

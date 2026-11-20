@@ -6,7 +6,7 @@ import type { Action } from "../bay/generated/mode.ts";
 import type { Config } from "../bay/generated/config.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
 import { approvalLines } from "../bay/approval-card.ts";
-import { isRecord, numberField } from "../bay/json.ts";
+import { isRecord, numberField, toJson } from "../bay/json.ts";
 import type { Run, Runs } from "../bay/runs/runs.ts";
 import {
   answer,
@@ -95,7 +95,7 @@ function gateScript(
   let failed = false;
   return (request) => {
     const item = numberField(request.input, "n");
-    if (item === failsFirst && !failed) {
+    if (item !== undefined && item === failsFirst && !failed) {
       failed = true;
       return failure(`item ${String(item)} is not ready`);
     }
@@ -317,10 +317,9 @@ const sliceItems: Json = [
 
 const sliceNamed: ItemName = { id: "$item.planned.slice.name", title: "$item.planned.title" };
 
-const judgedBoth = [
-  { mark: "judged", words: drafted, source: { step: "write", item: 0 } },
-  { mark: "judged", words: "item 1 holds", source: { step: "write", item: 1 } },
-];
+const judgedItem0 = { mark: "judged", words: drafted, source: { step: "write", item: 0 } };
+
+const judgedBoth = [judgedItem0, { mark: "judged", words: "item 1 holds", source: { step: "write", item: 1 } }];
 
 function rowsOf(run: Run): string {
   const [waiting] = waitsOf(run);
@@ -336,7 +335,7 @@ async function namedCard(opening: Partial<Opening>): Promise<{ readonly run: Run
 function namesOf(run: Run): readonly Json[] {
   const card = cardShown(run);
   assert.ok(isRecord(card) && Array.isArray(card["lines"]), JSON.stringify(card));
-  return card["lines"].map((line: unknown) => (isRecord(line) ? (line["itemName"] ?? null) : null));
+  return card["lines"].map((line: unknown) => (isRecord(line) ? toJson(line["itemName"] ?? null) : null));
 }
 
 describe("a card names an item by the name its foreach declares, or by its place", () => {
@@ -402,12 +401,12 @@ describe("a card names an item by the name its foreach declares, or by its place
   });
 
   test("a line that brings its own name or count of items is not shown: only the kernel names an item", async () => {
-    const named = { ...judgedBoth[0], itemName: { id: "TD9", title: "Something else" } };
+    const named = { ...judgedItem0, itemName: { id: "TD9", title: "Something else" } };
     assert.equal(
       await refusedCard([named]),
       `${cannot} has the field itemName, which a line does not take; ${kernelAdds}`,
     );
-    const counted = { ...judgedBoth[0], itemCount: 9 };
+    const counted = { ...judgedItem0, itemCount: 9 };
     assert.equal(
       await refusedCard([counted]),
       `${cannot} has the field itemCount, which a line does not take; ${kernelAdds}`,

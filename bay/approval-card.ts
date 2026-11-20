@@ -1,3 +1,4 @@
+import { itemNameWords, itemPlaceWords } from "./runs/item-name.ts";
 import type { Run } from "./runs/runs.ts";
 import { shown } from "./trust.ts";
 import { hanging, hashLine, namedRows } from "./trust-card.ts";
@@ -43,7 +44,12 @@ function skillWords(skill: SkillUsed): string {
 
 function itemWords(line: CardLine): string {
   const { item } = line.source;
-  return item === undefined || line.foreach === undefined ? "" : `, in item ${String(item)} of ${line.foreach}`;
+  const { foreach, itemName, itemCount } = line;
+  if (item === undefined || foreach === undefined) {
+    return "";
+  }
+  const place = itemCount === undefined ? { item, foreach } : { item, foreach, count: itemCount };
+  return `, for ${itemName === undefined ? itemPlaceWords(place) : itemNameWords(itemName)}`;
 }
 
 function sourceWords(line: CardLine): string | undefined {

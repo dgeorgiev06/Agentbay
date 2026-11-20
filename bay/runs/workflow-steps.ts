@@ -1,11 +1,13 @@
 import { nestedTarget, runNestedAction } from "./action-steps.ts";
 import { noSpend } from "./budget.ts";
 import type { Json, Settled } from "../contracts.ts";
+import { toJson } from "../json.ts";
 import type { Step as WorkflowStep } from "../generated/workflow.ts";
 import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
 import type { StepRecord } from "./run-store.ts";
 import { checkedCard } from "./card.ts";
 import type { StepSeen } from "./cited-step.ts";
+import type { DeclaredName } from "./item-name.ts";
 import { evaluatedChoices, reasonProblems, shownChoices, type ChoiceStatus } from "./choices.ts";
 import { approvalContentOf, type ApprovalContent } from "./scrubbed-store.ts";
 import type { ApprovalDetail, ApprovalVerdict } from "./step-detail.ts";
@@ -126,8 +128,10 @@ function evaluatedRules(scope: WorkflowScope, step: ApprovalStep): Outcome<reado
 
 function stepSeen(record: StepRecord): StepSeen {
   const seen = { kind: record.kind, status: record.status };
-  if (record.kind === "foreach" && record.detail !== null) {
-    return { ...seen, skill: undefined, attempts: record.detail.attempts };
+  if (record.kind === "foreach") {
+    const items = Array.isArray(record.input) ? record.input.map((item: unknown) => toJson(item)) : [];
+    const attempts = record.detail === null ? {} : { attempts: record.detail.attempts };
+    return { ...seen, skill: undefined, items, ...attempts };
   }
   return { ...seen, skill: record.kind === "skill" && record.detail !== null ? record.detail : undefined };
 }
@@ -136,15 +140,18 @@ function stepsSeen(records: ReadonlyMap<string, StepRecord>): ReadonlyMap<string
   return new Map([...records].map(([key, record]) => [key, stepSeen(record)]));
 }
 
+function foreachSteps(steps: readonly WorkflowStep[]): readonly ForeachStep[] {
+  return steps.flatMap((step) => ("foreach" in step ? [step, ...foreachSteps(step.steps)] : []));
+}
+
 function foreachOfSteps(steps: readonly WorkflowStep[]): ReadonlyMap<string, string> {
-  const foreachOf = new Map<string, string>();
-  for (const step of steps) {
-    if ("foreach" in step) {
-      step.steps.forEach((inner) => foreachOf.set(inner.id, step.id));
-      foreachOfSteps(step.steps).forEach((foreach, inner) => foreachOf.set(inner, foreach));
-    }
-  }
-  return foreachOf;
+  return new Map(foreachSteps(steps).flatMap((step) => step.steps.map((inner) => [inner.id, step.id] as const)));
+}
+
+function itemNamesOf(steps: readonly WorkflowStep[]): ReadonlyMap<string, DeclaredName> {
+  return new Map(
+    foreachSteps(steps).flatMap((step) => (step.itemName === undefined ? [] : [[step.id, step.itemName]])),
+  );
 }
 
 async function checkedShown(walk: Walk, scope: WorkflowScope, at: ShownAt): Promise<Outcome<ShownParts>> {
@@ -155,6 +162,7 @@ async function checkedShown(walk: Walk, scope: WorkflowScope, at: ShownAt): Prom
     quotes: step.quotes ?? [],
     keys: scope.keys,
     foreachOf: foreachOfSteps(scope.workflow.workflow.steps),
+    itemNames: itemNamesOf(scope.workflow.workflow.steps),
     steps: stepsSeen(walk.records),
     events: await store.readEvents(walk.writer.runId),
     eventsOf: (runId: string) => store.readEvents(runId),

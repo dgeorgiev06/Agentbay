@@ -33,18 +33,23 @@ function notHeldShown(practice: NotHeldPractice, must: readonly string[]): NotHe
   return must.includes(practice.id) ? { ...shown, level: "must" } : shown;
 }
 
+export function practicesTallyWords(rounds: RoundsOnCard): string {
+  const practices = judgedOf(rounds);
+  if (rounds.judged === undefined || practices === undefined) {
+    return notJudged;
+  }
+  const who = `the reviewer in round ${String(rounds.judged.round)}`;
+  return `${tallyWords(who, practices.tally)}; a check holds ${String(practices.checks)} more`;
+}
+
 export function reviewedPracticeLines(rounds: RoundsOnCard | undefined, must: readonly string[]): readonly CardLine[] {
   if (rounds === undefined) {
     return [];
   }
   const { judged } = rounds;
+  const tally = computed("draw", practicesTallyWords(rounds));
   if (judged?.practices === undefined) {
-    return [computed("draw", notJudged)];
+    return [tally];
   }
-  const { tally, notHeld, checks } = judged.practices;
-  const tallied = `${tallyWords(`the reviewer in round ${String(judged.round)}`, tally)}; a check holds ${String(checks)} more`;
-  return [
-    computed("draw", tallied),
-    ...notHeld.map((practice) => notHeldLine(judged.step, notHeldShown(practice, must))),
-  ];
+  return [tally, ...judged.practices.notHeld.map((practice) => notHeldLine(judged.step, notHeldShown(practice, must)))];
 }

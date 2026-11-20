@@ -1,13 +1,14 @@
 import type { BugsOnCard } from "./bug-card.ts";
 import type { Built, Missing } from "./builder-answer.ts";
-import { computed, counted, grouped, joined, judged, type Card, type CardLine } from "./card-lines.ts";
+import { computed, counted, grouped, judged, type Card, type CardLine } from "./card-lines.ts";
 import { interfaceChanges, interfaceWords, type Pins } from "./interface-pins.ts";
 import { verdictLines, type CaseMessages } from "./item-lines.ts";
 import type { Leak } from "./leaks.ts";
 import { answerWords, mergeReason, withheldReasons, type WithheldChoice } from "./merge-choices.ts";
 import { mustNotHeld, reviewedPracticeLines } from "./practices-block.ts";
 import type { Proved, Sized } from "./proof-answer.ts";
-import type { RoundsEnded, RoundsOnCard } from "./round-card.ts";
+import type { RoundsOnCard } from "./round-card.ts";
+import { bugWords, leakWords, roundsRanWords } from "./slice-words.ts";
 import type { Slice } from "./slice-form.ts";
 
 type Kept = "set-aside" | "with-tests";
@@ -42,13 +43,6 @@ const lacksSaid: Readonly<Record<Missing["lacks"], string>> = {
   toolbox: "the toolbox",
   "test-toolbox": "the test toolbox",
   interface: "an interface",
-};
-
-const endedSaid: Readonly<Record<RoundsEnded, string>> = {
-  leak: "a leak ended them",
-  stopped: "the builder stopped",
-  "no-findings": "the reviewer had no findings",
-  "last-round": "no more may run",
 };
 
 const watchedPaths: readonly { readonly matches: RegExp; readonly says: string }[] = [
@@ -97,7 +91,7 @@ function roundLines(rounds: RoundsOnCard | undefined): readonly CardLine[] {
   if (rounds === undefined) {
     return [];
   }
-  const ran = `rounds: ${String(rounds.count)} of at most ${String(rounds.most)}; ${endedSaid[rounds.ended]}`;
+  const ran = roundsRanWords(rounds);
   const { judged: lines } = rounds;
   if (lines === undefined) {
     return [computed("draw", ran)];
@@ -116,25 +110,6 @@ function builderLines(built: Built, step: string): readonly CardLine[] {
   return [...stopped, ...decided].map((words) => judged(step, words));
 }
 
-function bugWords(bugs: BugsOnCard | undefined): readonly string[] {
-  if (bugs === undefined) {
-    return [];
-  }
-  const planted = bugs.planted === 0 ? [] : [`the planter wrote ${counted(bugs.planted, "bug")}`];
-  return [...planted, ...bugs.survived.map((bug) => `bug survived: ${bug.name}, in ${joined(bug.files)}`)];
-}
-
-function leakWords(leak: Leak): string {
-  switch (leak.kind) {
-    case "shared-text":
-      return `leak: ${leak.path} shares ${counted(leak.lines, "line")} with the tests`;
-    case "mark":
-      return `leak: ${leak.path} holds the mark planted in the tests`;
-    case "mark-in-answer":
-      return "leak: the builder's answer holds the mark planted in the tests";
-  }
-}
-
 function drawnLines(input: MergeCardInput, reason: string | undefined): readonly CardLine[] {
   const { slice, proof, work, kept, pins = noPins } = input;
   const drawnWords = [
@@ -146,7 +121,7 @@ function drawnLines(input: MergeCardInput, reason: string | undefined): readonly
   return [
     computed("draw", answerWords(reason)),
     ...(input.leaks ?? []).map((leak) => computed("draw", leakWords(leak))),
-    ...verdictLines(slice, proof.verdicts, input.caseMessages),
+    ...verdictLines(slice, proof.verdicts, { messages: input.caseMessages, provedBy: "prove" }),
     ...reviewedPracticeLines(input.rounds, input.mustPractices ?? []),
     ...[...drawnWords, ...bugWords(input.bugs)].map((said) => computed("draw", said)),
     ...roundLines(input.rounds),

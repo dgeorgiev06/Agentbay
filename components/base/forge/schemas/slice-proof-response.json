@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SliceProofResponse",
+  "description": "Proof's answer for the slice without its checks items, in proof@1's form, with what of it quotes a kept test left out.",
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "proof@1/prove-response.json"
+    }
+  ]
+}

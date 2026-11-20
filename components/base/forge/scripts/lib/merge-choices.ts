@@ -76,7 +76,7 @@ export function answerWords(reason: string | undefined): string {
     : `Merge is not offered: ${reason}`;
 }
 
-function sentenceOf(clause: string): string {
+export function sentenceOf(clause: string): string {
   return `${clause.charAt(0).toUpperCase()}${clause.slice(1)}`;
 }
 

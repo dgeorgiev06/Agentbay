@@ -1,0 +1,185 @@
+name: wave
+trigger: { manual: true }
+budget: { minutes: 2880 }
+steps:
+  - id: wave
+    action: wave
+    input:
+      asked: $trigger
+      into: $settings.into
+  - id: start
+    approval: Build this wave?
+    show: $steps.wave.output.card
+    choices:
+      build: { does: Build the wave's slices side by side }
+      stop: { does: Stop; nothing is cut }
+  - id: begin
+    action: wave-begin
+    input:
+      choice: $steps.start.output.choice
+      slices: $steps.wave.output.slices
+  - id: batches
+    foreach: $steps.wave.output.batches
+    steps:
+      - id: slices
+        foreach: $item
+        sideBySide: 8
+        steps:
+          - id: slice
+            action: slice
+            input:
+              request: $item
+              planter: true
+          - id: lane
+            action: attempt
+            input:
+              wanted: $steps.slice.output.slice.name
+          - id: cut
+            action: worktrees.cut
+            input:
+              slice: $steps.lane.output.name
+              base: $steps.slice.output.base
+          - id: pin
+            action: pin
+            input:
+              interface: $steps.slice.output.interface
+              folder: $steps.cut.output.folder
+          - id: declare
+            action: declare
+            input:
+              slice: $steps.slice.output.slice
+              folder: $steps.cut.output.folder
+              practices: $settings.practices
+              fixed: $steps.slice.output.fixed
+          - id: round-1
+            action: round
+            input:
+              cutAs: $steps.lane.output.name
+              round: 1
+              slice: $steps.slice.output.slice
+              interface: $steps.slice.output.interface
+              fixed: $steps.slice.output.fixed
+              cut: $steps.cut.output
+              declared: $steps.declare.output
+              practices: $settings.practices
+              before: null
+          - id: review-1
+            action: review-round
+            input:
+              slice: $steps.slice.output.slice
+              fixed: $steps.slice.output.fixed
+              practices: $settings.practices
+              interface: $steps.slice.output.interface
+              state: $steps.round-1.output
+          - id: round-2
+            action: round
+            input:
+              cutAs: $steps.lane.output.name
+              round: 2
+              slice: $steps.slice.output.slice
+              interface: $steps.slice.output.interface
+              fixed: $steps.slice.output.fixed
+              cut: $steps.cut.output
+              declared: $steps.declare.output
+              practices: $settings.practices
+              before: $steps.review-1.output
+          - id: review-2
+            action: review-round
+            input:
+              slice: $steps.slice.output.slice
+              fixed: $steps.slice.output.fixed
+              practices: $settings.practices
+              interface: $steps.slice.output.interface
+              state: $steps.round-2.output
+          - id: round-3
+            action: round
+            input:
+              cutAs: $steps.lane.output.name
+              round: 3
+              slice: $steps.slice.output.slice
+              interface: $steps.slice.output.interface
+              fixed: $steps.slice.output.fixed
+              cut: $steps.cut.output
+              declared: $steps.declare.output
+              practices: $settings.practices
+              before: $steps.review-2.output
+          - id: review-3
+            action: review-round
+            input:
+              slice: $steps.slice.output.slice
+              fixed: $steps.slice.output.fixed
+              practices: $settings.practices
+              interface: $steps.slice.output.interface
+              state: $steps.round-3.output
+          - id: bugs
+            action: bugs
+            input:
+              slice: $steps.slice.output.slice
+              cutAs: $steps.lane.output.name
+              interface: $steps.slice.output.interface
+              fixed: $steps.slice.output.fixed
+              bugs: $steps.slice.output.bugs
+              state: $steps.review-3.output
+          - id: own-proof
+            action: slice-proof
+            input:
+              slice: $steps.slice.output.proved
+              base: $steps.cut.output.commit
+              head: $steps.review-3.output.head
+              declared: $steps.review-3.output.declared
+              bugs: $steps.bugs.output.bugs
+          - id: settle
+            action: settle
+            input:
+              request: $item
+              slice: $steps.slice.output
+              cutAs: $steps.lane.output.name
+              pinned: $steps.pin.output.pinned
+              rounds: $steps.review-3.output
+              bugs: $steps.bugs.output
+              proof: $steps.own-proof.output
+  - id: combine
+    action: combine
+    input:
+      wave: $steps.wave.output
+      slices: $steps.batches.output
+  - id: prove
+    action: prove-checks
+    input:
+      proving: $steps.combine.output.proving
+  - id: alone
+    foreach: $steps.prove.output.alone
+    steps:
+      - id: alone-each
+        foreach: $item
+        sideBySide: 8
+        steps:
+          - id: prove-alone
+            action: prove-checks
+            input:
+              proving: $item
+  - id: draw
+    action: draw-wave
+    input:
+      wave: $steps.wave.output
+      slices: $steps.batches.output
+      combined: $steps.combine.output
+      proved: $steps.prove.output
+      alone: $steps.alone.output
+  - id: card
+    approval: Merge this wave?
+    show: $steps.draw.output.card
+    choices:
+      merge:
+        {
+          does: "Merge the combined head into the integration branch, with every slice the card names as in it",
+          when: $steps.draw.output.merge,
+        }
+      keep: { does: Stop; every slice's branches stay }
+  - id: carry-out
+    action: carry-out-wave
+    input:
+      choice: $steps.card.output.choice
+      wave: $steps.wave.output
+      combined: $steps.combine.output
+      slices: $steps.batches.output

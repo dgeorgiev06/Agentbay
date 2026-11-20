@@ -1,0 +1,9 @@
+{
+  "input": {
+    "choice": "build",
+    "slices": ["ONE"]
+  },
+  "output": {
+    "forgotten": ["ONE"]
+  }
+}

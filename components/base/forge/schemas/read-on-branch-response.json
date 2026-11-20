@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReadOnBranchResponse",
+  "description": "The commit the files were read at, and each file's text, or no text when the commit holds no such file. The kernel records this answer, so a script that called for it reads the same texts when its calls are replayed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["commit", "files"],
+  "properties": {
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+      "description": "The commit the worktree was cut at, in full."
+    },
+    "files": {
+      "type": "array",
+      "maxItems": 200,
+      "description": "One entry for each path asked for, in its order.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path"],
+        "properties": {
+          "path": {
+            "$ref": "proof@1/prove-request.json#/$defs/path"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 2000000,
+            "description": "The file's text; left out when the commit holds no such file."
+          }
+        }
+      }
+    }
+  }
+}

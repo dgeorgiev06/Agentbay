@@ -9,6 +9,7 @@ import {
 } from "../../../../../bay/sdk.ts";
 import type { HandedTest } from "./handed-tests.ts";
 import { marked, markOf, withoutMark } from "./mark.ts";
+import { migratedPartition } from "./partition.ts";
 import { reviewOf, type Finding } from "./review.ts";
 import { textOf } from "./json-values.ts";
 
@@ -54,10 +55,8 @@ function insertStatement(slice: string, kept: readonly PackedTest[]): Statement 
   return { sql: `insert into kept_tests (slice, path, packed) values ${rows}`, parameters };
 }
 
-async function opened(context: ScriptContext): Promise<DatabasePartition> {
-  const partition = context.db.partition(partitionName);
-  const migrated = await partition.migrate();
-  return migrated.ok ? partition : fail(`forge could not prepare the partition ${partitionName}: ${migrated.message}`);
+function opened(context: ScriptContext): Promise<DatabasePartition> {
+  return migratedPartition(context, partitionName);
 }
 
 async function executed(partition: DatabasePartition, statement: Statement): Promise<void> {

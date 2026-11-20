@@ -1,4 +1,4 @@
-import { computed, counted, grouped, shortened, type CardLine } from "./card-lines.ts";
+import { computed, counted, grouped, shortened, type CardLine, type ComputedBy } from "./card-lines.ts";
 import type { FailingCase, FailingCases, Verdict } from "./proof-answer.ts";
 import type { Level, ProofKind, Slice } from "./slice-form.ts";
 
@@ -90,6 +90,11 @@ const longestReason = 240;
 
 export type CaseMessages = "filtered" | "unfiltered";
 
+export type ItemsShown = {
+  readonly messages: CaseMessages;
+  readonly provedBy: ComputedBy;
+};
+
 const verdictSaid: Readonly<Record<Verdict["verdict"], string>> = {
   passed: "passed",
   failed: "failed",
@@ -177,18 +182,19 @@ function openingWords(item: ShownItem, said: string): string {
   return item.says === "" ? opening : `${opening}: ${item.says}`;
 }
 
-function itemLines(item: ShownItem, verdicts: readonly Verdict[], messages: CaseMessages): readonly CardLine[] {
+function itemLines(item: ShownItem, verdicts: readonly Verdict[], shown: ItemsShown): readonly CardLine[] {
   const verdict = verdicts.find((each) => each.item === item.id);
+  const { provedBy } = shown;
   if (verdict === undefined && item.judgement) {
     return [computed("draw", openingWords(item, "for you to judge"))];
   }
   if (verdict === undefined) {
-    return [computed("prove", openingWords(item, "not known")), computed("prove", `why: ${noVerdictSaid}`)];
+    return [computed(provedBy, openingWords(item, "not known")), computed(provedBy, `why: ${noVerdictSaid}`)];
   }
-  const said = [openingWords(item, verdictSaid[verdict.verdict]), ...verdictWords(verdict, messages)];
-  return said.map((words) => computed("prove", words));
+  const said = [openingWords(item, verdictSaid[verdict.verdict]), ...verdictWords(verdict, shown.messages)];
+  return said.map((words) => computed(provedBy, words));
 }
 
-export function verdictLines(slice: Slice, verdicts: readonly Verdict[], messages: CaseMessages): readonly CardLine[] {
-  return shownItems(slice, verdicts).flatMap((item) => itemLines(item, verdicts, messages));
+export function verdictLines(slice: Slice, verdicts: readonly Verdict[], shown: ItemsShown): readonly CardLine[] {
+  return shownItems(slice, verdicts).flatMap((item) => itemLines(item, verdicts, shown));
 }

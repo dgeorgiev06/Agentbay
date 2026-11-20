@@ -1,0 +1,10 @@
+{
+  "input": {
+    "choice": "build",
+    "slices": ["ONE"]
+  },
+  "output": {
+    "choice": "build",
+    "slices": ["ONE"]
+  }
+}

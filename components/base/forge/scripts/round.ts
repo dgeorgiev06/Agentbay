@@ -9,11 +9,13 @@ import { keepTests, keptFindings, keptMark, keptTests } from "./lib/kept-tests.t
 import { leaksAfterBuild } from "./lib/leak-check.ts";
 import { newMark } from "./lib/mark.ts";
 import { roundPlan, roundsStateOf, type RoundPlan, type RoundsState, type Work } from "./lib/rounds.ts";
+import { withoutChecks } from "./lib/tool-checks.ts";
 import { listOf, textOf, textsOf } from "./lib/json-values.ts";
 
 type Round = {
   readonly number: number;
   readonly name: string;
+  readonly cutAs: string;
   readonly slice: Json;
   readonly interface: Json;
   readonly fixed: Json;
@@ -40,6 +42,7 @@ function roundOf(input: Json): Round {
   return {
     number: typeof fields.round === "number" ? fields.round : 1,
     name: sliceOf(slice).name,
+    cutAs: textOf(fields.cutAs),
     slice,
     interface: fields.interface ?? [],
     fixed: fields.fixed ?? [],
@@ -54,12 +57,6 @@ function withTests(declared: Json, tests: readonly string[]): Json {
   const fields = fieldsOf(declared);
   const files = [...new Set([...textsOf(fields.files), ...tests])];
   return { files, names: fields.names ?? null };
-}
-
-function lessChecks(slice: Json): Json {
-  const fields = fieldsOf(slice);
-  const kept = listOf(fields.done).filter((item) => fieldsOf(fieldsOf(item).proof ?? null).kind !== "checks");
-  return { ...fields, done: kept };
 }
 
 async function cutAt(context: ScriptContext, slice: string, base: string): Promise<Committed> {
@@ -90,7 +87,7 @@ async function newTests(context: ScriptContext, round: Round): Promise<readonly 
   if (round.number === 1) {
     return testsAsked(context, round, round.cut.folder);
   }
-  const writer = await cutAt(context, `${round.name}-writer-${String(round.number)}`, round.cut.commit);
+  const writer = await cutAt(context, `${round.cutAs}-writer-${String(round.number)}`, round.cut.commit);
   const tests = await testsAsked(context, round, writer.folder);
   await removed(context, { folder: writer.folder, into: round.cut.commit });
   return tests;
@@ -100,7 +97,7 @@ async function builderFolder(context: ScriptContext, round: Round, before: Round
   if (before === undefined) {
     return round.cut.folder;
   }
-  const cut = await cutAt(context, `${round.name}-${String(round.number)}`, before.builder.commit);
+  const cut = await cutAt(context, `${round.cutAs}-${String(round.number)}`, before.builder.commit);
   return cut.folder;
 }
 
@@ -144,6 +141,7 @@ async function leaksIn(
 ): Promise<readonly Leak[]> {
   return leaksAfterBuild(context, {
     slice: sliceOf(round.slice),
+    cutAs: round.cutAs,
     round: round.number,
     base: round.cut.commit,
     commit: made.building.builder.commit,
@@ -158,7 +156,7 @@ async function leaksIn(
 
 async function headOf(context: ScriptContext, round: Round, made: Made): Promise<Head> {
   const { building, tests } = made;
-  const folder = await cutAt(context, `${round.name}-tests-${String(round.number)}`, building.builder.commit);
+  const folder = await cutAt(context, `${round.cutAs}-tests-${String(round.number)}`, building.builder.commit);
   const leaks = await leaksIn(context, round, { ...made, folder: folder.folder });
   await testsWritten(context, folder.folder, tests);
   const head = await committed(context, folder.folder, `${round.name}: the tests the test writer handed in`);
@@ -174,7 +172,7 @@ async function proved(
     return [];
   }
   const asked = {
-    slice: lessChecks(round.slice),
+    slice: withoutChecks(round.slice),
     base: round.cut.commit,
     head: head.commit,
     declared: withTests(round.declared, head.tests),

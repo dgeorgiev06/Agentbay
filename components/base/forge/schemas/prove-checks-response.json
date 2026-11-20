@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProveChecksResponse",
+  "description": "Proof's answer, filtered against the kept tests of the slices named, and the solo proofs to run because the checks failed; or that proof was not asked.",
+  "type": "object",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "alone"],
+      "properties": {
+        "kind": {
+          "const": "not asked"
+        },
+        "alone": {
+          "type": "array",
+          "maxItems": 0,
+          "description": "No solo proof runs when proof was not asked."
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "proof", "alone"],
+      "properties": {
+        "kind": {
+          "const": "asked"
+        },
+        "proof": {
+          "$ref": "proof@1/prove-response.json"
+        },
+        "alone": {
+          "type": "array",
+          "maxItems": 50,
+          "description": "The solo proofs to run, the request's whenFailed when a checks item failed, and none otherwise.",
+          "items": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

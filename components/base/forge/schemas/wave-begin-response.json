@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WaveBeginResponse",
+  "description": "The go-ahead and the wave's slices; a stop is never an answer, since it ends the run. When the run fails after this step, the kernel undoes it with forget-wave, given this answer.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["choice", "slices"],
+  "properties": {
+    "choice": {
+      "const": "build"
+    },
+    "slices": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/sliceName"
+      }
+    }
+  }
+}

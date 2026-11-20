@@ -23,6 +23,7 @@
         }
       ]
     },
+    "cutAs": "TD1",
     "interface": ["components/modes/todo/schemas/add-request.json", "components/modes/todo/schemas/list-response.json"],
     "fixed": ["components/modes/todo/tests/todo.test.ts"],
     "cut": {

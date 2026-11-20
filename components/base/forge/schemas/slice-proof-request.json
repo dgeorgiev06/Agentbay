@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SliceProofRequest",
+  "description": "What proof is asked to judge for one slice of a wave, as proof@1's prove takes it; the script leaves out the slice's checks items, which the wave proves once.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["slice", "base", "head", "declared", "bugs"],
+  "properties": {
+    "slice": {
+      "$ref": "proof@1/prove-request.json#/$defs/slice"
+    },
+    "base": {
+      "$ref": "proof@1/prove-request.json#/$defs/commit"
+    },
+    "head": {
+      "$ref": "proof@1/prove-request.json#/$defs/commit"
+    },
+    "declared": {
+      "$ref": "proof@1/prove-request.json#/$defs/declaration"
+    },
+    "bugs": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/bug"
+      }
+    }
+  }
+}

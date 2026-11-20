@@ -10,7 +10,8 @@ export type Refusal = {
 };
 
 export type PlanRead =
-  { readonly kind: "read"; readonly plan: Plan } | { readonly kind: "refused"; readonly refusals: readonly Refusal[] };
+  | { readonly kind: "read"; readonly plan: Plan; readonly document: Json }
+  | { readonly kind: "refused"; readonly refusals: readonly Refusal[] };
 
 type LineOf = (path: readonly (string | number)[]) => number | undefined;
 
@@ -31,7 +32,11 @@ export async function readPlan(context: ScriptContext, path: string): Promise<Pl
   if (!text.ok) {
     return { kind: "refused", refusals: [{ at: "", line: undefined, sentence: text.message }] };
   }
-  const read = readYaml(text.value);
+  return planOfText(context, text.value);
+}
+
+export async function planOfText(context: ScriptContext, text: string): Promise<PlanRead> {
+  const read = readYaml(text);
   if (!read.ok) {
     const refusals = read.problems.map((problem) => ({
       at: "",
@@ -51,9 +56,10 @@ export async function readPlan(context: ScriptContext, path: string): Promise<Pl
     });
     return { kind: "refused", refusals };
   }
-  const plan = planOf(checked.value.value);
+  const document = checked.value.value;
+  const plan = planOf(document);
   const twice = namedTwice(plan, read.lineOf);
-  return twice.length > 0 ? { kind: "refused", refusals: twice } : { kind: "read", plan };
+  return twice.length > 0 ? { kind: "refused", refusals: twice } : { kind: "read", plan, document };
 }
 
 function featuresOf(value: Json): readonly Feature[] {

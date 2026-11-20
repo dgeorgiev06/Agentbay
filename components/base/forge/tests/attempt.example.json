@@ -1,0 +1,9 @@
+{
+  "input": {
+    "wanted": "ONE"
+  },
+  "output": {
+    "name": "ONE-again-2",
+    "cleared": [".forge/worktrees/ONE-tests-1"]
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AttemptResponse",
+  "description": "The name the attempt's worktrees are cut under, and the worktrees of earlier attempts that were set aside and removed; their branches stay.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "cleared"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*$",
+      "maxLength": 64,
+      "description": "The slice's name for its first attempt, and the name with -again- and the attempt's count after that, such as TD1-again-2."
+    },
+    "cleared": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "string",
+        "maxLength": 1000
+      },
+      "description": "The folders of earlier attempts that were removed, such as .forge/worktrees/TD1-tests-1."
+    }
+  }
+}

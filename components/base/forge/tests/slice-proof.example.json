@@ -1,0 +1,103 @@
+{
+  "input": {
+    "slice": {
+      "name": "ONE",
+      "kind": "mode",
+      "scope": ["src/**", "tests/**"],
+      "after": [],
+      "done": [
+        {
+          "id": "DOD-ONE-1",
+          "says": "The checks and the tests pass.",
+          "level": "must",
+          "proof": {
+            "kind": "checks"
+          }
+        },
+        {
+          "id": "DOD-ONE-2",
+          "says": "A test shows the change.",
+          "level": "must",
+          "proof": {
+            "kind": "fails-first",
+            "tests": ["tests/one.test.ts"]
+          }
+        },
+        {
+          "id": "DOD-ONE-3",
+          "says": "The words tell the owner what to do.",
+          "level": "should"
+        }
+      ]
+    },
+    "base": "main",
+    "head": "forge/one",
+    "declared": {
+      "files": ["src/one.txt", "tests/one.test.ts"],
+      "names": {
+        "gained": [],
+        "lost": [],
+        "changed": []
+      }
+    },
+    "bugs": []
+  },
+  "output": {
+    "verdicts": [
+      {
+        "item": "DOD-ONE-2",
+        "kind": "fails-first",
+        "verdict": "failed",
+        "detail": "The named tests fail on the head.",
+        "cases": {
+          "failures": [
+            {
+              "name": "one is counted once",
+              "file": "tests/one.test.ts",
+              "message": "",
+              "charactersCut": 0
+            },
+            {
+              "name": "two are counted twice",
+              "file": "tests/one.test.ts",
+              "message": "expected 2, got 1",
+              "charactersCut": 0
+            }
+          ],
+          "failuresNotListed": 0,
+          "notLoaded": []
+        }
+      },
+      {
+        "item": "scope",
+        "kind": "in-scope",
+        "verdict": "passed",
+        "detail": "Every changed path is in the scope: 2 of 2."
+      },
+      {
+        "item": "declared",
+        "kind": "as-declared",
+        "verdict": "passed",
+        "detail": "What changed is as declared: 2 files and 0 action names."
+      }
+    ],
+    "judgement": [
+      {
+        "id": "DOD-ONE-3",
+        "says": "The words tell the owner what to do.",
+        "level": "should"
+      }
+    ],
+    "size": [
+      {
+        "path": "src/one.txt",
+        "base": 1,
+        "head": 2
+      },
+      {
+        "path": "tests/one.test.ts",
+        "head": 9
+      }
+    ]
+  }
+}

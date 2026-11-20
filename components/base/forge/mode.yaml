@@ -68,6 +68,7 @@ actions:
     input: schemas/round-request.json
     output: schemas/rounds.json
     effects: [read, write, network, spend, delete]
+    calledOutputs: kept-packed
     run:
       - script: scripts/round.ts
   review:

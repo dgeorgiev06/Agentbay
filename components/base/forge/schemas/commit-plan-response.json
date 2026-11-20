@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CommitPlanResponse",
+  "description": "The plan committed and merged, and the slice requests of its first wave.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["commit", "merged", "into", "plan", "wave"],
+  "properties": {
+    "commit": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The commit that holds the plan."
+    },
+    "merged": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The integration branch's commit once the plan is merged."
+    },
+    "into": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The integration branch: the setting into."
+    },
+    "plan": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+      "maxLength": 1000,
+      "description": "The plan file committed, docs/plans/ and the next free number, then the job."
+    },
+    "wave": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "description": "A request the workflow rounds takes as its trigger: planned, base, bugs and interface."
+      },
+      "description": "For each slice of the first wave, the slice request the rounds take, with the plan's commit as base."
+    }
+  }
+}

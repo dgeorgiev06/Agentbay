@@ -54,7 +54,10 @@
             "additionalProperties": false,
             "required": ["at", "sentence"],
             "properties": {
-              "at": { "type": "string", "description": "Where in the plan, as a JSON pointer; empty for the whole file." },
+              "at": {
+                "type": "string",
+                "description": "Where in the plan, as a JSON pointer; empty for the whole file."
+              },
               "sentence": { "type": "string", "description": "What is wrong and what to do." }
             }
           },
@@ -94,6 +97,14 @@
               "because": { "type": "string" }
             }
           }
+        },
+        "meets": {
+          "$ref": "#/$defs/names",
+          "description": "The conditions the slice meets, when the plan names them."
+        },
+        "interface": {
+          "$ref": "#/$defs/names",
+          "description": "The interface files the slice builds against, when the plan names them."
         }
       }
     },
@@ -104,7 +115,11 @@
       "properties": {
         "wave": { "type": "integer", "minimum": 1 },
         "slices": { "$ref": "#/$defs/names" },
-        "builders": { "type": "integer", "minimum": 1, "description": "How many builders the wave can use: one per slice." }
+        "builders": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "How many builders the wave can use: one per slice."
+        }
       }
     },
     "pair": {
@@ -182,6 +197,107 @@
           "properties": {
             "kind": { "const": "one after another" },
             "level": { "const": "error" },
+            "sentence": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "level", "file", "sentence"],
+          "description": "The plan names a requirements file requirements.check does not accept, or a design file forge could not read.",
+          "properties": {
+            "kind": { "enum": ["requirements not accepted", "design not read"] },
+            "level": { "const": "error" },
+            "file": { "type": "string" },
+            "sentence": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "level", "condition", "sentence"],
+          "description": "A condition of the plan's requirements that no slice meets.",
+          "properties": {
+            "kind": { "const": "condition not met" },
+            "level": { "const": "error" },
+            "condition": { "type": "string" },
+            "sentence": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "level", "slice", "condition", "sentence"],
+          "description": "A slice meets a condition the plan's requirements do not hold.",
+          "properties": {
+            "kind": { "const": "condition not held" },
+            "level": { "const": "error" },
+            "slice": { "type": "string" },
+            "condition": { "type": "string" },
+            "sentence": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "level", "slice", "sentence"],
+          "description": "With a design named, a slice that names no interface file.",
+          "properties": {
+            "kind": { "const": "no interface" },
+            "level": { "const": "error" },
+            "slice": { "type": "string" },
+            "sentence": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "level", "slice", "file", "sentence"],
+          "description": "With a design named, a slice names an interface file the design did not commit.",
+          "properties": {
+            "kind": { "const": "interface not in the design" },
+            "level": { "const": "error" },
+            "slice": { "type": "string" },
+            "file": { "type": "string" },
+            "sentence": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "level", "slice", "modules", "sentence"],
+          "description": "With a design named, a slice that reaches two modules or more and does not say why.",
+          "properties": {
+            "kind": { "const": "crosses modules" },
+            "level": { "const": "error" },
+            "slice": { "type": "string" },
+            "modules": { "$ref": "#/$defs/names" },
+            "sentence": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "level", "slice", "sentence"],
+          "description": "With a design named, a slice of kind mode that meets no condition.",
+          "properties": {
+            "kind": { "const": "not vertical" },
+            "level": { "const": "error" },
+            "slice": { "type": "string" },
+            "sentence": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "level", "slice", "owner", "file", "sentence"],
+          "description": "A slice changes a test or an interface file of another slice that it does not come after.",
+          "properties": {
+            "kind": { "const": "fixed file changed" },
+            "level": { "const": "error" },
+            "slice": { "type": "string" },
+            "owner": { "type": "string" },
+            "file": { "type": "string" },
             "sentence": { "type": "string" }
           }
         }

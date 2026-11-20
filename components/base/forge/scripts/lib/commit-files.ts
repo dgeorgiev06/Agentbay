@@ -10,13 +10,14 @@ export type Written = {
 export type ToCommit = {
   readonly slice: string;
   readonly into: string;
-  readonly files: readonly Written[];
+  readonly files: (folder: string) => Promise<readonly Written[]>;
   readonly message: string;
 };
 
 export type Committed = {
   readonly commit: string;
   readonly merged: string;
+  readonly files: readonly Written[];
 };
 
 async function written(context: ScriptContext, folder: string, files: readonly Written[]): Promise<void> {
@@ -31,9 +32,10 @@ async function written(context: ScriptContext, folder: string, files: readonly W
 export async function committedInto(context: ScriptContext, asked: ToCommit): Promise<Committed> {
   const cut = await answerOf(context, "worktrees.cut", { slice: asked.slice, base: asked.into });
   const folder = textOf(cut.folder);
-  await written(context, folder, asked.files);
+  const files = await asked.files(folder);
+  await written(context, folder, files);
   const commit = await answerOf(context, "worktrees.commit", { folder, message: asked.message });
   const merge = await answerOf(context, "worktrees.merge", { folder, into: asked.into });
   await answerOf(context, "worktrees.remove", { folder, branchAfter: "kept" });
-  return { commit: textOf(commit.commit), merged: textOf(merge.commit) };
+  return { commit: textOf(commit.commit), merged: textOf(merge.commit), files };
 }

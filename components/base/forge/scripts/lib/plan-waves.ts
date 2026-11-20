@@ -1,5 +1,9 @@
 import { pathMatch } from "../../../../../bay/sdk.ts";
+import { cutFromDesignProblems } from "./cut-from-design.ts";
+import { fixedFileProblems } from "./fixed-files.ts";
 import type { Feature, Plan, PlannedSlice } from "./plan.ts";
+import { conditionsNotHeld, unmetConditions } from "./plan-conditions.ts";
+import type { Sources } from "./plan-sources.ts";
 import { afterNamesNoSlice, cycle, oneAfterAnother, sharedScopes, wholeFeature, type Problem } from "./problems.ts";
 import { scopesShare, type SharedPath } from "./scopes.ts";
 
@@ -158,7 +162,15 @@ function isOneAfterAnother(plan: Plan, placed: readonly PlannedSlice[], chain: r
   return count > 1 && placed.length === count && chain.length === count && plan.oneAfterAnotherBecause === undefined;
 }
 
-export function workOut(plan: Plan, features: readonly Feature[]): WorkedOut {
+function sourceProblems(plan: Plan, sources: Sources): readonly Problem[] {
+  const { conditions, design } = sources;
+  return [
+    ...(conditions === undefined ? [] : [...unmetConditions(plan, conditions), ...conditionsNotHeld(plan, conditions)]),
+    ...(design === undefined ? [] : cutFromDesignProblems(plan, design)),
+  ];
+}
+
+export function workOut(plan: Plan, features: readonly Feature[], sources: Sources = {}): WorkedOut {
   const order = orderOf(plan);
   const placed = placeableInOrder(order);
   const notPlaced = plan.slices.filter((slice) => !placed.includes(slice)).map((slice) => slice.name);
@@ -170,6 +182,8 @@ export function workOut(plan: Plan, features: readonly Feature[]): WorkedOut {
     ...pairProblems(pairs),
     ...wholeFeatureProblems(plan, features),
     ...(isOneAfterAnother(plan, placed, longestChain) ? [oneAfterAnother()] : []),
+    ...sourceProblems(plan, sources),
+    ...fixedFileProblems(plan, (one, other) => order.behind.get(one)?.has(other) === true),
   ];
   return { waves: wavesOf(order, placed, pairs), notPlaced, longestChain, problems };
 }

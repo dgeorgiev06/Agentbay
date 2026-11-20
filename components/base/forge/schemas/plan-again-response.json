@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PlanAgainResponse",
+  "description": "Whether the planner was asked to answer findings, and the plan as it then stands.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["answered", "plan"],
+  "properties": {
+    "answered": {
+      "type": "boolean",
+      "description": "True when the first challenge had findings and the planner answered them."
+    },
+    "plan": {
+      "type": "object",
+      "description": "A plan as schemas/plan.json gives it."
+    }
+  }
+}

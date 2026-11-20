@@ -17,9 +17,16 @@ export const run = defineScript(async (input, context) => {
   const file = textOf(fields.file);
   const files = designFiles({ job, file, version, design: designOf(fields.design ?? null) });
   const message = `${job}: the design, approved on the design card`;
-  const committed = await committedInto(context, { slice: `${job}-design`, into, files, message });
+  const slice = `${job}-design`;
+  const { commit, merged } = await committedInto(context, {
+    slice,
+    into,
+    files: () => Promise.resolve(files),
+    message,
+  });
   return {
-    ...committed,
+    commit,
+    merged,
     into,
     design: designPath(job),
     interface: files.map((each) => each.path),

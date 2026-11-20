@@ -36,6 +36,10 @@ export function practiceAnswersOf(value: Json | undefined): readonly PracticeAns
   return listOf(value).map(practiceAnswerOf);
 }
 
+export function askedPractices(asked: Json): readonly string[] {
+  return listOf(fieldsOf(asked).practices).map((practice) => textOf(fieldsOf(practice).id));
+}
+
 export function practiceProblems({ heldBy, asked, answers }: Answered): readonly string[] {
   const answered = answers.map((practice) => practice.id);
   const left = asked.filter((id) => !answered.includes(id));

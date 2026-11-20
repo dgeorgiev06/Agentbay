@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CommitPlanRequest",
+  "description": "The owner's choice on the plan card, and what to commit.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["choice", "start", "again", "into"],
+  "properties": {
+    "choice": {
+      "enum": ["approve", "stop"],
+      "description": "approve commits the plan; stop ends the run."
+    },
+    "start": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["design", "document", "file", "requirements", "job", "practices"],
+      "properties": {
+        "design": {
+          "type": "string",
+          "pattern": "^docs/designs/[a-z][a-z0-9-]*/design\\.yaml$",
+          "maxLength": 200,
+          "description": "The design file, as the trigger named it."
+        },
+        "document": {
+          "type": "object",
+          "description": "The design file whole, as the design workflow committed it: its modules, and its interfaces with each action's schema files, the conditions it serves and its worked examples."
+        },
+        "file": {
+          "type": "string",
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+          "maxLength": 1000,
+          "description": "The requirements file, relative to the project, as the design names it and requirements.check accepted it."
+        },
+        "requirements": {
+          "$ref": "requirements@1/check-response.json#/$defs/requirements",
+          "description": "The requirements file whole, as requirements.check accepted it."
+        },
+        "job": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "The job the design is for."
+        },
+        "practices": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "says"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Z]{1,4}-\\d{1,3}$"
+              },
+              "says": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            }
+          },
+          "description": "The practices held by a plan, from the practices files on the integration branch, each its id and its words."
+        }
+      }
+    },
+    "again": {
+      "type": "object",
+      "description": "The output of plan-again, which holds the plan to commit."
+    },
+    "into": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The integration branch: the setting into."
+    }
+  }
+}

@@ -10,6 +10,7 @@ function slice(name: string, scope: readonly string[], after: readonly string[] 
     kind: "mode",
     scope,
     after: after.map((other) => ({ slice: other, because: `${name} reads what ${other} adds.` })),
+    tests: [],
   };
 }
 

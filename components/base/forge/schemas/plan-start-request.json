@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PlanStartRequest",
+  "description": "The design to plan, as the trigger names it, and where to read it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["asked", "practices", "into"],
+  "properties": {
+    "asked": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["design"],
+      "properties": {
+        "design": {
+          "type": "string",
+          "pattern": "^docs/designs/[a-z][a-z0-9-]*/design\\.yaml$",
+          "maxLength": 200,
+          "description": "The design file the design workflow committed, such as docs/designs/todo/design.yaml."
+        }
+      },
+      "description": "The workflow's trigger."
+    },
+    "practices": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "string",
+        "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+        "maxLength": 1000
+      },
+      "description": "The practices files: the setting practices."
+    },
+    "into": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The integration branch: the setting into."
+    }
+  }
+}

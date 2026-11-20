@@ -19,6 +19,6 @@ export async function whileOnBranch<Made>(
   const folder = textOf(cut.folder);
   const files = await Promise.all(asked.paths.map((path) => readIn(context, folder, path)));
   const made = await use(files);
-  await answerOf(context, "worktrees.remove", { folder, branchAfter: "kept" });
+  await answerOf(context, "worktrees.remove", { folder, branchAfter: "deleted", into: asked.branch });
   return made;
 }

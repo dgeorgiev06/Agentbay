@@ -46,12 +46,13 @@ const roomyAgentQueries: AgentQueries = { milliseconds: 120_000, childProcesses:
 
 const agentQueryLimitMilliseconds = 1500;
 
-function brokerFor(
-  root: string,
-  effects: readonly Effect[],
-  extra: Partial<ModeGrants> = {},
-  agentQueries: AgentQueries = roomyAgentQueries,
-): Setup {
+type Fitting = {
+  readonly grants?: Partial<ModeGrants>;
+  readonly agentQueries?: AgentQueries;
+};
+
+function brokerFor(root: string, effects: readonly Effect[], fitting: Fitting = {}): Setup {
+  const agentQueries = fitting.agentQueries ?? roomyAgentQueries;
   const events = recordingSink();
   const broker = createBroker({
     layout: projectLayout(root),
@@ -67,7 +68,7 @@ function brokerFor(
     commandSearchPath: "/usr/bin:/bin",
     interfaceSchemas: noInterfaceSchemas,
     limits: { agentQueryMilliseconds: agentQueries.milliseconds },
-  }).forStep(place, permissionsIn(root, { effects, ...extra }));
+  }).forStep(place, permissionsIn(root, { effects, ...fitting.grants }));
   return { root, broker, events };
 }
 
@@ -124,7 +125,7 @@ test("migrations run in order inside a transaction and are recorded once", async
 test("a migrations folder outside the mode's folder is refused", async () => {
   await withProject(async (root) => {
     const outside = join(root, "components/base/store/migrations");
-    const { broker } = brokerFor(root, ["read", "write"], { migrationsFolder: outside });
+    const { broker } = brokerFor(root, ["read", "write"], { grants: { migrationsFolder: outside } });
     try {
       refusalOf(await broker.ask("db.migrate", {}));
     } finally {
@@ -275,7 +276,7 @@ test("an agent query with an endless recursive CTE is killed at the time limit, 
   await withProject(async (root) => {
     const started: Started[] = [];
     const limited = { milliseconds: agentQueryLimitMilliseconds, childProcesses: watchedChildProcesses(started) };
-    const { broker } = brokerFor(root, ["read", "write"], {}, limited);
+    const { broker } = brokerFor(root, ["read", "write"], { agentQueries: limited });
     try {
       await seedItems(broker, 1);
       const message = refusalOf(
@@ -390,20 +391,8 @@ async function endWithin(child: Child, milliseconds: number): Promise<string> {
 test("closing a step's broker ends the database processes it opened", async () => {
   await withProject(async (root) => {
     const started: Started[] = [];
-    const broker = createBroker({
-      layout: projectLayout(root),
-      files: nodeFileSystem,
-      throwawayFolders: nodeThrowawayFolders,
-      inspector: nodeFileInspector,
-      http: scriptedHttp(() => ({ status: 500, headers: {}, body: "" })),
-      secrets: new SecretStore({ environment: {}, processes: noProcesses, platform: "linux" }),
-      events: recordingSink(),
-      clock: systemClock,
-      childProcesses: watchedChildProcesses(started),
-      processes: noProcesses,
-      commandSearchPath: "/usr/bin:/bin",
-      interfaceSchemas: noInterfaceSchemas,
-    }).forStep(place, permissionsIn(root, { effects: ["read", "write"] }));
+    const watched = { ...roomyAgentQueries, childProcesses: watchedChildProcesses(started) };
+    const { broker } = brokerFor(root, ["read", "write"], { agentQueries: watched });
     try {
       valueOf(await broker.ask("db.execute", { sql: "create table notes (title text)", parameters: [] }));
       valueOf(await broker.ask("db.query", { sql: "select count(*) as notes from notes", parameters: [] }));

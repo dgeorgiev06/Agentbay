@@ -173,6 +173,7 @@ describe("the wave's merge card", () => {
         { name: "keep", does: "Stop; every slice's branches stay" },
       ],
       waveSkills,
+      ["TD1 (The td1 mode counts what was added)", "TD2 (The td2 mode counts what was added)"],
     );
     assert.equal(
       text,
@@ -181,7 +182,8 @@ describe("the wave's merge card", () => {
         "  Merge is offered for 1 of 2 slices: each",
         "    passed its own proof, and the wave's",
         "    checks passed on them combined; left",
-        "    out: TD2, as its own proof did not pass.",
+        "    out: TD2 (The td2 mode counts what was",
+        "    added), as its own proof did not pass.",
         "  TD1: The td1 mode counts what was added",
         "  TD1 is in the combined head; the work and",
         "    the tests are on forge/TD1-tests-1, the",
@@ -199,7 +201,8 @@ describe("the wave's merge card", () => {
         "judged     small. In src/count.ts: count is",
         "judged     40 lines.",
         "judged    by forge skills/review, tier deep,",
-        "judged      in item 0 of slices",
+        "judged      for TD1 (The td1 mode counts",
+        "judged      what was added)",
         "  interface files: 1 unchanged since the",
         "    base, by hash",
         "  rounds: 1 of at most 3; the reviewer had",
@@ -209,13 +212,15 @@ describe("the wave's merge card", () => {
         "judged   DOD-TD1-1 held by 2 cases",
         "judged   no finding remains",
         "judged    by forge skills/review, tier deep,",
-        "judged      in item 0 of slices",
+        "judged      for TD1 (The td1 mode counts",
+        "judged      what was added)",
         "judged   the builder decided: TD1 counts in",
         "judged     memory",
         "judged    by forge skills/write-tests, tier",
         "judged      balanced; forge",
         "judged      skills/build-without-tests, tier",
-        "judged      balanced, in item 0 of slices",
+        "judged      balanced, for TD1 (The td1 mode",
+        "judged      counts what was added)",
         "  TD2: The td2 mode counts what was added",
         "  TD2 is left out: 1 must item failed. Its",
         "    branches stay; the work and the tests",
@@ -237,7 +242,8 @@ describe("the wave's merge card", () => {
         "judged     small. In src/count.ts: count is",
         "judged     40 lines.",
         "judged    by forge skills/review, tier deep,",
-        "judged      in item 1 of slices",
+        "judged      for TD2 (The td2 mode counts",
+        "judged      what was added)",
         "  interface files: 1 unchanged since the",
         "    base, by hash",
         "  rounds: 1 of at most 3; the reviewer had",
@@ -247,13 +253,15 @@ describe("the wave's merge card", () => {
         "judged   DOD-TD1-1 held by 2 cases",
         "judged   no finding remains",
         "judged    by forge skills/review, tier deep,",
-        "judged      in item 1 of slices",
+        "judged      for TD2 (The td2 mode counts",
+        "judged      what was added)",
         "judged   the builder decided: TD2 counts in",
         "judged     memory",
         "judged    by forge skills/write-tests, tier",
         "judged      balanced; forge",
         "judged      skills/build-without-tests, tier",
-        "judged      balanced, in item 1 of slices",
+        "judged      balanced, for TD2 (The td2 mode",
+        "judged      counts what was added)",
         "  the combined head: 3710c98 on",
         "    forge/wave-1, with TD1 merged in plan",
         "    order",
@@ -282,7 +290,8 @@ describe("the wave's merge card", () => {
     assert.equal(
       answer.words,
       "Merge is offered for 1 of 3 slices: each passed its own proof, and the wave's checks passed on them " +
-        "combined; left out: TD1 and TD2, as their own proofs did not pass.",
+        "combined; left out: TD1 (The td1 mode counts what was added) and TD2 (The td2 mode counts what was " +
+        "added), as their own proofs did not pass.",
     );
     const words = waveDrawn({ ...oneFailing, slices: three }).card.lines.map((line) => line.words);
     assert.ok(
@@ -344,12 +353,14 @@ describe("the wave's answer", () => {
     const conflict: Joined = { kind: "conflict", slice: "TD2", onto: ["TD1"], reason: "It conflicts in a.ts." };
     assert.equal(
       waveAnswer(two, conflict, { kind: "not asked" }).words,
-      "Merge is not offered: TD2 does not merge cleanly onto TD1 in the combined head.",
+      "Merge is not offered: TD2 (The td2 mode counts what was added) does not merge cleanly onto TD1 in the " +
+        "combined head.",
     );
     const none = [settled("TD1", ownFailed("TD1"), "1 must item failed.")];
     assert.equal(
       waveAnswer(none, { kind: "nothing to join" }, { kind: "not asked" }).words,
-      "Merge is not offered: no slice passed its own proof; left out: TD1, as its own proof did not pass.",
+      "Merge is not offered: no slice passed its own proof; left out: TD1 (The td1 mode counts what was added), " +
+        "as its own proof did not pass.",
     );
   });
 });

@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FindBranchResponse",
+  "description": "The commit the branch points at, that there is no such branch, or why the branch was not looked at.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["how", "branch", "commit"],
+      "description": "The branch exists.",
+      "properties": {
+        "how": {
+          "const": "found",
+          "description": "The branch exists."
+        },
+        "branch": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "The branch asked for."
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+          "description": "The commit the branch points at, in full."
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["how", "branch"],
+      "description": "There is no such branch.",
+      "properties": {
+        "how": {
+          "const": "not-there",
+          "description": "There is no such branch."
+        },
+        "branch": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "The branch asked for."
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["how", "branch", "reason"],
+      "description": "The branch is not one the mode makes, so it was not looked at.",
+      "properties": {
+        "how": {
+          "const": "refused",
+          "description": "The branch was not looked at."
+        },
+        "branch": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "The branch asked for."
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "A sentence that says why the branch was not looked at."
+        }
+      }
+    }
+  ]
+}

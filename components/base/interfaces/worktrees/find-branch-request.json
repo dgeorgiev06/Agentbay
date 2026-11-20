@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FindBranchRequest",
+  "description": "Which branch the mode made to look for, to learn the commit it points at. Nothing is changed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["branch"],
+  "properties": {
+    "branch": {
+      "type": "string",
+      "pattern": "^forge/[A-Za-z0-9][A-Za-z0-9-]*(/[A-Za-z0-9][A-Za-z0-9-]*)*$",
+      "maxLength": 100,
+      "description": "A branch the mode made: forge/<slice>, as cut makes it, or forge/wip/<slice>/<n>, as set-aside makes it. Letters, digits and dashes after forge/, in parts split by single slashes, each starting with a letter or digit."
+    }
+  }
+}

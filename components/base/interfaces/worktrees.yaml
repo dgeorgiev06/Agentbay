@@ -45,3 +45,7 @@ actions:
     input: worktrees/drop-branch-request.json
     output: worktrees/drop-branch-response.json
     effects: [read, write, delete]
+  find-branch:
+    input: worktrees/find-branch-request.json
+    output: worktrees/find-branch-response.json
+    effects: [read]

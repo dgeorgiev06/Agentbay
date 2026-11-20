@@ -1085,6 +1085,46 @@ const cases: readonly Case[] = [
     },
   },
   {
+    name: "find-branch answers the commit a branch the mode made points at, a live worktree's branch too, and not-there for one it does not have; it refuses a branch under forge/ the mode never makes with a reason, and changes nothing",
+    restsOn:
+      "find-branch-request (branch: forge/<slice> or forge/wip/<slice>/<n>; nothing is changed), find-branch-response (found with the commit; not-there; refused with a reason)",
+    run: async (world) => {
+      const { folder, head } = await sliceWithCommit(world, { "feature.txt": "feature\n" });
+      await written(world, folder, { "notes.txt": "Not committed.\n" });
+      await world.makeBranch("forge/wip/feature/1", world.base);
+      await world.makeBranch("forge/wip/by-hand", head);
+      await world.makeBranch("forge/by-hand/1", head);
+      const state = async (): Promise<unknown> => ({
+        owners: await ownersCheckout(world),
+        forge: await forgeTree(world),
+        worktree: await treeIn(world, folder),
+        heads: await Promise.all(["forge/feature", "forge/wip/by-hand", "forge/by-hand/1"].map(world.headOf)),
+      });
+      const before = await state();
+      const found: readonly (readonly [string, string])[] = [
+        ["forge/feature", head],
+        ["forge/wip/feature/1", world.base],
+      ];
+      for (const [branch, commit] of found) {
+        assert.deepEqual(await world.output("find-branch", { branch }), { how: "found", branch, commit });
+      }
+      for (const branch of ["forge/gone", "forge/wip/feature/2"]) {
+        assert.deepEqual(await world.output("find-branch", { branch }), { how: "not-there", branch });
+      }
+      for (const branch of ["forge/wip/by-hand", "forge/by-hand/1"]) {
+        const output = fieldsOf(await world.output("find-branch", { branch }));
+        assert.deepEqual(output, { how: "refused", branch, reason: output.reason ?? null });
+        assert.equal(sentenceOf(textOf(output.reason)), givenReason);
+      }
+      assert.deepEqual(await state(), before);
+      await world.output("drop-branch", { branch: "forge/wip/feature/1" });
+      assert.deepEqual(await world.output("find-branch", { branch: "forge/wip/feature/1" }), {
+        how: "not-there",
+        branch: "forge/wip/feature/1",
+      });
+    },
+  },
+  {
     name: "a worktree the mode made that no longer exists is refused by status, merge, set-aside and commit, and forgotten by remove with its branch kept",
     restsOn: "remove-response (forgotten); README, what it refuses: says so when the folder no longer exists",
     run: async (world) => {
@@ -1273,6 +1313,9 @@ const cases: readonly Case[] = [
           `input.branch is not in the expected form. Expected: ${madeBranch}`,
         ],
         ["drop-branch", { branch: "forge/-x" }, `input.branch is not in the expected form. Expected: ${madeBranch}`],
+        ["find-branch", { branch: "main" }, `input.branch is not in the expected form. Expected: ${madeBranch}`],
+        ["find-branch", { branch: "forge/a//b" }, `input.branch is not in the expected form. Expected: ${madeBranch}`],
+        ["find-branch", { branch: "forge/x", into: "main" }, "input has the field into, which is not allowed here."],
         [
           "drop-branch",
           { branch: "forge/x", into: "--all" },
@@ -1324,6 +1367,7 @@ const cases: readonly Case[] = [
       const done = await cut(world, "done");
       await world.commit(changeOn({ folder: done }, { "done.txt": "done\n" }, "Do the other slice"));
       await world.output("remove", { folder: done, branchAfter: "kept" });
+      await world.output("find-branch", { branch: "forge/done" });
       await world.output("drop-branch", { branch: "forge/done", into: ownersBranch });
       await world.attempt("remove", { folder, into: "integration" });
       await world.attempt("merge", { folder, into: ownersBranch });

@@ -30,7 +30,7 @@ export type Step =
   | { readonly wait: string; readonly id: Name }
   | {
       readonly foreach: Reference;
-      readonly sideBySide?: number;
+      readonly sideBySide?: number | string;
       readonly id: Name;
       readonly steps: ReadonlyArray<Step>;
     };

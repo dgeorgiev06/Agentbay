@@ -187,7 +187,9 @@ function referencePlaces(step: WorkflowStep, path: PathSegments): readonly Refer
     return [...shown, ...rulePlaces(step.choices ?? {}, [...path, "choices"])];
   }
   if ("foreach" in step) {
-    return [{ text: step.foreach, path: [...path, "foreach"] }];
+    const { sideBySide } = step;
+    const cap = typeof sideBySide === "string" ? [{ text: sideBySide, path: [...path, "sideBySide"] }] : [];
+    return [{ text: step.foreach, path: [...path, "foreach"] }, ...cap];
   }
   return [];
 }

@@ -555,6 +555,22 @@ test("a skill under a called action waits with nothing in any file, and its answ
   }
 });
 
+test("a skill under a called action that fails its checks in its last round reaches the marked script withheld", async () => {
+  await withVault(async (project) => {
+    let run = await project.run("vault.keep", { calls: [called("note", secret)] });
+    for (const round of [1, 2, 3]) {
+      const token = tokenOf(round === 1 ? run : await project.newToken(run.id));
+      run = await project.answer(token, `draft ${String(round)} ${answerLine}`);
+    }
+    assert.deepEqual(outputOf(run), {
+      answers: [
+        { reason: "The skill skills/note of action note of mode vault failed; the kernel keeps its reason packed." },
+      ],
+    });
+    assert.deepEqual(await filesHolding(project.root, [secret, answerLine]), []);
+  });
+});
+
 test("bay runs marks each packed step and prints none of its input, output or reason", async () => {
   await withVault(async (project) => {
     const run = await project.run("vault.keep", { calls: [called("echo", secret), called("broken", answerLine)] });

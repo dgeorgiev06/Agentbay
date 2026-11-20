@@ -74,7 +74,7 @@ test("bay config on the kit lists proof's two time settings with the kit's value
     .filter((setting) => /^settings\.proof\.[a-zA-Z]+Seconds$/.test(String(fieldOf(setting, "name"))))
     .map((setting) => [fieldOf(setting, "name"), fieldOf(setting, "type"), fieldOf(setting, "current")]);
   assert.deepEqual(timeSettings, [
-    ["settings.proof.stepSeconds", "integer", 3600],
-    ["settings.proof.longestCallSeconds", "integer", 2400],
+    ["settings.proof.stepSeconds", "integer", 4200],
+    ["settings.proof.longestCallSeconds", "integer", 3400],
   ]);
 });

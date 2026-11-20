@@ -313,5 +313,5 @@ the whole end-to-end case each file comes from, writes the outputs of the steps 
 with the commits the test makes again by branch, and formats the files. `recapture.ts` lists, for each file, its
 case and the step its test runs from. A case that only remakes a file, since the test that reads the file holds every
 one of its assertions, runs only when `FORGE_RECAPTURE` is set, as `recapture.ts` sets it; the everyday suite skips
-it. With no file named it makes all three, in about two and a half minutes. The whole cases do not check the cards
+it. With no file named it makes all four, in about four minutes. The whole cases do not check the cards
 their files lead to, so the test that reads a file may then need its expected card changed to the one it now prints.

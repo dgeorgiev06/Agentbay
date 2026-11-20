@@ -152,6 +152,28 @@ test("a reference to a part the schema does not have is refused with a sentence"
   );
 });
 
+test("a reference written with escapes names the part the validator finds, and its unfolding counts that part", () => {
+  const escaped = { $defs: { "a/b": { type: "string" } }, $ref: "#/%24defs/a~1b" };
+  assert.deepEqual(checkedAgainst(escaped, 1), {
+    ok: true,
+    value: { passed: false, problems: [{ path: "", message: "The value must be text, but it is 1." }] },
+  });
+  const levels = 40;
+  const defs: Record<string, Json> = { level0: { type: "string" } };
+  for (let level = 1; level <= levels; level += 1) {
+    const below = { $ref: `#/%24defs/level${String(level - 1)}` };
+    defs[`level${String(level)}`] = { allOf: [below, below] };
+  }
+  const hidden = checkedAgainst({ $defs: defs, $ref: `#/%24defs/level${String(levels)}` }, 1);
+  assert.deepEqual(
+    hidden,
+    failedWith(
+      "The schema given grows past 65536 parts when each of its references is followed in place, so checking a " +
+        "value against it could run without end; refer to shared parts from fewer places.",
+    ),
+  );
+});
+
 test("an $id below the top is refused, so that every #/ reference names a part of the whole schema", () => {
   const scoped = {
     $id: "https://example.com/top.json",

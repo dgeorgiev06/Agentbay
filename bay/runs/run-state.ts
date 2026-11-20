@@ -47,7 +47,11 @@ export type UndoReport = {
 
 export type RunState<HandedTask extends SkillTask = SkillTask> =
   | { readonly status: "running" }
-  | { readonly status: "waiting"; readonly waiting: Waiting<HandedTask> }
+  | {
+      readonly status: "waiting";
+      readonly waiting: Waiting<HandedTask>;
+      readonly alsoWaiting?: readonly Waiting<HandedTask>[];
+    }
   | { readonly status: "done"; readonly output: Json }
   | { readonly status: "failed"; readonly reason: string }
   | { readonly status: "undone"; readonly reason: string; readonly undo: UndoReport };
@@ -58,3 +62,10 @@ export type ApprovalDecision = ApprovalAnswer & {
   readonly hash: string;
   readonly by: string;
 };
+
+export function waitsIn<HandedTask extends SkillTask>(state: RunState<HandedTask>): readonly Waiting<HandedTask>[] {
+  if (state.status !== "waiting") {
+    return [];
+  }
+  return [state.waiting, ...(state.alsoWaiting ?? [])];
+}

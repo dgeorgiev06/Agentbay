@@ -1,4 +1,13 @@
-import { addSpend, charge, frameAfterMinutes, frameRemaining, noSpend, subtractSpend } from "./budget.ts";
+import {
+  addSpend,
+  charge,
+  frameAfterMinutes,
+  frameRemaining,
+  noSpend,
+  subtractSpend,
+  turnsToTake,
+  type Turn,
+} from "./budget.ts";
 import {
   defaultScriptTimeLimitSeconds,
   type ActionCaller,
@@ -181,21 +190,35 @@ async function noteRerun(walk: Walk, leaf: ScriptLeaf): Promise<void> {
 }
 
 export async function runScript(walk: Walk, frame: ActionFrame, script: ScriptStep): Promise<Progress> {
-  const { leaf } = script;
-  const record = walk.records.get(leaf.key);
+  const record = walk.records.get(script.leaf.key);
   const replay = replayed(frame.budget, record);
   if (replay !== undefined) {
     return replay;
   }
+  const spends = frame.action.effects.includes("spend");
+  return inTurns(turnsToTake(frame.budget, spends), () => gatedScript(walk, frame, { ...script, record }));
+}
+
+function inTurns(turns: readonly Turn[], body: () => Promise<Progress>): Promise<Progress> {
+  const [first, ...rest] = turns;
+  return first === undefined ? body() : first.turns.take(first.holder, () => inTurns(rest, body));
+}
+
+function gatedScript(
+  walk: Walk,
+  frame: ActionFrame,
+  at: ScriptStep & { readonly record: StepRecord | undefined },
+): Promise<Progress> {
+  const { leaf, record } = at;
   const blocked = leaf.kind === "check" ? stopGate(walk) : gate(walk, frame.budget, leaf.key);
   if (blocked !== undefined) {
-    return blocked;
+    return Promise.resolve(blocked);
   }
   const stoppedForCall = scriptDetailOf(record)?.stoppedForCall !== undefined;
   if (record !== undefined && !mayRerun(walk, frame) && !stoppedForCall) {
-    return unfinishedWaiting(frame, leaf.key);
+    return Promise.resolve(unfinishedWaiting(frame, leaf.key));
   }
-  return attemptScript(walk, frame, { ...script, record });
+  return attemptScript(walk, frame, at);
 }
 
 async function startedScript(

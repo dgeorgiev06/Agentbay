@@ -1,6 +1,6 @@
 import { failedWith, succeededWith, type Outcome, type Problem } from "../outcome.ts";
 import { decisionRefusal } from "./choices.ts";
-import { kernelDatabaseFile, type RunWithSteps, type StepRecord, type StoredState } from "./run-store.ts";
+import { kernelDatabaseFile, storedWaits, type RunWithSteps, type StepRecord, type StoredState } from "./run-store.ts";
 import type { ApprovalDecision } from "./run-state.ts";
 import { startedSkillOf, type StartedSkill } from "./skill-steps.ts";
 import type { ApprovalVerdict } from "./step-detail.ts";
@@ -29,7 +29,9 @@ function describeState(state: StoredState): string {
     case "running":
       return "running (resume it if no engine is advancing it)";
     case "waiting":
-      return `waiting for ${state.reason} at step ${state.stepKey}`;
+      return storedWaits(state)
+        .map((wait) => `waiting for ${wait.reason} at step ${wait.stepKey}`)
+        .join(" and ");
     case "done":
     case "failed":
     case "undone":
@@ -47,7 +49,7 @@ export function endedRefusal(run: RunWithSteps): Outcome<never> | undefined {
 
 function waitingRefusal(run: RunWithSteps, expected: { reason: string; stepKey: string }): Outcome<never> | undefined {
   const state = run.state;
-  if (state.status === "waiting" && state.reason === expected.reason && state.stepKey === expected.stepKey) {
+  if (storedWaits(state).some((wait) => wait.reason === expected.reason && wait.stepKey === expected.stepKey)) {
     return undefined;
   }
   return refusal(run.id, {

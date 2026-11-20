@@ -1,7 +1,7 @@
 import { approvalLines } from "./approval-card.ts";
 import type { Json } from "./contracts.ts";
 import { toJson } from "./json.ts";
-import type { Run, RunSummary, Task } from "./runs/runs.ts";
+import { waitsOf, type Run, type RunSummary, type Task } from "./runs/runs.ts";
 import type { JsonObject } from "./command-context.ts";
 
 export type ReportOptions = {
@@ -19,22 +19,35 @@ const issuedNotice = "A task token was issued with this task; it is shown only n
 
 const replacedNotice = "A new task token was issued; the token shown earlier for this task no longer works.";
 
+function newTokenCommand(run: Run, task: Task): string {
+  return `bay runs ${run.id} --new-token --step ${task.stepKey}`;
+}
+
 export function noticeOf(run: Run, task: Task, after: ReportOptions["after"]): string {
   if (task.token !== undefined) {
     return after === "reissue" ? replacedNotice : issuedNotice;
   }
   if (after === "submit") {
-    return `The run waits for another skill step; bay runs ${run.id} --new-token gives its task with a token.`;
+    return `The run waits for another skill step; ${newTokenCommand(run, task)} gives its task with a token.`;
   }
-  return `The token was shown when this task was issued. bay runs ${run.id} --new-token replaces it with a new one.`;
+  return `The token was shown when this task was issued. ${newTokenCommand(run, task)} replaces it with a new one.`;
+}
+
+function waitingLine(waits: readonly { readonly reason: string; readonly stepKey: string }[]): string {
+  return `waiting for ${waits.map((wait) => `${wait.reason} at ${wait.stepKey}`).join(", and for ")}`;
 }
 
 export function stateLine(state: State): string {
-  return state.status === "waiting" ? `waiting for ${state.waiting.reason} at ${state.waiting.stepKey}` : state.status;
+  return state.status === "waiting" ? waitingLine(waitsOf(state)) : state.status;
 }
 
 export function statusLine(summary: RunSummary): string {
-  return summary.status === "waiting" ? `waiting for ${summary.waitingFor} at ${summary.stepKey}` : summary.status;
+  if (summary.status !== "waiting") {
+    return summary.status;
+  }
+  const lead = { reason: summary.waitingFor, stepKey: summary.stepKey };
+  const also = (summary.alsoWaiting ?? []).map((wait) => ({ reason: wait.waitingFor, stepKey: wait.stepKey }));
+  return waitingLine([lead, ...also]);
 }
 
 export function waitingJson(waiting: Waiting): JsonObject {
@@ -89,6 +102,10 @@ export function waitingText(run: Run, waiting: Waiting): string {
 
 export function waitingIn(run: Run): Waiting | undefined {
   return run.state.status === "waiting" ? run.state.waiting : undefined;
+}
+
+export function alsoWaitingIn(run: Run): readonly Waiting[] {
+  return waitsOf(run.state).slice(1);
 }
 
 export function taskIn(run: Run): Task | undefined {

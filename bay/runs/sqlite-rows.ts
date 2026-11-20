@@ -1,7 +1,7 @@
 import type { DatabaseSync, SQLInputValue, SQLOutputValue } from "node:sqlite";
 import { budgetFromJson, spendFromJson } from "./budget.ts";
 import type { Json, RunEvent, Spend } from "../contracts.ts";
-import { parseJson } from "../json.ts";
+import { parseJson, textField, toJson } from "../json.ts";
 import {
   runStatuses,
   waitingReasons,
@@ -9,6 +9,7 @@ import {
   type StepRecord,
   type StoredRun,
   type StoredState,
+  type StoredWait,
   type StoredTaskToken,
 } from "./run-store.ts";
 import { keepings, storedText, unpackedText } from "./packed-output.ts";
@@ -68,11 +69,26 @@ function targetOf(row: Row): RunTarget {
   return kind === "action" && caller !== undefined ? { ...target, kind, caller } : target;
 }
 
+function storedWaitOf(value: Json): StoredWait {
+  const until = textField(value, "until");
+  return {
+    reason: literalOf(waitingReasons, textField(value, "reason") ?? ""),
+    stepKey: textField(value, "stepKey") ?? "",
+    ...(until === undefined ? {} : { until }),
+  };
+}
+
+function alsoWaitingOf(row: Row): { readonly also?: readonly StoredWait[] } {
+  const also = row["waiting_also"] === null ? [] : jsonColumn(row, "waiting_also");
+  const waits = Array.isArray(also) ? also.map((wait: unknown) => storedWaitOf(toJson(wait))) : [];
+  return waits.length === 0 ? {} : { also: waits };
+}
+
 function waitingStateOf(row: Row): StoredState {
   const reason = literalOf(waitingReasons, textColumn(row, "waiting_reason"));
   const stepKey = textColumn(row, "waiting_step");
   const until = optionalText(row, "waiting_until");
-  return { status: "waiting", reason, stepKey, ...(until === undefined ? {} : { until }) };
+  return { status: "waiting", reason, stepKey, ...(until === undefined ? {} : { until }), ...alsoWaitingOf(row) };
 }
 
 function keepingOf(row: Row): Keeping {
@@ -174,18 +190,25 @@ export function taskTokenOf(row: Row): StoredTaskToken {
   };
 }
 
+export const stateAssignments =
+  "status = ?, waiting_reason = ?, waiting_step = ?, waiting_until = ?, waiting_also = ?, output = ?, reason = ?";
+
+function alsoColumn(also: readonly StoredWait[] | undefined): string | null {
+  return also === undefined || also.length === 0 ? null : JSON.stringify(also);
+}
+
 export function stateColumns(state: StoredState, keeping: Keeping): readonly SQLInputValue[] {
   switch (state.status) {
     case "running":
-      return [state.status, null, null, null, null, null];
+      return [state.status, null, null, null, null, null, null];
     case "waiting":
-      return [state.status, state.reason, state.stepKey, state.until ?? null, null, null];
+      return [state.status, state.reason, state.stepKey, state.until ?? null, alsoColumn(state.also), null, null];
     case "done":
-      return [state.status, null, null, null, storedJson(state.output, keeping), null];
+      return [state.status, null, null, null, null, storedJson(state.output, keeping), null];
     case "failed":
-      return [state.status, null, null, null, null, state.reason];
+      return [state.status, null, null, null, null, null, state.reason];
     case "undone":
-      return [state.status, null, null, null, storedJson(state.undo, keeping), state.reason];
+      return [state.status, null, null, null, null, storedJson(state.undo, keeping), state.reason];
   }
 }
 

@@ -19,9 +19,15 @@ export type RunTarget =
   | { readonly kind: "action"; readonly mode: string; readonly name: string; readonly caller?: string }
   | { readonly kind: "workflow"; readonly mode: string; readonly name: string };
 
+export type StoredWait = {
+  readonly reason: WaitingReason;
+  readonly stepKey: string;
+  readonly until?: string;
+};
+
 export type StoredState =
   | Extract<RunState, { readonly status: "running" | "done" | "failed" }>
-  | { readonly status: "waiting"; readonly reason: WaitingReason; readonly stepKey: string; readonly until?: string }
+  | (StoredWait & { readonly status: "waiting"; readonly also?: readonly StoredWait[] })
   | { readonly status: "undone"; readonly reason: string; readonly undo: Json };
 
 type StepStartFields = {
@@ -138,10 +144,18 @@ export type StoredTaskToken = {
 };
 
 export type TaskTokenStore = {
-  readonly replaceTaskToken: (token: StoredTaskToken) => Promise<void>;
+  readonly replaceTaskToken: (token: StoredTaskToken, roundsOf: string) => Promise<void>;
   readonly taskTokens: () => Promise<readonly StoredTaskToken[]>;
-  readonly removeTaskTokens: (runId: string) => Promise<void>;
+  readonly removeTaskToken: (hash: string) => Promise<void>;
 };
+
+export function storedWaits(state: StoredState): readonly StoredWait[] {
+  if (state.status !== "waiting") {
+    return [];
+  }
+  const { reason, stepKey, until } = state;
+  return [{ reason, stepKey, ...(until === undefined ? {} : { until }) }, ...(state.also ?? [])];
+}
 
 export function settledOf(record: StepRecord): Settled | undefined {
   switch (record.status) {

@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { fieldOf } from "../bay/json.ts";
+import type { Workflow } from "../bay/generated/workflow.ts";
+import { fieldOf, textField, toJson } from "../bay/json.ts";
 import { layoutOf } from "../bay/layout.ts";
 import { runResult } from "../bay/run-report.ts";
 import type { Run } from "../bay/runs/runs.ts";
+import { notesFlow, openedRuns, runOf, withFlow } from "./runs-fixture.ts";
 
 const layout = layoutOf({ kit: "/kit", project: "/project" });
 
@@ -482,4 +484,40 @@ test("a mark's words at the start of a computed line or a title's second row are
     ),
   );
   assert.deepEqual(titled.slice(0, 3), [`Merge it? ${"x".repeat(30)}`, "  judged by you", "You can:"]);
+});
+
+test("a run waiting on several steps prints each wait, and each task with its notice, in item order", async () => {
+  const steps: Workflow["steps"] = [
+    {
+      id: "each",
+      foreach: "$trigger",
+      sideBySide: 2,
+      steps: [{ id: "write", action: "draft", input: { topic: "$item" } }],
+    },
+  ];
+  const { runs, close } = await openedRuns({ changes: withFlow(steps) });
+  const started = runOf(await runs.start({ workflow: notesFlow }, ["tea", "coffee"]));
+  const shown = runOf(await runs.show(started.id));
+  const result = runResult(layout, { ok: true, value: shown });
+  const report = fieldOf(result.json.run ?? null, "alsoWaiting");
+  assert.ok(Array.isArray(report));
+  const [entry, ...rest] = report.map((element: unknown) => toJson(element));
+  assert.deepEqual(rest, []);
+  assert.equal(fieldOf(entry ?? null, "stepKey"), "each[1].write/0#1");
+  assert.equal(fieldOf(fieldOf(entry ?? null, "task") ?? null, "stepKey"), "each[1].write/0#1");
+  assert.equal(
+    fieldOf(entry ?? null, "notice"),
+    `The token was shown when this task was issued. bay runs ${shown.id} --new-token --step each[1].write/0#1 ` +
+      "replaces it with a new one.",
+  );
+  const lines = result.text.split("\n");
+  assert.equal(
+    lines[0],
+    `run ${shown.id} (workflow notes:workflows/flow.yaml): waiting for skill at each[0].write/0#1, ` +
+      "and for skill at each[1].write/0#1",
+  );
+  assert.ok(
+    lines.includes("also a task for the agent agentbay-notes-draft. " + (textField(entry ?? null, "notice") ?? "")),
+  );
+  close();
 });

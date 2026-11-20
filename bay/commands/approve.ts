@@ -16,7 +16,7 @@ import type { Outcome, Problem } from "../outcome.ts";
 import { listOf } from "../policy.ts";
 import { runResult } from "../run-report.ts";
 import { approvalLines } from "../approval-card.ts";
-import type { Run } from "../runs/runs.ts";
+import { waitsOf, type Run } from "../runs/runs.ts";
 import { shownPath, type Layout } from "../layout.ts";
 import {
   listHashOf,
@@ -158,8 +158,8 @@ async function typedYes(terminal: Terminal, question: string): Promise<boolean> 
 
 function approvalAt(shown: Outcome<Run>, stepKey: string): Approval | undefined {
   const state = shown.ok ? shown.value.state : undefined;
-  const waiting = state?.status === "waiting" ? state.waiting : undefined;
-  return waiting?.reason === "approval" && waiting.stepKey === stepKey ? waiting : undefined;
+  const waiting = state === undefined ? undefined : waitsOf(state).find((each) => each.stepKey === stepKey);
+  return waiting?.reason === "approval" ? waiting : undefined;
 }
 
 function plainQuestion(decision: Decision & { readonly verdict: string }, approval: Approval | undefined): string {

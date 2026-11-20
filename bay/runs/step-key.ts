@@ -3,6 +3,7 @@ type KeySegment =
   | { readonly kind: "end" }
   | { readonly kind: "workflow"; readonly id: string }
   | { readonly kind: "item"; readonly index: number }
+  | { readonly kind: "attempt"; readonly attempt: number }
   | { readonly kind: "undo"; readonly index: number }
   | { readonly kind: "round"; readonly round: number }
   | { readonly kind: "check"; readonly index: number }
@@ -36,6 +37,8 @@ function segmentText(segment: KeySegment): string {
       return segment.id;
     case "item":
       return `[${String(segment.index)}]`;
+    case "attempt":
+      return `~${String(segment.attempt)}`;
     case "undo":
       return `undo[${String(segment.index)}]`;
     case "round":
@@ -55,6 +58,7 @@ function separatorBefore(segment: KeySegment): string {
     case "workflow":
       return ".";
     case "item":
+    case "attempt":
     case "undo":
     case "round":
     case "check":
@@ -95,8 +99,9 @@ export function workflowStepKey(item: string, id: string): string {
   return appended(item, { kind: "workflow", id });
 }
 
-export function foreachItemKey(foreach: string, index: number): string {
-  return appended(foreach, { kind: "item", index });
+export function foreachItemKey(foreach: string, index: number, attempt = 1): string {
+  const item = appended(foreach, { kind: "item", index });
+  return attempt === 1 ? item : appended(item, { kind: "attempt", attempt });
 }
 
 export function undoStepKey(index: number): string {
@@ -149,8 +154,18 @@ const readBracketOrRound: Reader = (rest, previous) => {
   return round === null ? undefined : { segment: { kind: "round", round: numberAt(round) }, length: round[0].length };
 };
 
+const readAttempt: Reader = (rest, previous) => {
+  const attempt = previous?.kind === "item" ? matched(`~${count}`, rest) : null;
+  return attempt === null
+    ? undefined
+    : { segment: { kind: "attempt", attempt: numberAt(attempt) }, length: attempt[0].length };
+};
+
+const itemEnds: readonly KeySegment["kind"][] = ["item", "attempt"];
+
 const readItemStep: Reader = (rest, previous) => {
-  const id = previous?.kind === "item" ? matched(`\\.(${workflowId})`, rest) : null;
+  const afterItem = previous !== undefined && itemEnds.includes(previous.kind);
+  const id = afterItem ? matched(`\\.(${workflowId})`, rest) : null;
   return id === null ? undefined : { segment: { kind: "workflow", id: id[1] ?? "" }, length: id[0].length };
 };
 
@@ -166,7 +181,7 @@ const readCall: Reader = (rest, previous) => {
   return call === null ? undefined : { segment: { kind: "call", index: numberAt(call) }, length: call[0].length };
 };
 
-const readers: readonly Reader[] = [readStep, readBracketOrRound, readItemStep, readCheck, readCall];
+const readers: readonly Reader[] = [readStep, readBracketOrRound, readAttempt, readItemStep, readCheck, readCall];
 
 function readNext(rest: string, previous: KeySegment | undefined): Reading | undefined {
   if (previous === undefined) {

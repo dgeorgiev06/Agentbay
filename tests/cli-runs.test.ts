@@ -102,7 +102,7 @@ test("showing a waiting run, alone or in the list, never issues or replaces its 
     assert.equal(fieldOf(fieldOf(runOf(resumed.json), "task") ?? null, "token"), undefined);
     assert.equal((await query(project, first.token)).exitCode, 0);
     const human = await bay(["runs", first.runId, ...root]);
-    assert.match(human.output, new RegExp(`bay runs ${first.runId} --new-token replaces it`));
+    assert.match(human.output, new RegExp(`bay runs ${first.runId} --new-token --step \\S+ replaces it`));
     assert.ok(!human.output.includes(first.token));
   });
 });
@@ -233,7 +233,7 @@ test("submit never prints the token of the next skill step, and says how the coo
     assert.equal(fieldOf(task, "token"), undefined);
     assert.doesNotMatch(submitted.output, /"token":/);
     const notice = textField(runOf(submitted.json), "notice") ?? "";
-    assert.match(notice, new RegExp(`bay runs ${first.runId} --new-token gives its task`));
+    assert.match(notice, new RegExp(`bay runs ${first.runId} --new-token --step \\S+ gives its task`));
     const second = taskOf((await bay(["runs", first.runId, "--new-token", ...root, "--json"])).json);
     assert.equal(second.stepKey, "second/1#1");
     assert.equal((await query(project, second.token)).exitCode, 0);

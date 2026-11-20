@@ -1,5 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import type { RunStore, StoredState, TaskTokenStore } from "./run-store.ts";
+import { storedWaits, type RunStore, type StoredState, type TaskTokenStore } from "./run-store.ts";
+import { skillRoundOf } from "./step-key.ts";
 import { failedWith, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
 
 export type TaskPlace = {
@@ -28,20 +29,26 @@ function hashOf(token: string): Buffer {
 }
 
 function isWaitingAt(state: StoredState, stepKey: string): boolean {
-  return state.status === "waiting" && state.reason === "skill" && state.stepKey === stepKey;
+  return storedWaits(state).some((wait) => wait.reason === "skill" && wait.stepKey === stepKey);
 }
 
 function deadReason(place: TaskPlace, state: StoredState): string {
-  const now = state.status === "waiting" ? `waiting for ${state.reason} at ${state.stepKey}` : state.status;
+  const waits = storedWaits(state).map((wait) => `waiting for ${wait.reason} at ${wait.stepKey}`);
+  const now = waits.length === 0 ? state.status : waits.join(" and ");
   return (
     `The token was issued for step ${place.stepKey} of run ${place.runId}, which is no longer waiting for it ` +
     `(the run is ${now}); a token dies when its step finishes or its round changes.`
   );
 }
 
+function presentedHash(token: string): string {
+  return hashOf(token).toString("hex");
+}
+
 export async function issueTaskToken(store: TaskTokenStore, place: TaskPlace, now: Date): Promise<string> {
   const token = randomBytes(tokenBytes).toString("base64url");
-  await store.replaceTaskToken({ ...place, hash: hashOf(token).toString("hex"), issuedAt: now.toISOString() });
+  const roundsOf = `${skillRoundOf(place.stepKey)?.step ?? place.stepKey}#`;
+  await store.replaceTaskToken({ ...place, hash: presentedHash(token), issuedAt: now.toISOString() }, roundsOf);
   return token;
 }
 
@@ -68,7 +75,7 @@ export async function checkTaskToken(stores: TokenStores, token: string): Promis
     return refusedToken(unknownToken);
   }
   if (!isWaitingAt(run.state, place.stepKey)) {
-    await stores.tokens.removeTaskTokens(place.runId);
+    await stores.tokens.removeTaskToken(presentedHash(token));
     return refusedToken(deadReason(place, run.state));
   }
   return succeededWith(place);

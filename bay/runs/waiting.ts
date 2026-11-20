@@ -1,7 +1,7 @@
 import { measures, type RunEvent, type Scrubber } from "../contracts.ts";
 import { numberField, textField } from "../json.ts";
 import type { System } from "../manifests/manifests.ts";
-import type { RunWithSteps, StepRecord } from "./run-store.ts";
+import { storedWaits, type RunWithSteps, type StepRecord, type StoredWait } from "./run-store.ts";
 import type { Waiting } from "./run-state.ts";
 import { shownChoices } from "./choices.ts";
 import { approvalContentOf } from "./scrubbed-store.ts";
@@ -79,21 +79,29 @@ const ownerQuestion =
   "The step started and did not finish, and its action has effects other than read, so running it again could " +
   "repeat them. Resume with --rerun to run it again.";
 
-export function storedWaiting(context: WaitingContext, stored: Stored): Waiting | undefined {
-  const state = stored.run.state;
-  if (state.status !== "waiting") {
-    return undefined;
-  }
-  switch (state.reason) {
+function ownerWaiting(run: RunWithSteps, stepKey: string): Waiting {
+  const record = recordOf(run, stepKey);
+  const asked = record?.kind === "foreach" ? record.detail?.question : undefined;
+  return { reason: "owner", stepKey, question: asked ?? ownerQuestion };
+}
+
+function waitingOf(context: WaitingContext, stored: Stored, wait: StoredWait): Waiting | undefined {
+  switch (wait.reason) {
     case "skill":
-      return skillWaiting(context, stored, state.stepKey);
+      return skillWaiting(context, stored, wait.stepKey);
     case "approval":
-      return approvalWaiting(context, stored.run, state.stepKey);
+      return approvalWaiting(context, stored.run, wait.stepKey);
     case "time":
-      return { reason: "time", stepKey: state.stepKey, until: state.until ?? "" };
+      return { reason: "time", stepKey: wait.stepKey, until: wait.until ?? "" };
     case "budget":
-      return budgetWaiting(stored.events, state.stepKey);
+      return budgetWaiting(stored.events, wait.stepKey);
     case "owner":
-      return { reason: "owner", stepKey: state.stepKey, question: ownerQuestion };
+      return ownerWaiting(stored.run, wait.stepKey);
   }
+}
+
+export function storedWaiting(context: WaitingContext, stored: Stored): readonly Waiting[] | undefined {
+  const waits = storedWaits(stored.run.state).map((wait) => waitingOf(context, stored, wait));
+  const found = waits.flatMap((waiting) => (waiting === undefined ? [] : [waiting]));
+  return found.length === waits.length ? found : undefined;
 }

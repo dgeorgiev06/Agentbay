@@ -150,6 +150,10 @@ features:
       - bay/runs/sqlite-rows.ts
       - bay/runs/sqlite-task-tokens.ts
       - bay/runs/kernel-migrations.ts
+      - bay/runs/side-by-side.ts
+      - bay/runs/side-by-side-steps.ts
+      - bay/runs/draw-turns.ts
+      - bay/runs/issued-tasks.ts
     may_import:
       - vocabulary
       - manifests

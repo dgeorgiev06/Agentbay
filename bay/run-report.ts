@@ -11,6 +11,7 @@ import {
   pretty,
   stateLine,
   statusLine,
+  alsoWaitingIn,
   taskIn,
   waitingIn,
   waitingJson,
@@ -21,6 +22,8 @@ import {
 type State = Run["state"];
 
 type Step = Run["steps"][number];
+
+type Waiting = Extract<State, { readonly status: "waiting" }>["waiting"];
 
 function targetText(target: Run["target"]): string {
   return `${target.kind} ${target.mode}${target.kind === "action" ? "." : ":"}${target.name}`;
@@ -122,7 +125,24 @@ function outcomeText(run: Run): string {
   }
 }
 
+function alsoJson(run: Run, waiting: Waiting, options: ReportOptions): JsonObject {
+  if (waiting.reason !== "skill") {
+    return waitingJson(waiting);
+  }
+  const { task } = waiting;
+  return { ...waitingJson(waiting), task: taskJson(task), notice: noticeOf(run, task, options.after) };
+}
+
+function alsoText(run: Run, waiting: Waiting, options: ReportOptions): string {
+  if (waiting.reason !== "skill") {
+    return `also ${waitingText(run, waiting)}`;
+  }
+  const { task } = waiting;
+  return `also a task for the agent ${agentOf(task)}. ${noticeOf(run, task, options.after)}\n${pretty(taskJson(task))}`;
+}
+
 function reportJson(run: Run, options: ReportOptions): JsonObject {
+  const also = alsoWaitingIn(run);
   const waiting = waitingIn(run);
   const task = taskIn(run);
   const { askedBy } = run;
@@ -136,6 +156,7 @@ function reportJson(run: Run, options: ReportOptions): JsonObject {
     updatedAt: run.updatedAt,
     ...(waiting === undefined ? {} : { waiting: waitingJson(waiting) }),
     ...(task === undefined ? {} : { task: taskJson(task), notice: noticeOf(run, task, options.after) }),
+    ...(also.length === 0 ? {} : { alsoWaiting: also.map((waiting) => alsoJson(run, waiting, options)) }),
     ...(askedBy === undefined ? {} : { askedBy: { ...askedBy } }),
     ...(options.steps === true ? { steps: run.steps.map((step) => stepJson(step, options.full ?? false)) } : {}),
     ...(options.events === true ? { events: run.events.map(eventJson) } : {}),
@@ -151,6 +172,7 @@ function reportText(run: Run, options: ReportOptions): string {
     waiting === undefined ? "" : waitingText(run, waiting),
     askedBy === undefined ? "" : `asked for by step ${askedBy.stepKey} of run ${askedBy.runId} (call_action)`,
     taskText(run, options),
+    ...alsoWaitingIn(run).map((waiting) => alsoText(run, waiting, options)),
     options.steps === true ? stepsText(run.steps) : "",
     options.events === true ? eventsText(run.events) : "",
   ];

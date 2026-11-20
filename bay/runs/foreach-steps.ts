@@ -3,6 +3,7 @@ import type { Json } from "../contracts.ts";
 import type { Step as WorkflowStep } from "../generated/workflow.ts";
 import { toJson } from "../json.ts";
 import { problemText, succeededWith } from "../outcome.ts";
+import { runSideBySide } from "./side-by-side-steps.ts";
 import { foreachItemKey } from "./step-key.ts";
 import { concludeComposite, done, refuse, startRecord, type Progress, type Walk } from "./walk.ts";
 import {
@@ -49,7 +50,11 @@ export async function runForeach(walk: Walk, scope: WorkflowScope, at: ForeachAt
   if (record === undefined) {
     await startRecord(walk, { key: at.key, kind: "foreach", input: items, detail: null });
   }
-  return runItems(walk, scope, { at, items, runSteps: at.runSteps });
+  const cap = at.step.sideBySide;
+  if (cap === undefined) {
+    return runItems(walk, scope, { at, items, runSteps: at.runSteps });
+  }
+  return runSideBySide(walk, scope, { at, items, runSteps: at.runSteps, cap, record: walk.records.get(at.key) });
 }
 
 async function runItems(walk: Walk, scope: WorkflowScope, loop: Loop): Promise<Progress> {

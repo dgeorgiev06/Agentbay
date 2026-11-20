@@ -28,6 +28,7 @@ import {
   keepingGiven,
   optionalText,
   runOf,
+  stateAssignments,
   stateColumns,
   stepOf,
   storedJson,
@@ -184,8 +185,7 @@ export class SqliteRunStore implements RunStore {
       const state = stateColumns(patch.state ?? current.state, keepingGiven(current));
       this.#database
         .prepare(
-          `update runs set status = ?, waiting_reason = ?, waiting_step = ?, waiting_until = ?, output = ?, reason = ?,
-            extra = ?, spent = ?, stop_reason = ?, updated_at = ?
+          `update runs set ${stateAssignments}, extra = ?, spent = ?, stop_reason = ?, updated_at = ?
            where id = ?`,
         )
         .run(

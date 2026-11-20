@@ -42,10 +42,14 @@ function shortName(name: string): string {
   return name.startsWith(branchRef) ? name.slice(branchRef.length) : name;
 }
 
+export function notMadeSentence(branch: string, so: string): string {
+  return `The branch ${branch} is not one this mode makes, forge/<slice> or forge/wip/<slice>/<n>, so ${so}.`;
+}
+
 function namedReason(facts: BranchFacts): string | undefined {
   const { branch, into } = facts;
   if (!isMadeBranch(branch)) {
-    return `The branch ${branch} is not one this mode makes, forge/<slice> or forge/wip/<slice>/<n>, so it is kept.`;
+    return notMadeSentence(branch, "it is kept");
   }
   if (into !== undefined && shortName(into) === branch) {
     return `The branch ${branch} is the branch work is merged into, named as into, so it is kept.`;

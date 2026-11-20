@@ -95,9 +95,9 @@ export const toolDefinitions: readonly ToolDefinition[] = [
   {
     name: "submit",
     description:
-      "Hand in the output of your task. The answer says accepted: true when the step is done, or lists the " +
-      "schema problems or the check feedback; then correct the output and submit again, with the token the " +
-      "answer gives.",
+      "Hand in the output of your task. The answer says accepted: true when the step is done or when the kernel " +
+      "recorded your output to check later (recorded: true), or lists the schema problems or the check feedback; " +
+      "then correct the output and submit again, with the token the answer gives.",
     inputSchema: inputSchema(
       {
         output: { description: "Your output, matching the task's outputSchema and every schema in alsoMatches." },

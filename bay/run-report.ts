@@ -141,6 +141,14 @@ function alsoText(run: Run, waiting: Waiting, options: ReportOptions): string {
   return `also a task for the agent ${agentOf(task)}. ${noticeOf(run, task, options.after)}\n${pretty(taskJson(task))}`;
 }
 
+function recordedText(run: Run): string {
+  const keys = run.recordedAnswers ?? [];
+  return keys.length === 0
+    ? ""
+    : `answers recorded for ${keys.join(", ")}, not yet taken; the run takes them when the call advancing it ` +
+        `ends, or at bay resume ${run.id}`;
+}
+
 function reportJson(run: Run, options: ReportOptions): JsonObject {
   const also = alsoWaitingIn(run);
   const waiting = waitingIn(run);
@@ -158,6 +166,7 @@ function reportJson(run: Run, options: ReportOptions): JsonObject {
     ...(task === undefined ? {} : { task: taskJson(task), notice: noticeOf(run, task, options.after) }),
     ...(also.length === 0 ? {} : { alsoWaiting: also.map((waiting) => alsoJson(run, waiting, options)) }),
     ...(askedBy === undefined ? {} : { askedBy: { ...askedBy } }),
+    ...(run.recordedAnswers === undefined ? {} : { recordedAnswers: [...run.recordedAnswers] }),
     ...(options.steps === true ? { steps: run.steps.map((step) => stepJson(step, options.full ?? false)) } : {}),
     ...(options.events === true ? { events: run.events.map(eventJson) } : {}),
   };
@@ -171,6 +180,7 @@ function reportText(run: Run, options: ReportOptions): string {
     outcomeText(run),
     waiting === undefined ? "" : waitingText(run, waiting),
     askedBy === undefined ? "" : `asked for by step ${askedBy.stepKey} of run ${askedBy.runId} (call_action)`,
+    recordedText(run),
     taskText(run, options),
     ...alsoWaitingIn(run).map((waiting) => alsoText(run, waiting, options)),
     options.steps === true ? stepsText(run.steps) : "",

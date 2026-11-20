@@ -137,11 +137,18 @@ function settledSubmission(run: Run, step: Run["steps"][number] | undefined): Js
   return { accepted: step?.status === "done", run: summary, ...reason, ...next };
 }
 
+const recordedNext =
+  "The kernel recorded your output while another call advances the run; the run checks it when that call ends. " +
+  "Stop here: the coordinator gives the next round's task if the checks ask for one.";
+
 function submittedResult(call: ToolCall, result: Outcome<Run>): Json {
   if (!result.ok) {
     return { accepted: false, problems: result.problems.map((problem) => problem.message) };
   }
   const run = result.value;
+  if (run.recordedAnswers?.includes(call.task.stepKey) === true) {
+    return { accepted: true, recorded: true, run: { id: run.id, status: run.state.status }, next: recordedNext };
+  }
   const waiting = waitsOf(run.state).find((each) => each.reason === "skill" && each.task.token !== undefined);
   if (waiting?.reason === "skill" && waiting.task.token !== undefined) {
     const { round, feedback, token } = waiting.task;

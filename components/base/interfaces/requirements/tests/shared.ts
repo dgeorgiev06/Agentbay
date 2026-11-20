@@ -326,6 +326,20 @@ const cases: readonly Case[] = [
     ),
   },
   {
+    name: "an outcome with no id and no refusal is refused at the outcome's line, for both",
+    restsOn: "$defs/outcome required id; problem rule no refusal; problem line: the nearest line the file has",
+    run: refusedAt(
+      [
+        ["  - id: O2\n    says:", "  - says:"],
+        ["    noRefusal: Reading takes no input, so nothing of it can be refused.\n", ""],
+      ],
+      [
+        { rule: "not the form", line: 24 },
+        { rule: "no refusal", line: 24 },
+      ],
+    ),
+  },
+  {
     name: "a condition whose id names another outcome is refused at its id's line",
     restsOn: "problem rule id not its outcome's: a condition's id starts with its outcome's",
     run: refusedAt([["      - id: O2-C1\n", "      - id: O1-C9\n"]], [{ rule: "id not its outcome's", line: 28 }]),

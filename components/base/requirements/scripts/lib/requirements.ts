@@ -68,8 +68,8 @@ function isList(value: Json | undefined): value is readonly Json[] {
 }
 
 function listAt(fields: JsonFields, key: string): readonly Json[] {
-  const value = fields[key];
-  return isList(value) ? value : [];
+  const entries = fields[key];
+  return isList(entries) ? entries : [];
 }
 
 function textsOf(fields: JsonFields): readonly Text[] {

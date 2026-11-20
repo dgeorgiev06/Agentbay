@@ -186,7 +186,7 @@ const vaultManifest = {
     misfit: {
       description: "When an answer breaks its schema with a value from the input.",
       input: "schemas/any.json",
-      output: "schemas/count.json",
+      output: "schemas/pair.json",
       effects: ["read"],
       run: [{ script: "scripts/misfit.ts" }],
     },
@@ -232,6 +232,7 @@ async function writeVault(beside: Project, manifest: Json): Promise<void> {
   await beside.write(`${folder}/schemas/any.json`, "{}\n");
   await beside.write(`${folder}/schemas/text.json`, schemaText({ type: "string" }));
   await beside.write(`${folder}/schemas/count.json`, schemaText(countSchema));
+  await beside.write(`${folder}/schemas/pair.json`, schemaText({ ...countSchema, required: ["count", "label"] }));
   await beside.write(`${folder}/skills/note/SKILL.md`, noteSkill);
   await beside.write(`${folder}/scripts/keep.ts`, keepScript);
   await beside.write(`${folder}/scripts/echo.ts`, echoScript);
@@ -454,7 +455,7 @@ test("an answer that breaks its schema is counted, not quoted, and is in no file
       answers: [
         {
           reason:
-            "The output of action misfit of mode vault does not match its schema: 1 problem, not shown, since " +
+            "The output of action misfit of mode vault does not match its schema: 2 problems, not shown, since " +
             "the kernel keeps the output packed.",
         },
       ],
@@ -486,7 +487,8 @@ test("the same misfit under an action not marked is quoted, as before", async ()
       answers: [
         {
           reason:
-            'The output of action misfit of mode vault does not match its schema: output.count must be a number, but it is "short".',
+            "The output of action misfit of mode vault does not match its schema: output is missing the required " +
+            'field label. output.count must be a number, but it is "short".',
         },
       ],
     });

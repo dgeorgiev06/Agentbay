@@ -1,19 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import {
-  builtOf,
-  drawn,
-  provedOf,
-  startCard,
-  type Built,
-  type CardLine,
-  type Drawn,
-  type MergeCardInput,
-  type Missing,
-  type Planter,
-  type Slice,
-  type Verdict,
-} from "../scripts/lib/cards.ts";
+import { builtOf, type Built, type Missing } from "../scripts/lib/builder-answer.ts";
+import type { CardLine } from "../scripts/lib/card-lines.ts";
+import { drawn, type Drawn, type MergeCardInput } from "../scripts/lib/merge-card.ts";
+import { provedOf, type Verdict } from "../scripts/lib/proof-answer.ts";
+import type { Slice } from "../scripts/lib/slice-form.ts";
+import { startCard, type Planter } from "../scripts/lib/start-card.ts";
 
 type VerdictName = Verdict["verdict"];
 

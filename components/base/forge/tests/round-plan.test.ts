@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { drawn, sliceOf, type CardLine } from "../scripts/lib/cards.ts";
+import type { CardLine } from "../scripts/lib/card-lines.ts";
+import { drawn } from "../scripts/lib/merge-card.ts";
+import { sliceOf } from "../scripts/lib/slice-form.ts";
 import type { Failing } from "../scripts/lib/failing.ts";
 import type { Finding } from "../scripts/lib/review.ts";
 import { roundsOnCard } from "../scripts/lib/round-card.ts";

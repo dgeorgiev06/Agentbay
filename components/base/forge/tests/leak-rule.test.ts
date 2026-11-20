@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { drawn, sliceOf, type Leak } from "../scripts/lib/cards.ts";
+import type { Leak } from "../scripts/lib/leaks.ts";
+import { drawn } from "../scripts/lib/merge-card.ts";
+import { sliceOf } from "../scripts/lib/slice-form.ts";
 import type { HandedTest } from "../scripts/lib/handed-tests.ts";
 import { leaksFound, leaksOf, phrasesOf, sharedText, type Compared } from "../scripts/lib/leaks.ts";
 import { marked, markOf, newMark, withoutMark } from "../scripts/lib/mark.ts";

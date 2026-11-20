@@ -1,6 +1,6 @@
 import { defineScript, fieldsOf, type Json, type ScriptContext } from "../../../../bay/sdk.ts";
 import { answerOf } from "./lib/called.ts";
-import { sliceOf } from "./lib/cards.ts";
+import { sliceOf } from "./lib/slice-form.ts";
 import { codeAt } from "./lib/code.ts";
 import { forgetKept } from "./lib/kept-tests.ts";
 import { bugsHanded, bugsOf, plants, type Bug } from "./lib/planting.ts";

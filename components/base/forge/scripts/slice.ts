@@ -1,5 +1,6 @@
 import { defineScript, fieldsOf, type Json, type JsonFields } from "../../../../bay/sdk.ts";
-import { sliceOf, startCard } from "./lib/cards.ts";
+import { sliceOf } from "./lib/slice-form.ts";
+import { startCard } from "./lib/start-card.ts";
 import { namedTests } from "./lib/handed-tests.ts";
 
 type Asked = {

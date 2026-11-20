@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Json } from "../../../../bay/sdk.ts";
-import { sliceOf } from "../scripts/lib/cards.ts";
+import { sliceOf } from "../scripts/lib/slice-form.ts";
 import { failingOf, withoutCases } from "../scripts/lib/failing.ts";
 import { quotesAny } from "../scripts/lib/quoting.ts";
 

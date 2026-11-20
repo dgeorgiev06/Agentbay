@@ -1,6 +1,9 @@
 import { defineScript, fieldsOf } from "../../../../bay/sdk.ts";
 import { bugsOnCard } from "./lib/bug-card.ts";
-import { builtOf, drawn, provedOf, sliceOf } from "./lib/cards.ts";
+import { builtOf } from "./lib/builder-answer.ts";
+import { drawn } from "./lib/merge-card.ts";
+import { provedOf } from "./lib/proof-answer.ts";
+import { sliceOf } from "./lib/slice-form.ts";
 import { bugsOf } from "./lib/planting.ts";
 import { roundsOnCard } from "./lib/round-card.ts";
 import { roundsStateOf } from "./lib/rounds.ts";

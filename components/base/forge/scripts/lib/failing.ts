@@ -1,5 +1,5 @@
 import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
-import type { Slice } from "./cards.ts";
+import type { Slice } from "./slice-form.ts";
 import type { HandedTest } from "./handed-tests.ts";
 import { quotesAny } from "./quoting.ts";
 import { listOf, textOf } from "./json-values.ts";

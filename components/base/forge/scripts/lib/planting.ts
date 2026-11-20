@@ -1,5 +1,7 @@
 import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
-import type { Built, Leak, Slice } from "./cards.ts";
+import type { Built } from "./builder-answer.ts";
+import type { Leak } from "./leaks.ts";
+import type { Slice } from "./slice-form.ts";
 import type { HandedTest } from "./handed-tests.ts";
 import { quotesAny } from "./quoting.ts";
 import { listOf, textOf, textsOf } from "./json-values.ts";

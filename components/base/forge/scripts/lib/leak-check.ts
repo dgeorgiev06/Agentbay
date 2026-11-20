@@ -1,6 +1,7 @@
 import type { Json, ScriptContext } from "../../../../../bay/sdk.ts";
 import { answerOf } from "./called.ts";
-import type { Leak, Slice } from "./cards.ts";
+import type { Leak } from "./leaks.ts";
+import type { Slice } from "./slice-form.ts";
 import { codeAt } from "./code.ts";
 import type { HandedTest } from "./handed-tests.ts";
 import { leaksFound, phrasesOf, sharedText, type Compared, type SharedText } from "./leaks.ts";

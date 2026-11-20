@@ -1,6 +1,20 @@
-import { counted, type RoundsEnded, type RoundsOnCard } from "./cards.ts";
+import { counted } from "./card-lines.ts";
 import type { Condition } from "./review.ts";
 import { lastRound, type Remaining, type RoundsState } from "./rounds.ts";
+
+type JudgedLines = {
+  readonly step: string;
+  readonly sentences: readonly string[];
+};
+
+export type RoundsEnded = "leak" | "stopped" | "no-findings" | "last-round";
+
+export type RoundsOnCard = {
+  readonly count: number;
+  readonly most: number;
+  readonly ended: RoundsEnded;
+  readonly judged?: JudgedLines;
+};
 
 const findingsNamed = 3;
 

@@ -242,12 +242,19 @@ export async function actionOutputs(root: string, runId: string, action: string)
 }
 
 export async function task(root: string, runId: string): Promise<Json> {
-  return fieldsOf(runOf(await bay(root, ["runs", runId, "--new-token"]))).task ?? null;
+  return fieldsOf(await shown(root, runId)).task ?? null;
+}
+
+async function reissued(root: string, runId: string): Promise<Json> {
+  return runOf(await bay(root, ["runs", runId, "--new-token"]));
+}
+
+function submittedWith(root: string, given: Json, output: Json): Promise<Json> {
+  return bay(root, ["submit", JSON.stringify(output), "--token", textAt(given, "token")]);
 }
 
 export async function answered(root: string, runId: string, output: Json): Promise<Json> {
-  const given = await task(root, runId);
-  return bay(root, ["submit", JSON.stringify(output), "--token", textAt(given, "token")]);
+  return submittedWith(root, fieldsOf(await reissued(root, runId)).task ?? null, output);
 }
 
 export async function submitted(root: string, runId: string, output: Json): Promise<Json> {
@@ -381,21 +388,19 @@ export function playerOf(players: Players, action: string): Played | undefined {
 export async function playedTo(root: string, runId: string, players: Players): Promise<readonly Asked[]> {
   const asked: Asked[] = [];
   for (;;) {
-    const run = await shown(root, runId);
+    const run = await reissued(root, runId);
     const waiting = fieldsOf(run).waiting ?? null;
     if (textAt(run, "status") !== "waiting" || textAt(waiting, "reason") !== "skill") {
       return asked;
     }
-    const given = await task(root, runId);
+    const given = fieldsOf(run).task ?? null;
     const action = actionOf(given);
     const player = playerOf(players, action);
     if (player === undefined) {
       return asked;
     }
     asked.push({ action, step: textAt(given, "stepKey"), task: given });
-    const output = await player(given);
-    const token = textAt(await task(root, runId), "token");
-    const answer = await bay(root, ["submit", JSON.stringify(output), "--token", token]);
+    const answer = await submittedWith(root, given, await player(given));
     const ended = ["undone", "failed"].includes(textAt(runOf(answer), "status"));
     if (fieldsOf(answer).ok !== true && !ended) {
       throw new Error(`The kernel did not take the output of ${action}: ${JSON.stringify(answer)}`);

@@ -23,6 +23,7 @@ type Placed =
   | { readonly kind: "unplaced"; readonly path: string };
 
 export const testsThatOpenTheKit: readonly string[] = [
+  "components/base/forge/tests/listed-commands.test.ts",
   "components/base/forge/tests/one-slice.test.ts",
   "components/base/forge/tests/waves.test.ts",
   "components/base/git-worktrees/tests/listed-commands.test.ts",

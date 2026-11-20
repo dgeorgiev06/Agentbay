@@ -175,24 +175,34 @@ export async function recaptured(copy: string, source: Source): Promise<readonly
   return [source.file];
 }
 
-async function recapturedAll(wanted: readonly string[]): Promise<void> {
-  const asked = askedFiles(wanted);
-  const copy = await kitCopy();
+export async function recapturedIn(copy: string, chosen: readonly Source[]): Promise<void> {
   const written: string[] = [];
-  try {
-    for (const source of sources.filter((each) => asked.includes(each.file))) {
-      written.push(...(await recaptured(copy, source)));
-    }
-  } finally {
-    await rm(copy, { recursive: true, force: true });
+  for (const source of chosen) {
+    written.push(...(await recaptured(copy, source)));
   }
   const files = written.map((file) => join(import.meta.dirname, file));
   if (files.length > 0) {
     run(kit, "npx", ["prettier", "--config", "components/base/typescript/prettier.json", "--write", ...files]);
   }
-  const missing = notRemade(asked, written);
+  const missing = notRemade(
+    chosen.map((source) => source.file),
+    written,
+  );
   if (missing !== undefined) {
     throw new Error(missing);
+  }
+}
+
+async function recapturedAll(wanted: readonly string[]): Promise<void> {
+  const asked = askedFiles(wanted);
+  const copy = await kitCopy();
+  try {
+    await recapturedIn(
+      copy,
+      sources.filter((each) => asked.includes(each.file)),
+    );
+  } finally {
+    await rm(copy, { recursive: true, force: true });
   }
 }
 

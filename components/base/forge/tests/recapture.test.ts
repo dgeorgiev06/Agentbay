@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { askedFiles, notRemade, recaptured, withCapture, type Source } from "./recapture.ts";
+import { askedFiles, notRemade, recaptured, recapturedIn, withCapture, type Source } from "./recapture.ts";
 
 const given = ["given-b1-card.json", "given-r7-failed.json", "given-p2-stopped.json", "given-wave-ca-cb.json"];
 
@@ -68,21 +69,39 @@ test("recapture run with a file it has no case for exits 1 naming it, before it 
   assert.equal(ran.stdout, "");
 });
 
-test("a case that is skipped writes no capture, and recapture counts its file as not written", async () => {
+const skippedCase = [
+  'import { test } from "node:test";',
+  'test.skip("a case that reaches its card", async () => {',
+  "  const root = process.cwd();",
+  '  const card = waitingOf(run, "card");',
+  "});",
+  "",
+].join("\n");
+
+async function withSkippedCase(work: (copy: string) => Promise<void>): Promise<void> {
   const copy = await realpath(await mkdtemp(join(tmpdir(), "agentbay-recapture-test-")));
   try {
-    const skipped = [
-      'import { test } from "node:test";',
-      'test.skip("a case that reaches its card", async () => {',
-      "  const root = process.cwd();",
-      '  const card = waitingOf(run, "card");',
-      "});",
-      "",
-    ].join("\n");
     await mkdir(join(copy, "components/base/forge/tests"), { recursive: true });
-    await writeFile(join(copy, "components/base/forge/tests", source.test), skipped, "utf8");
-    assert.deepEqual(await recaptured(copy, source), []);
+    await writeFile(join(copy, "components/base/forge/tests", source.test), skippedCase, "utf8");
+    await work(copy);
   } finally {
     await rm(copy, { recursive: true, force: true });
   }
+}
+
+test("a case that is skipped writes no capture, and recapture counts its file as not written", async () => {
+  await withSkippedCase(async (copy) => {
+    assert.deepEqual(await recaptured(copy, source), []);
+  });
+});
+
+test("recapture fails naming the file whose case was skipped, and writes nothing", async () => {
+  await withSkippedCase(async (copy) => {
+    await assert.rejects(recapturedIn(copy, [source]), {
+      message:
+        "recapture did not write given-x.json: its case was skipped or never reached the capture, so the file is " +
+        "as it was.",
+    });
+  });
+  assert.equal(existsSync(join(import.meta.dirname, source.file)), false);
 });

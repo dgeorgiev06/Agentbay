@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { join } from "node:path";
+import { closeSync, mkdirSync, openSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { noInterfaceSchemas } from "./broker-fixture.ts";
 import type { Answer } from "../bay/answers.ts";
@@ -288,6 +290,30 @@ test("an agent query redacts what it returns before it cuts long cells", async (
       await broker.ask("db.agentQuery", { sql: "select body from notes where body like 'yyy%'" }),
     ).rows;
     assert.doesNotMatch(JSON.stringify(straddling), /sk-ant/);
+  });
+});
+
+function ownerOnlyFile(file: string): void {
+  mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
+  closeSync(openSync(file, "a", 0o600));
+}
+
+test("an agent query waits while another connection holds the partition, then answers", async () => {
+  await withBroker(["read"], async ({ root, broker }) => {
+    const file = join(root, ".agentbay", "data", "notes--kept.db");
+    ownerOnlyFile(file);
+    const holder = new DatabaseSync(file);
+    holder.exec("begin exclusive");
+    holder.exec("create table items (title text)");
+    setTimeout(() => {
+      holder.exec("commit");
+      holder.close();
+    }, 500);
+    const counted = await broker.ask("db.agentQuery", {
+      sql: "select count(*) as items from items",
+      partition: "kept",
+    });
+    assert.deepEqual(valueOf(counted), { columns: ["items"], rows: [[0]] });
   });
 });
 

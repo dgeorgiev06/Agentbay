@@ -23,24 +23,24 @@ const childFile = `${bayFolder}database-child.ts`;
 
 const replyBytes = 256 * 1024 * 1024;
 
-const statuses: readonly string[] = ["done", "missing", "writes-on-read-only", "several-statements", "error"];
+const resultsWithNoFields: readonly DatabaseResult<never>[] = [
+  { status: "missing" },
+  { status: "writes-on-read-only" },
+  { status: "several-statements" },
+  { status: "busy" },
+];
 
 function resultOf(value: Json | undefined): DatabaseResult<Json> | undefined {
-  if (!isJsonRecord(value) || typeof value.status !== "string" || !statuses.includes(value.status)) {
+  if (!isJsonRecord(value)) {
     return undefined;
   }
-  switch (value.status) {
-    case "done":
-      return value.value === undefined ? undefined : { status: "done", value: value.value };
-    case "error":
-      return typeof value.message === "string" ? { status: "error", message: value.message } : undefined;
-    case "missing":
-      return { status: "missing" };
-    case "writes-on-read-only":
-      return { status: "writes-on-read-only" };
-    default:
-      return { status: "several-statements" };
+  if (value.status === "done") {
+    return value.value === undefined ? undefined : { status: "done", value: value.value };
   }
+  if (value.status === "error") {
+    return typeof value.message === "string" ? { status: "error", message: value.message } : undefined;
+  }
+  return resultsWithNoFields.find((result) => result.status === value.status);
 }
 
 function stopped(end: ChildEnd): DatabaseResult<never> {

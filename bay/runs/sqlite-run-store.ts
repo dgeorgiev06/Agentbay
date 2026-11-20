@@ -1,6 +1,7 @@
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqlite";
 import { budgetFromJson, spendFromJson } from "./budget.ts";
 import type { Json, RunEvent, Spend } from "../contracts.ts";
+import { databaseLockWaitMilliseconds, isLockedError } from "../database-lock.ts";
 import { parseJson } from "../json.ts";
 import { narrowSideFiles } from "../owner-only.ts";
 import type { Folders } from "../ports.ts";
@@ -29,8 +30,6 @@ import {
 import { keepings, storedText, unpackedText } from "./packed-output.ts";
 import type { Keeping } from "../generated/mode.ts";
 import { decodedStepDetail, stepDetailJson, stepKinds } from "./step-detail.ts";
-
-const defaultBusyMilliseconds = 3000;
 
 type SqliteOptions = {
   readonly busyMilliseconds?: number;
@@ -269,14 +268,6 @@ function stateColumns(state: StoredState, keeping: Keeping): readonly SQLInputVa
   }
 }
 
-function isBusy(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-  const code = "errcode" in error ? error.errcode : undefined;
-  return code === 5 || code === 6 || /database (table )?is (locked|busy)/.test(error.message);
-}
-
 function isStale(heartbeatAt: string, now: Date): boolean {
   return now.getTime() - new Date(heartbeatAt).getTime() > lockStaleMilliseconds;
 }
@@ -290,7 +281,7 @@ export class SqliteRunStore implements RunStore, TaskTokenStore {
   }
 
   constructor(file: string, options: SqliteOptions = {}) {
-    this.#database = new DatabaseSync(file, { timeout: options.busyMilliseconds ?? defaultBusyMilliseconds });
+    this.#database = new DatabaseSync(file, { timeout: options.busyMilliseconds ?? databaseLockWaitMilliseconds });
     this.#database.exec("pragma journal_mode = wal; pragma foreign_keys = on;");
     this.#migrate();
     narrowSideFiles(file);
@@ -461,7 +452,7 @@ export class SqliteRunStore implements RunStore, TaskTokenStore {
 
   readonly acquire = (runId: string, owner: string, now: Date): Promise<LockResult> =>
     this.#takeLock(runId, owner, now).catch((error: unknown): LockResult => {
-      if (isBusy(error)) {
+      if (isLockedError(error)) {
         return { status: "busy" };
       }
       throw error;
@@ -519,17 +510,23 @@ export class SqliteRunStore implements RunStore, TaskTokenStore {
     });
 
   #migrate(): void {
-    const row = this.#database.prepare("pragma user_version").get();
-    const version = row === undefined ? 0 : integerColumn(row, "user_version");
-    for (const [index, migration] of migrations.entries()) {
-      if (index < version) {
-        continue;
-      }
-      this.#transaction(() => {
-        this.#database.exec(migration);
-        this.#database.exec(`pragma user_version = ${String(index + 1)}`);
-      });
+    if (this.#version() >= migrations.length) {
+      return;
     }
+    this.#transaction(() => {
+      const version = this.#version();
+      for (const [index, migration] of migrations.entries()) {
+        if (index >= version) {
+          this.#database.exec(migration);
+          this.#database.exec(`pragma user_version = ${String(index + 1)}`);
+        }
+      }
+    });
+  }
+
+  #version(): number {
+    const row = this.#database.prepare("pragma user_version").get();
+    return row === undefined ? 0 : integerColumn(row, "user_version");
   }
 
   #transaction<T>(body: () => T): T {

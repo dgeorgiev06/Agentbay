@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue, type StatementSync } from "node:sqlite";
 import type { Json } from "../contracts.ts";
+import { databaseLockWaitMilliseconds, isLockedError } from "../database-lock.ts";
 import { createOwnerOnlyFile, narrowSideFiles } from "../owner-only.ts";
 import type { ExecuteResult, Row, SqlParameters } from "../sdk.ts";
 import { isOneStatement } from "./sql-statements.ts";
@@ -15,6 +16,7 @@ export type DatabaseResult<T> =
   | { readonly status: "missing" }
   | { readonly status: "writes-on-read-only" }
   | { readonly status: "several-statements" }
+  | { readonly status: "busy" }
   | { readonly status: "error"; readonly message: string };
 
 export type Connection = "writable" | "read-only";
@@ -27,6 +29,97 @@ function errorMessage(error: unknown): string {
 
 function isReadOnlyError(error: unknown): boolean {
   return error instanceof Error && "errcode" in error && error.errcode === sqliteReadOnlyCode;
+}
+
+function failureOf(error: unknown): DatabaseResult<never> {
+  if (isLockedError(error)) {
+    return { status: "busy" };
+  }
+  if (isReadOnlyError(error)) {
+    return { status: "writes-on-read-only" };
+  }
+  return { status: "error", message: errorMessage(error) };
+}
+
+function attempted<T>(work: () => T): DatabaseResult<T> {
+  try {
+    return { status: "done", value: work() };
+  } catch (error) {
+    return failureOf(error);
+  }
+}
+
+function executed(database: DatabaseSync, sql: string): DatabaseResult<null> {
+  return attempted(() => {
+    database.exec(sql);
+    return null;
+  });
+}
+
+function connected(file: string, readOnly: boolean, setting: string): DatabaseSync {
+  const database = new DatabaseSync(file, { readOnly, timeout: databaseLockWaitMilliseconds });
+  try {
+    database.exec(setting);
+    return database;
+  } catch (error) {
+    database.close();
+    throw error;
+  }
+}
+
+function writableConnection(file: string): DatabaseSync {
+  createOwnerOnlyFile(file);
+  return connected(file, false, "pragma journal_mode = wal");
+}
+
+function pendingOf(database: DatabaseSync, migrations: readonly Migration[]): readonly Migration[] {
+  database.exec("create table if not exists _migrations (name text primary key, applied_at text not null)");
+  const applied = new Set(
+    database
+      .prepare("select name from _migrations")
+      .all()
+      .map((row) => String(row.name)),
+  );
+  return migrations.filter((migration) => !applied.has(migration.name));
+}
+
+function appliedNow(
+  database: DatabaseSync,
+  migrations: readonly Migration[],
+  appliedAt: string,
+): DatabaseResult<readonly string[]> {
+  const pending = attempted(() => pendingOf(database, migrations));
+  if (pending.status !== "done") {
+    return pending;
+  }
+  const record = database.prepare("insert into _migrations (name, applied_at) values (?, ?)");
+  for (const migration of pending.value) {
+    const ran = attempted(() => {
+      database.exec(migration.sql);
+      record.run(migration.name, appliedAt);
+    });
+    if (ran.status === "error") {
+      return { status: "error", message: `${migration.name}: ${ran.message}` };
+    }
+    if (ran.status !== "done") {
+      return ran;
+    }
+  }
+  return { status: "done", value: pending.value.map((migration) => migration.name) };
+}
+
+function migratedInOneTransaction(
+  database: DatabaseSync,
+  migrations: readonly Migration[],
+  appliedAt: string,
+): DatabaseResult<readonly string[]> {
+  const begun = executed(database, "begin immediate");
+  if (begun.status !== "done") {
+    return begun;
+  }
+  const applied = appliedNow(database, migrations, appliedAt);
+  const ended = executed(database, applied.status === "done" ? "commit" : "rollback");
+  return ended.status === "done" ? applied : ended;
 }
 
 function inputValue(value: Json): SQLInputValue | undefined {
@@ -130,43 +223,15 @@ export class ModeDatabase {
   }
 
   applyMigrations(migrations: readonly Migration[], appliedAt: string): DatabaseResult<readonly string[]> {
-    const database = this.#open("writable");
-    if (database === undefined) {
-      return { status: "missing" };
+    const database = this.#writableConnection();
+    if (database.status !== "done") {
+      return database;
     }
     try {
-      return this.#migrated(database, migrations, appliedAt);
+      return migratedInOneTransaction(database.value, migrations, appliedAt);
     } finally {
       this.#narrowSideFiles();
     }
-  }
-
-  #migrated(
-    database: DatabaseSync,
-    migrations: readonly Migration[],
-    appliedAt: string,
-  ): DatabaseResult<readonly string[]> {
-    database.exec("create table if not exists _migrations (name text primary key, applied_at text not null)");
-    const applied = new Set(
-      database
-        .prepare("select name from _migrations")
-        .all()
-        .map((row) => String(row.name)),
-    );
-    const pending = migrations.filter((migration) => !applied.has(migration.name));
-    const record = database.prepare("insert into _migrations (name, applied_at) values (?, ?)");
-    database.exec("begin");
-    for (const migration of pending) {
-      try {
-        database.exec(migration.sql);
-        record.run(migration.name, appliedAt);
-      } catch (error) {
-        database.exec("rollback");
-        return { status: "error", message: `${migration.name}: ${errorMessage(error)}` };
-      }
-    }
-    database.exec("commit");
-    return { status: "done", value: pending.map((migration) => migration.name) };
   }
 
   close(): void {
@@ -176,23 +241,33 @@ export class ModeDatabase {
     this.#readOnly = undefined;
   }
 
-  #open(connection: Connection): DatabaseSync | undefined {
-    if (connection === "writable") {
-      if (this.#writable === undefined) {
-        createOwnerOnlyFile(this.#file);
-        this.#writable = new DatabaseSync(this.#file);
-        this.#writable.exec("pragma journal_mode = wal");
+  #writableConnection(): DatabaseResult<DatabaseSync> {
+    if (this.#writable === undefined) {
+      const opened = attempted(() => writableConnection(this.#file));
+      if (opened.status !== "done") {
+        return opened;
       }
-      return this.#writable;
+      this.#writable = opened.value;
     }
+    return { status: "done", value: this.#writable };
+  }
+
+  #readOnlyConnection(): DatabaseResult<DatabaseSync> {
     if (this.#readOnly === undefined) {
       if (!existsSync(this.#file)) {
-        return undefined;
+        return { status: "missing" };
       }
-      this.#readOnly = new DatabaseSync(this.#file, { readOnly: true });
-      this.#readOnly.exec("pragma query_only = on");
+      const opened = attempted(() => connected(this.#file, true, "pragma query_only = on"));
+      if (opened.status !== "done") {
+        return opened;
+      }
+      this.#readOnly = opened.value;
     }
-    return this.#readOnly;
+    return { status: "done", value: this.#readOnly };
+  }
+
+  #connection(connection: Connection): DatabaseResult<DatabaseSync> {
+    return connection === "writable" ? this.#writableConnection() : this.#readOnlyConnection();
   }
 
   #narrowSideFiles(): void {
@@ -203,25 +278,25 @@ export class ModeDatabase {
   }
 
   #prepared<T>(statement: Statement, use: (bound: Bound) => T): DatabaseResult<T> {
-    const database = this.#open(statement.connection);
-    if (database === undefined) {
+    const database = this.#connection(statement.connection);
+    if (database.status === "missing") {
       return this.#classifiedWithoutFile(statement.sql);
+    }
+    if (database.status !== "done") {
+      return database;
     }
     const bound = bindings(statement.parameters);
     if (typeof bound === "string") {
       return { status: "error", message: bound };
     }
     try {
-      const prepared = database.prepare(statement.sql);
+      const prepared = database.value.prepare(statement.sql);
       if (!isOneStatement(statement.sql, prepared.sourceSQL)) {
         return { status: "several-statements" };
       }
       return { status: "done", value: use(bind(prepared, bound)) };
     } catch (error) {
-      if (isReadOnlyError(error)) {
-        return { status: "writes-on-read-only" };
-      }
-      return { status: "error", message: errorMessage(error) };
+      return failureOf(error);
     }
   }
 

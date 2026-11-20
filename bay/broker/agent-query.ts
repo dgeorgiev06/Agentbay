@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import type { ChildEnd, ChildProcesses } from "../ports.ts";
 import type { Json } from "../contracts.ts";
+import { databaseLockWaitMilliseconds } from "../database-lock.ts";
 import { isJson, parsedLine } from "../protocol-json.ts";
 import { isRecord } from "../json.ts";
 import type { AgentQueryResult } from "../sdk.ts";
@@ -79,6 +80,7 @@ export async function runAgentQuery(children: ChildProcesses, order: AgentQueryO
       sql: order.sql,
       rows: order.limits.rows,
       resultBytes: order.limits.resultBytes,
+      lockWaitMilliseconds: databaseLockWaitMilliseconds,
     }),
   );
   const end = await child.ended;

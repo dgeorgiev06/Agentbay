@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { promisify } from "node:util";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 import { DatabaseSync } from "node:sqlite";
@@ -393,6 +395,38 @@ test("opening a SQLite store makes its file owner-only through the Folders port 
   assert.equal((await store.readRun("run-1"))?.id, "run-1");
   store.close();
   rmSync(folder, { recursive: true, force: true });
+});
+
+const storeModule = new URL("../../../bay/runs/sqlite-run-store.ts", import.meta.url).href;
+
+const openStore = `const { SqliteRunStore } = await import(${JSON.stringify(storeModule)});
+new SqliteRunStore(process.argv[1]).close();`;
+
+async function openedInAnotherProcess(file: string): Promise<string> {
+  const options = ["--input-type=module", "--disable-warning=ExperimentalWarning", "-e", openStore, file];
+  try {
+    await promisify(execFile)(process.execPath, options);
+    return "opened";
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+test("kernel databases opened by several processes at once on a fresh file are migrated once", async () => {
+  const { file, remove } = temporaryKernelDb();
+  const holder = new DatabaseSync(file);
+  holder.exec("pragma journal_mode = wal");
+  holder.exec("begin immediate");
+  const openers = Promise.all([1, 2, 3].map(() => openedInAnotherProcess(file)));
+  setTimeout(() => {
+    holder.exec("commit");
+    holder.close();
+  }, 1000);
+  assert.deepEqual(await openers, ["opened", "opened", "opened"]);
+  const store = new SqliteRunStore(file);
+  assert.equal(await store.readRun("none"), undefined);
+  store.close();
+  remove();
 });
 
 test("a SQLite store that cannot get the database within its busy timeout answers busy instead of throwing", async () => {

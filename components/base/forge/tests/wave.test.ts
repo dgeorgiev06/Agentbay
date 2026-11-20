@@ -130,6 +130,7 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     assert.ok(printed.includes("Merge is not offered: the wave's checks failed on the slices combined."), printed);
     assert.ok(printed.includes("CA proved alone with the checks: DOD-CA-2, must, passed"), printed);
     assert.ok(printed.includes("CB fails the checks alone, so its work breaks the suite"), printed);
+    assert.ok(printed.includes("on forge/wave-1, with CA, CB merged in plan order"), printed);
     assert.equal((await askedOf(root, "wave-1")).length, 1);
     assert.deepEqual(kindsAsked((await askedOf(root, "CA")).slice(-1)), ["checks"]);
     const kept = runOf(await decided(root, card, { step: "card", choice: "keep" }));

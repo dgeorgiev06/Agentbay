@@ -1,0 +1,710 @@
+{
+  "look": {
+    "leftovers": []
+  },
+  "slice": {
+    "slice": {
+      "name": "R7",
+      "kind": "mode",
+      "scope": ["components/modes/r7/**"],
+      "after": [],
+      "done": [
+        {
+          "id": "DOD-R7-1",
+          "says": "A quill that was added is counted.",
+          "level": "must",
+          "proof": {
+            "kind": "fails-first",
+            "tests": ["components/modes/r7/tests/quill.test.ts"]
+          }
+        },
+        {
+          "id": "DOD-R7-2",
+          "says": "The checks pass.",
+          "level": "must",
+          "proof": {
+            "kind": "checks"
+          }
+        }
+      ]
+    },
+    "base": "c65eba5",
+    "bugs": [],
+    "interface": ["components/modes/r7/schemas/count-request.json"],
+    "fixed": ["components/modes/r7/tests/quill.test.ts"],
+    "card": {
+      "title": "Build slice R7?",
+      "lines": [
+        {
+          "mark": "computed",
+          "words": "The slice R7",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "kind mode; base c65eba5",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "scope: components/modes/r7/**",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "after no other slice",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "DOD-R7-1, must: A quill that was added is counted.",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "held by: a test fails first",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "tests: components/modes/r7/tests/quill.test.ts",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "DOD-R7-2, must: The checks pass.",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "held by: checks",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "bugs: none will be planted",
+          "source": {
+            "step": "slice"
+          }
+        }
+      ],
+      "withheld": {
+        "build-without-interface": "The slice names its interface files.",
+        "build-over": "No earlier run left a branch of this slice.",
+        "build-over-without-interface": "No earlier run left a branch of this slice."
+      }
+    },
+    "offered": {
+      "build": true,
+      "build-without-interface": false,
+      "build-over": false,
+      "build-over-without-interface": false
+    },
+    "proved": {
+      "name": "R7",
+      "kind": "mode",
+      "scope": ["components/modes/r7/**"],
+      "after": [],
+      "done": [
+        {
+          "id": "DOD-R7-1",
+          "says": "A quill that was added is counted.",
+          "level": "must",
+          "proof": {
+            "kind": "fails-first",
+            "tests": ["components/modes/r7/tests/quill.test.ts"]
+          }
+        },
+        {
+          "id": "DOD-R7-2",
+          "says": "The checks pass.",
+          "level": "must",
+          "proof": {
+            "kind": "checks"
+          }
+        }
+      ]
+    }
+  },
+  "start": {
+    "choice": "build",
+    "content": {
+      "title": "Build slice R7?",
+      "lines": [
+        {
+          "mark": "computed",
+          "words": "The slice R7",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "kind mode; base c65eba5",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "scope: components/modes/r7/**",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "after no other slice",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "DOD-R7-1, must: A quill that was added is counted.",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "held by: a test fails first",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "tests: components/modes/r7/tests/quill.test.ts",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "DOD-R7-2, must: The checks pass.",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "held by: checks",
+          "source": {
+            "step": "slice"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "bugs: none will be planted",
+          "source": {
+            "step": "slice"
+          }
+        }
+      ],
+      "withheld": {
+        "build-without-interface": "The slice names its interface files.",
+        "build-over": "No earlier run left a branch of this slice.",
+        "build-over-without-interface": "No earlier run left a branch of this slice."
+      }
+    }
+  },
+  "begin": {
+    "choice": "build"
+  },
+  "cut": {
+    "folder": ".forge/worktrees/R7",
+    "branch": "forge/R7",
+    "commit": "c65eba5d6cb37b902499c481510891b55135ecc3"
+  },
+  "pin": {
+    "pinned": [
+      {
+        "path": "components/modes/r7/schemas/count-request.json"
+      }
+    ]
+  },
+  "declare": {
+    "files": ["components/modes/r7/scripts/quill.ts"],
+    "names": {
+      "gained": [],
+      "lost": [],
+      "changed": []
+    }
+  },
+  "round-1": {
+    "round": 1,
+    "stage": "proved",
+    "done": false,
+    "base": "c65eba5d6cb37b902499c481510891b55135ecc3",
+    "built": {
+      "outcome": "built"
+    },
+    "builder": {
+      "branch": "forge/R7",
+      "commit": "1e4f134921bbcb6397f0fbe70424d2b077306945"
+    },
+    "builtAt": "round-1",
+    "head": "b95c39ed5138f48c8c651285ef6ef7eb95804c98",
+    "branch": "forge/R7-tests-1",
+    "folder": ".forge/worktrees/R7-tests-1",
+    "declared": {
+      "files": ["components/modes/r7/scripts/quill.ts", "components/modes/r7/tests/quill.test.ts"],
+      "names": {
+        "gained": [],
+        "lost": [],
+        "changed": []
+      }
+    },
+    "tests": ["components/modes/r7/tests/quill.test.ts"],
+    "verdicts": [
+      {
+        "item": "DOD-R7-1",
+        "kind": "fails-first",
+        "verdict": "failed",
+        "detail": "The named tests fail on the head."
+      },
+      {
+        "item": "DOD-R7-2",
+        "kind": "checks",
+        "verdict": "passed",
+        "detail": "It held."
+      },
+      {
+        "item": "scope",
+        "kind": "in-scope",
+        "verdict": "passed",
+        "detail": "It held."
+      },
+      {
+        "item": "declared",
+        "kind": "as-declared",
+        "verdict": "passed",
+        "detail": "It held."
+      }
+    ],
+    "failing": {
+      "items": ["DOD-R7-1"],
+      "cases": [],
+      "withheld": 0,
+      "notListed": 0,
+      "notLoaded": []
+    },
+    "toBuilder": [],
+    "toTests": 0,
+    "conditions": [],
+    "remaining": [],
+    "leaks": []
+  },
+  "review-1": {
+    "round": 1,
+    "stage": "reviewed",
+    "done": false,
+    "base": "c65eba5d6cb37b902499c481510891b55135ecc3",
+    "built": {
+      "outcome": "built"
+    },
+    "builder": {
+      "branch": "forge/R7",
+      "commit": "1e4f134921bbcb6397f0fbe70424d2b077306945"
+    },
+    "head": "b95c39ed5138f48c8c651285ef6ef7eb95804c98",
+    "branch": "forge/R7-tests-1",
+    "declared": {
+      "files": ["components/modes/r7/scripts/quill.ts", "components/modes/r7/tests/quill.test.ts"],
+      "names": {
+        "gained": [],
+        "lost": [],
+        "changed": []
+      }
+    },
+    "tests": ["components/modes/r7/tests/quill.test.ts"],
+    "verdicts": [
+      {
+        "item": "DOD-R7-1",
+        "kind": "fails-first",
+        "verdict": "failed",
+        "detail": "The named tests fail on the head."
+      },
+      {
+        "item": "DOD-R7-2",
+        "kind": "checks",
+        "verdict": "passed",
+        "detail": "It held."
+      },
+      {
+        "item": "scope",
+        "kind": "in-scope",
+        "verdict": "passed",
+        "detail": "It held."
+      },
+      {
+        "item": "declared",
+        "kind": "as-declared",
+        "verdict": "passed",
+        "detail": "It held."
+      }
+    ],
+    "failing": {
+      "items": ["DOD-R7-1"],
+      "cases": [],
+      "withheld": 0,
+      "notListed": 0,
+      "notLoaded": []
+    },
+    "toBuilder": [],
+    "toTests": 0,
+    "conditions": [],
+    "remaining": [],
+    "leaks": [],
+    "builtAt": "round-1",
+    "pinnedAtHead": [
+      {
+        "path": "components/modes/r7/schemas/count-request.json"
+      }
+    ]
+  },
+  "round-2": {
+    "round": 2,
+    "stage": "proved",
+    "done": false,
+    "base": "c65eba5d6cb37b902499c481510891b55135ecc3",
+    "built": {
+      "outcome": "built"
+    },
+    "builder": {
+      "branch": "forge/R7-2",
+      "commit": "02e9041deac4cb2a634ed8b4c35f776d09fa12c1"
+    },
+    "builtAt": "round-2",
+    "head": "307862702152030e4e165336980e3b44d7d99bdb",
+    "branch": "forge/R7-tests-2",
+    "folder": ".forge/worktrees/R7-tests-2",
+    "declared": {
+      "files": ["components/modes/r7/scripts/quill.ts", "components/modes/r7/tests/quill.test.ts"],
+      "names": {
+        "gained": [],
+        "lost": [],
+        "changed": []
+      }
+    },
+    "tests": ["components/modes/r7/tests/quill.test.ts"],
+    "verdicts": [
+      {
+        "item": "DOD-R7-1",
+        "kind": "fails-first",
+        "verdict": "failed",
+        "detail": "The named tests fail on the head."
+      },
+      {
+        "item": "DOD-R7-2",
+        "kind": "checks",
+        "verdict": "passed",
+        "detail": "It held."
+      },
+      {
+        "item": "scope",
+        "kind": "in-scope",
+        "verdict": "passed",
+        "detail": "It held."
+      },
+      {
+        "item": "declared",
+        "kind": "as-declared",
+        "verdict": "passed",
+        "detail": "It held."
+      }
+    ],
+    "failing": {
+      "items": ["DOD-R7-1"],
+      "cases": [],
+      "withheld": 0,
+      "notListed": 0,
+      "notLoaded": []
+    },
+    "toBuilder": [],
+    "toTests": 0,
+    "conditions": [],
+    "remaining": [],
+    "leaks": []
+  },
+  "review-2": {
+    "round": 2,
+    "stage": "reviewed",
+    "done": false,
+    "base": "c65eba5d6cb37b902499c481510891b55135ecc3",
+    "built": {
+      "outcome": "built"
+    },
+    "builder": {
+      "branch": "forge/R7-2",
+      "commit": "02e9041deac4cb2a634ed8b4c35f776d09fa12c1"
+    },
+    "head": "307862702152030e4e165336980e3b44d7d99bdb",
+    "branch": "forge/R7-tests-2",
+    "declared": {
+      "files": ["components/modes/r7/scripts/quill.ts", "components/modes/r7/tests/quill.test.ts"],
+      "names": {
+        "gained": [],
+        "lost": [],
+        "changed": []
+      }
+    },
+    "tests": ["components/modes/r7/tests/quill.test.ts"],
+    "verdicts": [
+      {
+        "item": "DOD-R7-1",
+        "kind": "fails-first",
+        "verdict": "failed",
+        "detail": "The named tests fail on the head."
+      },
+      {
+        "item": "DOD-R7-2",
+        "kind": "checks",
+        "verdict": "passed",
+        "detail": "It held."
+      },
+      {
+        "item": "scope",
+        "kind": "in-scope",
+        "verdict": "passed",
+        "detail": "It held."
+      },
+      {
+        "item": "declared",
+        "kind": "as-declared",
+        "verdict": "passed",
+        "detail": "It held."
+      }
+    ],
+    "failing": {
+      "items": ["DOD-R7-1"],
+      "cases": [],
+      "withheld": 0,
+      "notListed": 0,
+      "notLoaded": []
+    },
+    "toBuilder": [],
+    "toTests": 0,
+    "conditions": [],
+    "remaining": [],
+    "leaks": [],
+    "builtAt": "round-2",
+    "pinnedAtHead": [
+      {
+        "path": "components/modes/r7/schemas/count-request.json"
+      }
+    ]
+  },
+  "round-3": {
+    "round": 3,
+    "stage": "proved",
+    "done": false,
+    "base": "c65eba5d6cb37b902499c481510891b55135ecc3",
+    "built": {
+      "outcome": "built"
+    },
+    "builder": {
+      "branch": "forge/R7-3",
+      "commit": "c6f5c89be98ea46a26b0b4b6e549dfd64d85b1db"
+    },
+    "builtAt": "round-3",
+    "head": "1cdbb0334519590928dd051e25f5161cec3197b9",
+    "branch": "forge/R7-tests-3",
+    "folder": ".forge/worktrees/R7-tests-3",
+    "declared": {
+      "files": ["components/modes/r7/scripts/quill.ts", "components/modes/r7/tests/quill.test.ts"],
+      "names": {
+        "gained": [],
+        "lost": [],
+        "changed": []
+      }
+    },
+    "tests": ["components/modes/r7/tests/quill.test.ts"],
+    "verdicts": [
+      {
+        "item": "DOD-R7-1",
+        "kind": "fails-first",
+        "verdict": "failed",
+        "detail": "The named tests fail on the head."
+      },
+      {
+        "item": "DOD-R7-2",
+        "kind": "checks",
+        "verdict": "passed",
+        "detail": "It held."
+      },
+      {
+        "item": "scope",
+        "kind": "in-scope",
+        "verdict": "passed",
+        "detail": "It held."
+      },
+      {
+        "item": "declared",
+        "kind": "as-declared",
+        "verdict": "passed",
+        "detail": "It held."
+      }
+    ],
+    "failing": {
+      "items": ["DOD-R7-1"],
+      "cases": [],
+      "withheld": 0,
+      "notListed": 0,
+      "notLoaded": []
+    },
+    "toBuilder": [],
+    "toTests": 0,
+    "conditions": [],
+    "remaining": [],
+    "leaks": []
+  },
+  "review-3": {
+    "round": 3,
+    "stage": "reviewed",
+    "done": true,
+    "base": "c65eba5d6cb37b902499c481510891b55135ecc3",
+    "built": {
+      "outcome": "built"
+    },
+    "builder": {
+      "branch": "forge/R7-3",
+      "commit": "c6f5c89be98ea46a26b0b4b6e549dfd64d85b1db"
+    },
+    "head": "1cdbb0334519590928dd051e25f5161cec3197b9",
+    "branch": "forge/R7-tests-3",
+    "declared": {
+      "files": ["components/modes/r7/scripts/quill.ts", "components/modes/r7/tests/quill.test.ts"],
+      "names": {
+        "gained": [],
+        "lost": [],
+        "changed": []
+      }
+    },
+    "tests": ["components/modes/r7/tests/quill.test.ts"],
+    "verdicts": [
+      {
+        "item": "DOD-R7-1",
+        "kind": "fails-first",
+        "verdict": "failed",
+        "detail": "The named tests fail on the head."
+      },
+      {
+        "item": "DOD-R7-2",
+        "kind": "checks",
+        "verdict": "passed",
+        "detail": "It held."
+      },
+      {
+        "item": "scope",
+        "kind": "in-scope",
+        "verdict": "passed",
+        "detail": "It held."
+      },
+      {
+        "item": "declared",
+        "kind": "as-declared",
+        "verdict": "passed",
+        "detail": "It held."
+      }
+    ],
+    "failing": {
+      "items": ["DOD-R7-1"],
+      "cases": [],
+      "withheld": 0,
+      "notListed": 0,
+      "notLoaded": []
+    },
+    "toBuilder": [],
+    "toTests": 0,
+    "conditions": [
+      {
+        "item": "DOD-R7-1",
+        "held": true,
+        "cases": ["r7quilltestts: a quill that was added is counted"]
+      },
+      {
+        "item": "DOD-R7-2",
+        "held": true,
+        "cases": ["r7quilltestts: a quill that was added is counted"]
+      }
+    ],
+    "remaining": [],
+    "leaks": [],
+    "builtAt": "round-3",
+    "practices": {
+      "tally": {
+        "held": 65,
+        "notHeld": 0,
+        "doesNotApply": 0
+      },
+      "notHeld": [],
+      "checks": 12
+    },
+    "reviewedAt": "review-3",
+    "pinnedAtHead": [
+      {
+        "path": "components/modes/r7/schemas/count-request.json"
+      }
+    ]
+  },
+  "bugs": {
+    "bugs": [],
+    "planted": 0,
+    "stayed": []
+  },
+  "prove": {
+    "verdicts": [
+      {
+        "item": "DOD-R7-1",
+        "kind": "fails-first",
+        "verdict": "failed",
+        "detail": "The named tests fail on the head."
+      },
+      {
+        "item": "DOD-R7-2",
+        "kind": "checks",
+        "verdict": "passed",
+        "detail": "It held."
+      },
+      {
+        "item": "scope",
+        "kind": "in-scope",
+        "verdict": "passed",
+        "detail": "It held."
+      },
+      {
+        "item": "declared",
+        "kind": "as-declared",
+        "verdict": "passed",
+        "detail": "It held."
+      }
+    ],
+    "judgement": [],
+    "size": [
+      {
+        "path": "components/modes/r7/scripts/quill.ts",
+        "head": 1
+      }
+    ]
+  }
+}

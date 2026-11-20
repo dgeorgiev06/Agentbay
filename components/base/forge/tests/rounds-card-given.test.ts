@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { fieldsOf } from "../../../../bay/sdk.ts";
-import { kitTemplate, listOf, printedCard, project, removeAll, shown, waitingOf } from "./kit-copy.ts";
+import { kitTemplate, listOf, printedCard, project, removeAll, shown, textAt, waitingOf } from "./kit-copy.ts";
 import { givenIn, partStarted } from "./part-run.ts";
 
 const alphabet = Array.from({ length: 26 }, (_, at) => String.fromCharCode(65 + at)).join("");
@@ -93,4 +93,21 @@ test("given three rounds and reviews of a slice still failing, whose builder cha
     "             slice WD1.",
     "checked: 0 ran, 14 computed, 5 judged",
   ]);
+});
+
+test("given one round whose final proof failed a must item: merge is withheld, and the card gives the item's reason", async () => {
+  const root = await project(template);
+  const given = await givenIn("given-r7-failed.json");
+  const runId = await partStarted(root, "forge:workflows/rounds.yaml", { trigger: {}, part: { given } });
+  const card = waitingOf(await shown(root, runId), "card");
+  const words = listOf(fieldsOf(card.card).lines).map((line) => textAt(line, "words"));
+  const failedAt = words.indexOf("DOD-R7-1, must, failed: A quill that was added is counted.");
+  assert.ok(failedAt > 0, words.join("\n"));
+  assert.equal(words[failedAt + 1], "why: the named tests fail on the head");
+  assert.deepEqual(listOf(card.choices)[0], {
+    name: "merge",
+    status: "withheld",
+    does: "Merge into the integration branch",
+    reason: "1 must item failed.",
+  });
 });

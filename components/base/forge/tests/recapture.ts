@@ -32,6 +32,14 @@ const sources: readonly Source[] = [
     capture: { before: "draw" },
   },
   {
+    file: "given-r7-failed.json",
+    test: "one-round.test.ts",
+    name: "7. a must item that failed withholds merge",
+    anchor: "const words = wordsOf(card);",
+    run: "start.id",
+    capture: { before: "draw" },
+  },
+  {
     file: "given-p2-stopped.json",
     test: "planter.test.ts",
     name: "a builder that stopped gets no planter",

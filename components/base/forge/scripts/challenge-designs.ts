@@ -1,11 +1,11 @@
-import { defineScript, fieldsOf, type Json, type ScriptContext } from "../../../../bay/sdk.ts";
+import { defineScript, fieldsOf, type Json } from "../../../../bay/sdk.ts";
 import { answerOf } from "./lib/called.ts";
 import { challengeOf, type Challenge } from "./lib/challenge-answer.ts";
-import { readIn } from "./lib/code.ts";
+import { whileOnBranch } from "./lib/branch-files.ts";
 import { differences } from "./lib/design-compare.ts";
 import { designOf } from "./lib/design-form.ts";
 import { listOf, textOf, textsOf } from "./lib/json-values.ts";
-import { designPractices, type Practice } from "./lib/practices.ts";
+import { designPractices } from "./lib/practices.ts";
 import { conditionsOf, requirementsOf, type Requirements } from "./lib/requirements-form.ts";
 
 type Asked = {
@@ -38,18 +38,6 @@ function differencesOf(asked: Asked, requirements: Requirements): readonly strin
   return differences({ first: designOf(first), second: designOf(second) }, conditionsOf(requirements));
 }
 
-type Read = {
-  readonly folder: string;
-  readonly practices: readonly Practice[];
-};
-
-async function practicesAt(context: ScriptContext, asked: Asked, job: string): Promise<Read> {
-  const cut = await answerOf(context, "worktrees.cut", { slice: `${job}-practices`, base: asked.into });
-  const folder = textOf(cut.folder);
-  const files = await Promise.all(asked.practices.map((path) => readIn(context, folder, path)));
-  return { folder, practices: files.flatMap((file) => designPractices(file.text)) };
-}
-
 function chosenDesign(asked: Asked, challenge: Challenge): Json {
   const [first = null, second = null] = asked.designs;
   switch (challenge.chosen) {
@@ -66,15 +54,16 @@ export const run = defineScript(async (input, context) => {
   const asked = askedOf(input);
   const requirements = requirementsOf(asked.requirements);
   const compared = differencesOf(asked, requirements);
-  const { folder, practices } = await practicesAt(context, asked, requirements.job);
-  const answer = await answerOf(context, "challenge", {
-    file: asked.file,
-    requirements: asked.requirements,
-    designs: [...asked.designs],
-    differences: [...compared],
-    practices: [...practices],
-  });
-  await answerOf(context, "worktrees.remove", { folder, branchAfter: "kept" });
+  const onBranch = { slice: `${requirements.job}-practices`, branch: asked.into, paths: asked.practices };
+  const answer = await whileOnBranch(context, onBranch, (files) =>
+    answerOf(context, "challenge", {
+      file: asked.file,
+      requirements: asked.requirements,
+      designs: [...asked.designs],
+      differences: [...compared],
+      practices: files.flatMap((file) => designPractices(file.text)).map((practice) => ({ ...practice })),
+    }),
+  );
   const challenge = challengeOf(answer);
   return {
     path: asked.path,

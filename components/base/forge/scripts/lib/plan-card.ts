@@ -43,7 +43,7 @@ function withheldReason(input: PlanCardInput): string | undefined {
   return reasons.length === 0 ? undefined : reasons.join(" ");
 }
 
-function sliceWords(slice: PlannedSlice, design: DesignSummary): string {
+export function sliceWords(slice: PlannedSlice, design: DesignSummary): string {
   const modules = modulesReached(slice, design);
   const module = modules.length === 0 ? "no module of the design" : `module ${joined(modules)}`;
   const meets = slice.meets ?? [];

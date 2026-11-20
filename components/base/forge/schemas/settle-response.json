@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SettleResponse",
+  "description": "The slice as the wave hands it on: its names and heads, its slice whole, its own proof and rounds, its pins and bugs, and why its own proof did not pass, or null when it did and the slice goes into the combined head.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "title",
+    "cutAs",
+    "base",
+    "head",
+    "work",
+    "slice",
+    "proof",
+    "rounds",
+    "pinned",
+    "bugs",
+    "planted",
+    "declared",
+    "built",
+    "reason"
+  ],
+  "properties": {
+    "name": {
+      "$ref": "proof@1/prove-request.json#/$defs/sliceName"
+    },
+    "title": {
+      "type": "string",
+      "maxLength": 300
+    },
+    "cutAs": {
+      "$ref": "proof@1/prove-request.json#/$defs/sliceName"
+    },
+    "base": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+    },
+    "head": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+    },
+    "work": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The branch that holds the slice's last work and tests."
+    },
+    "slice": {
+      "$ref": "proof@1/prove-request.json#/$defs/slice"
+    },
+    "proof": {
+      "type": "object",
+      "description": "The slice's own proof, filtered."
+    },
+    "rounds": {
+      "type": "object",
+      "description": "Where the rounds ended."
+    },
+    "pinned": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object"
+      }
+    },
+    "bugs": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/bug"
+      }
+    },
+    "planted": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "declared": {
+      "$ref": "proof@1/prove-request.json#/$defs/declaration"
+    },
+    "built": {
+      "type": "object",
+      "description": "How the builder ended, as built.json gives it."
+    },
+    "reason": {
+      "type": ["string", "null"],
+      "maxLength": 4000,
+      "description": "Why the slice's own proof did not pass, in the merge card's words; null when it passed."
+    }
+  }
+}

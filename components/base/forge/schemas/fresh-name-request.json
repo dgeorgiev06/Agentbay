@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FreshNameRequest",
+  "description": "The name a run wants to cut worktrees under.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["wanted"],
+  "properties": {
+    "wanted": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*$",
+      "maxLength": 40,
+      "description": "The name wanted, such as a slice's name or wave-1."
+    }
+  }
+}

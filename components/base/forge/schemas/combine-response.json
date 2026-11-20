@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CombineResponse",
+  "description": "The combined head: the slices that passed their own proof merged in plan order onto the wave's base, or where a merge did not apply, or that nothing was joined; and what proof is to be asked on it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["joined", "proving"],
+  "properties": {
+    "joined": {
+      "type": "object",
+      "description": "combined, with the head, its branch and the slices merged; conflict, with the slice whose merge did not apply, those merged before it and the sentence; or nothing to join."
+    },
+    "proving": {
+      "type": "object",
+      "description": "What proof is to be asked for the checks: not asked, or a request, the slices whose kept tests filter the answer, and the solo proofs to run when the checks fail.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "const": "not asked"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "asked", "keptOf", "whenFailed"],
+          "properties": {
+            "kind": {
+              "const": "asked"
+            },
+            "asked": {
+              "$ref": "proof@1/prove-request.json"
+            },
+            "keptOf": {
+              "type": "array",
+              "maxItems": 50,
+              "items": {
+                "$ref": "proof@1/prove-request.json#/$defs/sliceName"
+              },
+              "description": "The slices whose kept tests the answer is filtered against."
+            },
+            "whenFailed": {
+              "type": "array",
+              "maxItems": 50,
+              "description": "The solo proofs to run when the checks fail, in batches of at most the setting sideBySide.",
+              "items": {
+                "type": "array",
+                "maxItems": 8,
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

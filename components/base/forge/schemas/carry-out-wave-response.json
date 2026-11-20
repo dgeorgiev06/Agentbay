@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CarryOutWaveResponse",
+  "description": "What was done: the combined head merged into into, or every slice's branches kept. Either way forge has forgotten every slice's kept tests.",
+  "type": "object",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["choice", "merged", "into", "slices"],
+      "properties": {
+        "choice": {
+          "const": "merge"
+        },
+        "merged": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+        },
+        "into": {
+          "type": "string",
+          "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+          "maxLength": 255
+        },
+        "slices": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "proof@1/prove-request.json#/$defs/sliceName"
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["choice", "kept"],
+      "properties": {
+        "choice": {
+          "const": "keep"
+        },
+        "kept": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "string",
+            "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+            "maxLength": 255
+          }
+        }
+      }
+    }
+  ]
+}

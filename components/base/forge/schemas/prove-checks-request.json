@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProveChecksRequest",
+  "description": "What proof is to be asked for a head's checks and whole test run, as combine gives it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["proving"],
+  "properties": {
+    "proving": {
+      "type": "object",
+      "description": "What proof is to be asked for the checks: not asked, or a request, the slices whose kept tests filter the answer, and the solo proofs to run when the checks fail.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "const": "not asked"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "asked", "keptOf", "whenFailed"],
+          "properties": {
+            "kind": {
+              "const": "asked"
+            },
+            "asked": {
+              "$ref": "proof@1/prove-request.json"
+            },
+            "keptOf": {
+              "type": "array",
+              "maxItems": 50,
+              "items": {
+                "$ref": "proof@1/prove-request.json#/$defs/sliceName"
+              },
+              "description": "The slices whose kept tests the answer is filtered against."
+            },
+            "whenFailed": {
+              "type": "array",
+              "maxItems": 50,
+              "description": "The solo proofs to run when the checks fail, in batches of at most the setting sideBySide.",
+              "items": {
+                "type": "array",
+                "maxItems": 8,
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

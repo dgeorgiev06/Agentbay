@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FreshNameResponse",
+  "description": "A name no earlier run or attempt was given for the same wanted name.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*$",
+      "maxLength": 64,
+      "description": "The wanted name the first time it is asked for, and the wanted name with -again- and the count of times it was asked for after that, such as TD1-again-2."
+    }
+  }
+}

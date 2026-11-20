@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DrawWaveRequest",
+  "description": "Everything the wave's merge card is drawn from: the wave, its slices as settle handed them on, the combined head, proof's answer for its checks, and the solo proofs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["wave", "slices", "combined", "proved", "alone"],
+  "properties": {
+    "wave": {
+      "type": "object",
+      "description": "The wave's start."
+    },
+    "slices": {
+      "type": "array",
+      "maxItems": 50,
+      "description": "The slices as settle answered for each.",
+      "items": {
+        "type": "array",
+        "maxItems": 8,
+        "items": {
+          "type": "object",
+          "description": "A slice of the wave as the step settle handed it on, the last step of the slice's item."
+        }
+      }
+    },
+    "combined": {
+      "type": "object",
+      "description": "combine's answer."
+    },
+    "proved": {
+      "type": "object",
+      "description": "prove-checks' answer for the combined head."
+    },
+    "alone": {
+      "type": "array",
+      "maxItems": 50,
+      "description": "prove-checks' answer for each slice proved alone, in the order combine listed them.",
+      "items": {
+        "type": "array",
+        "maxItems": 8,
+        "items": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

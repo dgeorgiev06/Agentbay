@@ -141,6 +141,95 @@ actions:
     effects: [read, write, delete]
     run:
       - script: scripts/carry-out.ts
+  fresh-name:
+    description: When a run is to cut worktrees under a name, it gives the name wanted the first time and the name with -again- and a count every later time, so a rerun or a later run never meets the branches an earlier one left.
+    input: schemas/fresh-name-request.json
+    output: schemas/fresh-name-response.json
+    effects: [read, write]
+    run:
+      - script: scripts/fresh-name.ts
+  attempt:
+    description: When a slice's item of a wave starts, or starts again after the owner chose a rerun, it gives the name to cut the slice's worktrees under, new for each attempt, and sets aside and removes the worktrees an earlier attempt left, keeping their branches.
+    input: schemas/fresh-name-request.json
+    output: schemas/attempt-response.json
+    effects: [read, write, delete]
+    run:
+      - script: scripts/attempt.ts
+  read-on-branch:
+    description: When a script needs files as they are at a commit, it reads them in a worktree of their own and removes it, and its answer holds the texts, so a replay of the calling script reads the same texts after the worktree is gone.
+    input: schemas/read-on-branch-request.json
+    output: schemas/read-on-branch-response.json
+    effects: [read, write, delete]
+    run:
+      - script: scripts/read-on-branch.ts
+  wave:
+    description: When the owner asks for a wave of a committed plan, it reads the plan at the head of the integration branch, works out its waves as forge.waves does, refuses with every reason a wave that cannot be built, and draws the wave's start card and its slice requests in batches.
+    input: schemas/wave-request.json
+    output: schemas/wave-response.json
+    effects: [read, write, delete]
+    run:
+      - script: scripts/wave.ts
+  wave-begin:
+    description: When the owner has answered the wave's start card, the run goes on to build the slices on build and ends on stop; if the run fails later, the kernel undoes it by forgetting every slice's kept tests.
+    input: schemas/wave-begin-request.json
+    output: schemas/wave-begin-response.json
+    effects: [read]
+    undo: forget-wave
+    run:
+      - script: scripts/wave-begin.ts
+  forget-wave:
+    description: When a wave's run has failed, it forgets the kept tests and findings of every slice of the wave.
+    input: schemas/forget-wave-request.json
+    output: schemas/forget-wave-response.json
+    effects: [read, write, delete]
+    run:
+      - script: scripts/forget-wave.ts
+  slice-proof:
+    description: When a slice of a wave is to be judged after its rounds and its planter, proof judges the last head with the slice whole but for its checks items, which the wave proves once; the answer is kept packed, and only what of it quotes no kept test is handed on.
+    input: schemas/slice-proof-request.json
+    output: schemas/slice-proof-response.json
+    effects: [read, write, network, spend, delete]
+    calledOutputs: kept-packed
+    scriptTimeLimitSeconds: 1800
+    run:
+      - script: scripts/slice-proof.ts
+  settle:
+    description: When a slice of a wave has been proved, it hands the slice on with its rounds, pins, bugs and own proof, and says why its own proof did not pass, or that it goes into the combined head.
+    input: schemas/settle-request.json
+    output: schemas/settle-response.json
+    effects: [read]
+    run:
+      - script: scripts/settle.ts
+  combine:
+    description: When a wave's slices are settled, it merges each that passed its own proof onto the wave's base in plan order, on a branch of the wave's own, and stops at a merge that does not apply, naming both sides.
+    input: schemas/combine-request.json
+    output: schemas/combine-response.json
+    effects: [read, write, delete]
+    run:
+      - script: scripts/combine.ts
+  prove-checks:
+    description: When a head's checks and whole test run are to be judged, the wave's combined head or one slice alone, proof is asked once; the answer is kept packed and filtered against the kept tests of the slices named, and when a checks item failed, the solo proofs are handed on.
+    input: schemas/prove-checks-request.json
+    output: schemas/prove-checks-response.json
+    effects: [read, write, network, spend, delete]
+    calledOutputs: kept-packed
+    scriptTimeLimitSeconds: 3600
+    run:
+      - script: scripts/prove-checks.ts
+  draw-wave:
+    description: When a wave's combined head has been proved, it draws the wave's merge card, with every slice's block, the combined head's checks and the solo proofs, and whether merge is offered.
+    input: schemas/draw-wave-request.json
+    output: schemas/draw-wave-response.json
+    effects: [read]
+    run:
+      - script: scripts/draw-wave.ts
+  carry-out-wave:
+    description: When the owner has chosen on the wave's merge card, it merges the combined head into the integration branch on merge and keeps every branch on keep, and forgets every slice's kept tests either way.
+    input: schemas/carry-out-wave-request.json
+    output: schemas/carry-out-wave-response.json
+    effects: [read, write, delete]
+    run:
+      - script: scripts/carry-out-wave.ts
   design-start:
     description: When a requirements file has been checked for a design, it stops the run on a refused file with every problem and its line, and draws the first card, on which the owner chooses the light or the full path.
     input: schemas/design-start-request.json
@@ -252,5 +341,6 @@ actions:
 workflows:
   - workflows/one-slice.yaml
   - workflows/rounds.yaml
+  - workflows/wave.yaml
   - workflows/design.yaml
   - workflows/plan.yaml

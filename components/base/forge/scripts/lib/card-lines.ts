@@ -1,4 +1,4 @@
-export type ComputedBy = "slice" | "start" | "prove" | "draw";
+export type ComputedBy = "slice" | "start" | "prove" | "draw" | "wave";
 
 export type CardLine =
   | {
@@ -39,6 +39,12 @@ export function shortened(text: string, longest: number): string {
 
 export function safeText(text: string): string {
   return shortened(text, longestShown);
+}
+
+const shortCommitDigits = 7;
+
+export function shortCommit(commit: string): string {
+  return commit.slice(0, shortCommitDigits);
 }
 
 export function counted(count: number, noun: string): string {

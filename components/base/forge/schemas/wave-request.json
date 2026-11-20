@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WaveRequest",
+  "description": "The wave the owner asks forge to build, and the branch whose head holds the plan and the earlier waves' merges.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["asked", "into"],
+  "properties": {
+    "asked": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan", "wave"],
+      "description": "The workflow's trigger.",
+      "properties": {
+        "plan": {
+          "$ref": "proof@1/prove-request.json#/$defs/path",
+          "description": "The committed plan, relative to the project, such as docs/plans/0024-forge-whole.yaml."
+        },
+        "wave": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "The wave's number, as forge.waves gives it."
+        }
+      }
+    },
+    "into": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The integration branch, forge's setting into."
+    }
+  }
+}

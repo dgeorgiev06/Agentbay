@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WaveBeginRequest",
+  "description": "The choice the owner took on the wave's start card, and the wave's slices.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["choice", "slices"],
+  "properties": {
+    "choice": {
+      "enum": ["build", "stop"],
+      "description": "build goes on to build the slices; stop ends the run before anything is cut."
+    },
+    "slices": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/sliceName"
+      },
+      "description": "The wave's slices, whose kept tests are forgotten if the run fails after this step."
+    }
+  }
+}

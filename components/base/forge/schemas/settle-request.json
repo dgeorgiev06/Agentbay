@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SettleRequest",
+  "description": "What one slice's item of a wave made: the request, the step slice's answer, the name its worktrees were cut under, the pins at the base, where the rounds ended, the bugs and its own proof.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["request", "slice", "cutAs", "pinned", "rounds", "bugs", "proof"],
+  "properties": {
+    "request": {
+      "type": "object",
+      "description": "The slice request the item was given."
+    },
+    "slice": {
+      "type": "object",
+      "description": "The step slice's answer for the slice."
+    },
+    "cutAs": {
+      "$ref": "proof@1/prove-request.json#/$defs/sliceName"
+    },
+    "pinned": {
+      "type": "array",
+      "maxItems": 200,
+      "description": "The interface files' hashes at the base, as pin answered them.",
+      "items": {
+        "type": "object"
+      }
+    },
+    "rounds": {
+      "type": "object",
+      "description": "Where the rounds stood after the last review, as rounds.json gives it."
+    },
+    "bugs": {
+      "type": "object",
+      "description": "The bugs proof planted and how many the planter wrote, as bugs answered."
+    },
+    "proof": {
+      "type": "object",
+      "description": "The slice's own proof, without its checks items, filtered against its kept tests."
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReadOnBranchRequest",
+  "description": "Which files to read at a commit, and the name of the worktree to read them in.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["cutAs", "base", "paths"],
+  "properties": {
+    "cutAs": {
+      "$ref": "proof@1/prove-request.json#/$defs/sliceName",
+      "description": "The name of the worktree cut for the reading, removed after it; its branch stays."
+    },
+    "base": {
+      "$ref": "proof@1/prove-request.json#/$defs/commit",
+      "description": "The commit or branch to read at."
+    },
+    "paths": {
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "The files to read, relative to the project."
+    }
+  }
+}

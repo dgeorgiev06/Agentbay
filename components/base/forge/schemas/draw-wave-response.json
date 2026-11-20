@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DrawWaveResponse",
+  "description": "The wave's merge card and whether merge is offered, with the reason on the card when it is not.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["card", "merge"],
+  "properties": {
+    "card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "lines", "withheld"],
+      "description": "The wave's merge card: the answer, each slice's block, then the wave's own lines.",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400
+        },
+        "lines": {
+          "type": "array",
+          "maxItems": 4000,
+          "description": "One line for each thing the card says, wrapped by the kernel to 44 columns.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["mark", "words", "source"],
+            "properties": {
+              "mark": {
+                "const": "computed",
+                "description": "Every line of this card comes from a step that ran no skill."
+              },
+              "words": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000,
+                "description": "What the owner reads, worked out by script."
+              },
+              "source": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["step"],
+                "properties": {
+                  "step": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "description": "The step of the wave that the line cites."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "withheld": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "merge": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000,
+              "description": "Why merge is withheld, as one sentence or more."
+            }
+          },
+          "description": "The reason for merge when it is withheld; empty when merge is offered."
+        }
+      }
+    },
+    "merge": {
+      "type": "boolean",
+      "description": "Offered only when at least one slice passed its own proof, every such slice merged cleanly into the combined head, and the wave's checks passed there."
+    }
+  }
+}

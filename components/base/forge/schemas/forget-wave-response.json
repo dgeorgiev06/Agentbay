@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ForgetWaveResponse",
+  "description": "The slices whose kept tests and findings forge forgot.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["forgotten"],
+  "properties": {
+    "forgotten": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/sliceName"
+      }
+    }
+  }
+}

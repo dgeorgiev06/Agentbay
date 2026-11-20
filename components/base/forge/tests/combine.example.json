@@ -1,0 +1,238 @@
+{
+  "input": {
+    "wave": {
+      "name": "wave-1",
+      "plan": "docs/plans/0031-one.yaml",
+      "wave": 1,
+      "into": "integration",
+      "base": "875d936a1b2c3d4e5f60718293a4b5c6d7e8f901",
+      "card": {
+        "title": "Build wave 1 of 0031-one.yaml?",
+        "lines": [
+          {
+            "mark": "computed",
+            "words": "1 slice of wave 1 of 1 in docs/plans/0031-one.yaml",
+            "source": {
+              "step": "wave"
+            }
+          },
+          {
+            "mark": "computed",
+            "words": "base 875d936, the head of integration",
+            "source": {
+              "step": "wave"
+            }
+          }
+        ]
+      },
+      "slices": ["ONE"],
+      "batches": [
+        [
+          {
+            "planned": {
+              "title": "One is counted once",
+              "slice": {
+                "name": "ONE",
+                "kind": "mode",
+                "scope": ["src/**", "tests/**"],
+                "after": [],
+                "done": [
+                  {
+                    "id": "DOD-ONE-1",
+                    "says": "The checks and the tests pass.",
+                    "level": "must",
+                    "proof": {
+                      "kind": "checks"
+                    }
+                  },
+                  {
+                    "id": "DOD-ONE-2",
+                    "says": "A test shows the change.",
+                    "level": "must",
+                    "proof": {
+                      "kind": "fails-first",
+                      "tests": ["tests/one.test.ts"]
+                    }
+                  },
+                  {
+                    "id": "DOD-ONE-3",
+                    "says": "The words tell the owner what to do.",
+                    "level": "should"
+                  }
+                ]
+              }
+            },
+            "base": "875d936a1b2c3d4e5f60718293a4b5c6d7e8f901",
+            "bugs": [],
+            "interface": ["schemas/one-request.json"]
+          }
+        ]
+      ]
+    },
+    "slices": [
+      [
+        {
+          "name": "ONE",
+          "title": "One is counted once",
+          "cutAs": "ONE",
+          "base": "875d936a1b2c3d4e5f60718293a4b5c6d7e8f901",
+          "head": "9e41c2a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6",
+          "work": "forge/ONE-tests-1",
+          "slice": {
+            "name": "ONE",
+            "kind": "mode",
+            "scope": ["src/**", "tests/**"],
+            "after": [],
+            "done": [
+              {
+                "id": "DOD-ONE-1",
+                "says": "The checks and the tests pass.",
+                "level": "must",
+                "proof": {
+                  "kind": "checks"
+                }
+              },
+              {
+                "id": "DOD-ONE-2",
+                "says": "A test shows the change.",
+                "level": "must",
+                "proof": {
+                  "kind": "fails-first",
+                  "tests": ["tests/one.test.ts"]
+                }
+              },
+              {
+                "id": "DOD-ONE-3",
+                "says": "The words tell the owner what to do.",
+                "level": "should"
+              }
+            ]
+          },
+          "proof": {
+            "verdicts": [
+              {
+                "item": "DOD-ONE-2",
+                "kind": "fails-first",
+                "verdict": "failed",
+                "detail": "The named tests fail on the head.",
+                "cases": {
+                  "failures": [
+                    {
+                      "name": "one is counted once",
+                      "file": "tests/one.test.ts",
+                      "message": "",
+                      "charactersCut": 0
+                    },
+                    {
+                      "name": "two are counted twice",
+                      "file": "tests/one.test.ts",
+                      "message": "expected 2, got 1",
+                      "charactersCut": 0
+                    }
+                  ],
+                  "failuresNotListed": 0,
+                  "notLoaded": []
+                }
+              },
+              {
+                "item": "scope",
+                "kind": "in-scope",
+                "verdict": "passed",
+                "detail": "Every changed path is in the scope: 2 of 2."
+              },
+              {
+                "item": "declared",
+                "kind": "as-declared",
+                "verdict": "passed",
+                "detail": "What changed is as declared: 2 files and 0 action names."
+              }
+            ],
+            "judgement": [
+              {
+                "id": "DOD-ONE-3",
+                "says": "The words tell the owner what to do.",
+                "level": "should"
+              }
+            ],
+            "size": [
+              {
+                "path": "src/one.txt",
+                "base": 1,
+                "head": 2
+              },
+              {
+                "path": "tests/one.test.ts",
+                "head": 9
+              }
+            ]
+          },
+          "rounds": {
+            "round": 1,
+            "stage": "reviewed",
+            "done": true,
+            "base": "875d936a1b2c3d4e5f60718293a4b5c6d7e8f901",
+            "built": {
+              "outcome": "built"
+            },
+            "builder": {
+              "branch": "forge/ONE",
+              "commit": "9e41c2a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6"
+            },
+            "head": "9e41c2a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6",
+            "branch": "forge/ONE-tests-1",
+            "declared": {
+              "files": ["src/one.txt", "tests/one.test.ts"],
+              "names": {
+                "gained": [],
+                "lost": [],
+                "changed": []
+              }
+            },
+            "tests": ["tests/one.test.ts"],
+            "verdicts": [],
+            "failing": {
+              "items": [],
+              "cases": [],
+              "withheld": 0,
+              "notListed": 0,
+              "notLoaded": []
+            },
+            "toBuilder": [],
+            "toTests": 0,
+            "conditions": [],
+            "remaining": [],
+            "leaks": []
+          },
+          "pinned": [
+            {
+              "path": "schemas/one-request.json",
+              "hash": "0123456789abcdef"
+            }
+          ],
+          "bugs": [],
+          "planted": 0,
+          "declared": {
+            "files": ["src/one.txt", "tests/one.test.ts"],
+            "names": {
+              "gained": [],
+              "lost": [],
+              "changed": []
+            }
+          },
+          "built": {
+            "outcome": "built"
+          },
+          "reason": "1 must item failed."
+        }
+      ]
+    ]
+  },
+  "output": {
+    "joined": {
+      "kind": "nothing to join"
+    },
+    "proving": {
+      "kind": "not asked"
+    }
+  }
+}

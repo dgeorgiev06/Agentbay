@@ -72,7 +72,10 @@ const standInScript = [
   "  if (!written.ok) {",
   "    fail(written.message);",
   "  }",
-  "  const read = await context.files.read(`.stand-in/${name}.json`);",
+  "  const done = fieldsOf(fieldsOf(input).slice ?? null).done;",
+  "  const kinds = (Array.isArray(done) ? done : []).map((item) => fieldsOf(fieldsOf(item).proof ?? null).kind);",
+  '  const asKinds = await context.files.read(`.stand-in/${name}.${[...new Set(kinds)].sort().join("-")}.json`);',
+  "  const read = asKinds.ok ? asKinds : await context.files.read(`.stand-in/${name}.json`);",
   "  return read.ok ? JSON.parse(read.value) : fail(read.message);",
   "});",
   "",
@@ -98,7 +101,7 @@ export function jsonOf(text: string): Json {
   return read.value;
 }
 
-async function configForTheTest(): Promise<string> {
+async function configForTheTest(forge: Json): Promise<string> {
   const config = fieldsOf(jsonOf(await readFile(join(kit, "agentbay.config.yaml"), "utf8")));
   const settings = fieldsOf(config.settings ?? null);
   return JSON.stringify({
@@ -106,7 +109,7 @@ async function configForTheTest(): Promise<string> {
     bindings: { ...fieldsOf(config.bindings ?? null), proof: "proof-stand-in" },
     approvals: { from: ["terminal", "chat"] },
     skillSteps: { run: "without-the-hook" },
-    settings: { ...settings, forge: { ...fieldsOf(settings.forge ?? null), into, practices } },
+    settings: { ...settings, forge: { ...fieldsOf(settings.forge ?? null), into, practices, ...fieldsOf(forge) } },
   });
 }
 
@@ -116,14 +119,14 @@ async function madeFolder(prefix: string): Promise<string> {
   return folder;
 }
 
-export async function kitTemplate(): Promise<string> {
+export async function kitTemplate(forge: Json = {}): Promise<string> {
   const folder = await madeFolder("agentbay-rounds-");
   const files = kitFiles();
   for (const path of files) {
     await mkdir(dirname(join(folder, path)), { recursive: true });
     await cp(join(kit, path), join(folder, path));
   }
-  await writeFile(join(folder, "agentbay.config.yaml"), await configForTheTest(), "utf8");
+  await writeFile(join(folder, "agentbay.config.yaml"), await configForTheTest(forge), "utf8");
   await mkdir(join(folder, standIn, "scripts"), { recursive: true });
   await writeFile(join(folder, standIn, "mode.yaml"), standInManifest, "utf8");
   await writeFile(join(folder, standIn, "scripts/prove.ts"), standInScript, "utf8");
@@ -330,6 +333,7 @@ export type Players = {
   readonly challenger?: Played;
   readonly planner?: Played;
   readonly planChallenger?: Played;
+  readonly declarer?: Played;
 };
 
 export type Asked = {
@@ -342,7 +346,7 @@ export function actionOf(task: Json): string {
   return textAt(task, "agent").replace(/^agentbay-forge-/, "");
 }
 
-function playerOf(players: Players, action: string): Played | undefined {
+export function playerOf(players: Players, action: string): Played | undefined {
   switch (action) {
     case "write-tests":
       return players.tests;
@@ -360,6 +364,8 @@ function playerOf(players: Players, action: string): Played | undefined {
       return players.planner;
     case "challenge-plan":
       return players.planChallenger;
+    case "declare":
+      return players.declarer;
     default:
       throw new Error(`No player answers the action ${action}.`);
   }

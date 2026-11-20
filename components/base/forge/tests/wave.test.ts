@@ -85,7 +85,7 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
       reviewed: async (name) => (name === "TD2" ? provedAs(root, "TD2", ownFailed("TD2")) : undefined),
     });
     const first = await playedSideBySide(root, start.id, players);
-    assert.ok(first.mostAtOnce >= 2, JSON.stringify(first.asked.map((each) => each.step)));
+    assert.equal(first.mostAtOnce, 3, JSON.stringify(first.asked.map((each) => each.step)));
     const asking = await shown(root, start.id);
     const question = textAt(fieldsOf(asking).waiting ?? null, "question");
     assert.equal(textAt(fieldsOf(asking).waiting ?? null, "reason"), "owner", JSON.stringify(asking));

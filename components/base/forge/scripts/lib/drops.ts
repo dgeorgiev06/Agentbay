@@ -57,16 +57,18 @@ export async function removedThenDropped(context: ScriptContext, made: Made, int
   return droppedAll(context, [made.branch], into);
 }
 
-async function leftAt(context: ScriptContext, branch: string): Promise<Dropped | undefined> {
-  const answer = await answerOf(context, "worktrees.drop-branch", { branch, into: branch });
-  const { commit } = answer;
-  return answer.how === "refused" && typeof commit === "string" ? { branch, commit } : undefined;
+function leftOf(answer: JsonFields): Dropped | undefined {
+  const branch = textOf(answer.branch);
+  if (answer.how === "refused") {
+    return fail(`forge could not look for ${branch}, which an earlier run may have left: ${textOf(answer.reason)}`);
+  }
+  return answer.how === "found" ? { branch, commit: textOf(answer.commit) } : undefined;
 }
 
 export async function leftOver(context: ScriptContext, branches: readonly string[]): Promise<readonly Dropped[]> {
   const found: Dropped[] = [];
   for (const branch of branches) {
-    const left = await leftAt(context, branch);
+    const left = leftOf(await answerOf(context, "worktrees.find-branch", { branch }));
     found.push(...(left === undefined ? [] : [left]));
   }
   return found;

@@ -1,6 +1,6 @@
 # git-worktrees
 
-The mode `git-worktrees` implements `worktrees@1`. It is the only mode that runs git. It makes a worktree and branch for each slice, says where a worktree stands, commits a slice's work to its branch, merges a slice's branch, sets a slice's work aside, drops a branch it made, and makes throwaway copies of commits and applies patches to them.
+The mode `git-worktrees` implements `worktrees@1`. It is the only mode that runs git. It makes a worktree and branch for each slice, says where a worktree stands, commits a slice's work to its branch, merges a slice's branch, sets a slice's work aside, drops a branch it made, says where a branch it made points, and makes throwaway copies of commits and applies patches to them.
 
 ## Actions
 
@@ -17,10 +17,11 @@ The mode `git-worktrees` implements `worktrees@1`. It is the only mode that runs
 | `commit` | Commits a worktree's changed and untracked files to its own branch `forge/<slice>`, with the message the caller gives, and the files stay in the worktree, which is then clean. Ignored files stay out of the commit and in the worktree. A link is committed as a link; git never follows it. With nothing changed it makes no commit and gives the branch's head. Refused when the worktree's head is not its branch's head. |
 | `apply` | Applies a patch to a copy, all of it or nothing, and gives the paths it names. The change is one more commit of the copy's repository, so the copy stays clean. Never a worktree. |
 | `drop-branch` | Deletes a branch the mode made, `forge/<slice>` or `forge/wip/<slice>/<n>`, merged or not, and answers `dropped` with the commit it pointed at, so its work can be found again (`git branch <name> <commit>` brings it back until git collects it). A branch that does not exist is the answer `not-there`, so dropping twice is safe. It answers `refused` with the commit and a sentence, and changes nothing, for a name of another shape under `forge/`, the branch named as `into`, the branch the project's own folder has checked out, and a branch a worktree of the mode still has: remove that worktree first, with `branchAfter` `kept`. A branch outside `forge/` is refused by the schema before any run. A branch checked out in a worktree the mode did not make is refused by git, and the failure quotes it. |
+| `find-branch` | Answers `found` with the commit a branch the mode made, `forge/<slice>` or `forge/wip/<slice>/<n>`, points at, whether a worktree has it or not, or `not-there` when there is no such branch. It changes nothing. A name of another shape under `forge/` is answered `refused` with a sentence, and the branch is not read. |
 
 ## What it refuses
 
-- A slice or copy name that is not letters, digits and dashes; a branch to drop that is not `forge/` and such names split by single slashes; a commit with `..` or a leading dash; a path that is absolute, has `..`, or starts with a dash. The interface's schemas hold these rules, so the kernel refuses such a request before any step runs.
+- A slice or copy name that is not letters, digits and dashes; a branch to drop or find that is not `forge/` and such names split by single slashes; a commit with `..` or a leading dash; a path that is absolute, has `..`, or starts with a dash. The interface's schemas hold these rules, so the kernel refuses such a request before any step runs.
 - A folder it did not make. Each folder it makes is recorded in its database; `status`, `overlay`, `remove`, `merge`, `set-aside`, `commit` and `apply` look the folder up there, and say so when the folder is recorded but no longer exists.
 - A copy that is no longer the top of a repository of its own, such as one whose `.git` was removed or now points at another repository. `overlay` and `apply` check this before git changes anything in it, so a tool run in the copy cannot make the mode write to the project's repository.
 - A repository whose own configuration names a filter or a merge driver, and a copy whose own configuration names one. One named in `.git/info/attributes` would run its command, and the mode cannot switch it off by name.
@@ -64,7 +65,7 @@ Each listed command says the effects it can have with any arguments a script add
 
 | Action | Effects | Why |
 |---|---|---|
-| `status`, `changed` | read | They run only commands that read. |
+| `status`, `changed`, `find-branch` | read | They run only commands that read. |
 | `cut` | read, write, delete | It runs `switch-branch`. |
 | `remove`, `merge`, `set-aside`, `commit`, `apply`, `drop-branch` | read, write, delete | They remove worktrees, branches, files or rows of the mode's database. |
 | `copy`, `overlay` | read, write, network, spend, delete | They run `restore-paths`. |

@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -143,26 +144,66 @@ async function kitCopy(): Promise<string> {
   return copy;
 }
 
-async function recaptured(copy: string, source: Source): Promise<void> {
+export function askedFiles(wanted: readonly string[]): readonly string[] {
+  const known = sources.map((source) => source.file);
+  const unknown = wanted.filter((file) => !known.includes(file));
+  if (unknown.length > 0) {
+    throw new Error(`recapture makes only ${known.join(", ")}; it has no case for ${unknown.join(", ")}.`);
+  }
+  return wanted.length === 0 ? known : wanted;
+}
+
+export function notRemade(asked: readonly string[], written: readonly string[]): string | undefined {
+  const missing = asked.filter((file) => !written.includes(file));
+  return missing.length === 0
+    ? undefined
+    : `recapture did not write ${missing.join(", ")}: its case was skipped or never reached the capture, so the ` +
+        "file is as it was.";
+}
+
+export async function recaptured(copy: string, source: Source): Promise<readonly string[]> {
   const test = join(copy, "components/base/forge/tests", source.test);
-  const into = join(import.meta.dirname, source.file);
+  const into = join(copy, "recaptured", source.file);
+  await mkdir(dirname(into), { recursive: true });
   await writeFile(test, withCapture(await readFile(test, "utf8"), source, into), "utf8");
   ranCase(copy, test, source.name);
+  if (!existsSync(into)) {
+    return [];
+  }
+  await cp(into, join(import.meta.dirname, source.file));
+  process.stdout.write(`recaptured ${source.file} from ${source.test}: ${source.name}\n`);
+  return [source.file];
+}
+
+export async function recapturedIn(copy: string, chosen: readonly Source[]): Promise<void> {
+  const written: string[] = [];
+  for (const source of chosen) {
+    written.push(...(await recaptured(copy, source)));
+  }
+  const files = written.map((file) => join(import.meta.dirname, file));
+  if (files.length > 0) {
+    run(kit, "npx", ["prettier", "--config", "components/base/typescript/prettier.json", "--write", ...files]);
+  }
+  const missing = notRemade(
+    chosen.map((source) => source.file),
+    written,
+  );
+  if (missing !== undefined) {
+    throw new Error(missing);
+  }
 }
 
 async function recapturedAll(wanted: readonly string[]): Promise<void> {
-  const chosen = sources.filter((source) => wanted.length === 0 || wanted.includes(source.file));
+  const asked = askedFiles(wanted);
   const copy = await kitCopy();
   try {
-    for (const source of chosen) {
-      await recaptured(copy, source);
-      process.stdout.write(`recaptured ${source.file} from ${source.test}: ${source.name}\n`);
-    }
+    await recapturedIn(
+      copy,
+      sources.filter((each) => asked.includes(each.file)),
+    );
   } finally {
     await rm(copy, { recursive: true, force: true });
   }
-  const files = chosen.map((source) => join(import.meta.dirname, source.file));
-  run(kit, "npx", ["prettier", "--config", "components/base/typescript/prettier.json", "--write", ...files]);
 }
 
 async function main(words: readonly string[]): Promise<void> {

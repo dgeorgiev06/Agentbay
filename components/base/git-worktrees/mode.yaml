@@ -157,3 +157,8 @@ actions:
     effects: [read, write, delete]
     run:
       - script: scripts/drop-branch.ts
+  find-branch:
+    description: When a caller needs to know whether a branch the mode made, forge/<slice> or forge/wip/<slice>/<n>, is there and the commit it points at; it changes nothing, and refuses a branch of another shape under forge/ without reading it.
+    effects: [read]
+    run:
+      - script: scripts/find-branch.ts

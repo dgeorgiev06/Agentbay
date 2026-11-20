@@ -4,7 +4,8 @@ export type ShelfVariant =
   | "keeps a changed worktree"
   | "removes a changed worktree"
   | "drops a branch a live worktree has"
-  | "fails on a branch not there";
+  | "fails on a branch not there"
+  | "finds a branch it does not make";
 
 export const shelf = "shelf";
 
@@ -13,6 +14,8 @@ export const wrongShelf = "shelf-wrong";
 export const liveDroppingShelf = "shelf-drops-live";
 
 export const absentFailingShelf = "shelf-fails-absent";
+
+export const strayFindingShelf = "shelf-finds-stray";
 
 export const casesThatNeedMergeSetAsideOrApply: readonly string[] = [
   "apply changes exactly the paths a patch names in the copy, and gives them in the patch's order",
@@ -48,6 +51,7 @@ const examples: readonly string[] = [
   "commit",
   "apply",
   "drop-branch",
+  "find-branch",
 ];
 
 const exampleTexts: Readonly<Record<string, string>> = {
@@ -154,6 +158,15 @@ const exampleTexts: Readonly<Record<string, string>> = {
   }
 }
 `,
+  "find-branch": String.raw`{
+  "input": { "branch": "forge/mail-source-planter" },
+  "output": {
+    "how": "found",
+    "branch": "forge/mail-source-planter",
+    "commit": "2d4f6a8c0e2b4d6f8a0c2e4b6d8f0a2c4e6b8d0f"
+  }
+}
+`,
 };
 
 const migration = String.raw`create table folders (
@@ -189,6 +202,8 @@ export const marker = ".shelf";
 const alwaysIgnored: readonly string[] = [".agentbay", ".forge", ".shelf"];
 
 const branchesFile = ".shelf/branches.json";
+
+export const madeByTheShelf = /^forge\/(wip\/[A-Za-z0-9][A-Za-z0-9-]*\/[1-9][0-9]*|(?!wip$)[A-Za-z0-9][A-Za-z0-9-]*)$/;
 
 const timeLimitSeconds = 60;
 
@@ -572,9 +587,7 @@ export const run = defineScript(async (input, context) => {
 `;
 
 const dropBranchScript = String.raw`import { defineScript, fieldsOf, type ScriptContext } from "../../../../bay/sdk.ts";
-import { answered, branches, branchOf, folderExists, textField, writeBranches } from "./lib/shelf.ts";
-
-const madeByTheShelf = /^forge\/(wip\/[A-Za-z0-9][A-Za-z0-9-]*\/[1-9][0-9]*|(?!wip$)[A-Za-z0-9][A-Za-z0-9-]*)$/;
+import { answered, branches, branchOf, folderExists, madeByTheShelf, textField, writeBranches } from "./lib/shelf.ts";
 
 async function liveWorktreeOf(context: ScriptContext, branch: string): Promise<string | undefined> {
   const rows = await answered(context.db.query("select folder from folders where kind = 'worktree'", []));
@@ -611,9 +624,22 @@ export const run = defineScript(async (input, context) => {
 });
 `;
 
+const findBranchScript = String.raw`import { defineScript } from "../../../../bay/sdk.ts";
+import { branches, madeByTheShelf, textField } from "./lib/shelf.ts";
+
+export const run = defineScript(async (input, context) => {
+  const branch = textField(input, "branch");
+  if (!madeByTheShelf.test(branch)) {
+    return { how: "refused", branch, reason: "The shelf does not make the branch " + branch + ", so it does not look at it." };
+  }
+  const commit = (await branches(context))[branch];
+  return commit === undefined ? { how: "not-there", branch } : { how: "found", branch, commit };
+});
+`;
+
 const unbuiltScript = String.raw`import { defineScript, fail } from "../../../../bay/sdk.ts";
 
-export const run = defineScript(() => Promise.resolve(fail("The shelf does not build this action; only cut, status, changed, copy, overlay, remove, commit and drop-branch.")));
+export const run = defineScript(() => Promise.resolve(fail("The shelf does not build this action; only cut, status, changed, copy, overlay, remove, commit, drop-branch and find-branch.")));
 `;
 
 const changedWorktreeKept = String.raw`  if (state.changed.length + state.untracked.length > 0) {
@@ -644,6 +670,14 @@ function dropBranchOf(variant: ShelfVariant): string {
       .replace(notThereAnswered, notThereFailed);
   }
   return dropBranchScript;
+}
+
+const madeBranchChecked = String.raw`  if (!madeByTheShelf.test(branch)) {`;
+
+function findBranchOf(variant: ShelfVariant): string {
+  return variant === "finds a branch it does not make"
+    ? findBranchScript.replace(madeBranchChecked, '  if (branch === "") {')
+    : findBranchScript;
 }
 
 function manifestOf(name: string): string {
@@ -708,13 +742,17 @@ actions:
     description: When a test no longer needs a branch the shelf made, merged or not, and no worktree of the shelf has it.
     effects: [read, write, delete]
     run: [{ script: scripts/drop-branch.ts }]
+  find-branch:
+    description: When a test needs to know the commit a branch the shelf made points at, or that there is no such branch.
+    effects: [read]
+    run: [{ script: scripts/find-branch.ts }]
 `;
 }
 
 function readmeOf(name: string): string {
   return String.raw`# ${name}
 
-A made-up worktrees@1 that a test adds to a copy of the kit. It keeps each commit as a file of its paths and texts under .shelf/commits/, and its branches as names in .shelf/branches.json. It builds cut, status, changed, copy, overlay, remove, commit and drop-branch; merge, set-aside and apply refuse. A copy holds a shelf of its own in its .shelf folder, with the copied commit, its links listed as ignored, so a commit made inside the copy stays there.
+A made-up worktrees@1 that a test adds to a copy of the kit. It keeps each commit as a file of its paths and texts under .shelf/commits/, and its branches as names in .shelf/branches.json. It builds cut, status, changed, copy, overlay, remove, commit, drop-branch and find-branch; merge, set-aside and apply refuse. A copy holds a shelf of its own in its .shelf folder, with the copied commit, its links listed as ignored, so a commit made inside the copy stays there.
 `;
 }
 
@@ -902,6 +940,7 @@ export function shelfFiles(name: string, variant: ShelfVariant): ModeFiles {
     "scripts/unbuilt.ts": unbuiltScript,
     "scripts/remove.ts": removeOf(variant),
     "scripts/drop-branch.ts": dropBranchOf(variant),
+    "scripts/find-branch.ts": findBranchOf(variant),
     [`tests/${name}.test.ts`]: modeTestOf(name),
     ...Object.fromEntries(exampleFiles),
   };

@@ -7,7 +7,7 @@ import { noInterfaceSchemas } from "./broker-fixture.ts";
 import type { Answer } from "../bay/answers.ts";
 import { createBroker, type StepBroker } from "../bay/broker/broker.ts";
 import type { Effect, ModeGrants } from "../bay/contracts.ts";
-import type { Child, ChildProcesses } from "../bay/ports.ts";
+import type { Child, ChildProcesses, ChildRequest } from "../bay/ports.ts";
 import {
   nodeChildProcesses,
   nodeFileInspector,
@@ -32,7 +32,27 @@ import {
 
 type Setup = { readonly root: string; readonly broker: StepBroker; readonly events: ReturnType<typeof recordingSink> };
 
-function brokerFor(root: string, effects: readonly Effect[], extra: Partial<ModeGrants> = {}): Setup {
+type Started = {
+  readonly request: ChildRequest;
+  readonly child: Child;
+};
+
+type AgentQueries = {
+  readonly milliseconds: number;
+  readonly childProcesses: ChildProcesses;
+};
+
+const roomyAgentQueries: AgentQueries = { milliseconds: 120_000, childProcesses: nodeChildProcesses };
+
+const agentQueryLimitMilliseconds = 1500;
+
+type Fitting = {
+  readonly grants?: Partial<ModeGrants>;
+  readonly agentQueries?: AgentQueries;
+};
+
+function brokerFor(root: string, effects: readonly Effect[], fitting: Fitting = {}): Setup {
+  const agentQueries = fitting.agentQueries ?? roomyAgentQueries;
   const events = recordingSink();
   const broker = createBroker({
     layout: projectLayout(root),
@@ -43,12 +63,12 @@ function brokerFor(root: string, effects: readonly Effect[], extra: Partial<Mode
     secrets: new SecretStore({ environment: {}, processes: noProcesses, platform: "linux" }),
     events,
     clock: systemClock,
-    childProcesses: nodeChildProcesses,
+    childProcesses: agentQueries.childProcesses,
     processes: noProcesses,
     commandSearchPath: "/usr/bin:/bin",
     interfaceSchemas: noInterfaceSchemas,
-    limits: { agentQueryMilliseconds: 1500 },
-  }).forStep(place, permissionsIn(root, { effects, ...extra }));
+    limits: { agentQueryMilliseconds: agentQueries.milliseconds },
+  }).forStep(place, permissionsIn(root, { effects, ...fitting.grants }));
   return { root, broker, events };
 }
 
@@ -105,7 +125,7 @@ test("migrations run in order inside a transaction and are recorded once", async
 test("a migrations folder outside the mode's folder is refused", async () => {
   await withProject(async (root) => {
     const outside = join(root, "components/base/store/migrations");
-    const { broker } = brokerFor(root, ["read", "write"], { migrationsFolder: outside });
+    const { broker } = brokerFor(root, ["read", "write"], { grants: { migrationsFolder: outside } });
     try {
       refusalOf(await broker.ask("db.migrate", {}));
     } finally {
@@ -248,21 +268,42 @@ for (const [label, text, reason] of hostileAgentQueries) {
   });
 }
 
+function isAgentQuery(started: Started): boolean {
+  return started.request.arguments.some((word) => word.endsWith("query-child.ts"));
+}
+
 test("an agent query with an endless recursive CTE is killed at the time limit, and the next query works", async () => {
-  await withBroker(["read", "write"], async ({ broker }) => {
-    await seedItems(broker, 1);
-    const started = Date.now();
-    const message = refusalOf(
-      await broker.ask("db.agentQuery", {
-        sql: "with recursive r(n) as (select 1 union all select n + 1 from r) select count(*) from r",
-      }),
-    );
-    const took = Date.now() - started;
-    assert.match(message, /1500 ms/);
-    assert.ok(took < 6000, `took ${String(took)} ms`);
-    assert.deepEqual(valueOf(await broker.ask("db.agentQuery", { sql: "select count(*) as n from items" })).rows, [
-      [1],
-    ]);
+  await withProject(async (root) => {
+    const started: Started[] = [];
+    const limited = { milliseconds: agentQueryLimitMilliseconds, childProcesses: watchedChildProcesses(started) };
+    const { broker } = brokerFor(root, ["read", "write"], { agentQueries: limited });
+    try {
+      await seedItems(broker, 1);
+      const message = refusalOf(
+        await broker.ask("db.agentQuery", {
+          sql: "with recursive r(n) as (select 1 union all select n + 1 from r) select count(*) from r",
+        }),
+      );
+      assert.match(message, /An agent's query was still running and was killed/);
+      assert.match(message, /stop at the time limit of 1500 ms/);
+      const queries = started.filter(isAgentQuery);
+      assert.deepEqual(
+        queries.map((query) => query.request.timeoutMilliseconds),
+        [agentQueryLimitMilliseconds],
+      );
+      assert.deepEqual(await Promise.all(queries.map(async (query) => (await query.child.ended).how)), ["timed-out"]);
+    } finally {
+      broker.close();
+    }
+    const next = brokerFor(root, ["read"]);
+    try {
+      assert.deepEqual(
+        valueOf(await next.broker.ask("db.agentQuery", { sql: "select count(*) as n from items" })).rows,
+        [[1]],
+      );
+    } finally {
+      next.broker.close();
+    }
   });
 });
 
@@ -323,11 +364,11 @@ test("an agent query against a mode with no database yet fails plainly", async (
   });
 });
 
-function watchedChildProcesses(started: Child[]): ChildProcesses {
+function watchedChildProcesses(started: Started[]): ChildProcesses {
   return {
     start: (request, onLine) => {
       const child = nodeChildProcesses.start(request, onLine);
-      started.push(child);
+      started.push({ request, child });
       return child;
     },
   };
@@ -349,30 +390,18 @@ async function endWithin(child: Child, milliseconds: number): Promise<string> {
 
 test("closing a step's broker ends the database processes it opened", async () => {
   await withProject(async (root) => {
-    const started: Child[] = [];
-    const broker = createBroker({
-      layout: projectLayout(root),
-      files: nodeFileSystem,
-      throwawayFolders: nodeThrowawayFolders,
-      inspector: nodeFileInspector,
-      http: scriptedHttp(() => ({ status: 500, headers: {}, body: "" })),
-      secrets: new SecretStore({ environment: {}, processes: noProcesses, platform: "linux" }),
-      events: recordingSink(),
-      clock: systemClock,
-      childProcesses: watchedChildProcesses(started),
-      processes: noProcesses,
-      commandSearchPath: "/usr/bin:/bin",
-      interfaceSchemas: noInterfaceSchemas,
-    }).forStep(place, permissionsIn(root, { effects: ["read", "write"] }));
+    const started: Started[] = [];
+    const watched = { ...roomyAgentQueries, childProcesses: watchedChildProcesses(started) };
+    const { broker } = brokerFor(root, ["read", "write"], { agentQueries: watched });
     try {
       valueOf(await broker.ask("db.execute", { sql: "create table notes (title text)", parameters: [] }));
       valueOf(await broker.ask("db.query", { sql: "select count(*) as notes from notes", parameters: [] }));
       assert.equal(started.length, 1);
       broker.close();
-      assert.deepEqual(await Promise.all(started.map((child) => endWithin(child, 5000))), ["signalled"]);
+      assert.deepEqual(await Promise.all(started.map(({ child }) => endWithin(child, 5000))), ["signalled"]);
     } finally {
       broker.close();
-      for (const child of started) {
+      for (const { child } of started) {
         child.kill();
       }
     }

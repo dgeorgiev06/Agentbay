@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ChallengeDesignsResponse",
-  "description": "The design chosen, the challenger's answers, where two designs differed, and the worktree cut for the commit.",
+  "description": "The design chosen, the challenger's answers, and where two designs differed.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -10,8 +10,7 @@
     "because",
     "design",
     "practices",
-    "differences",
-    "folder"
+    "differences"
   ],
   "properties": {
     "path": {
@@ -82,12 +81,6 @@
         "maxLength": 500
       },
       "description": "Where the two designs differ, one line each, worked out by script; empty with one design."
-    },
-    "folder": {
-      "type": "string",
-      "pattern": "^(?!.*\\.\\.)\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*(/\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
-      "maxLength": 1000,
-      "description": "The worktree the design is committed from, under .forge/worktrees/."
     }
   }
 }

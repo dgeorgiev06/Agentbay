@@ -15,17 +15,12 @@
             "words": "A todo mode. Add and list, done and remove. Then due dates."
           }
         ],
-        "constraints": [
-          "It is a mode of the kit, under components/modes/todo.",
-          "It uses no network."
-        ],
+        "constraints": ["It is a mode of the kit, under components/modes/todo.", "It uses no network."],
         "outcomes": [
           {
             "id": "O1",
             "says": "A person adds a todo and sees it among the open ones.",
-            "from": [
-              "asked 1"
-            ],
+            "from": ["asked 1"],
             "conditions": [
               {
                 "id": "O1-C1",
@@ -84,9 +79,7 @@
           {
             "id": "O2",
             "says": "A person marks a todo done, or removes it.",
-            "from": [
-              "asked 1"
-            ],
+            "from": ["asked 1"],
             "conditions": [
               {
                 "id": "O2-C1",
@@ -135,9 +128,7 @@
             ]
           }
         ],
-        "judged": [
-          "Every sentence a person reads from the mode says what to do next."
-        ],
+        "judged": ["Every sentence a person reads from the mode says what to do next."],
         "leftOut": [
           "Editing a todo's text.",
           "A time of day on a due date.",
@@ -215,17 +206,12 @@
           "words": "A todo mode. Add and list, done and remove. Then due dates."
         }
       ],
-      "constraints": [
-        "It is a mode of the kit, under components/modes/todo.",
-        "It uses no network."
-      ],
+      "constraints": ["It is a mode of the kit, under components/modes/todo.", "It uses no network."],
       "outcomes": [
         {
           "id": "O1",
           "says": "A person adds a todo and sees it among the open ones.",
-          "from": [
-            "asked 1"
-          ],
+          "from": ["asked 1"],
           "conditions": [
             {
               "id": "O1-C1",
@@ -284,9 +270,7 @@
         {
           "id": "O2",
           "says": "A person marks a todo done, or removes it.",
-          "from": [
-            "asked 1"
-          ],
+          "from": ["asked 1"],
           "conditions": [
             {
               "id": "O2-C1",
@@ -335,9 +319,7 @@
           ]
         }
       ],
-      "judged": [
-        "Every sentence a person reads from the mode says what to do next."
-      ],
+      "judged": ["Every sentence a person reads from the mode says what to do next."],
       "leftOut": [
         "Editing a todo's text.",
         "A time of day on a due date.",

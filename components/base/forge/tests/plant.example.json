@@ -3,9 +3,7 @@
     "slice": {
       "name": "TD1",
       "kind": "mode",
-      "scope": [
-        "components/modes/todo/**"
-      ],
+      "scope": ["components/modes/todo/**"],
       "after": [],
       "done": [
         {
@@ -14,9 +12,7 @@
           "level": "must",
           "proof": {
             "kind": "fails-first",
-            "tests": [
-              "components/modes/todo/tests/todo.test.ts"
-            ]
+            "tests": ["components/modes/todo/tests/todo.test.ts"]
           }
         },
         {
@@ -34,9 +30,7 @@
         }
       ]
     },
-    "interface": [
-      "components/modes/todo/schemas/list-response.json"
-    ],
+    "interface": ["components/modes/todo/schemas/list-response.json"],
     "code": [
       {
         "path": "components/modes/todo/scripts/list.ts",
@@ -49,9 +43,7 @@
       {
         "name": "a todo marked done is still listed as open",
         "patch": "diff --git a/components/modes/todo/scripts/list.ts b/components/modes/todo/scripts/list.ts\n--- a/components/modes/todo/scripts/list.ts\n+++ b/components/modes/todo/scripts/list.ts\n@@ -4 +4 @@\n-  return todos.filter((todo) => todo.status === \"open\");\n+  return todos;\n",
-        "tests": [
-          "components/modes/todo/tests/todo.test.ts"
-        ]
+        "tests": ["components/modes/todo/tests/todo.test.ts"]
       }
     ]
   }

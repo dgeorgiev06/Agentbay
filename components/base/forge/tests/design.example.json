@@ -13,17 +13,12 @@
           "words": "A todo mode. Add and list, done and remove. Then due dates."
         }
       ],
-      "constraints": [
-        "It is a mode of the kit, under components/modes/todo.",
-        "It uses no network."
-      ],
+      "constraints": ["It is a mode of the kit, under components/modes/todo.", "It uses no network."],
       "outcomes": [
         {
           "id": "O1",
           "says": "A person adds a todo and sees it among the open ones.",
-          "from": [
-            "asked 1"
-          ],
+          "from": ["asked 1"],
           "conditions": [
             {
               "id": "O1-C1",
@@ -82,9 +77,7 @@
         {
           "id": "O2",
           "says": "A person marks a todo done, or removes it.",
-          "from": [
-            "asked 1"
-          ],
+          "from": ["asked 1"],
           "conditions": [
             {
               "id": "O2-C1",
@@ -133,9 +126,7 @@
           ]
         }
       ],
-      "judged": [
-        "Every sentence a person reads from the mode says what to do next."
-      ],
+      "judged": ["Every sentence a person reads from the mode says what to do next."],
       "leftOut": [
         "Editing a todo's text.",
         "A time of day on a due date.",
@@ -203,13 +194,9 @@
       {
         "name": "todo",
         "hides": "How todos are kept, numbered and never given a removed id again.",
-        "implements": [
-          "todo"
-        ],
+        "implements": ["todo"],
         "owns": {
-          "tables": [
-            "todos"
-          ]
+          "tables": ["todos"]
         }
       }
     ],
@@ -222,9 +209,7 @@
             "request": {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "text"
-              ],
+              "required": ["text"],
               "properties": {
                 "text": {
                   "type": "string",
@@ -235,11 +220,7 @@
             "response": {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "id",
-                "text",
-                "status"
-              ],
+              "required": ["id", "text", "status"],
               "properties": {
                 "id": {
                   "type": "integer",
@@ -251,21 +232,11 @@
                   "maxLength": 500
                 },
                 "status": {
-                  "enum": [
-                    "open",
-                    "done"
-                  ]
+                  "enum": ["open", "done"]
                 }
               }
             },
-            "serves": [
-              "O1-C1",
-              "O1-C4",
-              "O1-C5",
-              "O1-C6",
-              "O1-C7",
-              "O2-C4"
-            ],
+            "serves": ["O1-C1", "O1-C4", "O1-C5", "O1-C6", "O1-C7", "O2-C4"],
             "examples": [
               {
                 "input": {
@@ -330,19 +301,14 @@
               "additionalProperties": false,
               "properties": {
                 "status": {
-                  "enum": [
-                    "open",
-                    "all"
-                  ]
+                  "enum": ["open", "all"]
                 }
               }
             },
             "response": {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "todos"
-              ],
+              "required": ["todos"],
               "properties": {
                 "todos": {
                   "type": "array",
@@ -352,14 +318,7 @@
                 }
               }
             },
-            "serves": [
-              "O1-C1",
-              "O1-C2",
-              "O1-C3",
-              "O2-C1",
-              "O2-C2",
-              "O2-C3"
-            ],
+            "serves": ["O1-C1", "O1-C2", "O1-C3", "O2-C1", "O2-C2", "O2-C3"],
             "examples": [
               {
                 "input": {},
@@ -407,9 +366,7 @@
             "request": {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "id"
-              ],
+              "required": ["id"],
               "properties": {
                 "id": {
                   "type": "integer",
@@ -420,12 +377,7 @@
             "response": {
               "$ref": "add-response.json"
             },
-            "serves": [
-              "O2-C1",
-              "O2-C2",
-              "O2-C5",
-              "O2-C6"
-            ],
+            "serves": ["O2-C1", "O2-C2", "O2-C5", "O2-C6"],
             "examples": [
               {
                 "earlier": [
@@ -486,9 +438,7 @@
             "request": {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "id"
-              ],
+              "required": ["id"],
               "properties": {
                 "id": {
                   "type": "integer",
@@ -499,9 +449,7 @@
             "response": {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "removed"
-              ],
+              "required": ["removed"],
               "properties": {
                 "removed": {
                   "type": "integer",
@@ -509,10 +457,7 @@
                 }
               }
             },
-            "serves": [
-              "O2-C3",
-              "O2-C5"
-            ],
+            "serves": ["O2-C3", "O2-C5"],
             "examples": [
               {
                 "earlier": [

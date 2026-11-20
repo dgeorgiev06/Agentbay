@@ -9,7 +9,6 @@
     "file",
     "requirements",
     "design",
-    "folder",
     "into"
   ],
   "properties": {
@@ -33,12 +32,6 @@
     "design": {
       "type": "object",
       "description": "The chosen design."
-    },
-    "folder": {
-      "type": "string",
-      "pattern": "^(?!.*\\.\\.)\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*(/\\.?[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
-      "maxLength": 1000,
-      "description": "The worktree the design is committed from, under .forge/worktrees/."
     },
     "into": {
       "type": "string",

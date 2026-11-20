@@ -18,14 +18,13 @@ async function written(context: ScriptContext, folder: string, files: readonly W
 
 export const run = defineScript(async (input, context) => {
   const fields = fieldsOf(input);
-  const folder = textOf(fields.folder);
   const into = textOf(fields.into);
   if (fields.choice !== "approve") {
-    await answerOf(context, "worktrees.remove", { folder, branchAfter: "kept" });
     return fail(stoppedOnCard);
   }
-  const requirements = requirementsOf(fields.requirements ?? null);
-  const { job, version } = requirements;
+  const { job, version } = requirementsOf(fields.requirements ?? null);
+  const cut = await answerOf(context, "worktrees.cut", { slice: `${job}-design`, base: into });
+  const folder = textOf(cut.folder);
   const file = textOf(fields.file);
   const files = designFiles({ job, file, version, design: designOf(fields.design ?? null) });
   await written(context, folder, files);

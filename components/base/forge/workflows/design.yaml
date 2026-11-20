@@ -49,5 +49,4 @@ steps:
       file: $steps.start.output.file
       requirements: $steps.start.output.requirements
       design: $steps.challenge.output.design
-      folder: $steps.challenge.output.folder
       into: $settings.into

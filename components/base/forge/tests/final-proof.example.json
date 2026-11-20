@@ -3,10 +3,7 @@
     "slice": {
       "name": "ONE",
       "kind": "mode",
-      "scope": [
-        "src/**",
-        "tests/**"
-      ],
+      "scope": ["src/**", "tests/**"],
       "after": [],
       "done": [
         {
@@ -23,9 +20,7 @@
           "level": "must",
           "proof": {
             "kind": "fails-first",
-            "tests": [
-              "tests/one.test.ts"
-            ]
+            "tests": ["tests/one.test.ts"]
           }
         },
         {
@@ -38,10 +33,7 @@
     "base": "main",
     "head": "forge/one",
     "declared": {
-      "files": [
-        "src/one.txt",
-        "tests/one.test.ts"
-      ],
+      "files": ["src/one.txt", "tests/one.test.ts"],
       "names": {
         "gained": [],
         "lost": [],

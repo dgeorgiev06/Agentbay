@@ -168,7 +168,7 @@ actions:
         tier: deep
         checks: [scripts/challenge-checked.ts]
   challenge-designs:
-    description: When the designs are written, it lists where two differ, reads the practices held by design and asks the challenger, in the worktree the design is to be committed from.
+    description: When the designs are written, it lists where two differ, reads the practices held by design from the integration branch and asks the challenger.
     input: schemas/challenge-designs-request.json
     output: schemas/challenge-designs-response.json
     effects: [read, write, delete]
@@ -182,7 +182,7 @@ actions:
     run:
       - script: scripts/draw-design.ts
   commit-design:
-    description: When the owner has answered the design card, it commits the design and its schema files into the integration branch on approve, and ends the run on stop.
+    description: When the owner has answered the design card, it commits the design and its schema files in a worktree of its own and merges them into the integration branch on approve, and ends the run on stop.
     input: schemas/commit-design-request.json
     output: schemas/commit-design-response.json
     effects: [read, write, delete]

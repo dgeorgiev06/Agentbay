@@ -149,6 +149,7 @@ features:
       - bay/runs/foreach-steps.ts
       - bay/runs/workflow-scope.ts
       - bay/runs/script-steps.ts
+      - bay/runs/drawn-values.ts
       - bay/runs/run-answers.ts
       - bay/runs/run-ending.ts
       - bay/runs/sqlite-rows.ts

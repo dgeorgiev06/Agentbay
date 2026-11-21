@@ -138,6 +138,8 @@ test("a script whose call to another action throws gets a failed answer and the 
       timeLimitMilliseconds: 30_000,
       timeLimitSetBy: "kernel",
       call: () => Promise.reject(new Error("the run store went away")),
+      random: () => Promise.reject(new Error("the run store went away")),
+      startedAt: new Date(),
     });
     assert.ok(outcome.status === "failed", JSON.stringify(outcome));
     assert.match(outcome.reason, /The call to store.get stopped at an unexpected/);

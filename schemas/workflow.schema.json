@@ -57,7 +57,7 @@
       "pattern": "^(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*$"
     },
     "reference": {
-      "description": "Resolved whole: $trigger, $steps.<id>.output[.path], $item[.path] in a foreach, $settings.<key>.",
+      "description": "Resolved whole: $trigger[.path], $steps.<id>.output[.path], $item[.path] in a foreach, $settings.<key>.",
       "type": "string",
       "pattern": "^\\$"
     },
@@ -175,7 +175,7 @@
               "oneOf": [
                 { "type": "integer", "minimum": 2, "maximum": 8 },
                 {
-                  "description": "A reference to a whole number from 2 to 8: $settings.<key>, $steps.<id>.output with an optional path, $trigger, or $item of an enclosing foreach.",
+                  "description": "A reference to a whole number from 2 to 8: $settings.<key>, or $trigger, $steps.<id>.output or $item of an enclosing foreach, each with an optional path.",
                   "type": "string",
                   "pattern": "^\\$"
                 }

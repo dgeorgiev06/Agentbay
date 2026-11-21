@@ -87,6 +87,42 @@ const dynamicImportSyntax = {
   message: "Mode and adapter code uses static imports only.",
 };
 
+const clockMessage = "A mode script reads the time with context.now(), which a step run again gets back unchanged.";
+
+const randomMessage =
+  "A mode script draws random values with context.random(bytes), which a step run again gets back unchanged.";
+
+const randomCalls = "/^(randomBytes|randomUUID|randomInt|randomFill|randomFillSync|getRandomValues)$/";
+
+const replaySafeSyntax = [
+  { selector: "CallExpression[callee.property.name='now'][callee.object.name='Date']", message: clockMessage },
+  { selector: "CallExpression[callee.property.value='now'][callee.object.name='Date']", message: clockMessage },
+  { selector: "CallExpression[callee.property.name='now'][callee.object.property.name='Date']", message: clockMessage },
+  { selector: "NewExpression[callee.name='Date'][arguments.length=0]", message: clockMessage },
+  { selector: "NewExpression[callee.property.name='Date'][arguments.length=0]", message: clockMessage },
+  { selector: "CallExpression[callee.name='Date']", message: clockMessage },
+  { selector: "CallExpression[callee.property.name='Date']", message: clockMessage },
+  { selector: "VariableDeclarator[init.name='Date']", message: clockMessage },
+  { selector: "VariableDeclarator[init.property.name='Date']", message: clockMessage },
+  { selector: "CallExpression[callee.property.name='random'][callee.object.name='Math']", message: randomMessage },
+  { selector: "CallExpression[callee.property.value='random'][callee.object.name='Math']", message: randomMessage },
+  {
+    selector: "CallExpression[callee.property.name='random'][callee.object.property.name='Math']",
+    message: randomMessage,
+  },
+  { selector: "VariableDeclarator[init.name='Math']", message: randomMessage },
+  { selector: "VariableDeclarator[init.property.name='Math']", message: randomMessage },
+  { selector: "VariableDeclarator[id.type='ObjectPattern'][init.name='crypto']", message: randomMessage },
+  { selector: "VariableDeclarator[id.type='ObjectPattern'][init.property.name='crypto']", message: randomMessage },
+  { selector: `CallExpression[callee.name=${randomCalls}]`, message: randomMessage },
+  { selector: `CallExpression[callee.property.name=${randomCalls}]`, message: randomMessage },
+  { selector: `CallExpression[callee.property.value=${randomCalls}]`, message: randomMessage },
+  {
+    selector: `ImportDeclaration[source.value=/^(node:)?crypto$/] ImportSpecifier[imported.name=${randomCalls}]`,
+    message: randomMessage,
+  },
+];
+
 const noComments = {
   meta: {
     type: "problem",
@@ -155,6 +191,13 @@ export default defineConfig(
     rules: {
       "no-restricted-imports": ["error", { patterns: [kernelImportsForModes, kitSpecifiersForModes] }],
       "no-restricted-syntax": ["error", ...bannedSyntax, dynamicImportSyntax],
+    },
+  },
+  {
+    files: ["components/**/*.ts"],
+    ignores: ["components/**/tests/**", "components/**/*.test.ts"],
+    rules: {
+      "no-restricted-syntax": ["error", ...bannedSyntax, dynamicImportSyntax, ...replaySafeSyntax],
     },
   },
   ...modeBoundaryConfigs,

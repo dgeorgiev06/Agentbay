@@ -18,7 +18,7 @@ it makes the digest the output of the run.
 
 `sync` is one script with a loop rather than a list of `call` steps, because a list of steps cannot repeat. The
 run's budget still holds for every page. When a fetch overspends it, the run waits for budget before that page is
-stored, and nothing of the page is stored. After `bay resume <run> --extend usd=<amount>`, the sync goes on:
+stored, and nothing of the page is stored. After `bay resume <run> --extend usd=<amount> [--via terminal | --via chat --quote "<the owner's exact words>"]`, the sync goes on:
 the pages it already fetched are replayed from the run's records, not fetched again.
 
 ### The monthly cap

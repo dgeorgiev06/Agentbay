@@ -1,5 +1,5 @@
 import { type Answer, errorLine, failed, listed, type RefusalWording, refused, type Resource } from "../answers.ts";
-import type { ActionCaller, Effect, Json, ModeGrants, Permissions } from "../contracts.ts";
+import type { ActionCaller, Effect, Json, ModeGrants, Permissions, RandomDrawer } from "../contracts.ts";
 import type { Layout } from "../layout.ts";
 import type { Outcome } from "../outcome.ts";
 import type { ChildProcesses, Clock, FileInspector, FileSystem, Http, Processes, ThrowawayFolders } from "../ports.ts";
@@ -96,6 +96,7 @@ export type Doing = {
   readonly record: (kind: string, detail: Json) => Promise<void>;
   readonly addSpending: (amounts: SpendAmounts) => void;
   readonly call: ActionCaller;
+  readonly random: RandomDrawer;
   readonly databaseOf: (file: string) => DatabaseProcess;
   readonly migratedOnce: (migrate: () => Promise<Answer<readonly string[]>>) => Promise<Answer<readonly string[]>>;
   readonly readSchema: (file: string) => Promise<SchemaFile>;

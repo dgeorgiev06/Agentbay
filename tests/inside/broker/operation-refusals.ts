@@ -185,6 +185,12 @@ export const refusedRequests: { readonly [Name in OperationName]: readonly Refus
     notAMapping("spend", 1),
     missing({ spending: { usd: 1 } }, "spending", fieldIsMissing(requestFor("spend"), "spending", "a JSON value")),
   ],
+  random: [
+    notAMapping("random", 16),
+    missing({ bytes: 16 }, "bytes", fieldIsMissing(requestFor("random"), "bytes", "a number")),
+    given({ bytes: 16 }, { bytes: "16" }, fieldIsNot(requestFor("random"), "bytes", "a number")),
+    given({ bytes: 16 }, { seed: 1 }, fieldIsUnknown(requestFor("random"), "seed", "the field bytes")),
+  ],
   "commands.run": [
     notAMapping("commands.run", ["git", "status"]),
     missing(commandRequest, "name", fieldIsMissing(command, "name", "text")),
@@ -324,6 +330,7 @@ export const refusedResults: { readonly [Name in Exclude<OperationName, "call">]
   ],
   "events.emit": onlyNull("events.emit"),
   spend: onlyNull("spend"),
+  random: onlyText("random"),
   "commands.run": [
     answerCase("not a mapping", [ran], wholeIsNot(commandAnswer, "a mapping")),
     answerCase("null", null, wholeIsNot(commandAnswer, "a mapping")),

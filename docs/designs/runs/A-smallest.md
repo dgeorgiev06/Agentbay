@@ -96,7 +96,7 @@ printed(await kernel.runs.start(form.target, input));
 const shown = await kernel.runs.show(runId);
 const answer = await terminal.ask(`Approve ${shown.ok ? shown.value.text : runId}\nType yes to confirm: `);
 printed(await kernel.runs.act(runId, { do: "approve", hash, by: "owner at the terminal" }));
-// bay resume <run> [--rerun | --extend usd=2,items=5 | --stop]     and     bay resume --due
+// bay resume <run> [--rerun | --extend usd=2,items=5 | --stop] [--via terminal | --via chat --quote "<the owner's exact words>"]     and     bay resume --due
 printed(await kernel.runs.act(runId, { do: "extend", by: { usd: 2, items: 5 } }));
 const woken = await kernel.runs.wake();
 // bay runs     and     bay runs <run> [--full] [--events] [--new-token]

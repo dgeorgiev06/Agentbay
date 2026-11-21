@@ -72,6 +72,8 @@ async function run(layout: Layout, modeFolder: string): Promise<StepOutcome> {
     timeLimitSetBy: "kernel",
     call: () =>
       Promise.resolve({ status: "failed", reason: "no calls", spent: { items: 0, usd: 0, tokens: 0, minutes: 0 } }),
+    random: () => Promise.resolve({ status: "failed", reason: "no random values" }),
+    startedAt: new Date(),
   });
 }
 

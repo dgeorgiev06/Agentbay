@@ -26,6 +26,7 @@ import { skillWaiting, storedWaiting } from "./waiting.ts";
 import { answerableSkill } from "./run-answers.ts";
 import { isLockedError } from "../database-lock.ts";
 import { markIn, type PartMark } from "./workflow-part.ts";
+import { shownStepDetail } from "./step-detail.ts";
 
 type RunsNeeds = {
   readonly project: string;
@@ -153,8 +154,8 @@ function refusal(message: string, fix?: string): Outcome<never> {
 }
 
 function stepOf(record: StepRecord): RunStep {
-  const { key, kind, startedAt, input, detail } = record;
-  const base = { key, kind, startedAt, input, detail };
+  const { key, kind, startedAt, input } = record;
+  const base = { key, kind, startedAt, input, detail: shownStepDetail(record) };
   switch (record.status) {
     case "started":
       return { ...base, status: record.status };

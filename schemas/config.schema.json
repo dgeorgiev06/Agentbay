@@ -59,7 +59,7 @@
       "additionalProperties": false,
       "properties": {
         "from": {
-          "description": "The channels approve accepts; without this setting only terminal.",
+          "description": "The channels an approval of a run and the owner's answers to bay resume are taken from; without this setting only terminal. Trust is given at a terminal whatever it lists, and from chat only when it lists chat.",
           "type": "array",
           "uniqueItems": true,
           "items": { "description": "A channel the owner approves from.", "enum": ["terminal", "chat"] }

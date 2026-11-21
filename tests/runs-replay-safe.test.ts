@@ -1,0 +1,314 @@
+import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
+import { test } from "node:test";
+import type { Drawn, Json, ScriptRequest } from "../bay/contracts.ts";
+import type { Action } from "../bay/generated/mode.ts";
+import type { Workflow } from "../bay/generated/workflow.ts";
+import { fieldOf, numberField } from "../bay/json.ts";
+import type { Run } from "../bay/runs/runs.ts";
+import {
+  answer,
+  failure,
+  finished,
+  fixtureSystem,
+  messagesOf,
+  notesFlow,
+  openedRuns,
+  runOf,
+  startTime,
+  tokenOf,
+  withFlow,
+  type Script,
+} from "./runs-fixture.ts";
+
+const drawing: Action = {
+  description: "When a test draws random values and reads the time.",
+  input: "schemas/anything.json",
+  output: "schemas/anything.json",
+  effects: ["read", "write"],
+  run: [{ script: "scripts/log.ts" }],
+};
+
+const changes = { notesActions: { draw: drawing } };
+
+function valueOf(drawn: Drawn): string {
+  assert.ok(drawn.status === "done", JSON.stringify(drawn));
+  return drawn.value;
+}
+
+function reasonOf(drawn: Drawn): string {
+  assert.ok(drawn.status === "failed", JSON.stringify(drawn));
+  return drawn.reason;
+}
+
+type Attempt = {
+  readonly values: readonly string[];
+  readonly now: string;
+};
+
+function recorded(attempts: Attempt[], request: ScriptRequest, values: readonly string[]): void {
+  attempts.push({ values, now: request.startedAt.toISOString() });
+}
+
+function shownDetailOf(run: Run, key: string): Json | undefined {
+  return run.steps.find((candidate) => candidate.key === key)?.detail;
+}
+
+function storedDetailOf(database: string, key: string): string {
+  const opened = new DatabaseSync(database, { readOnly: true });
+  try {
+    const row = opened.prepare("select detail from steps where key = ?").get(key);
+    return typeof row?.detail === "string" ? row.detail : "";
+  } finally {
+    opened.close();
+  }
+}
+
+async function drawnIdOf(runs: Awaited<ReturnType<typeof openedRuns>>["runs"]): Promise<string> {
+  const [listed] = await runs.list();
+  return listed?.id ?? "";
+}
+
+test("a step that died after drawing gets the same values and time when the owner runs it again, kept packed", async () => {
+  const attempts: Attempt[] = [];
+  const draw: Script = async (request) => {
+    const values = [valueOf(await request.random(16)), valueOf(await request.random(8))];
+    if (attempts.length === 0) {
+      recorded(attempts, request, values);
+      throw new Error("the process died");
+    }
+    recorded(attempts, request, [...values, valueOf(await request.random(4))]);
+    return finished({ drawn: values.length });
+  };
+  const opened = await openedRuns({ scripts: { "notes:scripts/log.ts": draw }, changes });
+  assert.match(messagesOf(await opened.runs.start({ action: "notes.draw" }, {})), /the process died/);
+  const id = await drawnIdOf(opened.runs);
+  opened.clock.advance(60 * 60 * 1000);
+  const asked = runOf(await opened.runs.resume(id));
+  assert.ok(asked.state.status === "waiting" && asked.state.waiting.reason === "owner");
+  const done = runOf(await opened.runs.rerun(id, "The owner"));
+  assert.equal(done.state.status, "done");
+  const [first, second] = attempts;
+  assert.ok(first !== undefined && second !== undefined);
+  assert.deepEqual(second.values.slice(0, 2), first.values);
+  assert.match(first.values[0] ?? "", /^[0-9a-f]{32}$/);
+  assert.match(first.values[1] ?? "", /^[0-9a-f]{16}$/);
+  assert.match(second.values[2] ?? "", /^[0-9a-f]{8}$/);
+  assert.deepEqual([first.now, second.now], [startTime.toISOString(), startTime.toISOString()]);
+  assert.deepEqual(shownDetailOf(done, "0"), { script: "scripts/log.ts", mode: "notes", drawnValues: 3 });
+  const stored = storedDetailOf(opened.database, "0");
+  assert.ok(stored.includes('"drawn":'), stored);
+  for (const value of second.values) {
+    assert.ok(!stored.includes(value), "a drawn value is stored as text");
+    assert.ok(!JSON.stringify(done).includes(value), "a drawn value is shown in the run");
+  }
+  opened.close();
+});
+
+test("a step that stopped for a called action draws the same values when the run goes on", async () => {
+  const seen: string[] = [];
+  const draw: Script = async (request) => {
+    const value = valueOf(await request.random(16));
+    seen.push(value);
+    const called = await request.call("draft", { topic: "tea" });
+    return called.status === "done" ? finished({ value, called: called.output }) : failure(called.reason);
+  };
+  const opened = await openedRuns({ scripts: { "notes:scripts/log.ts": draw }, changes });
+  const started = runOf(await opened.runs.start({ action: "notes.draw" }, {}));
+  const done = runOf(await opened.runs.submit(tokenOf(started), answer({ text: "long enough text" })));
+  assert.equal(done.state.status, "done", JSON.stringify(done.state));
+  assert.equal(seen.length, 2);
+  assert.equal(seen[1], seen[0]);
+  opened.close();
+});
+
+function itemOf(request: ScriptRequest): number {
+  return numberField(request.input, "n") ?? -1;
+}
+
+test("a foreach item's new attempt draws new values, and the first attempt's stay with its own step", async () => {
+  const byItem = new Map<number, string[]>();
+  const draw: Script = async (request) => {
+    const item = itemOf(request);
+    const values = byItem.get(item) ?? [];
+    values.push(valueOf(await request.random(16)));
+    byItem.set(item, values);
+    return item === 0 && values.length === 1 ? failure("item 0 broke") : finished({ n: item });
+  };
+  const steps: Workflow["steps"] = [
+    { id: "each", foreach: "$trigger", sideBySide: 2, steps: [{ id: "do", action: "draw", input: { n: "$item" } }] },
+  ];
+  const flowChanges = { ...withFlow(steps), notesActions: { draw: drawing } };
+  const opened = await openedRuns({ scripts: { "notes:scripts/log.ts": draw }, changes: flowChanges });
+  const started = runOf(await opened.runs.start({ workflow: notesFlow }, [0, 1]));
+  const done = runOf(await opened.runs.rerun(started.id, "The owner"));
+  assert.equal(done.state.status, "done", JSON.stringify(done.state));
+  const [first, again] = byItem.get(0) ?? [];
+  assert.ok(first !== undefined && again !== undefined);
+  assert.notEqual(again, first);
+  assert.equal(fieldOf(shownDetailOf(done, "each[0].do/0") ?? null, "drawnValues"), 1);
+  assert.equal(fieldOf(shownDetailOf(done, "each[0]~2.do/0") ?? null, "drawnValues"), 1);
+  opened.close();
+});
+
+test("a step records at most 64 random values, and a 65th is refused with a sentence", async () => {
+  const draw: Script = async (request) => {
+    const values: string[] = [];
+    for (let index = 0; index < 64; index += 1) {
+      values.push(valueOf(await request.random(1)));
+    }
+    return finished({ count: values.length, over: reasonOf(await request.random(1)) });
+  };
+  const opened = await openedRuns({ scripts: { "notes:scripts/log.ts": draw }, changes });
+  const done = runOf(await opened.runs.start({ action: "notes.draw" }, {}));
+  assert.deepEqual(done.state, {
+    status: "done",
+    output: { count: 64, over: "Step 0 has drawn 64 random values, the most one step records." },
+  });
+  opened.close();
+});
+
+test("a step run again that asks for a value of another size than the one recorded is told so", async () => {
+  let attempts = 0;
+  const draw: Script = async (request) => {
+    attempts += 1;
+    if (attempts === 1) {
+      valueOf(await request.random(16));
+      throw new Error("the process died");
+    }
+    return finished({ asked: reasonOf(await request.random(8)) });
+  };
+  const opened = await openedRuns({ scripts: { "notes:scripts/log.ts": draw }, changes });
+  await opened.runs.start({ action: "notes.draw" }, {});
+  const id = await drawnIdOf(opened.runs);
+  await opened.runs.resume(id);
+  const done = runOf(await opened.runs.rerun(id, "The owner"));
+  assert.deepEqual(done.state, {
+    status: "done",
+    output: {
+      asked:
+        "Random value 1 of step 0 was drawn as 16 bytes when the step first ran, and 8 are asked now; " +
+        "a step that runs again asks for its values in the same order and sizes.",
+    },
+  });
+  opened.close();
+});
+
+test("values drawn side by side are replayed in the order they were asked", async () => {
+  const attempts: (readonly string[])[] = [];
+  const draw: Script = async (request) => {
+    const values = (await Promise.all([request.random(4), request.random(8), request.random(2)])).map(valueOf);
+    attempts.push(values);
+    if (attempts.length === 1) {
+      throw new Error("the process died");
+    }
+    return finished({ drawn: values.length });
+  };
+  const opened = await openedRuns({ scripts: { "notes:scripts/log.ts": draw }, changes });
+  await opened.runs.start({ action: "notes.draw" }, {});
+  const id = await drawnIdOf(opened.runs);
+  await opened.runs.resume(id);
+  runOf(await opened.runs.rerun(id, "The owner"));
+  assert.deepEqual(attempts[1], attempts[0]);
+  assert.deepEqual(
+    attempts[0]?.map((value) => value.length),
+    [8, 16, 4],
+  );
+  opened.close();
+});
+
+test("each item of a foreach draws values of its own", async () => {
+  const byItem = new Map<number, string>();
+  const draw: Script = async (request) => {
+    byItem.set(itemOf(request), valueOf(await request.random(16)));
+    return finished({ n: itemOf(request) });
+  };
+  const steps: Workflow["steps"] = [
+    { id: "each", foreach: "$trigger", steps: [{ id: "do", action: "draw", input: { n: "$item" } }] },
+  ];
+  const opened = await openedRuns({
+    scripts: { "notes:scripts/log.ts": draw },
+    changes: { ...withFlow(steps), notesActions: { draw: drawing } },
+  });
+  const done = runOf(await opened.runs.start({ workflow: notesFlow }, [0, 1, 2]));
+  assert.equal(done.state.status, "done", JSON.stringify(done.state));
+  assert.equal(new Set(byItem.values()).size, 3);
+  opened.close();
+});
+
+const checkedDraft: Action = {
+  description: "When a test drafts a text that a drawing check reads.",
+  input: "schemas/anything.json",
+  output: "schemas/draft.json",
+  effects: ["read"],
+  run: [{ skill: "skills/draft", tier: "balanced", checks: ["scripts/long-enough.ts"] }],
+};
+
+test("a skill's next round runs its check with fresh values, and a check's values are kept packed too", async () => {
+  const seen: string[] = [];
+  const check: Script = async (request) => {
+    seen.push(valueOf(await request.random(16)));
+    return finished(seen.length === 1 ? { passed: false, feedback: "once more" } : { passed: true });
+  };
+  const opened = await openedRuns({
+    scripts: { "notes:scripts/long-enough.ts": check },
+    changes: { notesActions: { checked: checkedDraft } },
+  });
+  const first = runOf(await opened.runs.start({ action: "notes.checked" }, {}));
+  const again = runOf(await opened.runs.submit(tokenOf(first), answer({ text: "first try" })));
+  const done = runOf(await opened.runs.submit(tokenOf(again), answer({ text: "second try" })));
+  assert.equal(done.state.status, "done", JSON.stringify(done.state));
+  assert.equal(seen.length, 2);
+  assert.notEqual(seen[1], seen[0]);
+  const checks = done.steps.filter((step) => step.kind === "check");
+  assert.deepEqual(
+    checks.map((step) => step.key),
+    ["0#1.check0", "0#2.check0"],
+  );
+  for (const step of checks) {
+    assert.equal(fieldOf(step.detail ?? null, "drawnValues"), 1, step.key);
+    const stored = storedDetailOf(opened.database, step.key);
+    assert.ok(
+      seen.every((value) => !stored.includes(value)),
+      stored,
+    );
+  }
+  assert.ok(seen.every((value) => !JSON.stringify(done).includes(value)));
+  opened.close();
+});
+
+test("a step run again by a script other than the one that drew drops the values, says so, and records the script it runs", async () => {
+  const seen: (readonly [string, string])[] = [];
+  const drawingAs =
+    (script: string): Script =>
+    async (request) => {
+      seen.push([script, valueOf(await request.random(16))]);
+      if (script === "log.ts") {
+        throw new Error("the process died");
+      }
+      return finished({ drawn: 1 });
+    };
+  const scripts = { "notes:scripts/log.ts": drawingAs("log.ts"), "notes:scripts/double.ts": drawingAs("double.ts") };
+  const opened = await openedRuns({ scripts, changes });
+  await opened.runs.start({ action: "notes.draw" }, {});
+  const id = await drawnIdOf(opened.runs);
+  const changed = await fixtureSystem({
+    notesActions: { draw: { ...drawing, run: [{ script: "scripts/double.ts" }] } },
+  });
+  const runs = await opened.reopen(changed.system);
+  await runs.resume(id);
+  const done = runOf(await runs.rerun(id, "The owner"));
+  assert.equal(done.state.status, "done", JSON.stringify(done.state));
+  const [before, after] = seen;
+  assert.ok(before !== undefined && after !== undefined);
+  assert.equal(after[0], "double.ts");
+  assert.notEqual(after[1], before[1]);
+  assert.deepEqual(shownDetailOf(done, "0"), { script: "scripts/double.ts", mode: "notes", drawnValues: 1 });
+  const rerun = done.events.find((event) => event.kind === "step.started" && fieldOf(event.detail, "rerun") === true);
+  assert.equal(
+    fieldOf(rerun?.detail ?? null, "changed"),
+    "Step 0 ran scripts/log.ts of mode notes before and runs scripts/double.ts of mode notes now, so its 1 " +
+      "recorded random value is dropped and fresh ones are drawn.",
+  );
+  opened.close();
+});

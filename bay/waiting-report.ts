@@ -87,8 +87,23 @@ function decideLine(run: Run, waiting: Extract<Waiting, { readonly reason: "appr
     : `${decide} --choice <name> --hash ${waiting.hash}`;
 }
 
+function stopCommand(run: Run): string {
+  return `bay resume ${run.id} --stop ${sourceWords}`;
+}
+
 function stopLine(run: Run): string {
-  return `or stop with: bay resume ${run.id} --stop ${sourceWords}`;
+  return `or stop with: ${stopCommand(run)}`;
+}
+
+function stopsAtUntil(run: Run, waiting: Extract<Waiting, { readonly reason: "owner" }>): boolean {
+  return run.target.part?.until === waiting.stepKey;
+}
+
+function ownerLines(run: Run, waiting: Extract<Waiting, { readonly reason: "owner" }>): readonly string[] {
+  if (stopsAtUntil(run, waiting)) {
+    return [waiting.question, `stop with: ${stopCommand(run)}`];
+  }
+  return [waiting.question, `run again with: bay resume ${run.id} --rerun ${sourceWords}`, stopLine(run)];
 }
 
 export function waitingText(run: Run, waiting: Waiting): string {
@@ -106,9 +121,7 @@ export function waitingText(run: Run, waiting: Waiting): string {
         stopLine(run),
       ].join("\n");
     case "owner":
-      return [waiting.question, `run again with: bay resume ${run.id} --rerun ${sourceWords}`, stopLine(run)].join(
-        "\n",
-      );
+      return ownerLines(run, waiting).join("\n");
   }
 }
 

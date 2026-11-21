@@ -24,6 +24,8 @@ test("the runner starts node with the permission model, the grants and the prelo
     timeLimitMilliseconds: 1000,
     timeLimitSetBy: "kernel",
     call: () => Promise.resolve({ status: "failed", reason: "no", spent: noSpend }),
+    random: () => Promise.resolve({ status: "failed", reason: "no" }),
+    startedAt: new Date(0),
   };
   const bay = join(kitFolder, "bay");
   const packages = ["yaml", "ajv", "fast-deep-equal", "fast-uri", "json-schema-traverse"].map((name) =>
@@ -78,6 +80,8 @@ test("the runner tells the preload that files may be removed only when the actio
       timeLimitMilliseconds: 1000,
       timeLimitSetBy: "kernel",
       call: () => Promise.resolve({ status: "failed", reason: "no", spent: noSpend }),
+      random: () => Promise.resolve({ status: "failed", reason: "no" }),
+      startedAt: new Date(0),
     });
   assert.equal(commandFor(["read", "write", "delete"]).at(-1), "--agentbay-may-remove-files");
   assert.ok(!commandFor(["read", "write"]).includes("--agentbay-may-remove-files"));
@@ -95,6 +99,8 @@ test("a script is granted direct file writes only when its action declares write
     timeLimitMilliseconds: 1000,
     timeLimitSetBy: "kernel" as const,
     call: () => Promise.reject(new Error("no calls")),
+    random: () => Promise.reject(new Error("no random values")),
+    startedAt: new Date(0),
   });
   const writeGrants = (effects: readonly Effect[]): readonly string[] =>
     scriptCommand("/project/components/modes/notes/scripts/a.ts", request(effects)).filter((argument) =>

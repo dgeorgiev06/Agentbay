@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import type { ScriptContext } from "../../../../bay/sdk.ts";
 import type { Leak } from "../scripts/lib/leaks.ts";
 import { drawn } from "../scripts/lib/merge-card.ts";
 import { sliceOf } from "../scripts/lib/slice-form.ts";
@@ -158,10 +159,22 @@ describe("the shared-text rule", () => {
 });
 
 describe("the mark", () => {
-  test("a new mark is 32 hex characters, and two are not the same", () => {
-    const first = newMark();
-    assert.match(first, /^[0-9a-f]{32}$/);
-    assert.notEqual(first, newMark());
+  test("a new mark is 16 bytes drawn from the toolbox's random, so a round run again plants the same", async () => {
+    const asked: number[] = [];
+    const random: ScriptContext["random"] = (bytes) => {
+      asked.push(bytes);
+      return Promise.resolve({ ok: true, value: "0123456789abcdef0123456789abcdef" });
+    };
+    assert.equal(await newMark({ random }), "0123456789abcdef0123456789abcdef");
+    assert.deepEqual(asked, [16]);
+  });
+
+  test("a mark the toolbox cannot draw stops the script with the toolbox's sentence", async () => {
+    const random: ScriptContext["random"] = () =>
+      Promise.resolve({ ok: false, kind: "failed", message: "Step 0 has drawn 64 random values." });
+    await assert.rejects(newMark({ random }), {
+      message: "No mark could be drawn for the tests: Step 0 has drawn 64 random values.",
+    });
   });
 
   test("a marked text carries the mark on its first line, and stripping gives the text back whole", () => {

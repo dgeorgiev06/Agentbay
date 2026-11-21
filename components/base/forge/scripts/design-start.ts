@@ -6,5 +6,5 @@ export const run = defineScript((input) => {
   const { file, requirements } = acceptedOrStopped(fieldsOf(input).checked ?? null, "design");
   const read = requirementsOf(requirements);
   const card = pathCard(file, read);
-  return Promise.resolve({ file, job: read.job, requirements, card });
+  return Promise.resolve({ job: read.job, requirements, card });
 });

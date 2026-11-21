@@ -96,6 +96,7 @@ function contextOf(asked: Asked, planned: Answers): ScriptContext {
     settings: {},
     now: () => new Date("2026-11-18T10:00:00Z"),
     spend: unanswered,
+    random: unanswered,
     caller: undefined,
     skillInput: undefined,
   };

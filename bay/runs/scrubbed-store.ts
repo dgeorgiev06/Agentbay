@@ -1,7 +1,7 @@
 import type { Json, RunEvent, Scrubber } from "../contracts.ts";
 import { hashOf } from "../json.ts";
 import type { RunPatch, RunStore, StepEnd, StoredState } from "./run-store.ts";
-import { decodedStepDetail, stepDetailJson, type StepDetail } from "./step-detail.ts";
+import { redactedStepDetail, type StepDetail } from "./step-detail.ts";
 
 export type ApprovalContent = {
   readonly content: Json;
@@ -27,7 +27,7 @@ function redactEnd(end: StepEnd, scrubber: Scrubber): StepEnd {
 }
 
 function redactDetail(step: StepDetail, scrubber: Scrubber): StepDetail {
-  return decodedStepDetail(step.kind, scrubber.redactJson(stepDetailJson(step)));
+  return redactedStepDetail(step, (value) => scrubber.redactJson(value));
 }
 
 function redactState(state: StoredState, scrubber: Scrubber): StoredState {

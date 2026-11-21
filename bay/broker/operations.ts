@@ -41,6 +41,7 @@ export type Requests = {
   readonly "events.emit": { readonly kind: string; readonly detail: Json };
   readonly call: { readonly reference: string; readonly input: Json };
   readonly spend: { readonly spending: Json };
+  readonly random: { readonly bytes: number };
   readonly "commands.run": CommandRequest;
   readonly "schemas.read": { readonly schema: string };
 };
@@ -61,6 +62,7 @@ export type Results = {
   readonly "events.emit": null;
   readonly call: Json;
   readonly spend: null;
+  readonly random: string;
   readonly "commands.run": CommandRan;
   readonly "schemas.read": SchemaFile;
 };
@@ -255,6 +257,10 @@ const spendRequestOf = takingFields(["spending"], ({ spending }): Reading<Reques
   spending === undefined ? misfitAt(["spending"], spending, "a JSON value") : read({ spending }),
 );
 
+const randomRequestOf = takingFields(["bytes"], ({ bytes }): Reading<Requests["random"]> =>
+  typeof bytes === "number" ? read({ bytes }) : misfitAt(["bytes"], bytes, "a number"),
+);
+
 const commandRequestOf = takingFields(
   ["name", "arguments", "folder", "timeLimitSeconds", "input"],
   (fields): Reading<CommandRequest> => {
@@ -442,6 +448,7 @@ export const shapes: { readonly [Name in OperationName]: Shape<Name> } = {
   "events.emit": { resource: "events", request: emitRequestOf, result: nothingOf },
   call: { resource: "call", request: callRequestOf, result: anyJsonOf },
   spend: { resource: "spend", request: spendRequestOf, result: nothingOf },
+  random: { resource: "random", request: randomRequestOf, result: textOf },
   "commands.run": { resource: "commands", request: commandRequestOf, result: commandRanOf },
   "schemas.read": { resource: "schemas", request: schemaRequestOf, result: schemaFileOf },
 };
@@ -562,6 +569,7 @@ export function contextOver(asking: Asking, start: ScriptStart): ScriptContext {
     settings: start.settings,
     now: () => new Date(start.now),
     spend: (spending) => asked("spend", { spending: { ...spending } }),
+    random: (bytes) => asked("random", { bytes }),
     caller: start.caller,
     skillInput: start.skillInput,
   };

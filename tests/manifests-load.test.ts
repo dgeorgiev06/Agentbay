@@ -503,7 +503,11 @@ test("a skill step's check script that does not exist is reported", async () => 
 
 test("well-formed workflow references to earlier steps, the trigger, the item and settings are accepted", async () => {
   const files = withWorkflowSteps([
-    { id: "write", action: "add", input: { text: "$trigger", tag: "literal", count: 3 } },
+    {
+      id: "write",
+      action: "add",
+      input: { text: "$trigger", tag: "literal", count: 3, title: "$trigger.slice.title" },
+    },
     { id: "check", action: "items-store.get", input: { id: "$steps.write.output.id", lookback: "$settings.lookback" } },
     {
       id: "each",
@@ -520,13 +524,14 @@ test("well-formed workflow references to earlier steps, the trigger, the item an
 
 test("a malformed workflow reference is reported with the grammar", async () => {
   const files = withWorkflowSteps([
-    { id: "write", action: "add", input: { text: "$trigger.text", price: "$5" } },
+    { id: "write", action: "add", input: { text: "$trigger..text", price: "$5", title: "$trigger.a b" } },
     { id: "keep", approval: "Keep it?", show: "$steps.write" },
   ]);
   const problems = await problemsOf(files);
   for (const [path, text] of [
-    ["/steps/0/input/text", "$trigger.text"],
+    ["/steps/0/input/text", "$trigger..text"],
     ["/steps/0/input/price", "$5"],
+    ["/steps/0/input/title", "$trigger.a b"],
     ["/steps/1/show", "$steps.write"],
   ] as const) {
     const problem = findProblem(problems, workflowFile, `${text} is not a reference`);

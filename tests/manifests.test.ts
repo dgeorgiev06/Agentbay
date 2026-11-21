@@ -613,8 +613,8 @@ const written = { items: [{ id: "a" }, { id: "b" }] };
 const afterWrite = { trigger: { topic: "tea" }, outputs: new Map([["write", written]]) };
 
 const grammar =
-  "write $trigger, $item, $settings.<key> or $steps.<id>.output; $item and $steps.<id>.output take an optional " +
-  "dotted path such as .items.0. Every value that starts with $ is read as a reference.";
+  "write $trigger, $item, $settings.<key> or $steps.<id>.output; $trigger, $item and $steps.<id>.output take " +
+  "an optional dotted path such as .items.0. Every value that starts with $ is read as a reference.";
 
 describe("a workflow target's resolve", () => {
   test("$trigger resolves to the trigger", async () => {
@@ -720,7 +720,13 @@ describe("a workflow target's resolve", () => {
     assert.deepEqual(target.resolve("$steps.write.output.items.0.id", withItem), { ok: true, value: "a" });
     for (const text of [
       "$",
-      "$trigger.topic",
+      "$trigger.",
+      "$trigger..topic",
+      "$triggers",
+      "$trigger.a b",
+      "$trigger.tags.1+",
+      "$item.a b",
+      "$item.slice/name",
       "$item.",
       "$item..id",
       "$steps.write",
@@ -737,11 +743,46 @@ describe("a workflow target's resolve", () => {
     }
   });
 
+  test("$trigger takes a dotted path as an output does, and a path that leads nowhere says what is there", async () => {
+    const target = await workflowTarget("briefing", "workflows/morning.yaml");
+    const scope = { ...afterWrite, trigger: { request: { slice: "TD1" }, tags: ["a", "b"] } };
+    assert.deepEqual(target.resolve("$trigger.request.slice", scope), { ok: true, value: "TD1" });
+    assert.deepEqual(target.resolve("$trigger.tags.0", scope), { ok: true, value: "a" });
+    assert.deepEqual(target.resolve("$trigger.tags.2", scope), {
+      ok: false,
+      problems: [sentence("$trigger.tags.2 resolves to nothing: $trigger.tags has no 2; it is a list of 2 elements.")],
+    });
+    assert.deepEqual(target.resolve("$trigger.tags.1x", scope), {
+      ok: false,
+      problems: [
+        sentence("$trigger.tags.1x resolves to nothing: $trigger.tags has no 1x; it is a list of 2 elements."),
+      ],
+    });
+    assert.deepEqual(target.resolve("$trigger.tags.01", scope), {
+      ok: false,
+      problems: [
+        sentence("$trigger.tags.01 resolves to nothing: $trigger.tags has no 01; it is a list of 2 elements."),
+      ],
+    });
+    assert.deepEqual(target.resolve("$trigger.request.title", afterWrite), {
+      ok: false,
+      problems: [
+        sentence(
+          "$trigger.request.title resolves to nothing: $trigger has no request; it is a mapping with the keys topic.",
+        ),
+      ],
+    });
+  });
+
   test("$item takes a dotted path as an output does, and a path that leads nowhere says what is there", async () => {
     const target = await workflowTarget("briefing", "workflows/morning.yaml");
     const withItem = { ...afterWrite, item: { slice: { name: "TD1" }, tags: ["a"] } };
     assert.deepEqual(target.resolve("$item.slice.name", withItem), { ok: true, value: "TD1" });
     assert.deepEqual(target.resolve("$item.tags.0", withItem), { ok: true, value: "a" });
+    assert.deepEqual(target.resolve("$item.tags.0x", withItem), {
+      ok: false,
+      problems: [sentence("$item.tags.0x resolves to nothing: $item.tags has no 0x; it is a list of 1 element.")],
+    });
     assert.deepEqual(target.resolve("$item.slice.title", withItem), {
       ok: false,
       problems: [

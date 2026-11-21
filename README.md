@@ -142,23 +142,22 @@ tests/           python3 tests/run.py (the tests of a component live in its own 
 
 | command | does |
 |---|---|
-| `bay check [--base <ref> --proposal <file>] [--limits [--write]]` | lint and resolve everything; with `--base`, also check a change against core ownership; `--limits` checks the ceilings, `--write` records lower counts (release only) |
-| `bay build` / `bay clean` | compile into a project / remove what was generated |
-| `bay catalog [<name>] [--roles]`, `bay describe <name>` | what is installed, resolved; `--roles` lists the role units |
-| `bay show <mode> --resolved` | a mode's features after `extends`, with the file each comes from |
-| `bay call <mode>.<endpoint> '<json>'` | run a feature |
-| `bay submit '<json>' --token <token>`, `bay show <callId>`, `bay show reclaim <runId>`, `bay show close <callId> --reason <text>` | hand back a step's output; current state; mark a stuck run reclaimed; end an open call as abandoned |
-| `bay approve <callId\|runId> [--reject]` | pass an approval gate in your terminal, or from chat when `approve.from` lists chat |
-| `bay approve <F-id> [--defer\|--wontfix]` | decide a backlog item from the analysis mode (follows `approve.from`, like a gate) |
-| `bay status [--agents\|--log]`, `bay note <ref> "text"` | calls, steps, cost, agent runs (grouped by role, mode, model, tier); the raw run log; a note |
-| `bay note task`, `bay note dispatch <taskId> --agent <name> --input <x> [--unguarded <reason>]`, `bay note done <taskId>`, `bay note review <taskId> '<json>'`, `bay plan <taskId> [--done <n>]` | agent run records: a fresh taskId; the Chief of Staff logs each dispatch, its finish and outside review; a subagent first records its outcome and to-do (`bay plan` is its only `bay` command) |
-| `bay new mode <name>`, `bay new feature <name> --mode <mode>`, `bay new connector <name> --implements <interface> --mode <mode>`, `bay new content-type <name> --mode <mode>`, `bay new env <name> --mode <mode>` | create a mode, or a feature, a source connector, a content type or an env inside a mode in `components/modes/`, from a template |
-| `bay secret set <NAME>` | store a secret (read from your terminal, never echoed) |
-| `bay auth <connector>` | a connector's browser login (Claude Code asks first; needs the browser on this machine) |
-| `bay config` | print every agentbay.config.yaml setting, from the schemas |
+| `bay check` | Check manifests, skills, workflows, imports and limits, and report every problem at once. |
+| `bay new <mode\|action\|skill\|workflow\|interface> <name> [--mode <mode>] [--tier base\|modes]` | Write a new mode, action, skill, workflow or interface from its template. |
+| `bay actions [<mode>] [--find <words>]` | List the active modes, or the actions of one mode with their descriptions, effects and input schemas; --find keeps those that hold every given word. |
+| `bay call <mode.action> ['<json>'] \| call --workflow <mode>:<path> ['<json>'] \| call --tool <name> '<json>'` | Start an action or a workflow and print the run; or call a kernel tool, which needs a task token unless it is actions. |
+| `bay submit <json \| @file \| -> --token <token> [--tokens <n>] [--usd <x>]` | Hand in the output of a waiting skill step, with the token of its task. |
+| `bay runs [<run> [--full] [--events] [--new-token [--step <step key>]]]` | List the runs, newest first; or show one run with its steps and task; --events adds events, --new-token replaces the token of every task, or with --step only of that step's task. |
+| `bay approve <run> <stepKey> --hash <hash> [--reject \| --choice <name>] [--via terminal \| --via chat --quote "<the owner's words>"]; approve --trust <mode> [--reject] [--via chat --hash <hash> --quote "<the owner's words>"]` | Approve or reject what a waiting approval shows, or take one of its choices, naming its hash; or, with --trust, give or withdraw trust in a mode's list. From a terminal, or from chat if allowed. |
+| `bay resume <run> [--rerun \| --extend <measure>=<amount>[,...] \| --stop] [--via terminal \| --via chat --quote "<the owner's words>"] \| resume --due` | Continue a run: --rerun runs an unfinished step, or a side-by-side foreach's failed items, again, --extend raises a spent budget, --stop ends it, each from a terminal or from chat if allowed; --due wakes waits. |
+| `bay build [--clean] [--adapter <name>]` | Write the adapter's agent files for every skill step; --clean removes what a build wrote. |
+| `bay secret set <NAME> \| secret check <NAME>` | Store a secret in the macOS keychain from an interactive terminal, or check that one can be found. |
+| `bay auth <mode>` | Log in to a source that needs a browser login (not built yet). |
+| `bay config` | Print every setting the project config may hold, with its current value, and which mode serves whom. |
+| `bay import-v4 <folder>` | Copy your own to-dos and other local items from an agentbay 4 store once (not built yet). |
 
-Run as `./bay.sh <command>` in the kit, or `.agentbay/bay <command>` in a built project. A component's `README.md`
-lists any commands it adds.
+Run as `./bay.sh <command>` in the kit, and as `<kit>/bay.sh <command> --project <folder>` for a project
+elsewhere.
 
 ## Adding things
 
@@ -187,14 +186,22 @@ text for its `goal` and `deliverable`, so the example states them in words.
 
 ## Safety, in one paragraph
 
-Where it runs, the guard hook narrows what subagents can ask to do; it is defense in depth, not isolation, and
-cannot contain code once something runs it. A project whose config sets `skillSteps.run: without-the-hook` runs
-skill steps with no hook: the kernel takes their outputs, and each run records that no hook saw them. Nothing that runs code is auto-approved except a role's own read-only data shim;
-the main thread is pre-approved only for `bay show|status|note|catalog`. `bay secret set`
-needs your terminal. Approval gates and backlog approvals follow `approve.from` in agentbay.config.yaml (default
-`[terminal]`; chat is recorded as `user@chat-via-cos`). `approve.plans` makes a listed step show its plan for your
-approval before it runs. `bay auth` asks first in Claude Code.
-Details: [docs/DESIGN.md#safety-model](docs/DESIGN.md#safety-model).
+Where it runs, the guard hook narrows what step agents can do: a step's tools, the folders it reads and writes and
+the words of the commands it may run all come from its mode's manifest, and the main thread may write anything but
+`.agentbay/`, `.claude/`, `.mcp.json`, the kit's `bay/`, `schemas/`, `adapters/` and `framework/`, and, outside the kit, its `components/base/`. It is defence
+in depth, not isolation, and cannot contain code once a listed command runs it. A project whose config sets
+`skillSteps.run: without-the-hook` runs skill steps with no hook: the kernel takes their outputs, and each run
+records that no hook saw them. A mode's script runs in a child process under Node's permission model and reaches
+the kernel only through its toolbox, where each operation is checked against the mode's grants and its action's
+effects. A mode outside the kit's `components/base/` is granted the commands it lists only after the owner trusts
+that list. Secrets come from the environment (`AGENTBAY_SECRET_<NAME>`) or, on macOS, the keychain: `bay secret
+set` prints the command you run yourself, which never echoes the value. An approval and the owner's answers to
+`bay resume` are taken only from a channel that `approvals.from` in agentbay.config.yaml lists, `terminal` or
+`chat` (default `[terminal]`); trust is given at a terminal always, and from chat only when it lists chat. An
+answer is recorded as `owner at the terminal` or `owner via chat, quoted: "<the owner's words>"`. Details:
+[adapters/claude-code/README.md](adapters/claude-code/README.md) for the hook,
+[docs/designs/operations/0-frame.md](docs/designs/operations/0-frame.md) for the toolbox and
+[docs/designs/trust/0-frame.md](docs/designs/trust/0-frame.md) for trust.
 
 ## A skill's output kept packed
 
@@ -260,8 +267,8 @@ advances the run is recorded and answered as accepted; the run takes it once, wh
 When items fail, the others still run to their end or to their wait, and are recorded. The run then waits for the
 owner with one sentence that names every failed item, by the name its foreach declares (below) or else by its
 place, such as `the 3rd of 4 items`, then its key and its reason, each reason cut to 200 characters:
-`Step each failed for 1 of 4 items: the 3rd of 4 items at each[2]: <reason>`. `bay resume <run> --rerun` runs only the failed items again, under a new key such as `each[2]~2`;
-items that finished are not run again and keep their outputs. `bay resume <run> --stop` fails the foreach with that
+`Step each failed for 1 of 4 items: the 3rd of 4 items at each[2]: <reason>`. `bay resume <run> --rerun [--via terminal | --via chat --quote "<the owner's exact words>"]` runs only the failed items again, under a new key such as `each[2]~2`;
+items that finished are not run again and keep their outputs. `bay resume <run> --stop [--via terminal | --via chat --quote "<the owner's exact words>"]` fails the foreach with that
 sentence, and the run ends as any failed run: `failed` only when every finished action only read, so there is
 nothing to undo; otherwise `undone`. The kernel then runs, latest first, the undo of each finished action that has
 one and does not delete, and lists what it undid and what failed to undo; an action that deletes is listed as a
@@ -326,6 +333,20 @@ validator cannot compile or that sends it round without end. The validator has n
 cannot find stops the compile; it never fetches. A `pattern` is a regular expression as written, as in a schema
 file: one that backtracks without end stops the script at its own time limit, and nothing else.
 
+## The time and random values a script uses
+
+`context.now()` is the time the script's step first started, and `context.random(bytes)` answers a value of 1 to
+64 random bytes as hex. The kernel records each value in the step before the script sees it, so a step that runs
+again after a crash, a stop for a called action or the owner's rerun reads the same time and the same values in the
+same order; asked for more, it gets fresh ones. A skill's next round, a foreach item's new attempt and every other
+step have their own values. A step records at most 64, and on a rerun a value asked in another size than the one
+recorded is a failed answer. The values are stored packed, and a run shows only how many a step drew
+(`drawnValues`). The kit's lint refuses `Date.now()`, `new Date()` with no arguments, `Math.random()`
+and the random calls of `node:crypto`, also through `globalThis`, computed or taken apart, in every file of a mode
+that is not a test. It cannot see an alias made another way, `Intl` formatting with no date, or
+`performance.now()` and `process.hrtime()`, which it leaves alone by design
+(`docs/designs/runs/replay-safe-clock.md`).
+
 ## Testing a part of a workflow
 
 A mode's test can run one part of a workflow alone. `project.runWorkflowPart(mode, path, { input, given, until })`,
@@ -346,7 +367,8 @@ command ran there.
 
 A run started this way says so. `bay runs <run> --json` shows its target with `part`, the given steps and
 `until`; `--events` shows a `step.given` event for each given step; and a run stopped by `until` waits for its
-owner with a question that says a test stopped it there. Resuming it stops there again. `bay` itself has no way
+owner with a question that says a test stopped it there. Resuming it stops there again, so `bay runs <run>` offers
+only `bay resume <run> --stop`, with the owner's source, to end it. `bay` itself has no way
 to start one: a test that drives `bay` in a process of its own runs `node tests/start-part.ts <mode>:<path>
 '<trigger json>' '<part json>'` in its project, which works only in a folder under the temporary folder.
 

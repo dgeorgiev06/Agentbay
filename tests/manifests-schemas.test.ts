@@ -128,14 +128,14 @@ test("a name that is not kebab-case says what form is expected", async () => {
 });
 
 test("a step is checked against the kind its first field names, without noise from the other kinds", async () => {
-  const mode = { ...notesMode, actions: { add: { ...addAction(), run: [{ skill: "skills/write-note" }] } } };
+  const run = [{ skill: "skills/write-note", tier: "huge" }];
+  const mode = { ...notesMode, actions: { add: { ...addAction(), run } } };
   assert.deepEqual(await notesProblems(mode), [
     {
       file: paths.notes,
-      path: "/actions/add/run/0",
-      line: 16,
-      message: "actions.add.run.0 is missing the required field tier.",
-      fix: "Add tier. Expected: How capable a model the skill needs.",
+      path: "/actions/add/run/0/tier",
+      line: 17,
+      message: 'actions.add.run.0.tier must be one of "fast", "balanced", "deep", but it is "huge".',
     },
     notesBindingRefused,
   ]);

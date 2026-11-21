@@ -115,13 +115,16 @@ function actionStoresNotOwned(design: Design, action: Placed): readonly string[]
   );
 }
 
-function ruleStoresNotOwned(design: Design, rule: Kept): readonly string[] {
-  const owned = storesOf(design.modules.filter((module) => module.name === rule.module));
-  const sides = [
+function sidesOf(rule: Rule): readonly { readonly verb: string; readonly values: readonly Value[] }[] {
+  return [
     { verb: "takes", values: rule.takes },
     { verb: "gives", values: rule.gives },
   ];
-  return sides.flatMap(({ verb, values }) =>
+}
+
+function ruleStoresNotOwned(design: Design, rule: Kept): readonly string[] {
+  const owned = storesOf(design.modules.filter((module) => module.name === rule.module));
+  return sidesOf(rule).flatMap(({ verb, values }) =>
     storedIn(values)
       .filter((store) => !owned.includes(store))
       .map(
@@ -189,11 +192,7 @@ const rulesNobodyApplies: Check = (design) => {
 };
 
 function valuesTwice(rule: Rule): readonly string[] {
-  const sides = [
-    { verb: "takes", values: rule.takes },
-    { verb: "gives", values: rule.gives },
-  ];
-  return sides.flatMap(({ verb, values }) =>
+  return sidesOf(rule).flatMap(({ verb, values }) =>
     twice(values.map((value) => value.name)).map(
       (name) => `The rule "${rule.name}" ${verb} two values named "${name}"; give each value a name of its own.`,
     ),

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { textOf } from "../scripts/lib/json-values.ts";
-import { mostCodePoints, mostParts, spelledOut } from "../scripts/lib/long-texts.ts";
+import { spelledOut } from "../scripts/lib/long-texts.ts";
+
+const mostCodePoints = 10_000;
+
+const mostParts = 20;
 
 describe("a long text said by rule in a worked example, spelled out by one function", () => {
   test("500 times a is the text of 500 a's, and a value with no form is left as it is", () => {

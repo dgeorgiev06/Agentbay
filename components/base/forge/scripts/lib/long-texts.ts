@@ -14,9 +14,9 @@ type Part = {
 
 type Read = { readonly ok: true; readonly text: string } | { readonly ok: false; readonly reason: string };
 
-export const mostParts = 20;
+const mostParts = 20;
 
-export const mostCodePoints = 10_000;
+const mostCodePoints = 10_000;
 
 const formKey = "$text";
 

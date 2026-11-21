@@ -1,6 +1,6 @@
 import { computed, counted, joined, judged, shortened, type Card, type CardLine } from "./card-lines.ts";
 import { heldByPlanRules } from "./cut-from-design.ts";
-import { modulesReached, type DesignSummary } from "./design-summary.ts";
+import { modulesReached, rulesApplied, type DesignSummary } from "./design-summary.ts";
 import type { Plan, PlannedSlice } from "./plan.ts";
 import type { Conditions } from "./plan-conditions.ts";
 import type { WorkedOut } from "./plan-waves.ts";
@@ -59,7 +59,10 @@ function sliceWords(slice: PlannedSlice, design: DesignSummary): string {
   const module = modules.length === 0 ? "no module of the design" : `module ${joined(modules)}`;
   const meets = slice.meets ?? [];
   const met = meets.length === 0 ? "meets no condition" : `meets ${meets.join(", ")}`;
-  return `${slice.name}, ${module}; ${met}`;
+  const rules = rulesApplied(slice.interface ?? [], design).map((rule) => rule.name);
+  const noun = rules.length === 1 ? "rule" : "rules";
+  const applies = rules.length === 0 ? "applies no rule of the design" : `applies the ${noun} ${joined(rules)}`;
+  return `${slice.name}, ${module}; ${met}; ${applies}`;
 }
 
 function sliceLines(input: PlanCardInput, wave: number, slice: PlannedSlice): readonly CardLine[] {

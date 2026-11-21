@@ -65,5 +65,6 @@ export const run = defineScript((input) => {
   const shown = planter ? roundsCard(starting, slice) : oneSliceCard(starting);
   const fixed = namedTests(starting.slice);
   const bugs = request.bugs ?? [];
-  return Promise.resolve({ slice, base, bugs, interface: [...starting.interface], fixed, ...shown });
+  const rules = request.rules ?? [];
+  return Promise.resolve({ slice, base, bugs, interface: [...starting.interface], rules, fixed, ...shown });
 });

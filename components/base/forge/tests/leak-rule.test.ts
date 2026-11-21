@@ -148,6 +148,19 @@ describe("the shared-text rule", () => {
     assert.deepEqual(sharedText({ ...asked, base: [design] }), []);
   });
 
+  test("a long text a design's example says by rule is spelled out as the design check spells it, so both sides may write it", () => {
+    const parts = [{ repeat: "ü", times: 30 }, { repeat: "🥛", times: 30 }, "!"];
+    const line = `    "${"ü".repeat(30)}${"🥛".repeat(30)}!",`;
+    const both = [testText, `test("a long text is added", () => {\n  assert.equal(\n${line}\n  );\n});\n`].join("\n");
+    const code = file(codePath, ["return added(", line, ");"]);
+    const designFile = "docs/designs/todo/design.yaml";
+    const example = { examples: [{ input: { text: { $text: parts } }, answer: { id: 1 } }] };
+    const design = { path: designFile, text: JSON.stringify({ interfaces: [{ name: "todo", actions: [example] }] }) };
+    const asked: Compared = { ...compared([code]), tests: [both], interface: [interfacePath, designFile] };
+    assert.deepEqual(sharedText(asked), [{ path: codePath, lines: 1 }]);
+    assert.deepEqual(sharedText({ ...asked, base: [design] }), []);
+  });
+
   test("the phrases are the conditions' sentences and the paths, lower case, none shorter than ten characters", () => {
     assert.deepEqual(phrasesOf(slice, [codePath, "a/b.ts"]), [
       "a quill is counted once, even when the ink is dry and the moon is full",

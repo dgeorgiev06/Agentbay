@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import { fieldsOf, readYaml } from "../../../../bay/sdk.ts";
 import { cutFromDesignProblems } from "../scripts/lib/cut-from-design.ts";
 import { committedFiles, designSummaryOf, modulesReached, type DesignSummary } from "../scripts/lib/design-summary.ts";
+import { listOf } from "../scripts/lib/json-values.ts";
 import { fixedFileProblems, type ComesAfter } from "../scripts/lib/fixed-files.ts";
 import type { Plan, PlannedSlice } from "../scripts/lib/plan.ts";
 import { conditionsNotHeld, unmetConditions } from "../scripts/lib/plan-conditions.ts";
@@ -170,7 +171,7 @@ describe("the plan file and what the rounds take from it", () => {
     const document = planDocument(todoPlan, named);
     assert.equal(planOf(document).design, designFile);
     assert.equal(planOf(document).requirements, requirementsFile);
-    assert.deepEqual(sliceRequests(document, ["TD1"], "abc1234"), [
+    assert.deepEqual(sliceRequests(document, ["TD1"], { base: "abc1234" }), [
       {
         planned: { title: fieldsOf(tdOne).title, slice: fieldsOf(tdOne).slice },
         base: "abc1234",
@@ -178,6 +179,27 @@ describe("the plan file and what the rounds take from it", () => {
         interface: fieldsOf(tdOne).interface,
       },
     ]);
+  });
+
+  test("each slice request carries the rules its actions apply: those of the actions whose request file it names", () => {
+    const design = todoSummary();
+    const document = planDocument(todoPlan, { requirements: requirementsFile, design: designFile });
+    const [one = null, two = null] = sliceRequests(document, ["TD1", "TD2"], { base: "abc1234", design });
+    const [add] = design.rules;
+    assert.deepEqual(fieldsOf(one).rules, [
+      {
+        name: "add-todo",
+        module: "todo",
+        decides: "Whether a text may be added, and the id the new todo gets.",
+        takes: add?.takes ?? null,
+        gives: add?.gives ?? null,
+        appliedBy: [{ action: "todo.add", reads: ["todos"], writes: ["todos"] }],
+      },
+    ]);
+    assert.deepEqual(
+      listOf(fieldsOf(two).rules).map((rule) => fieldsOf(rule).name),
+      ["mark-done", "remove-todo"],
+    );
   });
 
   test("two slices of one name are refused with the place of the second", () => {

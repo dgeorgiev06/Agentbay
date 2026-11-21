@@ -20,9 +20,30 @@ As `schemas/design.json`, sent with `submit`:
 
 ```json
 {
-  "practices": [{ "id": "P-52", "sentence": "The module todo-rules holds the rules as pure functions; todo reads and writes around them." }],
+  "practices": [{ "id": "P-52", "sentence": "Each action of todo applies one rule; add takes the stored todos and the next id and gives the new todos, the new next id and the answer." }],
   "modules": [
-    { "name": "todo", "hides": "How todos are kept and numbered.", "implements": ["todo"], "owns": { "tables": ["todos"] } }
+    {
+      "name": "todo",
+      "hides": "How todos are kept and numbered.",
+      "implements": ["todo"],
+      "owns": { "tables": ["todos", "todo-ids"] },
+      "rules": [
+        {
+          "name": "add",
+          "decides": "Whether a text may be added, and the id the new todo gets.",
+          "takes": [
+            { "name": "request", "schema": { "$ref": "schemas/todo/add-request.json" } },
+            { "name": "todos", "store": "todos", "schema": { "type": "array" } },
+            { "name": "next-id", "store": "todo-ids", "schema": { "type": "integer", "minimum": 1 } }
+          ],
+          "gives": [
+            { "name": "todos", "store": "todos", "schema": { "type": "array" } },
+            { "name": "next-id", "store": "todo-ids", "schema": { "type": "integer", "minimum": 1 } },
+            { "name": "answer", "schema": { "$ref": "schemas/todo/add-response.json" } }
+          ]
+        }
+      ]
+    }
   ],
   "interfaces": [
     {
@@ -30,10 +51,16 @@ As `schemas/design.json`, sent with `submit`:
       "actions": [
         {
           "name": "add",
-          "request": { "type": "object", "required": ["text"], "properties": { "text": { "type": "string" } } },
+          "request": { "type": "object", "required": ["text"], "properties": { "text": { "type": "string", "maxLength": 500 } } },
           "response": { "type": "object", "required": ["id"], "properties": { "id": { "type": "integer" } } },
           "serves": ["O1-C1"],
-          "examples": [{ "input": { "text": "buy milk" }, "answer": { "id": 1 } }]
+          "rule": "add",
+          "reads": ["todos", "todo-ids"],
+          "writes": ["todos", "todo-ids"],
+          "examples": [
+            { "input": { "text": "buy milk" }, "answer": { "id": 1 } },
+            { "input": { "text": { "$text": [{ "repeat": "a", "times": 500 }] } }, "answer": { "id": 1 } }
+          ]
         }
       ]
     }
@@ -50,6 +77,9 @@ As `schemas/design.json`, sent with `submit`:
   exact answer or the exact refusal sentence. `scripts/design-checked.ts` checks the design.
 - [DOD-4] (must) Every practice given is in `practices` once, with one sentence on how the design holds it, or
   why it does not apply.
+- [DOD-5] (must) Each action that writes or refuses applies a rule of the module that offers it; the rule takes
+  every value it decides from and gives every value the action writes, and the answer; the action reads and
+  writes exactly what its rule takes and gives.
 
 ## Instructions
 
@@ -57,12 +87,23 @@ As `schemas/design.json`, sent with `submit`:
 2. Draw the modules by what each hides; give each the interface it offers.
 3. For each action write the request and response as JSON Schema, the conditions it serves, and examples:
    `earlier` calls when the example needs them, the `input`, and the `answer` or the `refusal` sentence.
-4. Design so each practice given holds. For each, say in one sentence where in the design it holds, naming the
+4. Write the rules of the work, what is allowed, what comes next, what a thing costs, as `rules` of the module
+   that owns the data: each a pure function, with what it `takes` and what it `gives`, each value with its
+   schema and, when it is read from or written to a table or file, its `store`. A rule's `$ref` names
+   `schemas/<interface>/<action>-<side>.json`. Give each action that writes or refuses its `rule`, and in `reads`
+   and `writes` what its thin function reads before the rule and writes after; it decides nothing itself.
+5. When an example needs a long text, such as one at a length limit, say it by rule instead of typing it:
+   `{"$text": [{"repeat": "a", "times": 500}]}`, or parts in order for mixed text, such as
+   `{"$text": [{"repeat": "ü", "times": 250}, {"repeat": "🥛", "times": 250}]}`. A part is a text or a repeat;
+   at most 20 parts and 10,000 characters, counted in Unicode code points. Forge spells it out before it checks
+   the example and keeps it as you wrote it.
+6. Design so each practice given holds. For each, say in one sentence where in the design it holds, naming the
    module or action, or why it does not apply.
-5. When `answering` is given, correct what each practice not held and each finding names, keep the rest, and
+7. When `answering` is given, correct what each practice not held and each finding names, keep the rest, and
    say for each such practice how the design now holds it. Where a practice was not held, change the design
-   itself, not only its sentence. You answer once; the challenger judges the answer.
-6. Hold to your stance. Submit. If it comes back with feedback, correct each problem it names.
+   itself, not only its sentence: for P-52, the rules, what they take and give, and what each action reads and
+   writes. You answer once; the challenger judges the answer.
+8. Hold to your stance. Submit. If it comes back with feedback, correct each problem it names.
 
 ## Tools
 

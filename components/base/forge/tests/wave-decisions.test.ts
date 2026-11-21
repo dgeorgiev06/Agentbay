@@ -166,6 +166,28 @@ function joining(name: string, files: readonly string[]): ToJoin {
 }
 
 describe("what the wave asks proof", () => {
+  test("the examples to try name every slice, whether it is in the head, and the actions built before and in the head", () => {
+    const ca = { ...joining("TD1", ["a.ts"]), examples: [{ action: "counting.add", examples: [] }] };
+    const left = {
+      ...joining("TD2", ["c.ts"]),
+      included: false,
+      examples: [{ action: "counting.done", examples: [] }],
+    };
+    const asking = fieldsOf(
+      proving({ name: "wave-1", base }, [ca], {
+        head: "combined",
+        trying: { builtBefore: ["counting.list"], slices: [ca, left] },
+      }),
+    );
+    assert.deepEqual(asking.trying, {
+      built: ["counting.list", "counting.add"],
+      slices: [
+        { slice: "TD1", inHead: true, examples: ca.examples },
+        { slice: "TD2", inHead: false, examples: left.examples },
+      ],
+    });
+  });
+
   const wave = { name: "wave-1", base };
   const joined = [joining("TD1", ["a.ts"]), joining("TD10", ["b.ts", "a.ts"])];
 
@@ -195,6 +217,13 @@ describe("what the wave asks proof", () => {
       alone.map((each) => each.keptOf),
       [["TD1"], ["TD10"]],
     );
+    assert.deepEqual(asking.trying, {
+      built: [],
+      slices: [
+        { slice: "TD1", inHead: true, examples: [] },
+        { slice: "TD10", inHead: true, examples: [] },
+      ],
+    });
     const first = fieldsOf(alone[0]?.asked ?? null);
     assert.equal(first.head, "TD1-head");
     assert.deepEqual(

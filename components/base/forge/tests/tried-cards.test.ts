@@ -8,7 +8,7 @@ import { blocksBySlice, shownResults, type TriedBlock } from "../scripts/lib/tri
 import { waveTrials, type Result } from "../scripts/lib/tried-examples.ts";
 import type { Joined, WaveChecks } from "../scripts/lib/wave-answer.ts";
 import { waveDrawn } from "../scripts/lib/wave-card.ts";
-import type { Settled } from "../scripts/lib/wave-standing.ts";
+import { settledOf, type Settled } from "../scripts/lib/wave-standing.ts";
 import { printed } from "./printed-card.ts";
 import { addToTry, countToTry, emptyName } from "./tally-design.ts";
 
@@ -270,6 +270,26 @@ function settled(name: string): Settled {
 }
 
 describe("the wave's merge card, with the examples tried on the combined head", () => {
+  test("with no combined head proved, a wave whose slices carry examples says they were not tried", () => {
+    const drawnCard = waveDrawn({
+      wave: 1,
+      into: "integration",
+      slices: [settled("TA")],
+      joined: { kind: "nothing to join" },
+      checks: { kind: "not asked" },
+      alone: [],
+      must: [],
+      tried: [],
+    });
+    assert.ok(
+      wordsOf(drawnCard.card.lines).includes(
+        "the design's examples: not tried, since no combined head was proved to try them on",
+      ),
+    );
+    assert.equal(settledOf({ examples: [{ action: "counting.add" }] }).carriesExamples, true);
+    assert.equal(settledOf({ examples: [] }).carriesExamples, false);
+  });
+
   const joined: Joined = { kind: "combined", head, branch: "forge/wave-1", merged: ["TA", "TB"] };
   const slices = [
     { slice: "TA", inHead: true, toTry: [addToTry] },

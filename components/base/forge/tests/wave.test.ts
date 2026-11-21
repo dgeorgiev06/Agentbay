@@ -89,7 +89,7 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     const asking = await shown(root, start.id);
     const question = textAt(fieldsOf(asking).waiting ?? null, "question");
     assert.equal(textAt(fieldsOf(asking).waiting ?? null, "reason"), "owner", JSON.stringify(asking));
-    assert.match(question, /1 of 3 items: item 1 \(slices\[1\]\)/);
+    assert.match(question, /1 of 3 items: TD10 \(The td10 mode counts what was added\) at slices\[1\]: /);
     assert.deepEqual(keptSlices(root), ["TD1", "TD10", "TD2"]);
     await provedAs(root, "TD10", ownPassed("TD10"));
     await bay(root, ["resume", start.id, "--rerun"]);

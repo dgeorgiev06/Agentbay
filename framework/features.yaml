@@ -259,6 +259,8 @@ features:
       - bay/run-report.ts
       - bay/waiting-report.ts
       - bay/approval-card.ts
+      - bay/approval-screen.ts
+      - bay/approval-words.ts
       - bay/owner-source.ts
       - bay/terminal.ts
       - bay/trust-card.ts

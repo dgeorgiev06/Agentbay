@@ -23,7 +23,7 @@ function flowing(lines: readonly Line[]): string {
     content: null,
     card: { title: "Merge wave 1?", lines, counted: { ran: 0, computed: 0, judged: lines.length } },
   };
-  return approvalLines(approval)
+  return approvalLines(approval, "run-1")
     .map((row) => row.replace(/^judged\s+/, ""))
     .join(" ")
     .replace(/\s+/g, " ");

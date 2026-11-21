@@ -67,13 +67,23 @@ const carderMode = {
       run: [{ script: "scripts/pass.ts" }],
     },
   },
-  workflows: ["workflows/computed.yaml", "workflows/judged.yaml", "workflows/forged.yaml", "workflows/items.yaml"],
+  workflows: [
+    "workflows/computed.yaml",
+    "workflows/judged.yaml",
+    "workflows/forged.yaml",
+    "workflows/items.yaml",
+    "workflows/screen.yaml",
+    "workflows/mixed.yaml",
+    "workflows/misplaced.yaml",
+  ],
 };
 
 type CardLine = {
   readonly mark: "computed" | "judged";
   readonly words: string;
   readonly source: { readonly step: string; readonly item?: number };
+  readonly section?: Json;
+  readonly short?: Json;
 };
 
 const inScope: CardLine = { mark: "computed", words: "in scope: 11 of 11 paths", source: { step: "draw" } };
@@ -109,12 +119,31 @@ function cardStep(quotes: readonly string[]): object {
 
 const reviewStep = { id: "review", action: "review" };
 
+const screenFacts: readonly CardLine[] = [
+  { ...inScope, section: "what", short: true },
+  { ...judgedLine, section: "checks", short: true },
+  { ...judgedLine, words: "and each case is named", section: "checks" },
+];
+
 const workflows: Readonly<Record<string, object>> = {
   computed: { name: "computed", steps: [drawStep(computedLines), cardStep([])] },
   judged: { name: "judged", steps: [reviewStep, drawStep([inScope, judgedLine]), cardStep(["review"])] },
   forged: {
     name: "forged",
     steps: [reviewStep, drawStep([{ ...judgedLine, mark: "computed" }]), cardStep(["review"])],
+  },
+  screen: { name: "screen", steps: [reviewStep, drawStep(screenFacts), cardStep(["review"])] },
+  mixed: { name: "mixed", steps: [reviewStep, drawStep([inScope, ...screenFacts]), cardStep(["review"])] },
+  misplaced: {
+    name: "misplaced",
+    steps: [
+      drawStep([
+        { ...inScope, section: "how" },
+        { ...inScope, section: "what", short: "yes" },
+        { ...inScope, section: "what", words: "x".repeat(601) },
+      ]),
+      cardStep([]),
+    ],
   },
   items: {
     name: "items",
@@ -310,6 +339,61 @@ test("the kernel still refuses a line marked computed whose source is a step tha
       textField(run, "reason"),
       "Step card cannot show its card: line 1 is marked computed but cites step review, " +
         "which ran the skill skills/review of mode carder; a computed line cites a step that ran no skill.",
+    );
+  });
+});
+
+test("a card whose every line has a section is a screen: it prints the short screen, and its details on request", async () => {
+  await withCarder(async (project) => {
+    const { runId, run } = await stoppedAt(project, "screen");
+    const lines = fieldOf(fieldOf(fieldOf(run, "waiting") ?? null, "card") ?? null, "lines");
+    assert.deepEqual(
+      Array.isArray(lines) ? lines.map((line: Json) => [fieldOf(line, "section"), fieldOf(line, "short")]) : [],
+      [
+        ["what", true],
+        ["checks", true],
+        ["checks", undefined],
+      ],
+    );
+    const root = ["--project", project.root];
+    const shown = (await bay(["runs", runId, ...root])).output;
+    assert.ok(shown.includes("\nMERGE TR2?\n"), shown);
+    assert.ok(shown.includes(`\nDetails:\n  bay runs ${runId} --details`), shown);
+    assert.ok(!shown.includes("decide with:") && !shown.includes("\nsteps:"), shown);
+    const hash = textField(fieldOf(run, "waiting") ?? null, "hash") ?? "";
+    const details = (await bay(["runs", runId, "--details", ...root])).output;
+    assert.ok(details.includes(`\nFor the record\n`), details);
+    assert.ok(details.includes(`\n    bay approve ${runId} card --choice <name> --hash ${hash}`), details);
+    const checks = (await bay(["runs", runId, "--details", "--section", "checks", ...root])).output;
+    assert.ok(checks.includes("\nOne section of the details.\n") && !checks.includes("What it is"), checks);
+    const refused = await bay(["runs", runId, "--details", "--section", "record", ...root]);
+    assert.equal(refused.output.trim(), "The section record is not one of what, checks, open, problems.");
+  });
+});
+
+test("the kernel refuses a card where only some lines have a section", async () => {
+  await withCarder(async (project) => {
+    const { run } = await stoppedAt(project, "mixed");
+    assert.equal(textField(run, "status"), "failed");
+    assert.equal(
+      textField(run, "reason"),
+      "Step card cannot show its card: 3 of its 4 lines have a section; on a screen every fact has one, " +
+        "and on a card none does.",
+    );
+  });
+});
+
+test("the kernel refuses a fact in no known section, a short that is not true, and words past their bound", async () => {
+  await withCarder(async (project) => {
+    const { run } = await stoppedAt(project, "misplaced");
+    const cannot = "Step card cannot show its card:";
+    assert.equal(
+      textField(run, "reason"),
+      [
+        `${cannot} line 1 has the section how; a fact's section is what, checks, open, problems.`,
+        `${cannot} line 2 has the short "yes"; short is true or left out.`,
+        `${cannot} line 3 has words longer than 600 characters.`,
+      ].join(" "),
     );
   });
 });

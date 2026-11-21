@@ -59,6 +59,8 @@ const forRuns = [
   ...readers,
   "bay/adapter.ts",
   "bay/approval-card.ts",
+  "bay/approval-screen.ts",
+  "bay/approval-words.ts",
   "bay/database-lock.ts",
   "bay/item-words.ts",
   "bay/kernel.ts",

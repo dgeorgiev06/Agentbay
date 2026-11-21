@@ -9,18 +9,26 @@ const marks = ["ran", "computed", "judged"] as const;
 
 type Mark = (typeof marks)[number];
 
+export const sections = ["what", "checks", "open", "problems"] as const;
+
+export type Section = (typeof sections)[number];
+
+type Placed = { readonly section?: Section; readonly short?: true };
+
 type CommandSource = StepSource & {
   readonly command: string;
   readonly run?: string;
 };
 
-type GivenLine =
+type GivenLine = (
   | { readonly mark: "ran"; readonly words: string; readonly source: CommandSource }
-  | { readonly mark: "computed" | "judged"; readonly words: string; readonly source: StepSource };
+  | { readonly mark: "computed" | "judged"; readonly words: string; readonly source: StepSource }
+) &
+  Placed;
 
 type InItem = { readonly foreach?: string; readonly itemCount?: number; readonly itemName?: ItemName };
 
-type CardLine =
+type CardLine = (
   | ({ readonly mark: "ran"; readonly words: string; readonly source: CommandSource } & InItem)
   | ({ readonly mark: "computed"; readonly words: string; readonly source: StepSource } & InItem)
   | ({
@@ -28,7 +36,9 @@ type CardLine =
       readonly words: string;
       readonly source: StepSource;
       readonly skills: readonly SkillUsed[];
-    } & InItem);
+    } & InItem)
+) &
+  Placed;
 
 export type Card = {
   readonly title: string;
@@ -51,7 +61,11 @@ type Given = {
 
 const cardFields: readonly string[] = ["title", "lines", "withheld"];
 
-const lineFields: readonly string[] = ["mark", "words", "source"];
+const lineFields: readonly string[] = ["mark", "words", "source", "section", "short"];
+
+const longestTitle = 200;
+
+const longestWords = 600;
 
 const kernelLineFields: readonly string[] = ["skills", "foreach", "itemCount", "itemName"];
 
@@ -146,6 +160,23 @@ function sourcedLine(mark: Mark, words: string, source: Json | undefined): Given
   }
 }
 
+function placedOf(line: Json): Placed | string {
+  const section = fieldOf(line, "section");
+  const short = fieldOf(line, "short");
+  if (section === undefined) {
+    return short === undefined ? {} : "has short but no section; only a fact in a section can be short.";
+  }
+  const known = sections.find((each) => each === section);
+  if (known === undefined) {
+    const named = typeof section === "string" ? section : JSON.stringify(section);
+    return `has the section ${named}; a fact's section is ${sections.join(", ")}.`;
+  }
+  if (short !== undefined && short !== true) {
+    return `has the short ${JSON.stringify(short)}; short is true or left out.`;
+  }
+  return short === true ? { section: known, short } : { section: known };
+}
+
 function givenLine(line: Json): GivenLine | string {
   if (!isRecord(line)) {
     return "is not a mapping of mark, words and source.";
@@ -154,16 +185,24 @@ function givenLine(line: Json): GivenLine | string {
   if (stray !== undefined) {
     return (
       `has the field ${stray}, which a line does not take; a line has mark, words and source, ` +
-      "and the kernel adds the skill and tier of a judged line, " +
+      "and on a screen its section and whether it is short; the kernel adds the skill and tier of a judged line, " +
       "and the foreach, its number of items and the item's name of a step in an item."
     );
   }
   const mark = fieldOf(line, "mark");
   const words = textField(line, "words");
+  const placed = placedOf(line);
   if (!isMark(mark)) {
     return markProblem(mark);
   }
-  return words === undefined ? "has no words." : sourcedLine(mark, words, fieldOf(line, "source"));
+  if (words === undefined) {
+    return "has no words.";
+  }
+  if (typeof placed === "string") {
+    return placed;
+  }
+  const sourced = sourcedLine(mark, words, fieldOf(line, "source"));
+  return typeof sourced === "string" ? sourced : { ...sourced, ...placed };
 }
 
 function computedProblem(cited: Cited): string | undefined {
@@ -228,7 +267,7 @@ async function checkedLine(context: CardContext, line: Json): Promise<CardLine |
     case "ran":
       return (await ranProblem(context, cited, given.source)) ?? { ...given, ...inItem };
     case "computed":
-      return computedProblem(cited) ?? { mark: "computed", words: given.words, source: given.source, ...inItem };
+      return computedProblem(cited) ?? { ...given, mark: "computed", ...inItem };
     case "judged":
       return judgedProblem(context, cited) ?? { ...given, mark: "judged", skills: cited.skills, ...inItem };
   }
@@ -253,6 +292,32 @@ function countedOf(lines: readonly CardLine[]): Readonly<Record<Mark, number>> {
   return { ran: count("ran"), computed: count("computed"), judged: count("judged") };
 }
 
+function isPlaced(line: Json): boolean {
+  return isRecord(line) && Object.hasOwn(line, "section");
+}
+
+function screenProblems(given: Given): readonly string[] {
+  const placed = given.lines.filter(isPlaced).length;
+  if (placed === 0) {
+    return [];
+  }
+  if (placed < given.lines.length) {
+    return [
+      `${String(placed)} of its ${String(given.lines.length)} lines have a section; ` +
+        "on a screen every fact has one, and on a card none does.",
+    ];
+  }
+  const long = (text: string, longest: number): boolean => Array.from(text).length > longest;
+  const title = long(given.title, longestTitle) ? [`its title is longer than ${String(longestTitle)} characters.`] : [];
+  const words = given.lines.flatMap((line, index) => {
+    const said = textField(line, "words");
+    return said !== undefined && long(said, longestWords)
+      ? [`line ${String(index + 1)} has words longer than ${String(longestWords)} characters.`]
+      : [];
+  });
+  return [...title, ...words];
+}
+
 export async function checkedCard(content: Json, context: CardContext): Promise<Outcome<Card | undefined>> {
   if (!isCard(content)) {
     return succeededWith(undefined);
@@ -272,6 +337,7 @@ export async function checkedCard(content: Json, context: CardContext): Promise<
       lines.push(checked);
     }
   }
+  problems.push(...screenProblems(given).map((problem) => `${cannot}: ${problem}`));
   if (problems.length > 0) {
     return failedWith(problems.map((message) => unplacedProblem(message)));
   }
@@ -355,10 +421,10 @@ function storedLine(value: unknown): CardLine {
     case "ran":
       return { ...line, ...inItem };
     case "computed":
-      return { mark: "computed", words: line.words, source: line.source, ...inItem };
+      return { ...line, mark: "computed", ...inItem };
     case "judged": {
       const skills = storedSkills(fieldOf(entry, "skills"));
-      return { mark: "judged", words: line.words, source: line.source, skills, ...inItem };
+      return { ...line, mark: "judged", skills, ...inItem };
     }
   }
 }

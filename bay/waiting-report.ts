@@ -1,4 +1,5 @@
 import { approvalLines } from "./approval-card.ts";
+import { screenOf, type Section } from "./approval-screen.ts";
 import type { Json } from "./contracts.ts";
 import { toJson } from "./json.ts";
 import { waitsOf, type Run, type RunSummary, type Task } from "./runs/runs.ts";
@@ -9,6 +10,7 @@ export type ReportOptions = {
   readonly full?: boolean;
   readonly events?: boolean;
   readonly steps?: boolean;
+  readonly details?: { readonly section?: Section };
 };
 
 type State = Run["state"];
@@ -80,11 +82,15 @@ export function pretty(value: Json): string {
   return JSON.stringify(value, null, 2);
 }
 
-function decideLine(run: Run, waiting: Extract<Waiting, { readonly reason: "approval" }>): string {
-  const decide = `decide with: bay approve ${run.id} ${waiting.stepKey}`;
+export function decideCommand(run: Run, waiting: Extract<Waiting, { readonly reason: "approval" }>): string {
+  const decide = `bay approve ${run.id} ${waiting.stepKey}`;
   return waiting.choices === undefined
     ? `${decide} --hash ${waiting.hash} [--reject]`
     : `${decide} --choice <name> --hash ${waiting.hash}`;
+}
+
+function decideLine(run: Run, waiting: Extract<Waiting, { readonly reason: "approval" }>): string {
+  return `decide with: ${decideCommand(run, waiting)}`;
 }
 
 function stopCommand(run: Run): string {
@@ -111,7 +117,9 @@ export function waitingText(run: Run, waiting: Waiting): string {
     case "skill":
       return "";
     case "approval":
-      return [...approvalLines(waiting), decideLine(run, waiting)].join("\n");
+      return screenOf(waiting) === undefined
+        ? [...approvalLines(waiting, run.id), decideLine(run, waiting)].join("\n")
+        : approvalLines(waiting, run.id).join("\n");
     case "time":
       return `wakes at ${waiting.until}; bay resume --due wakes it then`;
     case "budget":

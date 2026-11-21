@@ -153,7 +153,7 @@ function answerWords(decision: Decision): string {
 function confirmQuestion(decision: Decision, approval: Approval | undefined): string {
   if ("choice" in decision || approval?.card !== undefined || approval?.choices !== undefined) {
     const lines =
-      approval === undefined ? [`step ${decision.stepKey} of run ${decision.runId}`] : approvalLines(approval);
+      approval === undefined ? [`step ${decision.stepKey} of run ${decision.runId}`] : approvalLines(approval, decision.runId);
     return `${lines.join("\n")}\n${answerWords(decision)} Type yes to confirm: `;
   }
   return plainQuestion(decision, approval);

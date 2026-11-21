@@ -1,7 +1,9 @@
 import { computed, shortCommit, type Card, type CardLine, type ComputedBy } from "./card-lines.ts";
+import { examplesClauses } from "./examples-card.ts";
 import { verdictLines } from "./item-lines.ts";
 import { sentenceOf } from "./merge-choices.ts";
 import { aloneWords, waveAnswer, type Alone, type Checked, type Joined, type WaveChecks } from "./wave-answer.ts";
+import type { SliceTried } from "./tried-block.ts";
 import { sliceLines } from "./wave-slice-lines.ts";
 import type { Settled } from "./wave-standing.ts";
 
@@ -13,6 +15,7 @@ export type WaveCardInput = {
   readonly checks: WaveChecks;
   readonly alone: readonly Alone[];
   readonly must: readonly string[];
+  readonly tried?: readonly SliceTried[];
 };
 
 export type WaveDrawn = {
@@ -48,21 +51,39 @@ function aloneLines(alone: readonly Alone[]): readonly CardLine[] {
   return [...each, ...aloneWords(alone).map((words) => computed("draw", words))];
 }
 
+const untriedWords = "the design's examples: not tried, since no combined head was proved to try them on";
+
+function untriedLines(input: WaveCardInput): readonly CardLine[] {
+  const carried = input.slices.some((settled) => settled.carriesExamples === true);
+  return (input.tried ?? []).length === 0 && carried ? [computed("draw", untriedWords)] : [];
+}
+
 function waveLines(input: WaveCardInput): readonly CardLine[] {
   const checks = input.checks.kind === "asked" ? checkedLines(input.checks, "prove") : [];
-  return [...joinedWords(input.joined).map((words) => computed("draw", words)), ...checks, ...aloneLines(input.alone)];
+  const joinedLines = joinedWords(input.joined).map((words) => computed("draw", words));
+  return [...joinedLines, ...checks, ...untriedLines(input), ...aloneLines(input.alone)];
+}
+
+function examplesReason(tried: readonly SliceTried[]): readonly string[] {
+  return tried.flatMap((block) => examplesClauses(block, block.slice));
 }
 
 function mergedOf(joinedHead: Joined): readonly string[] {
   return joinedHead.kind === "combined" ? joinedHead.merged : [];
 }
 
+function triedOf(tried: readonly SliceTried[], name: string): { readonly tried?: SliceTried } {
+  const block = tried.find((each) => each.slice === name);
+  return block === undefined ? {} : { tried: block };
+}
+
 export function waveDrawn(input: WaveCardInput): WaveDrawn {
-  const answer = waveAnswer(input.slices, input.joined, input.checks);
+  const tried = input.tried ?? [];
+  const answer = waveAnswer(input.slices, input.joined, { checks: input.checks, examples: examplesReason(tried) });
   const at = { merged: mergedOf(input.joined), must: input.must };
   const lines = [
     computed("draw", answer.words),
-    ...input.slices.flatMap((settled, item) => sliceLines(settled, { ...at, item })),
+    ...input.slices.flatMap((settled, item) => sliceLines(settled, { ...at, item, ...triedOf(tried, settled.name) })),
     ...waveLines(input),
   ];
   const withheld = answer.reason === undefined ? {} : { merge: sentenceOf(answer.reason) };

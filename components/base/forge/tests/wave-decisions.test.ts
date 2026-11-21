@@ -139,7 +139,7 @@ describe("how many builders at once, and what a slice costs", () => {
 function joining(name: string, files: readonly string[]): ToJoin {
   const entry = fieldsOf(plannedSlice(name));
   const declared = { files: [...files], names: { gained: [`${name.toLowerCase()}.count`], lost: [], changed: [] } };
-  return { name, head: `${name}-head`, slice: entry.slice ?? null, declared, included: true };
+  return { name, head: `${name}-head`, slice: entry.slice ?? null, declared, included: true, examples: [] };
 }
 
 describe("what the wave asks proof", () => {
@@ -164,7 +164,8 @@ describe("what the wave asks proof", () => {
   });
 
   test("each merged slice is to be proved alone with its own checks items at its own head, filtered by its own kept tests", () => {
-    const asking = fieldsOf(proving(wave, joined, "combined"));
+    const trying = { builtBefore: [], slices: joined };
+    const asking = fieldsOf(proving(wave, joined, { head: "combined", trying }));
     assert.deepEqual(asking.keptOf, ["TD1", "TD10"]);
     const alone = listOf(asking.whenFailed).map(fieldsOf);
     assert.deepEqual(

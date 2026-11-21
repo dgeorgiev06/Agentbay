@@ -1,5 +1,5 @@
 import { fieldsOf, type Json, type JsonFields } from "../../../../../bay/sdk.ts";
-import { rulesApplied, rulesDocument, type DesignSummary } from "./design-summary.ts";
+import { actionsBuiltBy, rulesApplied, rulesDocument, type DesignSummary } from "./design-summary.ts";
 import { listOf, textOf, textsOf } from "./json-values.ts";
 
 type Cut = {
@@ -7,8 +7,19 @@ type Cut = {
   readonly design?: DesignSummary | undefined;
 };
 
+function examplesOf(files: readonly string[], design: DesignSummary): Json {
+  return actionsBuiltBy(files, design).map((built) => {
+    const [mode] = built.offeredBy;
+    const named = built.offeredBy.length === 1 && mode !== undefined ? { mode } : {};
+    return { action: built.action, ...named, examples: [...built.examples] };
+  });
+}
+
 function rulesOf(files: readonly string[], design: DesignSummary | undefined): JsonFields {
-  return design === undefined ? {} : { rules: rulesDocument(rulesApplied(files, design)) };
+  if (design === undefined) {
+    return {};
+  }
+  return { rules: rulesDocument(rulesApplied(files, design)), examples: examplesOf(files, design) };
 }
 
 function requestOf(planned: JsonFields, cut: Cut): Json {

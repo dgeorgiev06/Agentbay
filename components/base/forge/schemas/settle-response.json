@@ -20,7 +20,8 @@
     "declared",
     "built",
     "reason",
-    "stayed"
+    "stayed",
+    "examples"
   ],
   "properties": {
     "name": {
@@ -111,6 +112,14 @@
           }
         }
       }
+    },
+    "examples": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object"
+      },
+      "description": "The design's worked examples of the slice's actions, as its request carries them; empty when it carries none."
     }
   }
 }

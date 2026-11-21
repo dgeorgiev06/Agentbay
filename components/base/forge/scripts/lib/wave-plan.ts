@@ -1,6 +1,6 @@
 import type { Json } from "../../../../../bay/sdk.ts";
 import { counted, joined } from "./card-lines.ts";
-import type { DesignSummary } from "./design-summary.ts";
+import { actionsBuiltBy, type DesignSummary } from "./design-summary.ts";
 import type { Plan, PlannedSlice } from "./plan.ts";
 import type { Wave, WorkedOut } from "./plan-waves.ts";
 import { sliceRequests } from "./slice-requests.ts";
@@ -151,4 +151,14 @@ export function waveOf(asked: WaveAsked, found: PlanFound, at: AtInto): WaveFoun
   }
   const requests = sliceRequests(found.document, wave.slices, { base: at.base, design: found.design });
   return { kind: "wave", waves: waves.length, slices, requests };
+}
+
+export function builtBefore(found: PlanFound, wave: number): readonly string[] {
+  const { design } = found;
+  if (design === undefined) {
+    return [];
+  }
+  const earlier = found.workedOut.waves.filter((each) => each.wave < wave).flatMap((each) => each.slices);
+  const files = slicesNamed(found.plan, earlier).flatMap((slice) => slice.interface ?? []);
+  return actionsBuiltBy(files, design).map((action) => action.action);
 }

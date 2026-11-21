@@ -288,7 +288,7 @@ describe("the wave's merge card", () => {
       settled("TD2", ownPassed("TD2"), "the builder stopped."),
       settled("TD3", ownPassed("TD3")),
     ];
-    const answer = waveAnswer(three, { ...combined, merged: ["TD3"] }, passedChecks);
+    const answer = waveAnswer(three, { ...combined, merged: ["TD3"] }, { checks: passedChecks });
     assert.equal(
       answer.words,
       "Merge is offered for 1 of 3 slices: each passed its own proof, and the wave's checks passed on them " +
@@ -341,26 +341,26 @@ describe("the wave's answer", () => {
 
   test("merge is withheld when the checks fail or are not known on the combined head", () => {
     const failing: WaveChecks = { ...passedChecks, proof: provedOf(checksFailed("checks", "x")) };
-    assert.deepEqual(waveAnswer(two, combined, failing), {
+    assert.deepEqual(waveAnswer(two, combined, { checks: failing }), {
       offered: false,
       words: "Merge is not offered: the wave's checks failed on the slices combined.",
       reason: "the wave's checks failed on the slices combined.",
     });
     const unknown: WaveChecks = { ...passedChecks, proof: { verdicts: [], size: [] } };
-    assert.equal(waveAnswer(two, combined, unknown).offered, false);
-    assert.equal(waveAnswer(two, combined, { kind: "not asked" }).offered, false);
+    assert.equal(waveAnswer(two, combined, { checks: unknown }).offered, false);
+    assert.equal(waveAnswer(two, combined, { checks: { kind: "not asked" } }).offered, false);
   });
 
   test("a merge that does not apply names both slices, and no slice passing names that", () => {
     const conflict: Joined = { kind: "conflict", slice: "TD2", onto: ["TD1"], reason: "It conflicts in a.ts." };
     assert.equal(
-      waveAnswer(two, conflict, { kind: "not asked" }).words,
+      waveAnswer(two, conflict, { checks: { kind: "not asked" } }).words,
       "Merge is not offered: TD2 (The td2 mode counts what was added) does not merge cleanly onto TD1 in the " +
         "combined head.",
     );
     const none = [settled("TD1", ownFailed("TD1"), "1 must item failed.")];
     assert.equal(
-      waveAnswer(none, { kind: "nothing to join" }, { kind: "not asked" }).words,
+      waveAnswer(none, { kind: "nothing to join" }, { checks: { kind: "not asked" } }).words,
       "Merge is not offered: no slice passed its own proof; left out: TD1 (The td1 mode counts what was added), " +
         "as its own proof did not pass.",
     );
@@ -370,7 +370,7 @@ describe("the wave's answer", () => {
     const third = { ...settled("TD3", ownFailed("TD3"), "1 must item failed."), title: long };
     const conflict: Joined = { kind: "conflict", slice: "TD3", onto: ["TD1"], reason: "It conflicts in a.ts." };
     assert.equal(
-      waveAnswer([...two, third], conflict, { kind: "not asked" }).words,
+      waveAnswer([...two, third], conflict, { checks: { kind: "not asked" } }).words,
       "Merge is not offered: TD3 (The td3 mode counts what was added, remo...) does not merge cleanly onto TD1 " +
         "in the combined head; left out: TD3 (The td3 mode counts what was added, remo...), as its own proof did " +
         "not pass.",

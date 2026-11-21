@@ -145,8 +145,8 @@ describe("what a call of the built mode answered, compared with the design", () 
       action: "tally.add",
       number: 3,
       outcome: "otherwise",
-      designed: { how: "refuses", text: JSON.stringify(empty) },
-      built: { how: "refused", text: JSON.stringify(`${empty} Try again.`) },
+      designed: { how: "refuses", text: empty },
+      built: { how: "refused", text: `${empty} Try again.` },
     });
   });
 

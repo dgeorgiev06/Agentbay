@@ -17,7 +17,7 @@ type Named = {
   readonly number: number;
 };
 
-export type Side = { readonly how: string; readonly text: string };
+export type Side = { readonly how: string; readonly text: string; readonly kept?: true };
 
 export type Result = Named &
   (
@@ -213,7 +213,7 @@ export function sameJson(one: Json, other: Json): boolean {
 function designedSide(expected: Expected): Side {
   return expected.kind === "answer"
     ? { how: "answers", text: JSON.stringify(expected.value) }
-    : { how: "refuses", text: JSON.stringify(expected.sentence) };
+    : { how: "refuses", text: expected.sentence };
 }
 
 function builtSide(ran: Ran & { readonly kind: "answered" | "refused" | "schema refused" }): Side {
@@ -221,9 +221,9 @@ function builtSide(ran: Ran & { readonly kind: "answered" | "refused" | "schema 
     case "answered":
       return { how: "answered", text: JSON.stringify(ran.output) };
     case "refused":
-      return { how: "refused", text: JSON.stringify(ran.reason) };
+      return { how: "refused", text: ran.reason };
     case "schema refused":
-      return { how: "refused by the request schema", text: JSON.stringify(ran.message) };
+      return { how: "refused by the request schema", text: ran.message };
   }
 }
 
@@ -283,4 +283,38 @@ export function resultOf(trial: Trial, proved: Proved): Result {
     return comparedResult(trial, { kind: "unreadable" });
   }
   return comparedResult(trial, ranOf(last.stdout));
+}
+
+export type SliceToTry = {
+  readonly slice: string;
+  readonly inHead: boolean;
+  readonly toTry: readonly ToTry[];
+};
+
+const notInHead = "the slice is not in the combined head";
+
+const notBuiltInWave = "which no slice of this wave in the combined head, and none of an earlier wave, builds";
+
+function leftOut(each: SliceToTry): readonly Entry[] {
+  return each.toTry.flatMap((toTry) =>
+    toTry.examples.map((_, index) => ({
+      slice: each.slice,
+      action: toTry.action,
+      number: index + 1,
+      outcome: "not tried" as const,
+      reason: notInHead,
+    })),
+  );
+}
+
+export function waveTrials(slices: readonly SliceToTry[], at: Omit<TrialsAt, "notBuilt">): readonly Entry[] {
+  const entries: Entry[] = [];
+  for (const each of slices) {
+    const room = at.room - entries.filter((entry) => entry.outcome === "to try").length;
+    const planned = each.inHead
+      ? plannedTrials(each.slice, each.toTry, { ...at, room, notBuilt: notBuiltInWave })
+      : leftOut(each);
+    entries.push(...planned);
+  }
+  return entries;
 }

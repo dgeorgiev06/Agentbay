@@ -1,11 +1,54 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "FinalProofResponse",
-  "description": "Proof's answer in proof@1's form, with what of it quotes a test left out: a failing case's message that shares a run of 20 characters with a kept test is empty, and a detail or reason that does is replaced by a sentence saying so.",
+  "description": "Proof's answer in proof@1's form, with what of it quotes a test left out: a failing case's message that shares a run of 20 characters with a kept test is empty, and a detail or reason that does is replaced by a sentence saying so; and what the built mode answered to the design's worked examples, whose verdicts are taken out of proof's answer.",
   "type": "object",
-  "allOf": [
-    {
-      "$ref": "proof@1/prove-response.json"
+  "additionalProperties": false,
+  "required": ["verdicts", "judgement", "size", "tried"],
+  "properties": {
+    "verdicts": {
+      "$ref": "proof@1/prove-response.json#/properties/verdicts"
+    },
+    "judgement": {
+      "$ref": "proof@1/prove-response.json#/properties/judgement"
+    },
+    "size": {
+      "$ref": "proof@1/prove-response.json#/properties/size"
+    },
+    "tried": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["setting", "head", "carried", "results"],
+      "properties": {
+        "setting": {
+          "enum": ["must", "shown", "off"],
+          "description": "settings.forge.tryExamples when the examples were tried: must when it is left out."
+        },
+        "head": {
+          "type": "string",
+          "maxLength": 255,
+          "description": "The commit the examples were tried on."
+        },
+        "carried": {
+          "type": "boolean",
+          "description": "Whether the slice's request carried any of the design's examples."
+        },
+        "results": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "type": "object",
+            "required": ["slice", "action", "number", "outcome"],
+            "properties": {
+              "outcome": {
+                "enum": ["as designed", "refused by its schema", "otherwise", "not known", "not tried"]
+              }
+            }
+          },
+          "description": "Each example of the slice's actions, in the design's order, with what came back: as designed, refused by its request schema, otherwise with both sides, not known or not tried with the reason. The built mode's words are kept from it when they quote a kept test beyond the design's examples."
+        }
+      },
+      "description": "What the built mode answered to the design's worked examples, each tried in a throwaway copy of the head of its own."
     }
-  ]
+  }
 }

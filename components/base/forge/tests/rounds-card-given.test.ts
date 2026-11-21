@@ -52,6 +52,10 @@ test("given three rounds and reviews of a slice still failing, whose builder cha
     "  failing: b1 quill that was added is",
     "    counted twice",
     "  DOD-B1-2, must, passed: The checks pass.",
+    "  the design's examples: none, since the",
+    "    slice's request carries none of a",
+    "    design's examples; nothing is withheld",
+    "    for them",
     "  practices answered by the reviewer in",
     "    round 3: 65; 65 held, 0 not held, 0 do",
     "    not apply; a check holds 12 more",
@@ -91,7 +95,7 @@ test("given three rounds and reviews of a slice still failing, whose builder cha
     "  discard    Stop; the worktrees go",
     "             why: Discarding comes with",
     "             slice WD1.",
-    "checked: 0 ran, 14 computed, 5 judged",
+    "checked: 0 ran, 15 computed, 5 judged",
   ]);
 });
 

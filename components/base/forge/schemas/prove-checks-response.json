@@ -22,7 +22,7 @@
     {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "proof", "alone"],
+      "required": ["kind", "proof", "alone", "tried"],
       "properties": {
         "kind": {
           "const": "asked"
@@ -37,6 +37,49 @@
           "items": {
             "type": "object"
           }
+        },
+        "tried": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["setting", "head", "carried", "results", "slice"],
+            "properties": {
+              "setting": {
+                "enum": ["must", "shown", "off"],
+                "description": "settings.forge.tryExamples when the examples were tried: must when it is left out."
+              },
+              "head": {
+                "type": "string",
+                "maxLength": 255,
+                "description": "The commit the examples were tried on."
+              },
+              "carried": {
+                "type": "boolean",
+                "description": "Whether the slice's request carried any of the design's examples."
+              },
+              "results": {
+                "type": "array",
+                "maxItems": 1000,
+                "items": {
+                  "type": "object",
+                  "required": ["slice", "action", "number", "outcome"],
+                  "properties": {
+                    "outcome": {
+                      "enum": ["as designed", "refused by its schema", "otherwise", "not known", "not tried"]
+                    }
+                  }
+                },
+                "description": "Each example of the slice's actions, in the design's order, with what came back: as designed, refused by its request schema, otherwise with both sides, not known or not tried with the reason. The built mode's words are kept from it when they quote a kept test beyond the design's examples."
+              },
+              "slice": {
+                "$ref": "proof@1/prove-request.json#/$defs/sliceName"
+              }
+            },
+            "description": "What the built mode answered to the design's worked examples, each tried in a throwaway copy of the head of its own."
+          },
+          "description": "For each slice of the wave, what the built mode answered to the design's worked examples on the combined head; empty for a solo proof."
         }
       }
     }

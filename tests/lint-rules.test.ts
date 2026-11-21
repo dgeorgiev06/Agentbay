@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { ESLint, Linter } from "eslint";
 import { parser } from "typescript-eslint";
 
-const loaded: unknown = createRequire(import.meta.url)("../eslint.config.js");
+const loaded: unknown = createRequire(import.meta.url)("../components/base/typescript/eslint.config.js");
 
 function entriesOf(module: unknown): readonly unknown[] {
   const config = typeof module === "object" && module !== null && "default" in module ? module.default : undefined;
@@ -33,7 +33,7 @@ test("an empty block, an empty catch among them, is an error for every TypeScrip
   assert.deepEqual(ruleFor("**/*.ts", "no-empty"), ["error", { allowEmptyCatch: false }]);
 });
 
-const kit = fileURLToPath(new URL("../../../..", import.meta.url));
+const kit = fileURLToPath(new URL("..", import.meta.url));
 
 const kitLint = new ESLint({ cwd: kit, overrideConfigFile: "components/base/typescript/eslint.config.js" });
 

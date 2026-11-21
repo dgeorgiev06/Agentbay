@@ -383,6 +383,19 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     assert.equal(fieldsOf(await answered(root, start.id, allHeld(challengerTask))).ok, true);
   });
 
+  test("a designs answer whose path is neither light nor full is refused, and no designer is asked again", async () => {
+    const root = await project(template);
+    const example = fieldsOf(jsonOf(await readFile(join(import.meta.dirname, "design-again.example.json"), "utf8")));
+    const input = fieldsOf(example.input ?? null);
+    const asked = { ...input, designs: { ...fieldsOf(input.designs ?? null), path: "sideways" } };
+    const run = runOf(await bay(root, ["call", "forge.design-again", JSON.stringify(asked)]));
+    assert.equal(textAt(run, "status"), "failed", JSON.stringify(run));
+    assert.equal(
+      textAt(run, "reason"),
+      'The designs step names the path "sideways", which is neither light nor full, so no designer is asked again.',
+    );
+  });
+
   test("a design that does not say how it holds each practice it was given goes back to its designer with one sentence for each", async () => {
     const root = await project(template);
     const start = waitingOf(await startedDesign(root), "path");

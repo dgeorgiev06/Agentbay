@@ -1678,7 +1678,7 @@
         },
         {
           "mark": "computed",
-          "words": "remove: serves O2-C3, O2-C5; applies the rule remove-todo, reads todos, writes todos; 2 examples",
+          "words": "remove: serves O2-C3, O2-C4, O2-C5; applies the rule remove-todo, reads todos, writes todos; 2 examples",
           "source": {
             "step": "draw"
           }
@@ -1692,7 +1692,7 @@
         },
         {
           "mark": "computed",
-          "words": "checked by script: 24 checks of the design, no problem",
+          "words": "checked by script: 34 checks of the design, no problem",
           "source": {
             "step": "draw"
           }

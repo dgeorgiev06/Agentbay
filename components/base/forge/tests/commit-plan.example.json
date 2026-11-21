@@ -706,6 +706,56 @@
           "docs/designs/todo/schemas/todo/add-response.json",
           "docs/designs/todo/schemas/todo/list-request.json",
           "docs/designs/todo/schemas/todo/list-response.json"
+        ],
+        "rules": [
+          {
+            "name": "add-todo",
+            "module": "todo",
+            "decides": "Whether a text may be added, and the id the new todo gets.",
+            "takes": [
+              {
+                "name": "request",
+                "schema": {
+                  "$ref": "schemas/todo/add-request.json"
+                }
+              },
+              {
+                "name": "todos",
+                "store": "todos",
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "schemas/todo/add-response.json"
+                  }
+                }
+              }
+            ],
+            "gives": [
+              {
+                "name": "todos",
+                "store": "todos",
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "schemas/todo/add-response.json"
+                  }
+                }
+              },
+              {
+                "name": "answer",
+                "schema": {
+                  "$ref": "schemas/todo/add-response.json"
+                }
+              }
+            ],
+            "appliedBy": [
+              {
+                "action": "todo.add",
+                "reads": ["todos"],
+                "writes": ["todos"]
+              }
+            ]
+          }
         ]
       }
     ]

@@ -32,6 +32,18 @@ out.
    check against the schemas, the design check (which refuses a form it cannot spell), the card's count, and the
    leak check's reading of the interface files. The committed `design.yaml` keeps the short form.
 
+5. Sent back once (second pass of DS2): the test writer tests a rule through the entry of the action that
+   applies it, and reads the rule only to choose its cases (what it takes: the states to set up; what it gives:
+   the answers, refusals and what later calls must show). The other choice, a file and exported name fixed by
+   the design for both sides, would couple the test to the builder's layout and make the design own a code
+   path; through the entry the test holds the rule as a caller sees it (P-15), and the reviewer holds the code
+   to the rule's name (camelCase of the rule's name) and its takes and gives. More checks hold what a script
+   can: a rule takes an unstored value when its action's request has fields and gives one when the action has
+   a response; no value has an empty schema; an example after calls the examples refuse answers as the same
+   calls without them, where the examples show both; no schema has a field named `$text`; and the plan names a
+   slice that meets a condition while naming the request file of no action that serves it. The challenger is
+   told what no script can see.
+
 ## Reasons
 
 - The smallest form the check can hold. "The script works out the next id itself" becomes a table the action

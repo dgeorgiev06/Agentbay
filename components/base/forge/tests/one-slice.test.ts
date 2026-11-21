@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
-import { answered, submitted } from "./kit-copy.ts";
+import { answered, bayRan, submitted } from "./kit-copy.ts";
 
 type Answer = { readonly verdict: "approve" | "reject" } | { readonly choice: string };
 
@@ -33,11 +33,6 @@ type Build = {
   readonly files: readonly string[];
   readonly built: Json;
   readonly refusedFirst?: Json;
-};
-
-type Ran = {
-  readonly status: number | null;
-  readonly stdout: string;
 };
 
 const kit = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -285,18 +280,6 @@ async function project(): Promise<string> {
   git(root, ["branch", into]);
   await symlink(await realpath(join(kit, "node_modules")), join(root, "node_modules"));
   return root;
-}
-
-function bayRan(root: string, words: readonly string[]): Promise<Ran> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ["bay/cli.ts", ...words], { cwd: root, stdio: ["ignore", "pipe", "ignore"] });
-    const chunks: Buffer[] = [];
-    child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
-    child.on("error", reject);
-    child.on("close", (status) => {
-      resolve({ status, stdout: Buffer.concat(chunks).toString("utf8") });
-    });
-  });
 }
 
 async function bay(root: string, words: readonly string[]): Promise<Json> {

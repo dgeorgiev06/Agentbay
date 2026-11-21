@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
+import { commandLineIn, type CommandLineIn } from "../../../../tests/test-toolbox.ts";
 
 export type Waiting = {
   readonly id: string;
@@ -90,6 +91,10 @@ const standInScript = [
 
 const roots: string[] = [];
 
+const commandLines = new Map<string, Promise<CommandLineIn>>();
+
+const rootsRunByProcess = new Set<string>();
+
 export function git(root: string, words: readonly string[]): string {
   return execFileSync("git", [...gitWords, ...words], { cwd: root, encoding: "utf8" });
 }
@@ -159,7 +164,24 @@ export async function project(template: string): Promise<string> {
   return root;
 }
 
+export async function processProject(template: string): Promise<string> {
+  const root = await project(template);
+  rootsRunByProcess.add(root);
+  return root;
+}
+
+async function inProcessRan(root: string, words: readonly string[]): Promise<Ran> {
+  const commandLine = commandLines.get(root) ?? commandLineIn(root);
+  commandLines.set(root, commandLine);
+  const ran = await (await commandLine)(words);
+  return { status: ran.exitCode, stdout: `${ran.output}\n` };
+}
+
 export function bayRan(root: string, words: readonly string[]): Promise<Ran> {
+  return rootsRunByProcess.has(root) ? processRan(root, words) : inProcessRan(root, words);
+}
+
+function processRan(root: string, words: readonly string[]): Promise<Ran> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ["bay/cli.ts", ...words], { cwd: root, stdio: ["ignore", "pipe", "ignore"] });
     const chunks: Buffer[] = [];

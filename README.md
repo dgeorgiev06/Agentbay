@@ -336,6 +336,12 @@ owner with a question that says a test stopped it there. Resuming it stops there
 to start one: a test that drives `bay` in a process of its own runs `node tests/start-part.ts <mode>:<path>
 '<trigger json>' '<part json>'` in its project, which works only in a folder under the temporary folder.
 
+Forge's end-to-end tests run their `bay` commands inside the test's own process. `commandLineIn(copy)`, from the
+test toolbox, loads `bay/bay-command.ts` from the case's copy of the kit and runs a command line there as
+`./bay.sh` would, with the same output and exit code, without the second or so a new `bay` process costs to start.
+Script steps still run in their own hosts, from the copy's kernel. The one case about a fresh kernel for each
+answer (`one-round.test.ts` case 6) starts a `bay` process per command, through `processProject`.
+
 Forge's tests give outputs captured from whole runs, in `components/base/forge/tests/given-*.json`. When a
 workflow or an output schema changes, they no longer start, and the refusal names the step. `node
 components/base/forge/tests/recapture.ts [given-<name>.json ...]` makes them again: in a copy of the kit, it runs

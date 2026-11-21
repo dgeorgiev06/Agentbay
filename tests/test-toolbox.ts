@@ -4,7 +4,9 @@ import { existsSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { parse, stringify } from "yaml";
+import type * as BayCommandModule from "../bay/bay-command.ts";
 import type { Json, ModeList, RunEvent, Spend, StepPlace, Tier } from "../bay/contracts.ts";
 import type { Config } from "../bay/generated/config.ts";
 import type { Budget } from "../bay/generated/mode.ts";
@@ -481,4 +483,25 @@ async function projectIn(root: string, opening: Opening): Promise<ModeProject> {
       await rm(root, { recursive: true, force: true });
     },
   };
+}
+
+export type CommandLineIn = (words: readonly string[]) => ReturnType<typeof BayCommandModule.bayCommand>;
+
+const noTerminal = {
+  isInteractive: () => false,
+  ask: () => Promise.resolve(""),
+  readAll: () => Promise.resolve(""),
+};
+
+function isBayCommandModule(value: unknown): value is typeof BayCommandModule {
+  return isRecord(value) && typeof value.bayCommand === "function";
+}
+
+export async function commandLineIn(copy: string): Promise<CommandLineIn> {
+  const loaded: unknown = await import(pathToFileURL(join(copy, "bay/bay-command.ts")).href);
+  if (!isBayCommandModule(loaded)) {
+    throw new Error(`${copy} holds no kernel whose command line can run in this process.`);
+  }
+  const invocation = { kit: copy, workingDirectory: copy, environment: process.env, terminal: noTerminal };
+  return (words) => loaded.bayCommand(words, invocation);
 }

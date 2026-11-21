@@ -4,11 +4,18 @@ import { modulesReached, type DesignSummary } from "./design-summary.ts";
 import type { Plan, PlannedSlice } from "./plan.ts";
 import type { Conditions } from "./plan-conditions.ts";
 import type { WorkedOut } from "./plan-waves.ts";
-import { notHeldReason, practiceLines, type PracticeAnswer } from "./practice-answers.ts";
+import {
+  decidingWords,
+  firstFoundWords,
+  practiceLines,
+  withheldAfterAnswer,
+  type FirstFound,
+  type PracticeAnswer,
+} from "./practice-answers.ts";
 import type { Problem } from "./problems.ts";
 
 export type PlannerAnswer =
-  { readonly kind: "not asked" } | { readonly kind: "answered"; readonly changes: readonly string[] };
+  { readonly kind: "not asked" } | (FirstFound & { readonly kind: "answered"; readonly changes: readonly string[] });
 
 export type PlanCardInput = {
   readonly job: string;
@@ -38,7 +45,7 @@ function withheldReason(input: PlanCardInput): string | undefined {
   const errors = errorsOf(input).length;
   const reasons = [
     ...(errors === 0 ? [] : [`The plan check found ${counted(errors, "problem")}.`]),
-    ...notHeldReason(input.practices, "a plan"),
+    ...withheldAfterAnswer(input.practices, "a plan", input.answer.kind === "answered"),
   ];
   return reasons.length === 0 ? undefined : reasons.join(" ");
 }
@@ -122,14 +129,16 @@ function findingLines(input: PlanCardInput): readonly CardLine[] {
   ];
 }
 
-function answerWords(answer: PlannerAnswer): string {
+function answerLines(answer: PlannerAnswer): readonly CardLine[] {
   if (answer.kind === "not asked") {
-    return "the planner was not asked again, since the challenge found nothing";
+    return [computed("draw", "the planner was not asked again, since the challenge found nothing")];
   }
-  if (answer.changes.length === 0) {
-    return "the planner answered the findings and changed nothing";
-  }
-  return `the planner answered the findings and changed ${joined(answer.changes)}`;
+  const changed = answer.changes.length === 0 ? "nothing" : joined(answer.changes);
+  return [
+    computed("draw", firstFoundWords(answer, "a plan")),
+    computed("draw", `the planner changed ${changed}`),
+    computed("draw", decidingWords),
+  ];
 }
 
 export function planCard(input: PlanCardInput): PlanCard {
@@ -151,9 +160,9 @@ export function planCard(input: PlanCardInput): PlanCard {
     coverageLine(input),
     fixedLine(input),
     ...problemLines(input),
+    ...answerLines(input.answer),
     ...practiceLines({ answers: input.practices, heldByRules: heldByPlanRules, challenger: input.challenger }),
     ...findingLines(input),
-    computed("draw", answerWords(input.answer)),
     computed(
       "draw",
       `approve commits it into ${input.into} as docs/plans/NNNN-${input.job}.yaml, NNNN the next free number`,

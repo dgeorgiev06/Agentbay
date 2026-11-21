@@ -4,7 +4,7 @@
   "description": "What the plan card is drawn from.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["start", "first", "again", "challenged", "into"],
+  "required": ["start", "first", "challenge", "again", "challenged", "into"],
   "properties": {
     "start": {
       "type": "object",
@@ -85,6 +85,10 @@
     "first": {
       "type": "object",
       "description": "A plan as schemas/plan.json gives it."
+    },
+    "challenge": {
+      "type": "object",
+      "description": "The first challenge, as schemas/plan-challenge.json gives it."
     },
     "again": {
       "type": "object",

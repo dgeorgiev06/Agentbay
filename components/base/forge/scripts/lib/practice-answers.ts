@@ -1,5 +1,5 @@
 import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
-import { computed, joined, judged, shortened, type CardLine } from "./card-lines.ts";
+import { computed, counted, joined, judged, shortened, type CardLine } from "./card-lines.ts";
 import { listOf, oneOf, textOf } from "./json-values.ts";
 
 export type Held = "held" | "not-held" | "does-not-apply";
@@ -127,7 +127,36 @@ export function notHeldIds(answers: readonly PracticeAnswer[]): readonly string[
   return answers.filter((practice) => practice.answer === "not-held").map((practice) => practice.id);
 }
 
-export function notHeldReason(answers: readonly PracticeAnswer[], heldBy: ChallengedBy): readonly string[] {
+export type FirstFound = {
+  readonly notHeld: readonly string[];
+  readonly findings: number;
+};
+
+const answerers: Readonly<Record<ChallengedBy, { readonly who: string; readonly run: string }>> = {
+  design: { who: "designer", run: "design" },
+  "a plan": { who: "planner", run: "plan" },
+};
+
+export const decidingWords = "the second challenge's answers decide the card";
+
+export function firstFoundWords(found: FirstFound, heldBy: ChallengedBy): string {
+  const notHeld = found.notHeld.length === 0 ? [] : [`answered ${joined(found.notHeld)} not held`];
+  const findings = found.findings === 0 ? [] : [`gave ${counted(found.findings, "finding")}`];
+  return `the first challenge ${joined([...notHeld, ...findings])}; the ${answerers[heldBy].who} answered once`;
+}
+
+export function withheldAfterAnswer(
+  answers: readonly PracticeAnswer[],
+  heldBy: ChallengedBy,
+  answered: boolean,
+): readonly string[] {
+  const notHeld = notHeldReason(answers, heldBy);
+  const { who, run } = answerers[heldBy];
+  const once = `The ${who} has answered the challenge once, which is the most a ${run} run asks.`;
+  return notHeld.length > 0 && answered ? [...notHeld, once] : notHeld;
+}
+
+function notHeldReason(answers: readonly PracticeAnswer[], heldBy: ChallengedBy): readonly string[] {
   const notHeld = notHeldIds(answers);
   if (notHeld.length === 0) {
     return [];

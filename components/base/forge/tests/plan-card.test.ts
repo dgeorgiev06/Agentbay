@@ -84,14 +84,14 @@ const todoCard = `Commit the plan for todo?
     their slices
   checked by script, as forge.waves checks a
     plan: no problem
+  the planner was not asked again, since the
+    challenge found nothing
   practices held by the script's rules:
     P-33, P-34 and P-35
   practices answered by the challenger: 3; 3
     held, 0 not held, 0 do not apply
   findings left after the planner's answer:
     none
-  the planner was not asked again, since the
-    challenge found nothing
   approve commits it into integration as
     docs/plans/NNNN-todo.yaml, NNNN the next
     free number
@@ -100,6 +100,68 @@ You can:
   approve  Commit the plan
   stop     Stop; nothing is committed
 checked: 0 ran, 14 computed, 0 judged`;
+
+const answeredNotHeld = `Commit the plan for todo?
+  2 slices in 2 waves; longest chain: TD1,
+    TD2; approve is not offered
+  cut from docs/designs/todo/design.yaml and
+    docs/requirements/todo.yaml: 13
+    conditions
+  wave 1: TD1, module todo: A todo mode that
+    adds a todo and lists the open ones;
+    meets O1-C1, O1-C2, O1-C3, O1-C4, O1-C5,
+    O1-C6, O1-C7
+  wave 2: TD2, module todo: The todo mode
+    marks a todo done and removes one; meets
+    O2-C1, O2-C2, O2-C3, O2-C4, O2-C5, O2-C6
+  TD2 after TD1: It adds two actions to the
+    mode TD1 makes.
+  one after another because: Both slices
+    write the one mode's folder, and the
+    second adds to what the first makes.
+  every condition met: yes
+  fixed files made first: yes; 8 interface
+    files by the design, 2 test files by
+    their slices
+  checked by script, as forge.waves checks a
+    plan: no problem
+  the first challenge answered P-34 not held
+    and gave 1 finding; the planner answered
+    once
+  the planner changed TD2's meets and
+    interface
+  the second challenge's answers decide the
+    card
+  practices held by the script's rules:
+    P-33, P-34 and P-35
+  practices answered by the challenger: 3; 2
+    held, 1 not held, 0 do not apply
+judged   P-34, not held: TD2 writes the
+judged     folder TD1 makes.
+judged    by forge skills/challenge-plan,
+judged      tier deep
+  findings left after the planner's answer:
+    1
+judged   finding: TD2's item 3 is judgement
+judged     only; its sentences could be a
+judged     count.
+judged    by forge skills/challenge-plan,
+judged      tier deep
+  approve commits it into integration as
+    docs/plans/NNNN-todo.yaml, NNNN the next
+    free number
+Unmarked lines were worked out by script.
+You can:
+  stop  Stop; nothing is committed
+Not available:
+  approve  Commit the plan
+           why: The challenger answered P-34
+           not held, and a practice held by
+           a plan must be held. The planner
+           has answered the challenge once,
+           which is the most a plan run
+           asks.
+checked: 0 ran, 16 computed, 2 judged`;
 
 function withMeets(planned: Json, meets: readonly string[]): Json {
   return { ...fieldsOf(planned), meets: [...meets] };
@@ -110,47 +172,15 @@ describe("the plan card", () => {
     assert.equal(printedPlan(await todoInput(todoPlan)), todoCard);
   });
 
-  test("a practice not held and a finding left are judged lines that cite the second challenge, and approve is withheld with the reason", async () => {
+  test("after a second pass that left a practice not held and a finding, the card says what the first challenge found and that the planner answered once, its lines cite the second challenge, and approve is withheld, line by line", async () => {
     const input = {
       ...(await todoInput(todoPlan)),
       practices: p34NotHeld,
       findings: ["TD2's item 3 is judgement only; its sentences could be a count."],
       challenger: "challenge-2",
-      answer: { kind: "answered", changes: ["TD2's meets and interface"] },
+      answer: { kind: "answered", changes: ["TD2's meets and interface"], notHeld: ["P-34"], findings: 1 },
     } as const;
-    const card = printedPlan(input).split("\n");
-    assert.deepEqual(card.slice(0, 3), [
-      "Commit the plan for todo?",
-      "  2 slices in 2 waves; longest chain: TD1,",
-      "    TD2; approve is not offered",
-    ]);
-    const from = card.indexOf("  practices answered by the challenger: 3; 2");
-    assert.deepEqual(card.slice(from, from + 24), [
-      "  practices answered by the challenger: 3; 2",
-      "    held, 1 not held, 0 do not apply",
-      "judged   P-34, not held: TD2 writes the",
-      "judged     folder TD1 makes.",
-      "judged    by forge skills/challenge-plan,",
-      "judged      tier deep",
-      "  findings left after the planner's answer:",
-      "    1",
-      "judged   finding: TD2's item 3 is judgement",
-      "judged     only; its sentences could be a",
-      "judged     count.",
-      "judged    by forge skills/challenge-plan,",
-      "judged      tier deep",
-      "  the planner answered the findings and",
-      "    changed TD2's meets and interface",
-      "  approve commits it into integration as",
-      "    docs/plans/NNNN-todo.yaml, NNNN the next",
-      "    free number",
-      "Unmarked lines were worked out by script.",
-      "You can:",
-      "  stop  Stop; nothing is committed",
-      "Not available:",
-      "  approve  Commit the plan",
-      "           why: The challenger answered P-34",
-    ]);
+    assert.equal(printedPlan(input), answeredNotHeld);
     assert.deepEqual(planCard(input).offered, { approve: false });
   });
 
@@ -179,9 +209,9 @@ describe("the plan card", () => {
   });
 
   test("a planner's answer that changed nothing says so", async () => {
-    const input = { ...(await todoInput(todoPlan)), answer: { kind: "answered", changes: [] } } as const;
-    const lines = planCard(input).card.lines.map((line) => line.words);
-    assert.ok(lines.includes("the planner answered the findings and changed nothing"), lines.join("\n"));
+    const answer = { kind: "answered", changes: [], notHeld: [], findings: 1 } as const;
+    const lines = planCard({ ...(await todoInput(todoPlan)), answer }).card.lines.map((line) => line.words);
+    assert.ok(lines.includes("the planner changed nothing"), lines.join("\n"));
   });
 
   test("every row of the card is at most 44 columns in the kernel's print", async () => {

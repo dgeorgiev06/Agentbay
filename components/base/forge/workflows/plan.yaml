@@ -42,6 +42,7 @@ steps:
     input:
       start: $steps.start.output
       first: $steps.plan-1.output
+      challenge: $steps.challenge-1.output
       again: $steps.plan-2.output
       challenged: $steps.challenge-2.output
       into: $settings.into

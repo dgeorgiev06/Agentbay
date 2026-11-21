@@ -10,7 +10,15 @@ import {
 } from "./design-form.ts";
 import { heldByRules, ruleCount } from "./design-rules.ts";
 import type { DesignPath } from "./path-card.ts";
-import { notHeldIds, notHeldReason, practiceLines, type PracticeAnswer } from "./practice-answers.ts";
+import {
+  decidingWords,
+  firstFoundWords,
+  notHeldIds,
+  practiceLines,
+  withheldAfterAnswer,
+  type FirstFound,
+  type PracticeAnswer,
+} from "./practice-answers.ts";
 import { conditionsOf, type Requirements } from "./requirements-form.ts";
 
 export type DesignCardInput = {
@@ -29,9 +37,7 @@ export type DesignCardInput = {
   readonly second?: SecondPass;
 };
 
-export type SecondPass = {
-  readonly notHeld: readonly string[];
-  readonly findings: number;
+export type SecondPass = FirstFound & {
   readonly changes: readonly string[];
 };
 
@@ -50,8 +56,6 @@ const secondChallenger = "challenge-again";
 
 const differencesShown = 8;
 
-const answeredOnce = "The designer has answered the challenge once, which is the most a design run asks.";
-
 const answers: Readonly<Record<Chosen, string>> = {
   first: "the first design of two written apart",
   second: "the second design of two written apart",
@@ -64,11 +68,9 @@ function answerWords(input: DesignCardInput): string {
 }
 
 function withheldReason(input: DesignCardInput): string | undefined {
-  const notHeld = notHeldReason(input.practices, "design");
   const reasons = [
     ...(input.problems.length === 0 ? [] : [`The design check found ${counted(input.problems.length, "problem")}.`]),
-    ...notHeld,
-    ...(notHeld.length > 0 && input.second !== undefined ? [answeredOnce] : []),
+    ...withheldAfterAnswer(input.practices, "design", input.second !== undefined),
   ];
   return reasons.length === 0 ? undefined : reasons.join(" ");
 }
@@ -170,12 +172,6 @@ function differenceLines(input: DesignCardInput): readonly CardLine[] {
   ];
 }
 
-function firstFoundWords(second: SecondPass): string {
-  const notHeld = second.notHeld.length === 0 ? [] : [`answered ${joined(second.notHeld)} not held`];
-  const findings = second.findings === 0 ? [] : [`gave ${counted(second.findings, "finding")}`];
-  return `the first challenge ${joined([...notHeld, ...findings])}; the designer answered once`;
-}
-
 function passLines(input: DesignCardInput): readonly CardLine[] {
   const { second } = input;
   if (second === undefined) {
@@ -188,9 +184,9 @@ function passLines(input: DesignCardInput): readonly CardLine[] {
     ];
   }
   return [
-    computed("draw", firstFoundWords(second)),
+    computed("draw", firstFoundWords(second, "design")),
     ...listedLines("what the answer changed, by script", second.changes),
-    computed("draw", "the second challenge's answers decide the card"),
+    computed("draw", decidingWords),
   ];
 }
 

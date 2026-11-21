@@ -1,9 +1,9 @@
 import { defineScript, fieldsOf } from "../../../../bay/sdk.ts";
 import { challengeOf } from "./lib/challenge-answer.ts";
-import { answeringStance, foundOf, secondPassNeeded } from "./lib/design-again.ts";
+import { answeringStance } from "./lib/design-again.ts";
 import { textOf } from "./lib/json-values.ts";
 import { pathOf, stanceOf } from "./lib/path-card.ts";
-import { askedWhenNeeded } from "./lib/second-round.ts";
+import { askedWhenNeeded, foundOf, secondPassNeeded } from "./lib/second-round.ts";
 
 export const run = defineScript(async (input, context) => {
   const fields = fieldsOf(input);

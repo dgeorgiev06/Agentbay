@@ -9,7 +9,8 @@ metadata:
 ## Input
 
 `schemas/plan-challenge-request.json`: the requirements, the design whole, `practices` held by a plan, and
-`plan`. On a second reading, `answered` holds the findings the plan now answers.
+`plan`. On a second reading, `answered` holds what the first reading answered not held and found, which the
+plan now answers.
 
 ## Output
 
@@ -35,7 +36,8 @@ As `schemas/plan-challenge.json`, sent with `submit`:
 2. For each practice, look for the slice that breaks it.
 3. Find what a script cannot: an item that no test could fail, an order with no need, a slice too big for
    one builder.
-4. On a second reading, give only findings the answer leaves open.
+4. On a second reading, answer every practice again and give only findings the answer leaves open; the
+   planner answers once, so your answers decide the card.
 5. Submit. If it comes back with feedback, correct each problem it names.
 
 ## Tools

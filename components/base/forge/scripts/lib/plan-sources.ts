@@ -1,10 +1,12 @@
 import { fieldsOf, readYaml, type Json, type JsonFields, type ScriptContext } from "../../../../../bay/sdk.ts";
 import { counted } from "./card-lines.ts";
 import { designSummaryOf, type DesignSummary } from "./design-summary.ts";
-import { listOf, textOf } from "./json-values.ts";
+import { listOf, textOf, textsOf } from "./json-values.ts";
 import type { Plan } from "./plan.ts";
 import type { Conditions } from "./plan-conditions.ts";
+import { practiceAnswersOf } from "./practice-answers.ts";
 import { conditionsOf, requirementsOf } from "./requirements-form.ts";
+import type { Found } from "./second-round.ts";
 
 export type Sources = {
   readonly conditions?: Conditions;
@@ -114,4 +116,9 @@ export async function readSources(context: ScriptContext, plan: Plan): Promise<S
     sources: { ...requirements.sources, ...design.sources },
     problems: [...requirements.problems, ...design.problems],
   };
+}
+
+export function planChallengeFound(challenge: Json): Found<string> {
+  const fields = fieldsOf(challenge);
+  return { practices: practiceAnswersOf(fields.practices), findings: textsOf(fields.findings) };
 }

@@ -10,7 +10,8 @@ metadata:
 
 `schemas/plan-request.json`: `file` and `requirements`, the conditions by id; `design`, its path, and
 `document`, the design whole, each action with its schema files; `practices`, held by a plan. When you answer
-a challenge, `answering` holds your first plan and the findings.
+a challenge, `answering` holds your first plan, each practice the challenger answered not held with its
+sentence, and the findings.
 
 ## Output
 
@@ -56,7 +57,8 @@ As `schemas/plan.json`, sent with `submit`:
 2. Cut the fewest slices that each make something a person can see working. Give a slice its module's
    folder as its scope, and order slices with `after` only where one needs what another makes.
 3. Name in `interface` the schema files of the actions the slice serves or calls.
-4. When `answering` is given, correct what each finding names and keep the rest.
+4. When `answering` is given, correct what each practice not held and each finding names and keep the rest.
+   You answer once; the challenger judges the answer.
 5. Submit. If it comes back with feedback, correct each problem it names.
 
 ## Tools

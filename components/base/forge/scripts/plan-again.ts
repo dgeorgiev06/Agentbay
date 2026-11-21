@@ -1,16 +1,15 @@
 import { defineScript, fieldsOf } from "../../../../bay/sdk.ts";
-import { textsOf } from "./lib/json-values.ts";
-import { onlyWhenNeeded } from "./lib/second-round.ts";
+import { planChallengeFound } from "./lib/plan-sources.ts";
+import { foundOf, onlyWhenNeeded, secondPassNeeded } from "./lib/second-round.ts";
 
 export const run = defineScript(async (input, context) => {
   const { start = null, first = null, challenge = null } = fieldsOf(input);
-  const findings = [...textsOf(fieldsOf(challenge).findings)];
-  const adds = { answering: { plan: first, findings } };
+  const found = planChallengeFound(challenge);
   const round = await onlyWhenNeeded(context, {
-    needed: findings.length > 0,
+    needed: secondPassNeeded(found),
     action: "plan",
     start,
-    adds,
+    adds: { answering: { plan: first, ...foundOf(found) } },
     kept: first,
   });
   return { answered: round.ran, plan: round.answer };

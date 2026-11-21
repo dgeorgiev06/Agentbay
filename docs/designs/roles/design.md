@@ -3,8 +3,9 @@
 Status: design, 2026-11-20. The owner answered questions 1, 2 and 3 by 21 November (section 6): option D,
 built as A first, roles reaching a model through their tier, the builder at balanced. Questions 4, 5 and 6 are open.
 RL1 is built on `rl1/slice`; RL2 to RL5 are not. Words are used as `CONTEXT.md` defines them; of the three this
-note adds, role is in use since RL1, and ceiling and standing rules are still marked there as proposed. Read on
-`rl1/slice` at `a3507fc`.
+note adds, role is in use since RL1, and ceiling and standing rules are still marked there as proposed. Sections
+1 to 6 were written from `rl1/slice` at `a3507fc`, and their file and line references are to that commit. RL1 was
+built on `rl1/slice` after merging `feat/0022-agentbay5` at `e69815a`; its "As built" list is true of that branch.
 
 Read with: `docs/designs/trust/0-frame.md` (T1 to T5), `docs/designs/operations/0-frame.md` (S1 to S7), ADR 2 (the
 kernel never drives a model), ADR 24 (test writer, builder, reviewer), ADR 27 (with the hook or without),
@@ -204,8 +205,9 @@ text an agent reads and acts on (section 4).
 
 ### Where the role table lives
 
-In the kernel, as one table beside `tiers` (proposed `bay/roles.ts`), and as an enum in `schemas/mode.schema.json`,
-the way the tier names are held today. No new schema file: the limit of five holds. No new command: the limit of
+In the kernel, as one table beside `tiers`, in `bay/roles.ts` (built in RL1). The schema takes a role as text and
+holds no list of names, so the kernel alone says which names are roles, and its refusal of an unknown one says what
+to write instead (S4). No new schema file: the limit of five holds. No new command: the limit of
 13 holds. The kit's `bay/` is closed to every step's writes, and to the main thread's file tools, so no agent can
 edit a role (README, "What the hook does").
 
@@ -358,7 +360,8 @@ What may be merged, and what may not:
 
 ### A. Roles as names over today's tiers and tool lists
 
-- **Schema.** `mode.schema.json`: a skill step has `role` or `tier`, one required. The role enum.
+- **Schema.** `mode.schema.json`: a skill step has `role` or `tier`; the kernel requires exactly one, and holds the
+  role names (RL1).
 - **Kernel.** The role table maps a role to a tier. Load and `bay check` refuse an unknown role or both. The step
   record keeps the role beside the tier.
 - **Adapter.** Nothing. Agent files are the same bytes, the builder's tier aside (question 3).
@@ -475,9 +478,16 @@ answered (a), so it is not planned. RL3 waits for question 6. Size is reported b
 
 ### RL1. A skill step may name a role, which gives its tier (built)
 
-- **Scope.** `schemas/mode.schema.json`, `bay/generated/mode.ts`, `bay/roles.ts` (new), `bay/contracts.ts`,
-  `bay/manifests/**`, `bay/check-skills.ts`, `bay/build.ts`, `bay/adapter.ts`, `tests/roles*.test.ts`,
-  `CONTEXT.md`.
+- **Scope, as planned.** `schemas/mode.schema.json`, `bay/generated/mode.ts`, `bay/roles.ts` (new),
+  `bay/contracts.ts`, `bay/manifests/**`, `bay/check-skills.ts`, `bay/build.ts`, `bay/adapter.ts`,
+  `tests/roles*.test.ts`, `CONTEXT.md`.
+- **Scope, as built.** `schemas/mode.schema.json`, `bay/generated/mode.ts`, `bay/roles.ts` (new),
+  `bay/manifests/loaded-mode.ts` (new), `bay/manifests/loaded.ts`, `bay/manifests/manifests.ts`,
+  `bay/runs/action-steps.ts`, `bay/runs/step-detail.ts`, `README.md`, `CONTEXT.md`, `framework/features.yaml`,
+  `tests/roles.test.ts`, `tests/roles-agents.test.ts`, `tests/roles-runs.test.ts`,
+  `tests/inside/runs/stored-role.test.ts`, `tests/runs-fixture.ts`, `tests/manifests-schemas.test.ts`,
+  `tests/start-up.test.ts`. Not changed: `bay/contracts.ts`, `bay/check-skills.ts`, `bay/adapter.ts`,
+  `bay/build.ts`, which reads the tier from the loaded step as it read it from the written one.
 - **Its tests show:**
   - A step with `role: reviewer` loads, and `planAgents` gives its agent tier `deep`; with `role: builder`, tier
     `balanced` (by question 3).
@@ -487,20 +497,30 @@ answered (a), so it is not planned. RL3 waits for question 6. Size is reported b
   - A step with both `role` and `tier` is refused with a sentence that says to keep one.
   - A step with `tier:` and no role loads exactly as before.
   - The role enum in the schema and the kernel's table hold the same names.
-- **As built.** `tests/roles.test.ts` and `tests/roles-agents.test.ts`. What differs from the plan above:
-  - The schema holds the roles as an enum, so it refuses `role: lead` first, in the words it uses for an unknown
-    tier: `actions.add.run.0.role must be one of "builder", "test writer", "reviewer", "planter", "designer",
-    "challenger", "planner", but it is "lead".` It has no fix line. The load and `bay check` give that sentence.
-  - The kernel refuses a step that names both, and one that names neither, which the schema now allows since
-    `tier` is no longer required (`bay/manifests/action-problems.ts`).
-  - The step record and the task carry the role beside the tier. The task the coordinator prints is unchanged: it
-    names its agent, and holds neither tier nor role.
+- **As built.** What differs from the plan above:
+  - A skill step becomes `{ tier, role? }` once, as the mode loads (`bay/manifests/loaded-mode.ts`). A mode with a
+    step that names both, neither, or a name that is not a role does not load; nothing after the load sees such a
+    step, and the build and the runs read the tier from the loaded step.
+  - The schema takes a role as text, so the kernel refuses an unknown one, in the same words at load and in
+    `bay check`. A name written in another case or with extra spaces gets the role it meant: "Action add of mode
+    notes names the role "Reviewer" for the skill skills/write-note, and the kit has no role written that way."
+    with "Write it in lower case, with one space between words: role: reviewer." Any other name gets "Action add
+    of mode notes names the role "lead" for the skill skills/write-note, which is not one of the kit's roles:
+    builder, test writer, reviewer, planter, designer, challenger, planner." with "Name one of those roles, or
+    name a tier in its place: fast, balanced, deep."
+  - A step that names a role and a tier is refused even when the tier is the role's own.
+  - The step record carries the role beside the tier, in every round, in a workflow's step and in a called
+    action's step, and a stored role that is not one of the kit's is refused as malformed. RL3 reads it from
+    there. The task carries no role: the task the coordinator prints is unchanged, names its agent, and holds
+    neither tier nor role.
   - The adapter is unchanged and is handed no role. With every mode of the kit active, the twelve agent files and
     `steps.json` are the same bytes when each step names a role of its tier as when it names the tier, and the
-    same bytes as before the slice.
+    same bytes as before the slice. A reviewer's agent file names the deep tier's model and effort.
   - The trust hash of a list is the same when the mode's steps name roles, and a list trusted with tier steps stays
     trusted.
-  - `bay/roles.ts` is in the feature `vocabulary`, and in the files `bay check` and `bay runs` load.
+  - `bay/roles.ts` is in the feature `vocabulary` and `bay/manifests/loaded-mode.ts` in `manifests`; both are in
+    the files `bay check` and `bay runs` load. With no enum in the schema, the test that the schema's names are
+    the kernel's is gone; a test holds the README's list of roles to the kernel's.
 
 ### RL2. Forge's skill steps name their roles
 

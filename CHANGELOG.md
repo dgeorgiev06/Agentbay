@@ -1,5 +1,7 @@
 # Changelog
 
+agentbay 5 (`5.0.0-dev` in `package.json`), the TypeScript kit, has no entry here yet: what it built is in `docs/adr/` and `docs/plans/`, and the newest notes are at the end of `docs/plans/0024-forge-whole.md`. Every entry below is from before agentbay 5.
+
 Earlier versions: see docs/proposals/
 
 ## 4.0.0 - 2026-11-05

@@ -2,8 +2,8 @@
 
 The store keeps items for the modes that compose it. It implements `items-store@1`
 (`components/base/interfaces/items-store.yaml`). Each composing mode gets a database of its own, a partition
-named after the calling mode: `.agentbay/data/store--<caller>.db`. The mail briefing's items and the to-dos
-never share a file, so SQL an agent writes for one cannot read the other. An action you start yourself, with no
+named after the calling mode: `.agentbay/data/store--<caller>.db`. Two composing modes' items never share a
+file, so SQL an agent writes for one cannot read the other. An action you start yourself, with no
 calling mode, uses the partition `owner`.
 
 ## Actions
@@ -29,7 +29,7 @@ Given under `settings.store` in `agentbay.config.yaml` (`schemas/settings.json`)
 | `monthlyUsd` | A map from source name to the most US dollars one composing mode may spend on that source in a calendar month. A source without an entry has no cap. |
 
 The cap is per composing mode and per source: each caller's partition records its own spend, so with
-`monthlyUsd: { x: 20 }` the feed briefing and the mail briefing may each spend $20 a month on X. Months are
+`monthlyUsd: { x: 20 }` two briefings may each spend $20 a month on a source named `x`. Months are
 calendar months in UTC, read from the kernel's clock (`context.now()`), so the spend recorded at 23:59 UTC on
 the last day of a month counts for that month. The store only answers; a briefing's sync asks `allowance` before
 each fetch and stops itself.

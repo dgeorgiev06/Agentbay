@@ -153,6 +153,6 @@ Whether two scopes share a path is one pure function, `scripts/lib/scopes.ts`. I
 
 `featureMap`: the project's map of features, such as `framework/features.yaml`. Forge reads each feature's private files from it for the warning on a whole feature. Left out, no scope is compared with a feature. The kit sets it.
 
-## What it will become
+## What is not built yet
 
-Forge will carry out the merge into the checked-out branch, run the stages before the build, and then build a whole wave at once. Slices F2 to F4 of plan 0022 and the capabilities they wait for add those.
+The stages that plan 0022 left for later are built: the merge into the checked-out branch (fast-forwarded only when the folder is clean), the design and the plan before the build, and a whole wave at once. Send-back and discard are never taken: a slice's merge card withholds both, and the wave merge card offers only merge and keep. No whole run from a requirements file through design, plan and wave has yet been made with the owner at the cards.

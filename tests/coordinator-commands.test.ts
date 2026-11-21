@@ -315,9 +315,8 @@ async function answersOf(project: Project, runId: string): Promise<readonly stri
   return events.flatMap((event) => {
     const detail = fieldOf(event, "detail") ?? null;
     const by = textField(detail, "by");
-    return textField(event, "kind") === "run.resumed" && by !== undefined
-      ? [`${textField(detail, "cause")}: ${by}`]
-      : [];
+    const cause = textField(detail, "cause") ?? "";
+    return textField(event, "kind") === "run.resumed" && by !== undefined ? [`${cause}: ${by}`] : [];
   });
 }
 

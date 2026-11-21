@@ -3,7 +3,6 @@ import { after, before, describe, test } from "node:test";
 import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
 import {
   askedOf,
-  bay,
   branches,
   decided,
   git,

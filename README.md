@@ -270,8 +270,9 @@ Running again, stopping and raising a budget (`--rerun`, `--stop`, `--extend`) a
 where the answer comes from as `bay approve` does: a terminal, the default, which must be interactive and where the
 owner types yes, or `--via chat --quote "<the owner's exact words>"`; each is refused unless `approvals.from` in
 agentbay.config.yaml lists it, and by default it lists terminal alone. The kernel records it with the answer, as
-`owner at the terminal` or `owner via chat, quoted: "<words>"`, in the answer's `run.resumed` event (`bay runs <run> --events`). A stop gives the
-run the reason `<that source> stopped the run.`, except at a foreach whose items failed, whose sentence is the reason.
+`owner at the terminal` or `owner via chat, quoted: "<words>"`, in the answer's `run.resumed` event (`bay runs <run>
+--events`). A stop gives the run the reason `<that source> stopped the run.`, except at a foreach whose items failed,
+whose sentence is the reason.
 A plain `bay resume <run>` decides nothing for the owner and takes no source: a run that no engine advances goes on,
 and a run that asks the owner asks again.
 

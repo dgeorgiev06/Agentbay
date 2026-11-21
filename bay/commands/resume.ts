@@ -68,7 +68,10 @@ function answerOf(invocation: Invocation): Answer | string | undefined {
     const extra = extensionOf(extend);
     return typeof extra === "string" ? extra : { kind: "extend", extra };
   }
-  return stop ? { kind: "stop" } : rerun ? { kind: "rerun" } : undefined;
+  if (stop) {
+    return { kind: "stop" };
+  }
+  return rerun ? { kind: "rerun" } : undefined;
 }
 
 function runFormOf(invocation: Invocation, runId: string): Form | string {

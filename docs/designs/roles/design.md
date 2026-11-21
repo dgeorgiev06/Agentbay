@@ -1,8 +1,10 @@
 # Roles: a named bundle a skill step declares
 
-Status: design, 2026-11-20. Not approved, not planned, not built. It proposes; the owner decides. Words are used
-as `CONTEXT.md` defines them; the three it adds (role, ceiling, standing rules) are marked there as proposed by
-this note. Read on `rl1/slice` at `a3507fc`.
+Status: design, 2026-11-20. The owner answered questions 1, 2 and 3 by 21 November (section 6): option D,
+built as A first, roles reaching a model through their tier, the builder at balanced. Questions 4, 5 and 6 are open.
+RL1 is built on `rl1/slice`; RL2 to RL5 are not. Words are used as `CONTEXT.md` defines them; of the three this
+note adds, role is in use since RL1, and ceiling and standing rules are still marked there as proposed. Read on
+`rl1/slice` at `a3507fc`.
 
 Read with: `docs/designs/trust/0-frame.md` (T1 to T5), `docs/designs/operations/0-frame.md` (S1 to S7), ADR 2 (the
 kernel never drives a model), ADR 24 (test writer, builder, reviewer), ADR 27 (with the hook or without),
@@ -10,7 +12,7 @@ kernel never drives a model), ADR 24 (test writer, builder, reviewer), ADR 27 (w
 
 ## The owner's idea
 
-His words: "Why not have well defined rolls like reviewer lead builder etc that map to platform agents like Claude
+His words, 20 November: "Why not have well defined rolls like reviewer lead builder etc that map to platform agents like Claude
 and define platform specific params like model effort etc. Then instructions can just say use a lead or use a
 builder to do this". And: "Why one agent per skill step."
 
@@ -30,7 +32,8 @@ builder to do this". And: "Why one agent per skill step."
    builder and the planter apart, and a token ties each answer to one step.
 8. Who may see what stays a property of the step in its workflow, never of the role.
 9. A judged line on a card names the role in the owner's words: "by the reviewer, forge review, tier deep".
-10. Recommended: option D, built as option A first (four kernel or adapter slices and one forge slice).
+10. The owner's choice, 21 November: option D, built as option A first (four kernel or adapter slices and one
+    forge slice).
 
 ---
 
@@ -98,7 +101,8 @@ sighting by the step's own mode and skill (README, "How the kernel knows the hoo
 Three facts follow from this table.
 
 - **The builder has two tiers.** `build` (the workflow `one-slice`) runs at deep; `build-without-tests` (the
-  workflow `rounds`) and `declare` at balanced. A role with one tier must change one of them (question 3).
+  workflow `rounds`) and `declare` at balanced. A role with one tier must change one of them. The owner chose balanced (question 3): the
+  `one-slice` workflow's `build` moves from deep to balanced when forge's steps name their roles (RL2).
 - **Eight of forge's ten agents get the same policy.** Every forge skill but the two builds has an action that
   declares only `read`, and none names a kernel tool beyond `submit`. So `declare`, `write-tests`, `review`,
   `plant`, `design`, `challenge`, `challenge-plan` and `plan` all get `submit, Read, Glob, Grep` over the same
@@ -160,7 +164,7 @@ The set, derived from the skills that exist. Nothing else is proposed.
 
 | Role | Tier | Ceiling | Standing rules (sketch) | Skills |
 |---|---|---|---|---|
-| builder | balanced (question 3) | no shell | Run nothing; proof runs the checks. Change only the files you declared. Never write in another slice's worktree. Stop with what is missing rather than build around it. | forge `declare`, `build`, `build-without-tests` |
+| builder | balanced (question 3, the owner's answer) | no shell | Run nothing; proof runs the checks. Change only the files you declared. Never write in another slice's worktree. Stop with what is missing rather than build around it. | forge `declare`, `build`, `build-without-tests` |
 | test writer | balanced | no shell, no write | Write no file; hand the tests in as data. You never read the builder's code. | forge `write-tests` |
 | reviewer | deep | no shell, no write, reads only its mode's folder | Write no file. Your verdicts are judgement. A finding for the builder never quotes a test. | forge `review` |
 | planter | balanced | no shell, no write, reads only its mode's folder | You never see the tests and never look for them. Plant only in the code given. | forge `plant` |
@@ -173,13 +177,14 @@ reviewer is given the tests and the code in its task; the challenger and the pla
 theirs. The ceilings are a starting proposal; each one only narrows, so getting one wrong fails a step loudly
 (a refused read) rather than widening anything.
 
-`digest` and `ask` have no role in the glossary. They keep `tier: balanced` (question 4). No role is invented for
-them.
+`digest` and `ask` have no role in the glossary. They keep `tier: balanced` (question 4, open). No role is invented
+for them. That is the recommendation, and it builds nothing: RL1 lets a step keep `tier:`.
 
 **"Lead."** The owner's lead is the coordinator: the owner's own session, which starts each step's agent and shows
 the owner each card. It is not a step, is not confined by the hook, and starts agents only because a task names
 one. Making it a role would make it a step agent that starts agents, which the hook denies and ADR 2 rules out
-(question 5).
+(question 5, open). The recommendation builds nothing, and RL1 follows it: no role is named lead, and `bay check`
+refuses `role: lead` as it refuses any name not in the set.
 
 ### A skill step declares its role
 
@@ -208,7 +213,7 @@ edit a role (README, "What the hook does").
 
 Two ways were weighed.
 
-| | Through tiers (recommended) | Directly, role to model and effort |
+| | Through tiers (the owner's answer) | Directly, role to model and effort |
 |---|---|---|
 | Config | `tiers:` as today, three entries at most | `roles:` beside or in place of `tiers:`, up to seven entries |
 | Owner's work to change the reviewer's model | Change `deep`, which also moves the designer and the challenger | Change `reviewer` alone |
@@ -216,8 +221,9 @@ Two ways were weighed.
 | "Another model" for planner and challenger | Holds while balanced and deep differ | Holds only while the owner keeps the two apart; `bay build` would have to warn |
 | Says it once | One place sets a model | Two, if `tiers:` stays for role-less steps |
 
-The recommendation is through tiers, with a later, optional slice (RL6) that lets the config give one role its
-own model and effort, which then wins over its tier:
+The owner chose through tiers (question 2, 21 November: "Through its tier (Recommended)"). A later, optional
+slice (RL6), not planned, would let the config give one role its own model and effort, which then wins over its
+tier:
 
 ```yaml
 tiers:
@@ -227,7 +233,7 @@ roles:
   reviewer: { model: opus, effort: high }
 ```
 
-That is question 2. Either way the adapter does the mapping and the kernel names no model (ADR 2). What an adapter
+Either way the adapter does the mapping and the kernel names no model (ADR 2). What an adapter
 needs beyond a model and an effort is the adapter's to add to the tier's setting; claude-code needs nothing more
 today.
 
@@ -241,7 +247,8 @@ judged   The reviewer holds every condition.
            deep
 ```
 
-A step with no role reads as today: "by feed-briefing digest, tier balanced". The words are question 6.
+A step with no role reads as today: "by feed-briefing digest, tier balanced". The words are question 6, open;
+until it is answered no card names a role (RL3 waits for it).
 
 ---
 
@@ -397,7 +404,9 @@ What may be merged, and what may not:
   out of a skill are no longer beside the instructions they qualify; RL5 moves only lines that are the same for
   every skill of the role.
 
-### Recommendation
+### Recommendation, and the owner's choice
+
+The owner chose D, built as A first, on 21 November (question 1). The recommendation was:
 
 **D, built as A first.** A gives the owner his words on the card and in `mode.yaml` at almost no risk, and can
 stop there. D then makes each role mean something the hook enforces, closes the gaps in section 1 (the builder's
@@ -410,37 +419,59 @@ After the owner's answers, the decision is written as ADR 29.
 
 ## 6. Questions for the owner
 
-**Conclusion.** Six questions. The first decides how much is built; the third changes a model the owner chose.
+**Conclusion.** Six questions. The owner answered the first three by 21 November; 4, 5 and 6 are open.
+
+| Question | Answer | Answered |
+|---|---|---|
+| 1. Which option? | D, built as A first: "2 roles and limits" | 21 November |
+| 2. Where a role's model and effort come from | (a): "Through its tier (Recommended)" | by 21 November |
+| 3. The builder's tier | (a), balanced: "Sonnet (Recommended)" | by 21 November |
+| 4. `digest` and `ask` | Open. RL1 follows the recommendation, (a), which builds nothing | |
+| 5. "Lead" | Open. RL1 follows the recommendation, (a), which builds nothing | |
+| 6. How a judged line names a role | Open. Nothing that depends on it is built: RL3 waits | |
+
+The owner's idea, 20 November: "Why not have well defined rolls like reviewer lead builder etc that map to
+platform agents like Claude and define platform specific params like model effort etc. Then instructions can just
+say use a lead or use a builder to do this".
+
+Question 1 was asked on 21 November as "names first then limits, names only, or not now"; his answer, "2 roles and
+limits", is names first then limits: option D, built as A first (names over tiers, agent files unchanged), then
+ceilings and standing rules.
 
 1. **Which option?** (A) roles as names only; (B) one agent definition per role; (C) reword the card only;
    (D) A, plus a ceiling and standing rules per role. Recommendation: D, built as A first, so it can stop after A.
+   **Answered 21 November: D, built as A first.**
 2. **Where does a role's model and effort come from?** (a) Through its tier only: `tiers:` as today.
    (b) Also from the config, which may give one role its own model and effort, winning over its tier (slice RL6).
    (c) Only from the config: `roles:` in place of `tiers:`. Recommendation: (a) now, (b) later if you want the
    reviewer at a different effort than the designer and challenger; (c) makes role-less steps need a second place.
+   **Answered: (a), through its tier.** RL6 is not planned.
 3. **The builder has two tiers today. Which one is the builder's?** (a) Balanced, as ADR 24 item 8 says
    ("Implementers run sonnet medium"); the `one-slice` workflow's `build` moves from Opus to Sonnet. (b) Deep;
    `declare` and `build-without-tests` move from Sonnet to Opus, and every round costs more. (c) A step may name a
    tier beside its role, winning over it. Recommendation: (a). (c) says the tier in two places.
+   **Answered: (a), balanced (Sonnet).** The `one-slice` workflow's `build` moves from deep to balanced in RL2.
 4. **The feed briefing's `digest` and `ask` have no role in the glossary. What do they get?** (a) No role: they
    keep `tier: balanced`, and their card lines read as today. (b) A new role for them, with a word added to the
    glossary first. Recommendation: (a). No skill but these two would use the new role.
+   **Open.** RL1 follows (a): it builds nothing, since a step may keep `tier:`.
 5. **"Lead": what is it?** (a) The coordinator, your own session, named "lead" nowhere but in prose; nothing is
    built. (b) The word "lead" added to the glossary for the coordinator, and used in the `CLAUDE.md` block.
    Not available: a lead as a step agent that starts other agents. The hook denies every subagent that is not a
    step, and ADR 2 keeps the kernel, not an agent, deciding what runs. Recommendation: (a).
+   **Open.** RL1 follows (a): it builds nothing, and lead is not in the set of roles.
 6. **How should a judged line name a role?** (a) "by the reviewer, forge review, tier deep". (b) "by the reviewer
    (forge), tier deep", without the skill. (c) "by forge's reviewer, tier deep". Recommendation: (a). The skill
    stays because two skills share the builder's and the challenger's role, and the line must say which step it
-   cites.
+   cites. **Open.** Nothing that depends on it is built; RL3 waits for the answer.
 
 ---
 
 ## 7. Slices for option D
 
 Each slice is small and vertical, with its write scope. RL1 comes first; RL2, RL3 and RL4 come after RL1 and can
-run side by side; RL5 comes after RL2 and RL4; RL6 is built only if question 2 is answered (b). Size is reported
-before and after each (P-13).
+run side by side; RL5 comes after RL2 and RL4; RL6 is built only if question 2 is answered (b), and the owner
+answered (a), so it is not planned. RL3 waits for question 6. Size is reported before and after each (P-13).
 
 ### RL1. A skill step may name a role, which gives its tier
 

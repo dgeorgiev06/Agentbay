@@ -4,7 +4,7 @@ import type { CardLine } from "../scripts/lib/card-lines.ts";
 import { drawn, type MergeCardInput } from "../scripts/lib/merge-card.ts";
 import { provedOf } from "../scripts/lib/proof-answer.ts";
 import { sliceOf, type Slice } from "../scripts/lib/slice-form.ts";
-import { blocksBySlice, keptFromCard, shownResults, type TriedBlock } from "../scripts/lib/tried-block.ts";
+import { blocksBySlice, shownResults, type TriedBlock } from "../scripts/lib/tried-block.ts";
 import { waveTrials, type Result } from "../scripts/lib/tried-examples.ts";
 import type { Joined, WaveChecks } from "../scripts/lib/wave-answer.ts";
 import { waveDrawn } from "../scripts/lib/wave-card.ts";
@@ -206,7 +206,7 @@ describe("the block the rounds' merge card draws for the design's examples", () 
     const shown = shownResults([quoting, sharing], [test, `assert.equal(x, "${emptyName}")`], [emptyName]);
     assert.deepEqual(
       shown.map((result) => (result.outcome === "otherwise" ? result.built.text : "")),
-      [keptFromCard, `${emptyName} More.`],
+      ["kept from the card: it quotes a test", `${emptyName} More.`],
     );
   });
 });

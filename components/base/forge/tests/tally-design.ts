@@ -7,14 +7,14 @@ const added = (name: string): Json => ({ action: "add", input: { name } });
 
 export const twentyA = "a".repeat(20);
 
-export const addExamples: readonly Json[] = [
+const addExamples: readonly Json[] = [
   { input: { name: "ann" }, answer: { name: "ann", count: 1 } },
   { earlier: [added("ann")], input: { name: "ann" }, answer: { name: "ann", count: 2 } },
   { input: { name: "" }, refusal: emptyName },
   { input: { name: { $text: [{ repeat: "a", times: 20 }] } }, answer: { name: twentyA, count: 1 } },
 ];
 
-export const countExamples: readonly Json[] = [{ earlier: [added("bo")], input: { name: "bo" }, answer: { count: 1 } }];
+const countExamples: readonly Json[] = [{ earlier: [added("bo")], input: { name: "bo" }, answer: { count: 1 } }];
 
 export const addToTry: ToTry = { action: "tally.add", mode: "tally", examples: addExamples };
 

@@ -37,7 +37,7 @@ export type ProvedTrying =
 
 const outcomes = ["as designed", "refused by its schema", "otherwise", "not known", "not tried"] as const;
 
-export const keptFromCard = "kept from the card: it quotes a test";
+const keptFromCard = "kept from the card: it quotes a test";
 
 export function settingOf(value: Json | undefined): Setting {
   return oneOf(settings, value) ?? "must";

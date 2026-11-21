@@ -4,6 +4,7 @@ import { agentName, type Adapter, type SkillAgent } from "./adapter.ts";
 import type { Effect, Tier } from "./contracts.ts";
 import type { FileSystem } from "./ports.ts";
 import type { ActiveMode, System } from "./manifests/manifests.ts";
+import { tierOfStep } from "./roles.ts";
 import { skillNameOf, skillToolsOf } from "./skill-tools.ts";
 import { isRecord } from "./json.ts";
 import type { Outcome, Problem } from "./outcome.ts";
@@ -32,7 +33,7 @@ function higherTier(first: Tier, second: Tier): Tier {
 function skillSteps(mode: ActiveMode): readonly SkillStepUse[] {
   return Object.values(mode.manifest.actions).flatMap((action) =>
     action.run.flatMap((step) =>
-      "skill" in step ? [{ skill: step.skill, tier: step.tier, effects: action.effects }] : [],
+      "skill" in step ? [{ skill: step.skill, tier: tierOfStep(step), effects: action.effects }] : [],
     ),
   );
 }

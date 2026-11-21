@@ -4,6 +4,7 @@ import type { Action } from "../generated/mode.ts";
 import { type Context, type ActionPlace, type ModeSource, actionLabel } from "./loaded.ts";
 import { boundModeOf } from "./bindings.ts";
 import { interfaceName, requiredReferences } from "./interfaces.ts";
+import { namingProblem } from "../roles.ts";
 
 type CallStep = {
   readonly call: string;
@@ -160,10 +161,32 @@ function undoProblems(place: ActionPlace): readonly Problem[] {
   return [];
 }
 
+function skillNamingProblems(place: ActionPlace): readonly Problem[] {
+  return place.action.run.flatMap((step, index) => {
+    const problem = "skill" in step ? namingProblem(step, step.skill) : undefined;
+    if (problem === undefined) {
+      return [];
+    }
+    return [
+      problemAt(place.mode, ["actions", place.name, "run", index], {
+        message: `${actionLabel(place)} ${problem.said}`,
+        fix: problem.fix,
+      }),
+    ];
+  });
+}
+
 export function actionProblems(context: Context, place: ActionPlace): readonly Problem[] {
   const callSteps = place.action.run.flatMap((step, index) => ("call" in step ? [{ call: step.call, index }] : []));
   const calls = callSteps.flatMap((step) => callProblems(context, place, step));
   const keptCalls = callSteps.flatMap((step) => keptCallProblems(context, place, step));
   const keptAnswers = callSteps.flatMap((step) => keptAnswerProblems(place, step));
-  return [...calls, ...keptCalls, ...keptAnswers, ...keptRunProblems(place), ...undoProblems(place)];
+  return [
+    ...skillNamingProblems(place),
+    ...calls,
+    ...keptCalls,
+    ...keptAnswers,
+    ...keptRunProblems(place),
+    ...undoProblems(place),
+  ];
 }

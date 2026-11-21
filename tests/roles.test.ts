@@ -4,12 +4,13 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { planAgents } from "../bay/build.ts";
 import type { ListTrust, Tier } from "../bay/contracts.ts";
-import { fieldOf, isRecord, textField } from "../bay/json.ts";
+import { fieldOf, parseJson, textField } from "../bay/json.ts";
 import { loadSystem, type System } from "../bay/manifests/manifests.ts";
 import type { Problem } from "../bay/outcome.ts";
 import { roles, tierOfRole, type Role } from "../bay/roles.ts";
 import { listHashOf } from "../bay/trust.ts";
 import { check } from "./check-fixture.ts";
+import { listOf } from "./cli-fixture.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import { openKernel } from "./kernel-fixture.ts";
 import { kit, makeProject } from "./project-fixture.ts";
@@ -39,7 +40,7 @@ async function loaded(files: Readonly<Record<string, string>>): Promise<System> 
 async function refusals(files: Readonly<Record<string, string>>): Promise<readonly Problem[]> {
   const outcome = await loadSystem(fakeFileSystem(rooted(files)), layout);
   assert.ok(!outcome.ok, "expected the system to be refused");
-  return outcome.problems.filter((problem) => problem.file === `${layout.project}/${paths.notes}`);
+  return outcome.problems.filter((problem) => problem.file === paths.notes);
 }
 
 async function plannedTier(step: unknown): Promise<Tier | undefined> {
@@ -100,7 +101,7 @@ test("a step that names both a role and a tier is refused with a sentence that s
   const problems = await sameInLoadAndCheck({ skill: "skills/write-note", role: "reviewer", tier: "fast" });
   assert.deepEqual(problems, [
     {
-      file: `${layout.project}/${paths.notes}`,
+      file: paths.notes,
       path: "/actions/add/run/0",
       line: 16,
       message:
@@ -115,7 +116,7 @@ test("a step that names neither a role nor a tier is refused with the names it m
   const problems = await sameInLoadAndCheck({ skill: "skills/write-note" });
   assert.deepEqual(problems, [
     {
-      file: `${layout.project}/${paths.notes}`,
+      file: paths.notes,
       path: "/actions/add/run/0",
       line: 16,
       message:
@@ -129,11 +130,11 @@ test("a step that names neither a role nor a tier is refused with the names it m
 });
 
 test("the schema's roles are the kernel's roles, in the same order", async () => {
-  const schema: unknown = JSON.parse(await readFile(join(kit, "schemas", "mode.schema.json"), "utf8"));
-  const branches = fieldOf(fieldOf(fieldOf(isRecord(schema) ? schema : null, "$defs") ?? null, "step") ?? null, "oneOf");
-  const skillBranch = Array.isArray(branches)
-    ? branches.find((branch) => fieldOf(fieldOf(branch, "properties") ?? null, "skill") !== undefined)
-    : undefined;
+  const schema = parseJson(await readFile(join(kit, "schemas", "mode.schema.json"), "utf8"));
+  const step = fieldOf(fieldOf(schema, "$defs") ?? null, "step") ?? null;
+  const skillBranch = listOf(fieldOf(step, "oneOf")).find(
+    (branch) => fieldOf(fieldOf(branch, "properties") ?? null, "skill") !== undefined,
+  );
   const role = fieldOf(fieldOf(skillBranch ?? null, "properties") ?? null, "role");
   assert.deepEqual(fieldOf(role ?? null, "enum"), [...roles]);
 });

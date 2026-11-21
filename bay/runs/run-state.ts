@@ -1,5 +1,6 @@
 import type { Overrun } from "./budget.ts";
 import type { Json, Permissions, StepPlace, Tier } from "../contracts.ts";
+import type { Role } from "../roles.ts";
 import type { Card } from "./card.ts";
 import type { ApprovalAnswer, Choice } from "./choices.ts";
 
@@ -10,6 +11,7 @@ export type SkillTask = {
   readonly feedback: readonly string[];
   readonly skill: string;
   readonly tier: Tier;
+  readonly role?: Role;
   readonly input: Json;
   readonly files: { readonly skill: string; readonly outputSchema: string; readonly alsoMatches: readonly string[] };
   readonly place: StepPlace;

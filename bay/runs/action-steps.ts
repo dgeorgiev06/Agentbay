@@ -8,6 +8,7 @@ import type { StepRecord } from "./run-store.ts";
 import { actionPermissions, frameLabel, runScript, type CallStep } from "./script-steps.ts";
 import { skillSchemas, skillTaskOf, startedSkillOf, type SkillAt } from "./skill-steps.ts";
 import type { SkillDetail } from "./step-detail.ts";
+import { tierOfStep, type Role } from "../roles.ts";
 import { actionEndKey, actionStepKey, checkStepKey } from "./step-key.ts";
 import type { ActionTarget, ActiveMode } from "../manifests/manifests.ts";
 import {
@@ -40,13 +41,20 @@ type NestedAction = {
 
 type StepOf =
   | { readonly kind: "script"; readonly script: string }
-  | { readonly kind: "skill"; readonly skill: string; readonly tier: Tier; readonly checks: readonly string[] }
+  | {
+      readonly kind: "skill";
+      readonly skill: string;
+      readonly tier: Tier;
+      readonly role?: Role;
+      readonly checks: readonly string[];
+    }
   | { readonly kind: "call"; readonly call: string };
 
 type SkillStep = {
   readonly key: string;
   readonly skill: string;
   readonly tier: Tier;
+  readonly role?: Role;
   readonly checks: readonly string[];
   readonly input: Json;
   readonly place: StepPlace;
@@ -92,7 +100,8 @@ function stepOf(step: Step): StepOf {
     return { kind: "script", script: step.script };
   }
   if ("skill" in step) {
-    return { kind: "skill", skill: step.skill, tier: step.tier, checks: step.checks ?? [] };
+    const role = step.role === undefined ? {} : { role: step.role };
+    return { kind: "skill", skill: step.skill, tier: tierOfStep(step), ...role, checks: step.checks ?? [] };
   }
   return { kind: "call", call: step.call };
 }
@@ -119,6 +128,7 @@ async function startSkill(walk: Walk, frame: ActionFrame, skill: SkillStep): Pro
     action: frame.name,
     skill: skill.skill,
     tier: skill.tier,
+    ...(skill.role === undefined ? {} : { role: skill.role }),
     schemas,
     round: 1,
     feedback: [],
@@ -217,6 +227,7 @@ function nextRound(detail: SkillDetail, feedback: readonly string[], submission:
     action: detail.action,
     skill: detail.skill,
     tier: detail.tier,
+    ...(detail.role === undefined ? {} : { role: detail.role }),
     schemas: detail.schemas,
     round: detail.round + 1,
     feedback,

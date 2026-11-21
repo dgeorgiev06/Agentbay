@@ -60,7 +60,8 @@ export type Step =
   | { readonly script: RelativePath }
   | {
       readonly skill: RelativePath;
-      readonly tier: "fast" | "balanced" | "deep";
+      readonly tier?: "fast" | "balanced" | "deep";
+      readonly role?: "builder" | "test writer" | "reviewer" | "planter" | "designer" | "challenger" | "planner";
       readonly checks?: ReadonlyArray<RelativePath>;
     }
   | { readonly call: string };

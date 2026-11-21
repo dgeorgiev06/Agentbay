@@ -1,6 +1,7 @@
 import { noSpend, spendFromJson } from "./budget.ts";
 import { tiers, type Json, type Spend, type Submission, type Tier } from "../contracts.ts";
 import { fieldOf, numberField, textField, textsField, toJson } from "../json.ts";
+import { roleNamed, type Role } from "../roles.ts";
 import { storedCardOf, type Card } from "./card.ts";
 import { packedDrawn, unpackedDrawn } from "./drawn-values.ts";
 import { choiceStatuses, type ApprovalAnswer, type ChoiceStatus } from "./choices.ts";
@@ -21,6 +22,7 @@ export type SkillDetail = {
   readonly action: string;
   readonly skill: string;
   readonly tier: Tier;
+  readonly role?: Role;
   readonly schemas: readonly string[];
   readonly round: number;
   readonly feedback: readonly string[];
@@ -135,6 +137,15 @@ function tierOf(value: Json): Tier {
   return tier;
 }
 
+function roleOf(value: Json): { readonly role?: Role } {
+  const named = textField(value, "role");
+  const role = roleNamed(named);
+  if (named !== undefined && role === undefined) {
+    throw malformed("skill", "role");
+  }
+  return role === undefined ? {} : { role };
+}
+
 function skillDetailOf(value: Json): SkillDetail {
   const submission = submissionOf(value);
   const calledRuns = textsField(value, "calledRuns");
@@ -143,6 +154,7 @@ function skillDetailOf(value: Json): SkillDetail {
     action: requiredText(value, "action", "skill"),
     skill: requiredText(value, "skill", "skill"),
     tier: tierOf(value),
+    ...roleOf(value),
     schemas: textsField(value, "schemas"),
     round: requiredNumber(value, "round", "skill"),
     feedback: textsField(value, "feedback"),

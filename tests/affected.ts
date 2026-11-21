@@ -49,7 +49,7 @@ const manifestFolders = ["schemas/", "workflows/", "skills/"];
 
 const testFile = /(^|\/)(test|test-[^/]*|[^/]*[.\-_]test)\.[cm]?[jt]s$|(^|\/)test\/[^/].*\.[cm]?[jt]s$/;
 
-const cheapChecks: readonly string[] = ["generate:check", "typecheck", "lint", "format:check", "deadcode"];
+export const cheapChecks: readonly string[] = ["generate:check", "typecheck", "lint", "format:check", "deadcode"];
 
 const reminder =
   "These are the tests this change needs before a merge. The whole suite still runs on the merged branch.";

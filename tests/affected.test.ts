@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { affectedTests, changedSince, repositoryTestFiles, testsThatOpenTheKit } from "./affected.ts";
+import { affectedTests, changedSince, cheapChecks, repositoryTestFiles, testsThatOpenTheKit } from "./affected.ts";
 
 const modeFolders = ["components/base/store", "components/base/proof", "components/modes/feed-briefing"];
 
@@ -234,4 +234,16 @@ test("the changed paths are those since the base, both paths of a moved file, an
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
+});
+
+test("test:affected runs the checks npm run check runs before its tests, in the same order", () => {
+  const manifest: unknown = JSON.parse(readFileSync("package.json", "utf8"));
+  const scripts = typeof manifest === "object" && manifest !== null && "scripts" in manifest ? manifest.scripts : {};
+  const check = typeof scripts === "object" && scripts !== null && "check" in scripts ? String(scripts.check) : "";
+  const parts = check.split("&&").map((part) => part.trim());
+  assert.equal(parts.at(-1), "npm test");
+  assert.deepEqual(
+    cheapChecks,
+    parts.slice(0, -1).map((part) => part.replace(/^npm run /, "")),
+  );
 });

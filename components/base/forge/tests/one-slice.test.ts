@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
-import { answered, submitted } from "./kit-copy.ts";
+import { answered, bayRan, byProcess, submitted } from "./kit-copy.ts";
 
 type Answer = { readonly verdict: "approve" | "reject" } | { readonly choice: string };
 
@@ -33,11 +33,6 @@ type Build = {
   readonly files: readonly string[];
   readonly built: Json;
   readonly refusedFirst?: Json;
-};
-
-type Ran = {
-  readonly status: number | null;
-  readonly stdout: string;
 };
 
 const kit = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -287,18 +282,6 @@ async function project(): Promise<string> {
   return root;
 }
 
-function bayRan(root: string, words: readonly string[]): Promise<Ran> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ["bay/cli.ts", ...words], { cwd: root, stdio: ["ignore", "pipe", "ignore"] });
-    const chunks: Buffer[] = [];
-    child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
-    child.on("error", reject);
-    child.on("close", (status) => {
-      resolve({ status, stdout: Buffer.concat(chunks).toString("utf8") });
-    });
-  });
-}
-
 async function bay(root: string, words: readonly string[]): Promise<Json> {
   return jsonOf((await bayRan(root, [...words, "--json"])).stdout);
 }
@@ -512,7 +495,7 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
   });
 
   test("3. a rejected start card fails the run, and nothing is cut", async () => {
-    const root = await project();
+    const root = byProcess(await project());
     const start = await started(root, planned("A3", ["docs/a3/**"], [item("DOD-A3-1", "must", "checks")]));
     const rejected = runOf(await decided(root, start, { step: "start", verdict: "reject" }));
     assert.equal(textAt(rejected, "status"), "failed");

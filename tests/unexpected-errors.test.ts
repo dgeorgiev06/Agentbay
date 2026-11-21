@@ -231,6 +231,27 @@ test("a command whose files cannot be read prints one JSON object with the reaso
   }
 });
 
+test("bay exits 70 with one line on stderr when it breaks before any command handler runs", async () => {
+  const project = await makeProject({ ownKernel: true });
+  try {
+    await project.write(
+      "bay/bay-command.ts",
+      'export function bayCommand(): never {\n  throw new Error("The command line broke before any handler ran.");\n}\n',
+    );
+    const result = spawnSync(process.execPath, [project.cli, "actions", "--json"], {
+      cwd: project.root,
+      env: testEnvironment,
+      input: "",
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 70, result.stdout + result.stderr);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /^internal error: The command line broke before any handler ran\.$/m);
+  } finally {
+    await project.remove();
+  }
+});
+
 test("the last-resort handler prints one line and exits non-zero", () => {
   const written: string[] = [];
   const exits: number[] = [];

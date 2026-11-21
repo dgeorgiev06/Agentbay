@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
+import { commandLineIn, type CommandLineIn } from "../../../../tests/test-toolbox.ts";
 
 type Planned = {
   readonly title: string;
@@ -15,6 +16,8 @@ type Planned = {
 const kit = fileURLToPath(new URL("../../../..", import.meta.url));
 
 let copy: string;
+
+let bay: CommandLineIn;
 
 async function copyKitInto(folder: string): Promise<void> {
   const listing = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: kit });
@@ -42,6 +45,7 @@ async function copyOfTheKit(): Promise<string> {
 
 before(async () => {
   copy = await copyOfTheKit();
+  bay = await commandLineIn(copy);
 });
 
 after(async () => {
@@ -62,18 +66,31 @@ function listOf(value: Json | undefined): readonly Json[] {
   return isList(value) ? value : [];
 }
 
-function called(plan: string): Json {
-  const words = ["bay/cli.ts", "call", "forge.waves", JSON.stringify({ plan }), "--json"];
-  const ran = spawnSync(process.execPath, words, { cwd: copy, encoding: "utf8" });
-  const run = fieldsOf(fieldsOf(jsonOf(ran.stdout)).run ?? null);
-  assert.equal(run.status, "done", ran.stdout + ran.stderr);
+type Printed = { readonly output: string };
+
+function outputOf(ran: Printed): Json {
+  const run = fieldsOf(fieldsOf(jsonOf(ran.output)).run ?? null);
+  assert.equal(run.status, "done", ran.output);
   return run.output ?? null;
 }
 
-async function waves(name: string, plan: Json): Promise<Json> {
+function wordsFor(plan: string): readonly string[] {
+  return ["call", "forge.waves", JSON.stringify({ plan }), "--json"];
+}
+
+async function called(plan: string): Promise<Json> {
+  return outputOf(await bay(wordsFor(plan)));
+}
+
+function calledInAProcess(plan: string): Promise<Json> {
+  const ran = spawnSync(process.execPath, ["bay/cli.ts", ...wordsFor(plan)], { cwd: copy, encoding: "utf8" });
+  return Promise.resolve(outputOf({ output: ran.stdout }));
+}
+
+async function waves(name: string, plan: Json, call = called): Promise<Json> {
   const file = `docs/plans/${name}.yaml`;
   await writeFile(join(copy, file), `${JSON.stringify(plan, null, 2)}\n`, "utf8");
-  return called(file);
+  return call(file);
 }
 
 function planned(name: string, scope: readonly string[], afterNames: readonly string[] = []): Planned {
@@ -281,8 +298,8 @@ test("three problems together are all reported", async () => {
   ]);
 });
 
-test("a plan of one slice has one wave and no problem", async () => {
-  const output = await waves("one", plan("One", [planned("A", ["a/**"])]));
+test("a plan of one slice has one wave and no problem, as a bay process works it out", async () => {
+  const output = await waves("one", plan("One", [planned("A", ["a/**"])]), calledInAProcess);
   assert.deepEqual(linesFrom(output, "One"), [
     "One",
     "1 slice in 1 wave. Longest chain, 1 slice: A.",
@@ -361,7 +378,7 @@ test("two slices with one name are refused, since an after names a slice by it",
 
 test("text that is not YAML is refused with the line the reader names", async () => {
   await writeFile(join(copy, "docs/plans/broken.yaml"), "title: [a\nslices: []\n", "utf8");
-  assert.deepEqual(fieldsOf(called("docs/plans/broken.yaml")).lines, [
+  assert.deepEqual(fieldsOf(await called("docs/plans/broken.yaml")).lines, [
     "docs/plans/broken.yaml is not a plan forge can read, for 1 reason:",
     "line 2: The YAML cannot be read: Flow sequence in block collection must be sufficiently indented and end with a ]. Correct the YAML syntax at this line.",
   ]);
@@ -391,6 +408,6 @@ test("the plan's slice is proof@1's slice by reference, so a slice proof@1 refus
   ]);
 });
 
-test("plan 0022 as a file is read, and worked out", () => {
-  assert.equal(fieldsOf(called("docs/plans/0022-forge-in-waves.yaml")).answer, "worked out");
+test("plan 0022 as a file is read, and worked out", async () => {
+  assert.equal(fieldsOf(await called("docs/plans/0022-forge-in-waves.yaml")).answer, "worked out");
 });

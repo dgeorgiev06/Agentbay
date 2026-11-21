@@ -13,6 +13,7 @@ import {
   onlyWhenRecapturing,
   ownerAnswered,
   printedCard,
+  processProject,
   project,
   removeAll,
   runOf,
@@ -184,7 +185,7 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
   });
 
   test("a wave stopped after a slice failed as a run forgets every kept test", async () => {
-    const root = await project(template);
+    const root = await processProject(template);
     await planOnInto(root, ["SA"]);
     const start = await waveStarted(root);
     await decided(root, start, { step: "start", choice: "build" });

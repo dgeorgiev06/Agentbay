@@ -236,6 +236,7 @@ features:
     entry:
       - bay/cli.ts
       - bay/mcp.ts
+      - bay/bay-command.ts
     private:
       - bay/command-line.ts
       - bay/command-context.ts

@@ -362,6 +362,17 @@ only `bay resume <run> --stop`, with the owner's source, to end it. `bay` itself
 to start one: a test that drives `bay` in a process of its own runs `node tests/start-part.ts <mode>:<path>
 '<trigger json>' '<part json>'` in its project, which works only in a folder under the temporary folder.
 
+Forge's end-to-end tests run their `bay` commands inside the test's own process. `commandLineIn(copy)`, from the
+test toolbox, loads `bay/bay-command.ts` from the case's copy of the kit and runs a command line there as
+`./bay.sh` would, without the second or so a new `bay` process costs to start. It answers the exit code and the
+text `bay` prints on stdout, without the trailing newline. It does not give what `bay` writes on stderr, and on an
+error that escapes the command line it rejects with that error where `bay` would print `internal error` and exit 70.
+Script steps still run in their own hosts, from the copy's kernel. One whole case of each workflow still starts a
+`bay` process per command, through `processProject` (or `byProcess`): rounds (`one-round.test.ts` case 6, a fresh
+kernel for each answer), design (a design that serves no action for a condition), plan (a condition no slice
+meets), one-slice (case 3, a rejected start card), wave (a wave stopped after a slice failed as a run), and one
+`forge.waves` call (`waves.test.ts`, a plan of one slice).
+
 Forge's tests give outputs captured from whole runs, in `components/base/forge/tests/given-*.json`. When a
 workflow or an output schema changes, they no longer start, and the refusal names the step. `node
 components/base/forge/tests/recapture.ts [given-<name>.json ...]` makes them again: in a copy of the kit, it runs
@@ -371,3 +382,38 @@ case and the step its test runs from. A case that only remakes a file, since the
 one of its assertions, runs only when `FORGE_RECAPTURE` is set, as `recapture.ts` sets it; the everyday suite skips
 it. With no file named it makes all four, in about four minutes. The whole cases do not check the cards
 their files lead to, so the test that reads a file may then need its expected card changed to the one it now prints.
+
+## Checking a change
+
+`npm run check` is the whole check, and what a merge needs: the generated types, the type check, lint, the format
+check, the dead-code check, then every test file. On a 2-core machine its tests keep both cores busy for the whole
+run, so it is about as short as the CPU work in it.
+
+While building, `npm run test:affected -- <base>` runs the same five checks on the whole kit, then only the test
+files the change needs. The change is every path changed since `<base>` (`git diff <base>...HEAD`), with uncommitted
+and untracked paths. It picks one of three tiers and prints it with its reason:
+
+- **mode**: every changed path is inside one or more mode folders (a folder with a `mode.yaml`), and none is a
+  manifest, schema, workflow or skill. Only the test files inside those mode folders run.
+- **manifest**: a changed path is a mode's `mode.yaml`, or under its `schemas/`, `workflows/` or `skills/`. The
+  modes' own tests run, and the tests that open the kit, listed by hand in `tests/affected.ts` (a test checks that
+  every test file with one of its markers is on the list).
+- **all**: any other path changed: the kernel (`bay/`), `tests/`, `framework/`, `schemas/`, `adapters/`, an
+  interface, `package.json`, any file at the top. The whole suite runs, as in `npm run check`.
+
+A change under `docs/`, or to the root `README.md` or `CONTEXT.md`, runs no test. Markdown inside a mode folder
+counts as part of that mode.
+
+What it can miss, in the two lower tiers:
+
+- **Other modes that run the changed mode.** A mode's code also runs in other modes' tests. Proof's tests run the
+  real `git-worktrees` and `typescript` modes, and forge's end-to-end tests run the real `git-worktrees` and
+  `requirements`. A change to `components/base/git-worktrees/scripts/` runs only git-worktrees' own tests, not those.
+- **Kernel tests that read every mode.** In the mode tier, the tests under `tests/` that check the whole kit do not
+  run: `bay check` on the kit (the imports a script may make, the size warnings), the feature map, the made-up
+  modes beside the kit's own. In the manifest tier, a test that opens the kit but carries none of the markers
+  is missed until it is put on the list.
+- **The merged result.** It checks the branch, not the branch merged with what landed since `<base>`.
+
+So it decides what to run while building, not whether a change is safe: run `npm run check` before asking for a
+merge, and the whole suite runs again on the merged branch.

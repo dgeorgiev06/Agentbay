@@ -49,6 +49,8 @@ const manifestFolders = ["schemas/", "workflows/", "skills/"];
 
 const testFile = /(^|\/)(test|test-[^/]*|[^/]*[.\-_]test)\.[cm]?[jt]s$|(^|\/)test\/[^/].*\.[cm]?[jt]s$/;
 
+export const cheapChecks: readonly string[] = ["generate:check", "typecheck", "lint", "format:check", "deadcode"];
+
 const reminder =
   "These are the tests this change needs before a merge. The whole suite still runs on the merged branch.";
 
@@ -153,7 +155,7 @@ function checked(base: string): boolean {
   console.log(`Why: ${affected.why}`);
   console.log(`Test files: ${String(affected.files.length)}`);
   console.log(reminder);
-  const staticChecks = ["typecheck", "lint", "format:check"].every((script) => ran(["run", script]));
+  const staticChecks = cheapChecks.every((script) => ran(["run", script]));
   return staticChecks && testsRan(affected);
 }
 

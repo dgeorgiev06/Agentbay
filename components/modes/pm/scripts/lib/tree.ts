@@ -1,6 +1,6 @@
 import type { Json } from "../../../../../bay/sdk.ts";
 import { flagAt, textAt, textsAt } from "./json.ts";
-import { each, joined } from "./words.ts";
+import { each, joined, repeated } from "./words.ts";
 
 const kinds = ["decision", "fact", "prototype"] as const;
 
@@ -57,9 +57,9 @@ export function questionNamed(tree: Tree, id: string): Question | undefined {
 }
 
 function twiceProblems(questions: readonly Question[]): readonly string[] {
-  const ids = questions.map((question) => question.id);
-  const twice = new Set(ids.filter((id, index) => ids.indexOf(id) !== index));
-  return [...twice].map((id) => `${id} is in the tree twice; give each question its own id.`);
+  return repeated(questions.map((question) => question.id)).map(
+    (id) => `${id} is in the tree twice; give each question its own id.`,
+  );
 }
 
 function unknownAfterProblems(questions: readonly Question[]): readonly string[] {

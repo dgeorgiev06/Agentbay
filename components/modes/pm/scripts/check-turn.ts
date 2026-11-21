@@ -1,5 +1,6 @@
 import { defineScript, fail, type Json, type ScriptContext } from "../../../../bay/sdk.ts";
 import { listAt, textAt } from "./lib/json.ts";
+import { isOpen } from "./lib/interview.ts";
 import { settingsOf } from "./lib/settings.ts";
 import { readSources } from "./lib/sources.ts";
 import { readInterview } from "./lib/store.ts";
@@ -22,7 +23,7 @@ async function shapeProblems(context: ScriptContext, added: readonly Json[]): Pr
 export const run = defineScript(async (output, context) => {
   const job = textAt(context.skillInput ?? null, "job");
   const interview = await readInterview(context, job);
-  if (interview === undefined || !interview.open) {
+  if (interview === undefined || !isOpen(interview)) {
     return fail(`No turn of the interview of ${job} is open, so no turn can be checked.`);
   }
   const turn = turnOf(output);

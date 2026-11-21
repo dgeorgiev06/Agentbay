@@ -21,6 +21,10 @@ export function choiceAt(choices: readonly string[], letter: string): string | u
   return namesChoice(letter, choices.length) ? choices[indexOfLetter(letter)] : undefined;
 }
 
+export function repeated(items: readonly string[]): readonly string[] {
+  return [...new Set(items.filter((item, index) => items.indexOf(item) !== index))];
+}
+
 export function joined(names: readonly string[]): string {
   if (names.length < 2) {
     return names.join("");

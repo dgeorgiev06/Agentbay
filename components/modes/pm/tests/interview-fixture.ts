@@ -155,6 +155,12 @@ export const secondTurn: Json = {
   facts: [factQ4],
 };
 
+export function openedOf(run: Run): string {
+  const frontier = run.steps.find((step) => step.key === "frontier");
+  const opened = fieldsOf(frontier?.output ?? null).opened;
+  return typeof opened === "string" ? opened : assert.fail("the run has no open turn");
+}
+
 export async function answeredAll(project: ModeProject, run: Run, choices: readonly string[]): Promise<Run> {
   let now = run;
   for (const choice of choices) {

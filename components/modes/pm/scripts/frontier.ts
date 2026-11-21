@@ -21,7 +21,11 @@ export const run = defineScript(async (input, context) => {
   if (found.asks.length === 0 && found.lookUp.length === 0) {
     return fail(`Nothing is left to ask in the interview of ${job}; the sign-off is not built yet.`);
   }
-  await writeInterview(context, opened(interview));
+  const token = await context.random(16);
+  if (!token.ok) {
+    return fail(token.message);
+  }
+  await writeInterview(context, opened(interview, token.value));
   return {
     job,
     turn: interview.turn,
@@ -30,5 +34,6 @@ export const run = defineScript(async (input, context) => {
     questions: interview.questions,
     asks: idsOf(found.asks),
     lookUp: idsOf(found.lookUp),
+    opened: token.value,
   };
 });

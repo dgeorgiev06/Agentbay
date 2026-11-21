@@ -8,6 +8,7 @@ import {
   type Finding,
   type LoadedModeFolder,
 } from "./check-context.ts";
+import { grantedFolderFindings } from "./check-granted-folders.ts";
 import { checkImports, checkKernelImports } from "./check-imports.ts";
 import type { FileListing } from "./ports.ts";
 import { checkKitLayout, checkLayout } from "./check-layout.ts";
@@ -109,6 +110,7 @@ export async function checkSystem(ports: CheckPorts, layout: Layout): Promise<Ch
     ...longStepWarnings(context),
     ...(await kitFindings(context)),
     ...withoutTheHookWarnings(layout, skillSteps),
+    ...(inspection.problems.length === 0 ? await grantedFolderFindings(ports.files, layout) : []),
   ]);
   const errorCount = findings.filter((finding) => finding.severity === "error").length;
   return { findings, errors: errorCount, warnings: findings.length - errorCount, skillSteps };

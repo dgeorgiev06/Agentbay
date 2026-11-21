@@ -34,8 +34,9 @@ test("the start card shows his words and what the interview does, and start begi
   assert.equal(approval.card?.title, "Start an interview of todo?");
   assert.deepEqual(outputOf(await choose(project, opened, "start")), {
     job: "todo",
-    summary: "The interview of todo is started; its turn 1 comes next.",
-    next: { workflow: "pm:workflows/ask.yaml", input: { job: "todo" } },
+    summary:
+      "The interview of todo is started. When the owner asks for its turn 1, run: " +
+      `bay call --workflow pm:workflows/ask.yaml '{"job": "todo"}' --json`,
   });
   await project.close();
 });
@@ -85,11 +86,12 @@ test("starting an interview again keeps what was settled, says so, and adds his 
   const again = await project.runWorkflow("pm", "workflows/start.yaml", { job: "todo", words: "Overdue first." });
   assert.equal(
     approvalOf(again).card?.lines[1]?.words,
-    "The interview of todo has 2 of 5 questions settled. Starting again keeps them and asks the open ones.",
+    "The interview of todo has 2 of 5 questions settled. Starting again keeps what is settled and asks the open ones.",
   );
   await choose(project, again, "start");
   const input = taskOf(await askedTurn(project)).input;
   assert.deepEqual(fieldOf(input, "turn"), 2);
   assert.match(JSON.stringify(fieldOf(input, "asked")), /Overdue first\./);
+  assert.deepEqual(fieldOf(input, "asks"), ["Q3", "Q5"]);
   await project.close();
 });

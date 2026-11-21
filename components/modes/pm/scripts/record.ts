@@ -1,6 +1,6 @@
 import { defineScript, fail, fieldsOf } from "../../../../bay/sdk.ts";
 import { answerOf, answerProblems, recorded } from "./lib/answers.ts";
-import { askWorkflow } from "./lib/interview.ts";
+import { isOpen } from "./lib/interview.ts";
 import { listAt, textAt } from "./lib/json.ts";
 import { settingsOf } from "./lib/settings.ts";
 import { readSources } from "./lib/sources.ts";
@@ -11,8 +11,11 @@ import { sourcePaths, turnOf, turnProblems } from "./lib/turn.ts";
 export const run = defineScript(async (input, context) => {
   const job = textAt(input, "job");
   const interview = await readInterview(context, job);
-  if (interview === undefined || !interview.open) {
+  if (interview === undefined || !isOpen(interview)) {
     return fail(`No turn of the interview of ${job} is open, so nothing can be kept.`);
+  }
+  if (interview.openTurn !== textAt(input, "opened")) {
+    return fail(`Nothing is kept: the turn handed to record is not the turn of the interview of ${job} that is open.`);
   }
   const turn = turnOf(fieldsOf(input).turn ?? null);
   const answers = listAt(input, "answers").map(answerOf);
@@ -26,8 +29,5 @@ export const run = defineScript(async (input, context) => {
   }
   const after = recorded(interview, turn, answers);
   await writeInterview(context, after);
-  const kept = keptSummary(interview, after, perTurn);
-  return kept.more
-    ? { job, summary: kept.summary, next: { workflow: askWorkflow, input: { job } } }
-    : { job, summary: kept.summary };
+  return { job, summary: keptSummary(interview, after, perTurn) };
 });

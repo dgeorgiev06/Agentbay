@@ -4,7 +4,14 @@
   "description": "One question of an interview's tree.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "title", "asks", "after", "kind", "settled"],
+  "required": [
+    "id",
+    "title",
+    "asks",
+    "after",
+    "kind",
+    "settled"
+  ],
   "properties": {
     "id": {
       "type": "string",
@@ -15,13 +22,15 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 40,
-      "description": "A few words a card shows."
+      "description": "A few words a card shows.",
+      "pattern": "^[^\\n\\r]*$"
     },
     "asks": {
       "type": "string",
       "minLength": 1,
       "maxLength": 300,
-      "description": "The question, one sentence."
+      "description": "The question, one sentence.",
+      "pattern": "^[^\\n\\r]*$"
     },
     "after": {
       "type": "array",
@@ -34,7 +43,11 @@
       "description": "The questions settled before this one is asked."
     },
     "kind": {
-      "enum": ["decision", "fact", "prototype"],
+      "enum": [
+        "decision",
+        "fact",
+        "prototype"
+      ],
       "description": "decision: the owner's to answer; fact: the project's files answer it, and the owner confirms it; prototype: talking cannot settle it."
     },
     "settled": {
@@ -45,7 +58,8 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 300,
-      "description": "What the owner's answer settled it as: the words of the choice he took, or the fact he confirmed."
+      "description": "What the owner's answer settled it as: the words of the choice he took, or the fact he confirmed.",
+      "pattern": "^[^\\n\\r]*$"
     }
   }
 }

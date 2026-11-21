@@ -10,7 +10,7 @@ settings: schemas/settings.json
 resources:
   db: { migrations: migrations }
   files:
-    read: [CONTEXT.md, README.md, docs/, src/, lib/, app/, packages/, tests/]
+    read: [CONTEXT.md, README.md, docs/, src/, lib/, app/, packages/]
 
 actions:
   open:

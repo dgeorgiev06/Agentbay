@@ -1,10 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Next",
-  "description": "What a run of the interview kept, and the run that comes next, if any.",
+  "description": "What a run of the interview kept, and, in its summary, the command for the next turn when the owner asks for it.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["job", "summary"],
+  "required": [
+    "job",
+    "summary"
+  ],
   "properties": {
     "job": {
       "type": "string"
@@ -12,20 +15,6 @@
     "summary": {
       "type": "string",
       "minLength": 1
-    },
-    "next": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["workflow", "input"],
-      "properties": {
-        "workflow": {
-          "type": "string"
-        },
-        "input": {
-          "type": "object"
-        }
-      },
-      "description": "The run to start next, for the coordinator."
     }
   }
 }

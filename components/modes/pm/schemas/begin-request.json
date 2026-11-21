@@ -4,14 +4,37 @@
   "description": "The owner's choice on the start card, and what the card showed.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["choice", "opened"],
+  "required": [
+    "choice",
+    "opened"
+  ],
   "properties": {
     "choice": {
       "type": "string"
     },
     "opened": {
       "type": "object",
-      "description": "As schemas/opened.json gives it."
+      "required": [
+        "job",
+        "words",
+        "namedBy",
+        "card"
+      ],
+      "properties": {
+        "job": {
+          "$ref": "requirements@1/check-response.json#/$defs/requirements/properties/job"
+        },
+        "words": {
+          "type": "string"
+        },
+        "namedBy": {
+          "type": "string"
+        },
+        "card": {
+          "type": "object"
+        }
+      },
+      "description": "As schemas/opened.json gives it; begin draws the start card again and starts only when it is the same."
     }
   }
 }

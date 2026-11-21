@@ -2,7 +2,17 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
 import type { ModeProject } from "../../../../tests/test-toolbox.ts";
-import { answeredAll, askedTurn, factQ4, firstTurn, listOf, openPm, started, taskOf } from "./interview-fixture.ts";
+import {
+  answeredAll,
+  askedTurn,
+  factQ4,
+  firstTurn,
+  listOf,
+  openedOf,
+  openPm,
+  started,
+  taskOf,
+} from "./interview-fixture.ts";
 
 let project: ModeProject;
 
@@ -166,6 +176,29 @@ describe("the check of a turn sends back", () => {
     assert.match(feedback, /The fact for Q4 names docs\/missing\.md, which cannot be read: /);
   });
 
+  test("a turn that would show no card", async () => {
+    const feedback = await secondTurnFeedback([factQuestion], { added: [], asked: [], facts: [] });
+    assert.match(feedback, /The turn shows no card; give a fact for Q4, with its file and the words it rests on\./);
+  });
+
+  test("a quote whose letters differ in case from its file, and a hidden file as a fact's source", async () => {
+    const feedback = await secondTurnFeedback([factQuestion], {
+      added: [],
+      asked: [],
+      facts: [{ ...fieldsOf(factQ4), quote: "a folder with a `mode.yaml`." }],
+    });
+    assert.match(feedback, /quotes "a folder with a `mode\.yaml`\.", which CONTEXT\.md does not hold/);
+    const job = await newJob();
+    const first = await project.answer(taskOf(await askedTurn(project, job)).token, {
+      ...fieldsOf(firstTurn),
+      added: [factQuestion],
+    });
+    await answeredAll(project, first, ["a", "a", "a"]);
+    const task = taskOf(await askedTurn(project, job));
+    const hidden = { added: [], asked: [], facts: [{ ...fieldsOf(factQ4), source: "docs/.env" }] };
+    assert.match(await project.answerRefusal(task.token, hidden), /source/);
+  });
+
   test("a fact for a settled question, and a settled question asked again", async () => {
     const feedback = await secondTurnFeedback([factQuestion], {
       added: [],
@@ -195,9 +228,9 @@ describe("the steps after the check hold the records, not what they are handed",
   test("record keeps nothing of a turn or answers the check did not pass", async () => {
     const job = await newJob();
     const shown = await project.answer(taskOf(await askedTurn(project, job)).token, firstTurn);
-    assert.equal(shown.state.status, "waiting");
     const refusal = await project.failure("pm.record", {
       job,
+      opened: openedOf(shown),
       turn: turn([q1 ?? null], { facts: [{ ...fieldsOf(factQ4), question: "Q1" }] }),
       answers: [{ id: "Q1", choice: "c" }],
     });
@@ -210,7 +243,7 @@ describe("the steps after the check hold the records, not what they are handed",
   test("record and draw refuse a job with no turn open", async () => {
     const job = await newJob();
     assert.match(
-      await project.failure("pm.record", { job, turn: firstTurn, answers: [] }),
+      await project.failure("pm.record", { job, opened: "none", turn: firstTurn, answers: [] }),
       /No turn of the interview of job-\d+ is open, so nothing can be kept\./,
     );
     assert.match(
@@ -221,9 +254,10 @@ describe("the steps after the check hold the records, not what they are handed",
 
   test("record sends back answers that leave a card out, name a card not asked, or answer one twice", async () => {
     const job = await newJob();
-    await project.answer(taskOf(await askedTurn(project, job)).token, firstTurn);
+    const shown = await project.answer(taskOf(await askedTurn(project, job)).token, firstTurn);
     const refusal = await project.failure("pm.record", {
       job,
+      opened: openedOf(shown),
       turn: firstTurn,
       answers: [
         { id: "Q1", choice: "a" },

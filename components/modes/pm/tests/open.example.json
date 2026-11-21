@@ -6,7 +6,6 @@
   "output": {
     "job": "todo",
     "words": "A todo mode.",
-    "by": "owner",
     "card": {
       "title": "Start an interview of todo?",
       "lines": [],
@@ -14,6 +13,7 @@
     },
     "offered": {
       "start": true
-    }
+    },
+    "namedBy": "owner"
   }
 }

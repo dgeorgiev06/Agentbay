@@ -3,7 +3,7 @@ import { flagAt, listAt, numberAt, textAt } from "./json.ts";
 import { questionOf, type Question } from "./tree.ts";
 
 export type Words = {
-  readonly by: string;
+  readonly namedBy: string;
   readonly on: string;
   readonly words: string;
 };
@@ -12,14 +12,18 @@ export type Interview = {
   readonly job: string;
   readonly asked: readonly Words[];
   readonly turn: number;
-  readonly open: boolean;
+  readonly openTurn: string;
   readonly stopped: boolean;
   readonly questions: readonly Question[];
 };
 
 const startWorkflow = "pm:workflows/start.yaml";
 
-export const askWorkflow = "pm:workflows/ask.yaml";
+const askWorkflow = "pm:workflows/ask.yaml";
+
+export function nextTurnCommand(job: string): string {
+  return `bay call --workflow ${askWorkflow} '{"job": "${job}"}' --json`;
+}
 
 function seed(id: string, title: string, asks: string): Question {
   return { id, title, asks, after: [], kind: "decision", settled: false };
@@ -32,7 +36,7 @@ const seeds: readonly Question[] = [
 ];
 
 function wordsOf(value: Json): Words {
-  return { by: textAt(value, "by"), on: textAt(value, "on"), words: textAt(value, "words") };
+  return { namedBy: textAt(value, "namedBy"), on: textAt(value, "on"), words: textAt(value, "words") };
 }
 
 export function interviewOf(value: Json): Interview {
@@ -40,7 +44,7 @@ export function interviewOf(value: Json): Interview {
     job: textAt(value, "job"),
     asked: listAt(value, "asked").map(wordsOf),
     turn: numberAt(value, "turn"),
-    open: flagAt(value, "open"),
+    openTurn: textAt(value, "openTurn"),
     stopped: flagAt(value, "stopped"),
     questions: listAt(value, "questions").map(questionOf),
   };
@@ -48,9 +52,9 @@ export function interviewOf(value: Json): Interview {
 
 export function started(before: Interview | undefined, job: string, words: Words): Interview {
   if (before === undefined) {
-    return { job, asked: [words], turn: 1, open: false, stopped: false, questions: seeds };
+    return { job, asked: [words], turn: 1, openTurn: "", stopped: false, questions: seeds };
   }
-  return { ...before, asked: [...before.asked, words], open: false, stopped: false };
+  return { ...before, asked: [...before.asked, words], openTurn: "", stopped: false };
 }
 
 function startAgain(job: string): string {
@@ -64,7 +68,7 @@ export function turnRefusal(interview: Interview | undefined, job: string): stri
   if (interview.stopped) {
     return `The owner stopped the interview of ${job}; ${startAgain(job)}.`;
   }
-  if (interview.open) {
+  if (isOpen(interview)) {
     return (
       `Turn ${String(interview.turn)} of the interview of ${job} was put to the owner and not answered; ` +
       `${startAgain(job)}.`
@@ -73,10 +77,14 @@ export function turnRefusal(interview: Interview | undefined, job: string): stri
   return undefined;
 }
 
-export function opened(interview: Interview): Interview {
-  return { ...interview, open: true };
+export function isOpen(interview: Interview): boolean {
+  return interview.openTurn !== "";
+}
+
+export function opened(interview: Interview, token: string): Interview {
+  return { ...interview, openTurn: token };
 }
 
 export function stopped(interview: Interview): Interview {
-  return { ...interview, open: false, stopped: true };
+  return { ...interview, openTurn: "", stopped: true };
 }

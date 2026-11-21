@@ -4,7 +4,12 @@
   "description": "A turn and the owner's answer to each of its cards.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["job", "turn", "answers"],
+  "required": [
+    "job",
+    "turn",
+    "answers",
+    "opened"
+  ],
   "properties": {
     "job": {
       "type": "string"
@@ -19,6 +24,11 @@
         "type": "object",
         "description": "As schemas/took.json gives it."
       }
+    },
+    "opened": {
+      "type": "string",
+      "minLength": 1,
+      "description": "As frontier gave it for this turn."
     }
   }
 }

@@ -1,5 +1,5 @@
 import { computedBy, judgedBy, type Card, type CardLine } from "./card.ts";
-import type { Interview } from "./interview.ts";
+import { isOpen, type Interview } from "./interview.ts";
 import type { Answers } from "./settings.ts";
 import { frontierOf, questionNamed, type Frontier, type Question, type Tree } from "./tree.ts";
 import { factChoices, type Asked, type Fact, type Sources, type Turn } from "./turn.ts";
@@ -46,7 +46,7 @@ function untalkableLines(found: Frontier): readonly CardLine[] {
   if (found.untalkable.length === 0) {
     return [];
   }
-  const named = joined(found.untalkable.map((question) => `${question.id}, ${question.title}`));
+  const named = joined(found.untalkable.map((question) => question.id));
   const goes = each(found.untalkable.length, "It goes", "They go");
   return [
     computed(`Not asked, since talking cannot settle it: ${named}. ${goes} to the file as a thing a person judges.`),
@@ -154,20 +154,26 @@ export type Opening = {
   readonly before: Interview | undefined;
 };
 
+function leftHow(before: Interview): string {
+  if (before.stopped) {
+    return ` You stopped it at turn ${String(before.turn)}.`;
+  }
+  return isOpen(before) ? ` Its turn ${String(before.turn)} was put to you and not answered.` : "";
+}
+
 function beforeLines(before: Interview | undefined): readonly CardLine[] {
   if (before === undefined) {
     return [];
   }
   const found = frontierOf(before, 0);
-  return [
-    startComputed(
-      `The interview of ${before.job} has ${String(found.settled)} of ${String(found.total)} questions settled. ` +
-        "Starting again keeps them and asks the open ones.",
-    ),
-  ];
+  const settled = `The interview of ${before.job} has ${String(found.settled)} of ${String(found.total)} questions settled.`;
+  const why = leftHow(before);
+  return [startComputed(`${settled}${why} Starting again keeps what is settled and asks the open ones.`)];
 }
 
-export function startCard(opening: Opening): { readonly card: Card; readonly offered: { readonly start: boolean } } {
+export type StartCard = { readonly card: Card; readonly offered: { readonly start: boolean } };
+
+export function startCard(opening: Opening): StartCard {
   const lines = [
     startComputed(`Your words: "${opening.words}"`),
     ...beforeLines(opening.before),

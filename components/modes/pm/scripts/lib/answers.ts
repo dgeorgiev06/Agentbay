@@ -3,7 +3,7 @@ import type { Interview } from "./interview.ts";
 import { textAt } from "./json.ts";
 import type { Question } from "./tree.ts";
 import { factChoices, type Turn } from "./turn.ts";
-import { choiceAt, counted, joined, namesChoice } from "./words.ts";
+import { choiceAt, counted, joined, namesChoice, repeated } from "./words.ts";
 
 export type Answer = {
   readonly id: string;
@@ -56,7 +56,7 @@ export function answerProblems(turn: Turn, answers: readonly Answer[]): readonly
   const ids = answers.map((answer) => answer.id);
   const missing = due.filter((entry) => !ids.includes(entry.id)).map((entry) => entry.id);
   const unknown = answers.filter((answer) => !due.some((entry) => entry.id === answer.id)).map((answer) => answer.id);
-  const twice = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
+  const twice = repeated(ids);
   return [
     ...(missing.length === 0 ? [] : [`The turn's answers leave out ${joined(missing)}.`]),
     ...(unknown.length === 0 ? [] : [`The turn's answers name ${joined(unknown)}, which the turn did not ask.`]),
@@ -81,5 +81,5 @@ function answered(question: Question, due: readonly Due[], answers: readonly Ans
 export function recorded(interview: Interview, turn: Turn, answers: readonly Answer[]): Interview {
   const due = dueOf(turn);
   const questions = [...interview.questions, ...turn.added].map((question) => answered(question, due, answers));
-  return { ...interview, questions, turn: interview.turn + 1, open: false };
+  return { ...interview, questions, turn: interview.turn + 1, openTurn: "" };
 }

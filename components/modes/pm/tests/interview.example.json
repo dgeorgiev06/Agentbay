@@ -5,7 +5,7 @@
     "perTurn": 1,
     "asked": [
       {
-        "by": "owner",
+        "namedBy": "owner",
         "on": "2026-11-21",
         "words": "A todo mode."
       }
@@ -28,15 +28,21 @@
         "settled": false
       }
     ],
-    "asks": ["Q1"],
-    "lookUp": []
+    "asks": [
+      "Q1"
+    ],
+    "lookUp": [],
+    "opened": "3f2a9c0d4b1e6a7c8d9e0f1a2b3c4d5e"
   },
   "output": {
     "added": [],
     "asked": [
       {
         "question": "Q1",
-        "choices": ["The owner, for short tasks", "A team that shares one list"],
+        "choices": [
+          "The owner, for short tasks",
+          "A team that shares one list"
+        ],
         "recommended": "a",
         "why": "His words name no one else."
       }

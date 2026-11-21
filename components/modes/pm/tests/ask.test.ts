@@ -86,8 +86,9 @@ test("the turn's answers are kept with the words of the choice taken, later keep
   const done = await answeredAll(project, await firstTurnShown(project), ["a", "c", "later"]);
   assert.deepEqual(outputOf(done), {
     job: "todo",
-    summary: "Turn 1 of the interview of todo is kept: 2 questions settled, 3 open. Turn 2 comes next.",
-    next: { workflow: "pm:workflows/ask.yaml", input: { job: "todo" } },
+    summary:
+      "Turn 1 of the interview of todo is kept: 2 questions settled, 3 open. When the owner asks for turn 2, run: " +
+      `bay call --workflow pm:workflows/ask.yaml '{"job": "todo"}' --json`,
   });
   const next = await askedTurn(project);
   assert.deepEqual(fieldOf(taskOf(next).input, "asks"), ["Q3", "Q5"]);
@@ -232,9 +233,7 @@ test("a question talking cannot settle is named on the turn's first card and nev
   const lines = shownLines(approvalOf(await project.answer(taskOf(await askedTurn(project)).token, second)));
   assert.deepEqual(
     lines[1],
-    computed(
-      "Not asked, since talking cannot settle it: Q4, How the list reads. It goes to the file as a thing a person judges.",
-    ),
+    computed("Not asked, since talking cannot settle it: Q4. It goes to the file as a thing a person judges."),
   );
   await project.close();
 });

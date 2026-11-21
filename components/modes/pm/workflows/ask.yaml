@@ -36,5 +36,6 @@ steps:
     action: record
     input:
       job: $steps.frontier.output.job
+      opened: $steps.frontier.output.opened
       turn: $steps.interview.output
       answers: $steps.cards.output

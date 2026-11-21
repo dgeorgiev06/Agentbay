@@ -9,7 +9,7 @@ import {
   type Question,
   type Tree,
 } from "./tree.ts";
-import { counted, holds, joined, lettersOf, namesChoice, wordCount } from "./words.ts";
+import { counted, holds, joined, lettersOf, namesChoice, repeated, wordCount } from "./words.ts";
 
 export type Asked = {
   readonly question: string;
@@ -74,10 +74,6 @@ export function sourcePaths(turn: Turn): readonly string[] {
   return [...new Set(turn.facts.map((fact) => fact.source))];
 }
 
-function twice(ids: readonly string[]): readonly string[] {
-  return [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
-}
-
 function addedProblems(tree: Tree, turn: Turn): readonly string[] {
   const known = (id: string): boolean => questionNamed(tree, id) !== undefined;
   const combined = { questions: [...tree.questions, ...turn.added.filter((question) => !known(question.id))] };
@@ -119,7 +115,7 @@ function coverageProblems(given: Given, turn: Turn): readonly string[] {
   const asked = turn.asked.map((entry) => entry.question);
   const due = frontierOf(given.tree, given.perTurn).asks.map((question) => question.id);
   return [
-    ...twice(asked).map((id) => `${id} is asked twice in the turn; ask it once.`),
+    ...repeated(asked).map((id) => `${id} is asked twice in the turn; ask it once.`),
     ...[...new Set(asked)].filter((id) => !due.includes(id)).map((id) => notDueWhy(id, given, turn)),
     ...due
       .filter((id) => !asked.includes(id))
@@ -128,16 +124,16 @@ function coverageProblems(given: Given, turn: Turn): readonly string[] {
 }
 
 function choiceProblems(asked: Asked): readonly string[] {
-  const repeated = twice(asked.choices).map(
+  const sameChoice = repeated(asked.choices).map(
     (choice) => `${asked.question} gives the choice "${choice}" twice; give each choice once.`,
   );
   if (namesChoice(asked.recommended, asked.choices.length)) {
-    return repeated;
+    return sameChoice;
   }
   const choices = counted(asked.choices.length, "choice", "choices");
   const letters = joined(lettersOf(asked.choices.length));
   return [
-    ...repeated,
+    ...sameChoice,
     `${asked.question} recommends ${asked.recommended}, but it has ${choices}, ${letters}; recommend one of them.`,
   ];
 }
@@ -181,15 +177,24 @@ function factSourceProblem(fact: Fact, sources: Sources): string | undefined {
 function factProblems(tree: Tree, turn: Turn, sources: Sources): readonly string[] {
   const ids = turn.facts.map((fact) => fact.question);
   return [
-    ...twice(ids).map((id) => `${id} has more than one fact; give one fact for a question.`),
+    ...repeated(ids).map((id) => `${id} has more than one fact; give one fact for a question.`),
     ...turn.facts.flatMap((fact) =>
       [factQuestionProblem(fact, tree), factSourceProblem(fact, sources)].filter((problem) => problem !== undefined),
     ),
   ];
 }
 
+function emptyProblems(given: Given, turn: Turn): readonly string[] {
+  if (turn.asked.length > 0 || turn.facts.length > 0) {
+    return [];
+  }
+  const lookUp = frontierOf(given.tree, given.perTurn).lookUp.map((question) => question.id);
+  return [`The turn shows no card; give a fact for ${joined(lookUp)}, with its file and the words it rests on.`];
+}
+
 export function turnProblems(given: Given, turn: Turn, sources: Sources): readonly string[] {
   return [
+    ...emptyProblems(given, turn),
     ...addedProblems(given.tree, turn),
     ...coverageProblems(given, turn),
     ...turn.asked.flatMap(choiceProblems),

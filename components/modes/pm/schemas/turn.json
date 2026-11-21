@@ -4,7 +4,11 @@
   "description": "What the interviewer hands in for one turn. It has no place to settle a question.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["added", "asked", "facts"],
+  "required": [
+    "added",
+    "asked",
+    "facts"
+  ],
   "properties": {
     "added": {
       "type": "array",
@@ -20,7 +24,12 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["question", "choices", "recommended", "why"],
+        "required": [
+          "question",
+          "choices",
+          "recommended",
+          "why"
+        ],
         "properties": {
           "question": {
             "type": "string",
@@ -33,7 +42,8 @@
             "items": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 60
+              "maxLength": 60,
+              "pattern": "^[^\\n\\r]*$"
             },
             "description": "The answers offered, lettered a, b and c in this order."
           },
@@ -46,8 +56,9 @@
           "why": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 200,
-            "description": "One sentence on why it is recommended."
+            "maxLength": 120,
+            "pattern": "^[^\\n\\r]*$",
+            "description": "One line, for the owner only, on why it is recommended."
           }
         }
       }
@@ -57,7 +68,12 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["question", "says", "source", "quote"],
+        "required": [
+          "question",
+          "says",
+          "source",
+          "quote"
+        ],
         "properties": {
           "question": {
             "type": "string",
@@ -66,7 +82,8 @@
           "says": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 300
+            "maxLength": 300,
+            "pattern": "^[^\\n\\r]*$"
           },
           "source": {
             "type": "string",

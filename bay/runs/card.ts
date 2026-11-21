@@ -2,6 +2,8 @@ import { tiers, type Json, type RunEvent } from "../contracts.ts";
 import { fieldOf, isRecord, textField, toJson } from "../json.ts";
 import { failedWith, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
 import { citedStep, isUnder, type Cited, type Records, type SkillUsed, type StepSource } from "./cited-step.ts";
+import type { ItemName } from "../item-words.ts";
+import { isItemName, itemNameOf, type DeclaredName } from "./item-name.ts";
 
 const marks = ["ran", "computed", "judged"] as const;
 
@@ -16,7 +18,7 @@ type GivenLine =
   | { readonly mark: "ran"; readonly words: string; readonly source: CommandSource }
   | { readonly mark: "computed" | "judged"; readonly words: string; readonly source: StepSource };
 
-type InItem = { readonly foreach?: string };
+type InItem = { readonly foreach?: string; readonly itemCount?: number; readonly itemName?: ItemName };
 
 type CardLine =
   | ({ readonly mark: "ran"; readonly words: string; readonly source: CommandSource } & InItem)
@@ -35,6 +37,8 @@ export type Card = {
 };
 
 type CardContext = Records & {
+  readonly itemNames: ReadonlyMap<string, DeclaredName>;
+  readonly resolveInItem: (reference: string, item: Json) => Outcome<Json>;
   readonly stepId: string;
   readonly quotes: readonly string[];
   readonly eventsOf: (runId: string) => Promise<readonly RunEvent[]>;
@@ -49,7 +53,9 @@ const cardFields: readonly string[] = ["title", "lines", "withheld"];
 
 const lineFields: readonly string[] = ["mark", "words", "source"];
 
-const kernelLineFields: readonly string[] = ["skills", "foreach"];
+const kernelLineFields: readonly string[] = ["skills", "foreach", "itemCount", "itemName"];
+
+const itemNameFields: readonly string[] = ["id", "title"];
 
 const commandSourceFields: readonly string[] = ["step", "command", "run", "item"];
 
@@ -148,7 +154,8 @@ function givenLine(line: Json): GivenLine | string {
   if (stray !== undefined) {
     return (
       `has the field ${stray}, which a line does not take; a line has mark, words and source, ` +
-      "and the kernel adds the skill and tier of a judged line and the foreach of a step in an item."
+      "and the kernel adds the skill and tier of a judged line, " +
+      "and the foreach, its number of items and the item's name of a step in an item."
     );
   }
   const mark = fieldOf(line, "mark");
@@ -216,7 +223,7 @@ async function checkedLine(context: CardContext, line: Json): Promise<CardLine |
   if (typeof cited === "string") {
     return cited;
   }
-  const inItem = cited.foreach === undefined ? {} : { foreach: cited.foreach };
+  const inItem = inItemOf(context, cited.foreach, given.source.item);
   switch (given.mark) {
     case "ran":
       return (await ranProblem(context, cited, given.source)) ?? { ...given, ...inItem };
@@ -225,6 +232,20 @@ async function checkedLine(context: CardContext, line: Json): Promise<CardLine |
     case "judged":
       return judgedProblem(context, cited) ?? { ...given, mark: "judged", skills: cited.skills, ...inItem };
   }
+}
+
+function inItemOf(context: CardContext, foreach: string | undefined, item: number | undefined): InItem {
+  if (foreach === undefined || item === undefined) {
+    return {};
+  }
+  const key = context.keys.get(foreach);
+  const items = key === undefined ? undefined : context.steps.get(key)?.items;
+  if (items === undefined) {
+    return { foreach };
+  }
+  const read = (reference: string): Outcome<Json> => context.resolveInItem(reference, items[item] ?? null);
+  const name = itemNameOf(context.itemNames.get(foreach), read);
+  return { foreach, itemCount: items.length, ...(name === undefined ? {} : { itemName: name }) };
 }
 
 function countedOf(lines: readonly CardLine[]): Readonly<Record<Mark, number>> {
@@ -277,12 +298,49 @@ function storedSkills(value: Json | undefined): readonly SkillUsed[] {
   });
 }
 
-function storedForeach(entry: Json, source: StepSource): InItem {
-  const foreach = textField(entry, "foreach");
-  if ((foreach === undefined) !== (source.item === undefined)) {
+function storedCount(count: Json | undefined, item: number): { readonly itemCount?: number } {
+  if (count === undefined) {
+    return {};
+  }
+  if (typeof count !== "number" || !Number.isSafeInteger(count) || count <= item) {
     throw malformedCard();
   }
-  return foreach === undefined ? {} : { foreach };
+  return { itemCount: count };
+}
+
+function nameFrom(fields: Readonly<Record<string, unknown>>): ItemName | undefined {
+  const { id, title } = fields;
+  if (typeof id !== "string" || strayField(fields, itemNameFields) !== undefined) {
+    return undefined;
+  }
+  if (title === undefined) {
+    return { id };
+  }
+  return typeof title === "string" ? { id, title } : undefined;
+}
+
+function storedName(value: Json | undefined): { readonly itemName?: ItemName } {
+  if (value === undefined) {
+    return {};
+  }
+  const name = isRecord(value) ? nameFrom(value) : undefined;
+  if (name === undefined || !isItemName(name)) {
+    throw malformedCard();
+  }
+  return { itemName: name };
+}
+
+function storedForeach(entry: Json, source: StepSource): InItem {
+  const foreach = textField(entry, "foreach");
+  const count = fieldOf(entry, "itemCount");
+  const name = fieldOf(entry, "itemName");
+  if ([foreach, source.item, count, name].every((field) => field === undefined)) {
+    return {};
+  }
+  if (foreach === undefined || source.item === undefined) {
+    throw malformedCard();
+  }
+  return { foreach, ...storedCount(count, source.item), ...storedName(name) };
 }
 
 function storedLine(value: unknown): CardLine {

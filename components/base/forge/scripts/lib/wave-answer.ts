@@ -1,5 +1,5 @@
 import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
-import { counted, joined } from "./card-lines.ts";
+import { counted, joined, shortened } from "./card-lines.ts";
 import { textOf, textsOf } from "./json-values.ts";
 import type { Proved } from "./proof-answer.ts";
 import type { Slice } from "./slice-form.ts";
@@ -55,12 +55,25 @@ export function checksVerdict(checked: Checked): ChecksVerdict {
   return passed === ids.length && ids.length > 0 ? "passed" : "not known";
 }
 
-function joinReason(joinedHead: Joined): string | undefined {
+const titleShown = 40;
+
+function titled(slice: Settled): string {
+  return `${slice.name} (${shortened(slice.title, titleShown)})`;
+}
+
+function titledName(slices: readonly Settled[], name: string): string {
+  const slice = slices.find((each) => each.name === name);
+  return slice === undefined ? name : titled(slice);
+}
+
+function joinReason(slices: readonly Settled[], joinedHead: Joined): string | undefined {
   switch (joinedHead.kind) {
     case "nothing to join":
       return "no slice passed its own proof";
-    case "conflict":
-      return `${joinedHead.slice} does not merge cleanly onto ${joined(joinedHead.onto)} in the combined head`;
+    case "conflict": {
+      const conflicting = titledName(slices, joinedHead.slice);
+      return `${conflicting} does not merge cleanly onto ${joined(joinedHead.onto)} in the combined head`;
+    }
     case "combined":
       return undefined;
   }
@@ -81,7 +94,7 @@ function checksReason(checks: WaveChecks): string | undefined {
 }
 
 function leftOutClause(slices: readonly Settled[]): string {
-  const left = slices.filter((slice) => !isIncluded(slice)).map((slice) => slice.name);
+  const left = slices.filter((slice) => !isIncluded(slice)).map(titled);
   if (left.length === 0) {
     return "";
   }
@@ -90,7 +103,7 @@ function leftOutClause(slices: readonly Settled[]): string {
 }
 
 export function waveAnswer(slices: readonly Settled[], joinedHead: Joined, checks: WaveChecks): WaveAnswer {
-  const because = joinReason(joinedHead) ?? checksReason(checks);
+  const because = joinReason(slices, joinedHead) ?? checksReason(checks);
   const left = leftOutClause(slices);
   if (because !== undefined) {
     const reason = `${because}${left}.`;

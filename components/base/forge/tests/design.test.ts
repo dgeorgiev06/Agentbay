@@ -126,7 +126,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     ]);
     assert.deepEqual(
       await printedCard(root, start.id, "Commit the design"),
-      printed(expected.card, cardChoices, skills).split("\n"),
+      printed(expected.card, cardChoices, { skills }).split("\n"),
     );
     const done = runOf(await decided(root, card, { step: "card", choice: "approve" }));
     assert.equal(textAt(done, "status"), "done", JSON.stringify(done));

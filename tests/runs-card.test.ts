@@ -119,8 +119,17 @@ const workflows: Readonly<Record<string, object>> = {
   items: {
     name: "items",
     steps: [
-      { id: "list", action: "draw", input: { items: [{ slice: "first" }, { slice: "second" }] } },
-      { id: "each", foreach: "$steps.list.output.items", steps: [reviewStep] },
+      {
+        id: "list",
+        action: "draw",
+        input: { items: [{ slice: "TR2", title: "Cards name an item" }, { slice: "TR3" }] },
+      },
+      {
+        id: "each",
+        foreach: "$steps.list.output.items",
+        itemName: { id: "$item.slice", title: "$item.title" },
+        steps: [reviewStep],
+      },
       drawStep([
         { ...judgedLine, source: { step: "review", item: 0 } },
         { ...judgedLine, words: "and each case is named", source: { step: "review", item: 0 } },
@@ -268,7 +277,7 @@ test("a judged line keeps its mark at the start of each row, with its skill and 
   });
 });
 
-test("a judged line from a step in an item names its skill and its item on the row under it", async () => {
+test("a judged line from a step in an item names its skill and its item, by the name its foreach declares, on the row under it", async () => {
   await withCarder(async (project) => {
     const rows = await printedCard(project, "items");
     assert.deepEqual(rows, [
@@ -277,10 +286,11 @@ test("a judged line from a step in an item names its skill and its item on the r
       "judged     says",
       "judged   and each case is named",
       "judged    by carder skills/review, tier",
-      "judged      deep, in item 0 of each",
+      "judged      deep, for TR2 (Cards name an",
+      "judged      item)",
       "judged   the second holds too",
       "judged    by carder skills/review, tier",
-      "judged      deep, in item 1 of each",
+      "judged      deep, for TR3",
       "You can:",
       "  keep  Stop; the slice stays as it is",
       "Not available:",

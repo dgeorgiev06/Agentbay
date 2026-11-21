@@ -179,8 +179,9 @@ test("bay check refuses a sideBySide reference it can see is wrong before any ru
   ]);
   assert.deepEqual(await problems("$item"), [`${reference}$item is used outside a foreach.`]);
   assert.deepEqual(await problems("$cap"), [
-    `${reference}$cap is not a reference: write $trigger, $item, $settings.<key> or $steps.<id>.output with an ` +
-      "optional dotted path such as .items.0. Every value that starts with $ is read as a reference.",
+    `${reference}$cap is not a reference: write $trigger, $item, $settings.<key> or $steps.<id>.output; $item and ` +
+      "$steps.<id>.output take an optional dotted path such as .items.0. Every value that starts with $ is read " +
+      "as a reference.",
   ]);
   assert.deepEqual(await problems("four"), [
     "steps.1.sideBySide is not in the expected form. Expected: A reference to a whole number from 2 to 8: " +

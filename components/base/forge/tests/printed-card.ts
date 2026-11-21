@@ -41,7 +41,7 @@ function hanging(words: string, first: string, rest: string): readonly string[] 
 
 type Skills = Readonly<Record<string, string>>;
 
-const itemsOf = "slices";
+type By = { readonly skills?: Skills; readonly items?: readonly string[] };
 
 function itemOf(line: CardLine): number | undefined {
   return line.mark === "judged" ? line.source.item : undefined;
@@ -52,13 +52,13 @@ function sharesStep(line: CardLine, next: CardLine | undefined): boolean {
   return next !== undefined && next.mark === line.mark && next.source.step === line.source.step && sameItem;
 }
 
-function byWords(line: CardLine, skills: Skills): string {
+function byWords(line: CardLine, skills: Skills, items: readonly string[]): string {
   const item = itemOf(line);
   const by = `by ${skills[line.source.step] ?? ""}`;
-  return item === undefined ? by : `${by}, in item ${String(item)} of ${itemsOf}`;
+  return item === undefined ? by : `${by}, for ${items[item] ?? ""}`;
 }
 
-function lineRows(lines: readonly CardLine[], skills: Skills): readonly string[] {
+function lineRows(lines: readonly CardLine[], skills: Skills, items: readonly string[]): readonly string[] {
   return lines.flatMap((line, index) => {
     if (line.mark === "computed") {
       return hanging(line.words, "  ", "    ");
@@ -67,7 +67,7 @@ function lineRows(lines: readonly CardLine[], skills: Skills): readonly string[]
     if (sharesStep(line, lines[index + 1])) {
       return rows;
     }
-    return [...rows, ...hanging(byWords(line, skills), "judged    ", "judged      ")];
+    return [...rows, ...hanging(byWords(line, skills, items), "judged    ", "judged      ")];
   });
 }
 
@@ -108,11 +108,11 @@ function countedRow(lines: readonly CardLine[]): string {
 export function printed(
   card: { readonly title: string; readonly lines: readonly CardLine[] },
   choices: readonly PrintedChoice[] = [],
-  skills: Skills = {},
+  by: By = {},
 ): string {
   return [
     ...hanging(card.title, "", "  "),
-    ...lineRows(card.lines, skills),
+    ...lineRows(card.lines, by.skills ?? {}, by.items ?? []),
     footRow(card.lines),
     ...choiceGroup(
       "You can:",

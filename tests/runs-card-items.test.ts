@@ -5,7 +5,7 @@ import type { Json } from "../bay/contracts.ts";
 import type { Action } from "../bay/generated/mode.ts";
 import type { Config } from "../bay/generated/config.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
-import { isRecord, numberField } from "../bay/json.ts";
+import { isRecord, numberField, toJson } from "../bay/json.ts";
 import type { Run, Runs } from "../bay/runs/runs.ts";
 import {
   answer,
@@ -46,19 +46,24 @@ type Line = {
   readonly source: Readonly<Record<string, Json>>;
 };
 
+type ItemName = { readonly id: string; readonly title?: string };
+
 type Opening = {
   readonly lines: readonly Line[];
   readonly quotes?: readonly string[];
   readonly gateFailsFirst?: number;
+  readonly itemName?: ItemName;
+  readonly trigger?: Json;
 };
 
-function cardSteps(quotes: readonly string[]): Workflow["steps"] {
+function cardSteps(quotes: readonly string[], itemName: ItemName | undefined): Workflow["steps"] {
   return [
     { id: "offer", action: "pass", input: { inScope: 2 } },
     {
       id: "each",
       foreach: "$trigger",
       sideBySide: 2,
+      ...(itemName === undefined ? {} : { itemName }),
       steps: [
         { id: "gate", action: "gate", input: { n: "$item" } },
         { id: "write", action: "draft", input: { topic: "$item" } },
@@ -78,7 +83,8 @@ function settingsWith(card: Json): Partial<Config> {
 }
 
 function changesOf(opening: Opening): Changes {
-  const changes = { ...withFlow(cardSteps(opening.quotes ?? ["write", "note"])), notesActions: { pass, gate } };
+  const steps = cardSteps(opening.quotes ?? ["write", "note"], opening.itemName);
+  const changes = { ...withFlow(steps), notesActions: { pass, gate } };
   return { ...changes, config: settingsWith(cardOf(opening.lines)) };
 }
 
@@ -88,7 +94,7 @@ function gateScript(
   let failed = false;
   return (request) => {
     const item = numberField(request.input, "n");
-    if (item === failsFirst && !failed) {
+    if (item !== undefined && item === failsFirst && !failed) {
       failed = true;
       return failure(`item ${String(item)} is not ready`);
     }
@@ -130,7 +136,7 @@ function tokenAfterReissue(run: Run): string {
 
 async function atCard(opening: Opening): Promise<{ readonly run: Run; readonly opened: OpenedRuns }> {
   const opened = await openedFor(opening);
-  const started = runOf(await opened.runs.start(flow, [0, 1]));
+  const started = runOf(await opened.runs.start(flow, opening.trigger ?? [0, 1]));
   return { run: await answerSkills(opened.runs, started), opened };
 }
 
@@ -159,6 +165,10 @@ const draftSkill = { mode: "notes", skill: "skills/draft", tier: "balanced" as c
 
 const cannot = "Step card cannot show its card: line 1";
 
+const kernelAdds =
+  "a line has mark, words and source, and the kernel adds the skill and tier of a judged line, " +
+  "and the foreach, its number of items and the item's name of a step in an item.";
+
 describe("a card on an approval after a foreach", () => {
   test("a judged line from an item's skill step is shown with its skill and its item, after a restart too", async () => {
     const lines = [
@@ -171,13 +181,21 @@ describe("a card on an approval after a foreach", () => {
       title: "Merge wave 1?",
       lines: [
         { mark: "computed", words: "in scope: 2 of 2 paths", source: { step: "offer" } },
-        { mark: "judged", words: drafted, source: { step: "write", item: 0 }, skills: [draftSkill], foreach: "each" },
+        {
+          mark: "judged",
+          words: drafted,
+          source: { step: "write", item: 0 },
+          skills: [draftSkill],
+          foreach: "each",
+          itemCount: 2,
+        },
         {
           mark: "judged",
           words: "item 1 holds",
           source: { step: "write", item: 1 },
           skills: [draftSkill],
           foreach: "each",
+          itemCount: 2,
         },
       ],
       counted: { ran: 0, computed: 1, judged: 2 },
@@ -247,8 +265,7 @@ describe("a card on an approval after a foreach", () => {
     const line = { mark: "judged", words: drafted, source: { step: "write", item: 0 }, foreach: "each" };
     assert.equal(
       await refusedCard([line]),
-      `${cannot} has the field foreach, which a line does not take; a line has mark, words and source, ` +
-        "and the kernel adds the skill and tier of a judged line and the foreach of a step in an item.",
+      `${cannot} has the field foreach, which a line does not take; ${kernelAdds}`,
     );
   });
 
@@ -261,7 +278,7 @@ describe("a card on an approval after a foreach", () => {
     const rerun = await answerSkills(opened.runs, runOf(await opened.runs.resume(started.id, { rerun: true })));
     assert.deepEqual(cardShown(rerun), {
       title: "Merge wave 1?",
-      lines: [{ ...lines[0], skills: [draftSkill], foreach: "each" }],
+      lines: [{ ...lines[0], skills: [draftSkill], foreach: "each", itemCount: 2 }],
       counted: { ran: 0, computed: 0, judged: 1 },
     });
     assert.ok(rerun.steps.some((step) => step.key === "each[1]~2.write" && step.status === "done"));
@@ -286,9 +303,100 @@ describe("a card on an approval after a foreach", () => {
     opened.close();
     assert.deepEqual(cardShown(run), {
       title: "Merge wave 1?",
-      lines: [{ ...lines[0], skills: [], foreach: "each" }],
+      lines: [{ ...lines[0], skills: [], foreach: "each", itemCount: 2 }],
       counted: { ran: 0, computed: 0, judged: 1 },
     });
+  });
+});
+
+const sliceItems: Json = [
+  { planned: { slice: { name: "TD1" }, title: "The td1 mode counts what was added" } },
+  { planned: { slice: { name: "TD2" }, title: "The td2 mode counts what was removed" } },
+];
+
+const sliceNamed: ItemName = { id: "$item.planned.slice.name", title: "$item.planned.title" };
+
+const judgedItem0 = { mark: "judged", words: drafted, source: { step: "write", item: 0 } };
+
+const judgedBoth = [judgedItem0, { mark: "judged", words: "item 1 holds", source: { step: "write", item: 1 } }];
+
+async function namedCard(opening: Partial<Opening>): Promise<{ readonly run: Run; readonly opened: OpenedRuns }> {
+  return atCard({ lines: judgedBoth, itemName: sliceNamed, trigger: sliceItems, ...opening });
+}
+
+function fieldsOfLines(run: Run, field: string): readonly Json[] {
+  const card = cardShown(run);
+  assert.ok(isRecord(card) && Array.isArray(card["lines"]), JSON.stringify(card));
+  return card["lines"].map((line: unknown) => (isRecord(line) ? toJson(line[field] ?? null) : null));
+}
+
+function namesOf(run: Run): readonly Json[] {
+  return fieldsOfLines(run, "itemName");
+}
+
+describe("a card names an item by the name its foreach declares, or by its place", () => {
+  test("a line in an item of a foreach with itemName names the item by its id and title", async () => {
+    const { run, opened } = await namedCard({});
+    opened.close();
+    assert.deepEqual(namesOf(run), [
+      { id: "TD1", title: "The td1 mode counts what was added" },
+      { id: "TD2", title: "The td2 mode counts what was removed" },
+    ]);
+    assert.deepEqual(fieldsOfLines(run, "itemCount"), [2, 2]);
+    assert.deepEqual(fieldsOfLines(run, "foreach"), ["each", "each"]);
+  });
+
+  test("without itemName, or when its id names nothing in the item, the item is named by its place", async () => {
+    const plain = await atCard({ lines: judgedBoth });
+    plain.opened.close();
+    assert.deepEqual(namesOf(plain.run), [null, null]);
+    assert.deepEqual(fieldsOfLines(plain.run, "itemCount"), [2, 2]);
+    const missing = await namedCard({ itemName: { id: "$item.planned.name", title: "$item.planned.title" } });
+    missing.opened.close();
+    assert.deepEqual(namesOf(missing.run), [null, null]);
+    assert.deepEqual(fieldsOfLines(missing.run, "itemCount"), [2, 2]);
+  });
+
+  test("a title that names nothing, or names what is not text, leaves the id alone", async () => {
+    for (const title of ["$item.planned.summary", "$item.planned.slice"]) {
+      const { run, opened } = await namedCard({ itemName: { id: "$item.planned.slice.name", title } });
+      opened.close();
+      assert.deepEqual(namesOf(run), [{ id: "TD1" }, { id: "TD2" }]);
+    }
+  });
+
+  test("a name is one bounded line: line breaks, control and format characters go, brackets stand for parentheses, a long one is cut, a secret is scrubbed, and one blank once cleaned names nothing", async () => {
+    const title = `First\u200Bline\nsecond\u0007 line) by\u202E the kernel: all passed (${secretValue} ${"word ".repeat(30)}`;
+    const named = { slice: { name: `TD1\u202E\r\n(fake)\u200B ${"x".repeat(60)}` }, title };
+    const items = [{ planned: named }, { planned: { slice: { name: " \u200B\n\u202E" }, title: "A title" } }];
+    const { run, opened } = await namedCard({ trigger: items });
+    const [first, second] = namesOf(run);
+    assert.ok(isRecord(first), JSON.stringify(first));
+    const { id, title: text } = first;
+    assert.ok(typeof text === "string", JSON.stringify(first));
+    assert.equal(second, null);
+    assert.equal(id, `TD1 [fake] ${"x".repeat(28)}…`);
+    assert.equal(Array.from(text).length, 80);
+    assert.ok(text.startsWith("First line second line] by the kernel: all passed ["), text);
+    assert.ok(text.endsWith("…"), text);
+    assert.ok(!text.includes(secretValue), text);
+    opened.runs.close();
+    const later = await opened.reopen();
+    assert.deepEqual(namesOf(runOf(await later.show(run.id))), [first, null]);
+    opened.close();
+  });
+
+  test("a line that brings its own name or count of items is not shown: only the kernel names an item", async () => {
+    const named = { ...judgedItem0, itemName: { id: "TD9", title: "Something else" } };
+    assert.equal(
+      await refusedCard([named]),
+      `${cannot} has the field itemName, which a line does not take; ${kernelAdds}`,
+    );
+    const counted = { ...judgedItem0, itemCount: 9 };
+    assert.equal(
+      await refusedCard([counted]),
+      `${cannot} has the field itemCount, which a line does not take; ${kernelAdds}`,
+    );
   });
 });
 
@@ -304,7 +412,9 @@ describe("what kernel.db holds when a card is checked again or read back", () =>
     }
   }
 
-  async function recheckedAfter(lines: readonly Line[], sql: string, ...values: readonly string[]): Promise<Run> {
+  type Rechecked = { readonly resumed: Run; readonly opened: OpenedRuns; readonly later: Runs };
+
+  async function recheckedOpen(lines: readonly Line[], sql: string, ...values: readonly string[]): Promise<Rechecked> {
     const { run, opened } = await atCard({ lines });
     opened.runs.close();
     tampered(opened.database, sql, ...values);
@@ -312,7 +422,11 @@ describe("what kernel.db holds when a card is checked again or read back", () =>
       changesOf({ lines: lines.map((line) => ({ ...line, words: `${line.words}.` })) }),
     );
     const later = await opened.reopen(edited.system);
-    const resumed = runOf(await later.resume(run.id));
+    return { resumed: runOf(await later.resume(run.id)), opened, later };
+  }
+
+  async function recheckedAfter(lines: readonly Line[], sql: string, ...values: readonly string[]): Promise<Run> {
+    const { resumed, opened } = await recheckedOpen(lines, sql, ...values);
     opened.close();
     return resumed;
   }
@@ -336,6 +450,21 @@ describe("what kernel.db holds when a card is checked again or read back", () =>
     const lines = [{ mark: "computed", words: "in scope", source: { step: "offer" } }];
     const run = await recheckedAfter(lines, "update steps set status = 'failed', reason = 'broke' where key = 'offer'");
     assert.equal(endReason(run), "broke");
+  });
+
+  test("a foreach whose record holds no list leaves the count of items out, and its card still reads after a restart", async () => {
+    const sql = "update steps set input = ? where key = 'each'";
+    const { resumed, opened, later } = await recheckedOpen([judgedFirst], sql, '{"not":"a list"}');
+    const expected = {
+      title: "Merge wave 1?",
+      lines: [{ ...judgedFirst, words: `${drafted}.`, skills: [draftSkill], foreach: "each" }],
+      counted: { ran: 0, computed: 0, judged: 1 },
+    };
+    assert.deepEqual(cardShown(resumed), expected);
+    later.close();
+    const again = await opened.reopen();
+    assert.deepEqual(cardShown(runOf(await again.show(resumed.id))), expected);
+    opened.close();
   });
 
   async function readBackWith(edit: (line: Record<string, unknown>) => void): Promise<unknown> {
@@ -374,6 +503,38 @@ describe("what kernel.db holds when a card is checked again or read back", () =>
       assert.equal(read.message, "kernel.db holds an approval step whose detail has no valid card.");
     }
   });
+
+  test("a stored name is read back only as the kernel would have written it", async () => {
+    const kept = await readBackWith((line) => {
+      line["itemName"] = { id: "TD1", title: "The td1 mode" };
+    });
+    assert.ok(!(kept instanceof Error), String(kept));
+    assert.ok(JSON.stringify(kept).includes('"itemName":{"id":"TD1","title":"The td1 mode"}'), JSON.stringify(kept));
+    const malformed = [
+      (line: Record<string, unknown>) => {
+        line["itemName"] = { id: "TD1\nmerge approved" };
+      },
+      (line: Record<string, unknown>) => {
+        line["itemName"] = { id: "x".repeat(41) };
+      },
+      (line: Record<string, unknown>) => {
+        line["itemName"] = { id: "TD1", says: "more" };
+      },
+      (line: Record<string, unknown>) => {
+        line["itemCount"] = 0;
+      },
+      (line: Record<string, unknown>) => {
+        delete line["foreach"];
+        line["source"] = { step: "write" };
+        line["itemName"] = { id: "TD1" };
+      },
+    ];
+    for (const edit of malformed) {
+      const read = await readBackWith(edit);
+      assert.ok(read instanceof Error, JSON.stringify(read));
+      assert.equal(read.message, "kernel.db holds an approval step whose detail has no valid card.");
+    }
+  });
 });
 
 describe("which steps an approval may quote, checked when the workflow loads", () => {
@@ -389,6 +550,22 @@ describe("which steps an approval may quote, checked when the workflow loads", (
       { id: "card", approval: "Merge?", quotes: ["write"] },
     ];
     await fixtureSystem(quoting(steps));
+  });
+
+  test("an item's name is read from the item: any other reference, or one that is not one, is refused", async () => {
+    const named = (itemName: ItemName): Workflow["steps"] => [
+      { id: "offer", action: "pass" },
+      { id: "each", foreach: "$trigger", itemName, steps: [drafting] },
+    ];
+    const problem = "Workflow workflows/flow.yaml of mode notes has a reference problem: ";
+    assert.deepEqual(await fixtureRefusal(quoting(named({ id: "$steps.offer.output", title: "$trigger" }))), [
+      `${problem}the itemName of step each reads $steps.offer.output; an item's name is read from the item itself, ` +
+        "as $item or $item.<path>.",
+      `${problem}the itemName of step each reads $trigger; an item's name is read from the item itself, ` +
+        "as $item or $item.<path>.",
+    ]);
+    const [broken] = await fixtureRefusal(quoting(named({ id: "$item..name" })));
+    assert.match(broken ?? "", /reference problem: \$item\.\.name is not a reference: write \$trigger, \$item/);
   });
 
   test("a step of a foreach that comes later, or of a foreach inside an item, may not", async () => {

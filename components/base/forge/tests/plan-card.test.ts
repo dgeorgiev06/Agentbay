@@ -57,7 +57,7 @@ function printedPlan(input: PlanCardInput): string {
   const reason = drawn.card.withheld.approve;
   const approve = { name: "approve", does: "Commit the plan" };
   const choices = [reason === undefined ? approve : { ...approve, withheld: reason }];
-  return printed(drawn.card, [...choices, { name: "stop", does: "Stop; nothing is committed" }], skills);
+  return printed(drawn.card, [...choices, { name: "stop", does: "Stop; nothing is committed" }], { skills });
 }
 
 const todoCard = `Commit the plan for todo?

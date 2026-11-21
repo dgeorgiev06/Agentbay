@@ -2,16 +2,14 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import type { Json } from "../../../../bay/sdk.ts";
 import { split, trialsIn } from "../scripts/lib/tried-block.ts";
-import {
-  notKnownReasons,
-  plannedTrials,
-  ranOf,
-  resultOf,
-  roomBeside,
-  trialItems,
-  type Trial,
-} from "../scripts/lib/tried-examples.ts";
+import { plannedTrials, ranOf, resultOf, roomBeside, trialItems, type Trial } from "../scripts/lib/tried-examples.ts";
 import { addToTry, countToTry, emptyName, inRounds, twentyA } from "./tally-design.ts";
+
+const notKnownReasons = {
+  unreadable: "what the last call printed is not the run bay call --json prints",
+  notStarted: "the kernel did not start the call, for a reason other than the request schema",
+  notMade: "proof could not make the calls in a copy or read what the last one printed whole",
+};
 
 function call(action: string, input: Json): readonly string[] {
   return ["call", action, JSON.stringify(input), "--json"];

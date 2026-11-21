@@ -3,7 +3,7 @@ import type { ProofStep } from "../lib/step.ts";
 import { heldWith, unknown, type Parts } from "../lib/verdicts.ts";
 import { runsInCopy, type CommandRun, type RunsInCopy } from "./command-run.ts";
 
-export const mostPrinted = 20_000;
+const mostPrinted = 20_000;
 
 function placeOf(index: number, all: number): string {
   return `Run ${String(index + 1)} of ${String(all)}`;

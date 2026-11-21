@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mostPrinted, printedParts } from "../scripts/kinds/printed.ts";
+import { printedParts } from "../scripts/kinds/printed.ts";
+
+const mostPrinted = 20_000;
 import { verdictOf, type Verdict } from "../scripts/lib/verdicts.ts";
 import type { RunsInCopy } from "../scripts/kinds/command-run.ts";
 

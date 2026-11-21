@@ -225,7 +225,7 @@ function awaitedWords(reason: string): string {
   return awaited[reason] ?? "an answer";
 }
 
-export const notKnownReasons = {
+const notKnownReasons = {
   unreadable: "what the last call printed is not the run bay call --json prints",
   notStarted: "the kernel did not start the call, for a reason other than the request schema",
   notMade: "proof could not make the calls in a copy or read what the last one printed whole",

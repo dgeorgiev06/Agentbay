@@ -71,6 +71,23 @@ describe("workflows", () => {
     close();
   });
 
+  test("a step takes one field of the trigger along a dotted path, and a path that leads nowhere fails it", async () => {
+    const changes = withFlow([
+      { id: "seed", action: "copy", input: { count: "$trigger.given.count" } },
+      { id: "again", action: "copy", input: { count: "$trigger.given.total" } },
+    ]);
+    const { runs, close } = await openedRuns({ changes });
+    const run = runOf(await runs.start(flow, { given: { count: 2 } }));
+    assert.deepEqual(run.steps.find((step) => step.key === "seed")?.input, { count: 2 });
+    assert.equal(run.state.status, "failed");
+    assert.equal(
+      run.state.reason,
+      "Step again cannot start: input.count: $trigger.given.total resolves to nothing: $trigger.given " +
+        "has no total; it is a mapping with the keys count.",
+    );
+    close();
+  });
+
   test("foreach runs its steps once per element, in order, saved under the element's index", async () => {
     const changes = withFlow([
       {

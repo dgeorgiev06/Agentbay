@@ -5,18 +5,11 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "file",
     "job",
     "requirements",
     "card"
   ],
   "properties": {
-    "file": {
-      "type": "string",
-      "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
-      "maxLength": 1000,
-      "description": "The requirements file, relative to the project, as requirements.check named it."
-    },
     "job": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]*$",

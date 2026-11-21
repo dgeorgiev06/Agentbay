@@ -613,8 +613,8 @@ const written = { items: [{ id: "a" }, { id: "b" }] };
 const afterWrite = { trigger: { topic: "tea" }, outputs: new Map([["write", written]]) };
 
 const grammar =
-  "write $trigger, $item, $settings.<key> or $steps.<id>.output; $item and $steps.<id>.output take an optional " +
-  "dotted path such as .items.0. Every value that starts with $ is read as a reference.";
+  "write $trigger, $item, $settings.<key> or $steps.<id>.output; $trigger, $item and $steps.<id>.output take " +
+  "an optional dotted path such as .items.0. Every value that starts with $ is read as a reference.";
 
 describe("a workflow target's resolve", () => {
   test("$trigger resolves to the trigger", async () => {
@@ -720,7 +720,9 @@ describe("a workflow target's resolve", () => {
     assert.deepEqual(target.resolve("$steps.write.output.items.0.id", withItem), { ok: true, value: "a" });
     for (const text of [
       "$",
-      "$trigger.topic",
+      "$trigger.",
+      "$trigger..topic",
+      "$triggers",
       "$item.",
       "$item..id",
       "$steps.write",
@@ -735,6 +737,25 @@ describe("a workflow target's resolve", () => {
         [`${text} is not a reference: ${grammar}`],
       );
     }
+  });
+
+  test("$trigger takes a dotted path as an output does, and a path that leads nowhere says what is there", async () => {
+    const target = await workflowTarget("briefing", "workflows/morning.yaml");
+    const scope = { ...afterWrite, trigger: { request: { slice: "TD1" }, tags: ["a", "b"] } };
+    assert.deepEqual(target.resolve("$trigger.request.slice", scope), { ok: true, value: "TD1" });
+    assert.deepEqual(target.resolve("$trigger.tags.0", scope), { ok: true, value: "a" });
+    assert.deepEqual(target.resolve("$trigger.tags.2", scope), {
+      ok: false,
+      problems: [sentence("$trigger.tags.2 resolves to nothing: $trigger.tags has no 2; it is a list of 2 elements.")],
+    });
+    assert.deepEqual(target.resolve("$trigger.request.title", afterWrite), {
+      ok: false,
+      problems: [
+        sentence(
+          "$trigger.request.title resolves to nothing: $trigger has no request; it is a mapping with the keys topic.",
+        ),
+      ],
+    });
   });
 
   test("$item takes a dotted path as an output does, and a path that leads nowhere says what is there", async () => {

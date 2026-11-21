@@ -192,7 +192,6 @@
     }
   },
   "output": {
-    "file": "docs/requirements/todo.yaml",
     "job": "todo",
     "requirements": {
       "job": "todo",

@@ -3,7 +3,7 @@
 Keeps you briefed on what the accounts you follow post. It syncs posts from a source into the store, writes a
 digest of themes in which every claim cites the posts it rests on, and answers questions from the stored posts.
 It requires `items-source@1` and `items-store@1`. The project config binds each interface to a mode, for example
-`fake-source` today and `x` from stage 5.
+`fake-source`, the only source built so far.
 
 ## Actions
 
@@ -18,7 +18,7 @@ it makes the digest the output of the run.
 
 `sync` is one script with a loop rather than a list of `call` steps, because a list of steps cannot repeat. The
 run's budget still holds for every page. When a fetch overspends it, the run waits for budget before that page is
-stored, and nothing of the page is stored. After `bay resume <run> --extend usd=<amount>`, the sync goes on:
+stored, and nothing of the page is stored. After `bay resume <run> --extend usd=<amount> [--via terminal | --via chat --quote "<the owner's exact words>"]`, the sync goes on:
 the pages it already fetched are replayed from the run's records, not fetched again.
 
 ### The monthly cap
@@ -71,8 +71,8 @@ settings:
 ```
 
 A binding is either one mode for every mode that requires the interface (`items-store: store`) or a map from
-requiring mode to serving mode, with an optional `default`, so the mail briefing and this one can each have
-their own source.
+requiring mode to serving mode, with an optional `default`, so two briefings can each have their own
+source.
 
 ```sh
 ./bay.sh call feed-briefing.sync '{"since":"2026-11-01T00:00:00Z"}'

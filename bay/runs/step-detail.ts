@@ -2,6 +2,7 @@ import { noSpend, spendFromJson } from "./budget.ts";
 import { tiers, type Json, type Spend, type Submission, type Tier } from "../contracts.ts";
 import { fieldOf, numberField, textField, textsField, toJson } from "../json.ts";
 import { storedCardOf, type Card } from "./card.ts";
+import { packedDrawn, unpackedDrawn } from "./drawn-values.ts";
 import { choiceStatuses, type ApprovalAnswer, type ChoiceStatus } from "./choices.ts";
 
 export const stepKinds = ["script", "check", "skill", "call", "action", "undo", "approval", "wait", "foreach"] as const;
@@ -11,6 +12,8 @@ export type StepKind = (typeof stepKinds)[number];
 export type ScriptDetail = {
   readonly script: string;
   readonly stoppedForCall?: Spend;
+  readonly mode?: string;
+  readonly drawn?: readonly string[];
 };
 
 export type SkillDetail = {
@@ -99,9 +102,16 @@ function optionalSpend(value: Json, field: string): Spend | undefined {
 
 function scriptDetailOf(value: Json, kind: StepKind): ScriptDetail {
   const stoppedForCall = optionalSpend(value, "stoppedForCall");
+  const mode = textField(value, "mode");
+  const drawn = unpackedDrawn(fieldOf(value, "drawn"));
+  if (drawn === undefined) {
+    throw malformed(kind, "drawn");
+  }
   return {
     script: requiredText(value, "script", kind),
     ...(stoppedForCall === undefined ? {} : { stoppedForCall }),
+    ...(mode === undefined ? {} : { mode }),
+    ...(drawn.length === 0 ? {} : { drawn }),
   };
 }
 
@@ -238,6 +248,34 @@ export function decodedStepDetail(kind: StepKind, value: Json): StepDetail {
   }
 }
 
+type DrawnStep = {
+  readonly kind: "script" | "check";
+  readonly rest: Omit<ScriptDetail, "drawn">;
+  readonly drawn: readonly string[];
+};
+
+function drawnIn(step: StepDetail | RefusedDetail): DrawnStep | undefined {
+  if ((step.kind !== "script" && step.kind !== "check") || step.detail?.drawn === undefined) {
+    return undefined;
+  }
+  const { drawn, ...rest } = step.detail;
+  return { kind: step.kind, rest, drawn };
+}
+
 export function stepDetailJson(step: StepDetail | RefusedDetail): Json {
-  return step.detail;
+  const drawn = drawnIn(step);
+  return drawn === undefined ? step.detail : { ...drawn.rest, drawn: packedDrawn(drawn.drawn) };
+}
+
+export function shownStepDetail(step: StepDetail | RefusedDetail): Json {
+  const drawn = drawnIn(step);
+  return drawn === undefined ? step.detail : { ...drawn.rest, drawnValues: drawn.drawn.length };
+}
+
+export function redactedStepDetail(step: StepDetail, redact: (value: Json) => Json): StepDetail {
+  const drawn = drawnIn(step);
+  if (drawn === undefined) {
+    return decodedStepDetail(step.kind, redact(stepDetailJson(step)));
+  }
+  return { kind: drawn.kind, detail: { ...scriptDetailOf(redact(drawn.rest), drawn.kind), drawn: drawn.drawn } };
 }

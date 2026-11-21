@@ -19,6 +19,7 @@ import {
   kitTemplate,
   listOf,
   onlyWhenRecapturing,
+  processProject,
   project,
   printedCard,
   provedIn,
@@ -390,7 +391,7 @@ describe(
     });
 
     test("6. each answer is taken by a fresh kernel: the round resumes where it waited, asks each skill once, and commits once each", async () => {
-      const root = await project(template);
+      const root = await processProject(template);
       const tests = [handed("R6", "quill.test.ts")];
       await allPassedIn(root, "R6", [codeOf("R6")]);
       const start = await started(root, trigger(root, "R6", [testPath("R6", "quill.test.ts")]));

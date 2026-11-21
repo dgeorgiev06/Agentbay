@@ -92,6 +92,7 @@ function contextOf(asked: Asked, reads: readonly Read[], changed: readonly strin
     settings: {},
     now: () => new Date("2026-11-18T10:00:00Z"),
     spend: unanswered,
+    random: unanswered,
     caller: undefined,
     skillInput: undefined,
   };

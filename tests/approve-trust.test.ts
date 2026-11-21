@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { KernelPorts } from "../bay/kernel.ts";
+import type { KernelPorts } from "../bay/kernel-ports.ts";
 import { layoutOf } from "../bay/layout.ts";
 import { loadSystem } from "../bay/manifests/manifests.ts";
 import { nodeFileSystem } from "../bay/node-ports.ts";

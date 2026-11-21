@@ -164,12 +164,12 @@ describe("actions", () => {
         overrun: { measure, limit: 1, spent: 2 },
       });
       assert.equal(runner.calls.length, 2);
-      assert.equal(waitingOf(await runs.extend(id, { [measure]: 0 })).reason, "budget");
+      assert.equal(waitingOf(await runs.extend(id, { [measure]: 0 }, "The owner")).reason, "budget");
       assert.equal(runner.calls.length, 2);
-      const afterLast = waitingOf(await runs.extend(id, { [measure]: 1 }));
+      const afterLast = waitingOf(await runs.extend(id, { [measure]: 1 }, "The owner"));
       assert.deepEqual(afterLast, { reason: "budget", stepKey: "end", overrun: { measure, limit: 2, spent: 3 } });
       assert.equal(runner.calls.length, 3);
-      const done = runOf(await runs.extend(id, { [measure]: 1 }));
+      const done = runOf(await runs.extend(id, { [measure]: 1 }, "The owner"));
       assert.deepEqual(done.state, { status: "done", output: { measure } });
       assert.equal(done.spent[measure], 3);
       assert.equal(runner.calls.length, 3);
@@ -181,7 +181,7 @@ describe("actions", () => {
   test("an extension raises only the measures the run limits", async () => {
     const { runs, runner, close } = await openedRuns({ changes: { config: { budget: { items: 1 } } } });
     const id = runOf(await runs.start({ action: "notes.spend" }, { measure: "items" })).id;
-    runOf(await runs.extend(id, { items: 1, usd: 9 }));
+    runOf(await runs.extend(id, { items: 1, usd: 9 }, "The owner"));
     assert.deepEqual(
       runner.calls.map((call) => call.remaining),
       [{ items: 1 }, { items: 0 }, { items: 0 }],
@@ -192,13 +192,13 @@ describe("actions", () => {
   test("an extension must be numbers of at least zero, and stop ends a run that waits for budget", async () => {
     const { runs, close } = await openedRuns({ changes: { config: { budget: { usd: 1 } } } });
     const id = runOf(await runs.start({ action: "notes.spend" }, { measure: "usd" })).id;
-    assert.deepEqual(problemsOf(await runs.extend(id, { usd: -1, minutes: Number.NaN })), [
+    assert.deepEqual(problemsOf(await runs.extend(id, { usd: -1, minutes: Number.NaN }, "The owner")), [
       "The extension is not valid: usd must be a number of at least 0, but it is -1. " +
         "minutes must be a number of at least 0, but it is NaN.",
     ]);
-    const stopped = runOf(await runs.stop(id));
+    const stopped = runOf(await runs.stop(id, "The owner"));
     assert.deepEqual(stopped.state, { status: "failed", reason: "The owner stopped the run." });
-    assert.match(messagesOf(await runs.extend(id, { usd: 5 })), /has ended \(failed\)/);
+    assert.match(messagesOf(await runs.extend(id, { usd: 5 }, "The owner")), /has ended \(failed\)/);
     close();
   });
 
@@ -211,7 +211,7 @@ describe("actions", () => {
       stepKey: "0/end",
       overrun: { measure: "items", limit: 10, spent: 11 },
     });
-    const extended = runOf(await runs.extend(runOf(started).id, { items: 5 }));
+    const extended = runOf(await runs.extend(runOf(started).id, { items: 5 }, "The owner"));
     assert.deepEqual(extended.state, { status: "done", output: { id: "a" } });
     close();
   });
@@ -407,7 +407,7 @@ test("a skill's reported spend is charged; over the budget, the run waits right 
     overrun: { measure: "tokens", limit: 100, spent: 150 },
   });
   assert.deepEqual(runner.calls, []);
-  const run = runOf(await runs.extend(started.id, { tokens: 100 }));
+  const run = runOf(await runs.extend(started.id, { tokens: 100 }, "The owner"));
   assert.equal(run.state.status, "done");
   assert.equal(run.spent.tokens, 150);
   close();

@@ -5,8 +5,8 @@ import { failedWith, problemText, succeededWith, unplacedProblem, type Outcome, 
 import type { PathSegments, Wording } from "../value-check.ts";
 
 type Reference =
-  | { readonly kind: "trigger"; readonly text: string }
-  | { readonly kind: "item"; readonly text: string }
+  | { readonly kind: "trigger"; readonly text: string; readonly path: readonly string[] }
+  | { readonly kind: "item"; readonly text: string; readonly path: readonly string[] }
   | { readonly kind: "settings"; readonly text: string; readonly key: string }
   | { readonly kind: "steps"; readonly text: string; readonly id: string; readonly path: readonly string[] };
 
@@ -37,21 +37,34 @@ type Quotable = {
 
 const stepsPattern = /^\$steps\.([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\.output((?:\.[A-Za-z0-9_-]+)*)$/;
 
+const itemPattern = /^\$item((?:\.[A-Za-z0-9_-]+)*)$/;
+
+const triggerPattern = /^\$trigger((?:\.[A-Za-z0-9_-]+)*)$/;
+
 const settingsPattern = /^\$settings\.([A-Za-z0-9_-]+)$/;
 
 const grammar =
-  "write $trigger, $item, $settings.<key> or $steps.<id>.output with an optional dotted path such as .items.0";
+  "write $trigger, $item, $settings.<key> or $steps.<id>.output; $trigger, $item and $steps.<id>.output take " +
+  "an optional dotted path such as .items.0";
+
+const itemOnly = "an item's name is read from the item itself, as $item or $item.<path>.";
+
+function segmentsOf(dotted: string | undefined): readonly string[] {
+  return (dotted ?? "").split(".").filter((segment) => segment !== "");
+}
 
 function isReferenceText(value: unknown): value is string {
   return typeof value === "string" && value.startsWith("$");
 }
 
 function parseReference(text: string): Outcome<Reference> {
-  if (text === "$trigger") {
-    return succeededWith({ kind: "trigger", text });
+  const trigger = triggerPattern.exec(text);
+  if (trigger !== null) {
+    return succeededWith({ kind: "trigger", text, path: segmentsOf(trigger[1]) });
   }
-  if (text === "$item") {
-    return succeededWith({ kind: "item", text });
+  const item = itemPattern.exec(text);
+  if (item !== null) {
+    return succeededWith({ kind: "item", text, path: segmentsOf(item[1]) });
   }
   const settings = settingsPattern.exec(text);
   if (settings?.[1] !== undefined) {
@@ -59,8 +72,7 @@ function parseReference(text: string): Outcome<Reference> {
   }
   const steps = stepsPattern.exec(text);
   if (steps?.[1] !== undefined) {
-    const path = (steps[2] ?? "").split(".").filter((segment) => segment !== "");
-    return succeededWith({ kind: "steps", text, id: steps[1], path });
+    return succeededWith({ kind: "steps", text, id: steps[1], path: segmentsOf(steps[2]) });
   }
   const message = `${text} is not a reference: ${grammar}. Every value that starts with $ is read as a reference.`;
   return failedWith([unplacedProblem(message)]);
@@ -72,7 +84,7 @@ function listed(names: readonly string[]): string {
 
 function keysOf(value: Json): string {
   if (Array.isArray(value)) {
-    return `a list of ${String(value.length)} elements`;
+    return value.length === 1 ? "a list of 1 element" : `a list of ${String(value.length)} elements`;
   }
   if (isRecord(value)) {
     return `a mapping with the keys ${listed(Object.keys(value))}`;
@@ -91,14 +103,22 @@ function childOf(value: Json, segment: string): Json | undefined {
   return undefined;
 }
 
-function followPath(reference: Reference & { readonly kind: "steps" }, output: Json): Outcome<Json> {
-  let current = output;
+type PathReference = Reference & { readonly kind: "trigger" | "item" | "steps" };
+
+function walkedWords(reference: PathReference, index: number): string {
+  const walked = reference.path.slice(0, index);
+  return reference.kind === "steps"
+    ? `${["output", ...walked].join(".")} of step ${reference.id}`
+    : [`$${reference.kind}`, ...walked].join(".");
+}
+
+function followPath(reference: PathReference, start: Json): Outcome<Json> {
+  let current = start;
   for (const [index, segment] of reference.path.entries()) {
     const next = childOf(current, segment);
     if (next === undefined) {
-      const walked = ["output", ...reference.path.slice(0, index)].join(".");
       const problem =
-        `${reference.text} resolves to nothing: ${walked} of step ${reference.id} has no ${segment}; ` +
+        `${reference.text} resolves to nothing: ${walkedWords(reference, index)} has no ${segment}; ` +
         `it is ${keysOf(current)}.`;
       return failedWith([unplacedProblem(problem)]);
     }
@@ -133,12 +153,12 @@ function resolveSettings(reference: Reference & { readonly kind: "settings" }, s
 function resolveReference(reference: Reference, scope: ReferenceScope): Outcome<Json> {
   switch (reference.kind) {
     case "trigger":
-      return { ok: true, value: scope.trigger };
+      return followPath(reference, scope.trigger);
     case "item":
       if (scope.item === undefined) {
         return failedWith([unplacedProblem("$item resolves to nothing: it is used outside a foreach.")]);
       }
-      return { ok: true, value: scope.item };
+      return followPath(reference, scope.item);
     case "settings":
       return resolveSettings(reference, scope);
     case "steps":
@@ -256,6 +276,29 @@ function quoteIssues(step: WorkflowStep, path: PathSegments, quotable: Quotable)
   );
 }
 
+function itemNameIssue(stepId: string, place: ReferencePlace): ReferenceIssue | undefined {
+  const parsed = parseReference(place.text);
+  if (!parsed.ok) {
+    return { path: place.path, message: problemText(parsed.problems), fix: `Correct the reference: ${grammar}.` };
+  }
+  return parsed.value.kind === "item"
+    ? undefined
+    : {
+        path: place.path,
+        message: `the itemName of step ${stepId} reads ${place.text}; ${itemOnly}`,
+        fix: "Name a field of the item, such as $item.id.",
+      };
+}
+
+function itemNameIssues(step: WorkflowStep, path: PathSegments): readonly ReferenceIssue[] {
+  const named = "foreach" in step ? step.itemName : undefined;
+  if (named === undefined) {
+    return [];
+  }
+  const places = Object.entries(named).map(([part, text]) => ({ text, path: [...path, "itemName", part] }));
+  return places.flatMap((place) => itemNameIssue(step.id, place) ?? []);
+}
+
 function issuesIn(steps: readonly WorkflowStep[], prefix: PathSegments, scope: StaticScope): readonly ReferenceIssue[] {
   const earlier = [...scope.earlier];
   const inItems: string[] = [];
@@ -265,6 +308,7 @@ function issuesIn(steps: readonly WorkflowStep[], prefix: PathSegments, scope: S
     const current = { earlier: [...earlier], insideForeach: scope.insideForeach };
     issues.push(...referencePlaces(step, path).flatMap((place) => placeIssues(place, current)));
     issues.push(...quoteIssues(step, path, { earlier, inItems }));
+    issues.push(...itemNameIssues(step, path));
     if ("foreach" in step) {
       issues.push(...issuesIn(step.steps, path, { earlier: [...earlier], insideForeach: true }));
       inItems.push(...step.steps.map((inner) => inner.id));

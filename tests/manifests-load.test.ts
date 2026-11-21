@@ -503,7 +503,11 @@ test("a skill step's check script that does not exist is reported", async () => 
 
 test("well-formed workflow references to earlier steps, the trigger, the item and settings are accepted", async () => {
   const files = withWorkflowSteps([
-    { id: "write", action: "add", input: { text: "$trigger", tag: "literal", count: 3 } },
+    {
+      id: "write",
+      action: "add",
+      input: { text: "$trigger", tag: "literal", count: 3, title: "$trigger.slice.title" },
+    },
     { id: "check", action: "items-store.get", input: { id: "$steps.write.output.id", lookback: "$settings.lookback" } },
     {
       id: "each",
@@ -520,13 +524,14 @@ test("well-formed workflow references to earlier steps, the trigger, the item an
 
 test("a malformed workflow reference is reported with the grammar", async () => {
   const files = withWorkflowSteps([
-    { id: "write", action: "add", input: { text: "$trigger.text", price: "$5" } },
+    { id: "write", action: "add", input: { text: "$trigger..text", price: "$5", title: "$trigger.a b" } },
     { id: "keep", approval: "Keep it?", show: "$steps.write" },
   ]);
   const problems = await problemsOf(files);
   for (const [path, text] of [
-    ["/steps/0/input/text", "$trigger.text"],
+    ["/steps/0/input/text", "$trigger..text"],
     ["/steps/0/input/price", "$5"],
+    ["/steps/0/input/title", "$trigger.a b"],
     ["/steps/1/show", "$steps.write"],
   ] as const) {
     const problem = findProblem(problems, workflowFile, `${text} is not a reference`);
@@ -551,17 +556,19 @@ test("a reference to a step that is not defined earlier in its scope is reported
   findProblem(problems, workflowFile, "$steps.self.output names the step self");
 });
 
-test("$item outside a foreach is reported, and inside one it is accepted", async () => {
+test("$item outside a foreach is reported, with a path or without, and inside one it is accepted", async () => {
+  const inner = { id: "inner", action: "add", input: { text: "$item", title: "$item.title" } };
   const problems = await problemsOf(
     withWorkflowSteps([
       { id: "write", action: "add", input: { text: "$item" } },
-      { id: "each", foreach: "$item", steps: [{ id: "inner", action: "add", input: { text: "$item" } }] },
+      { id: "read", action: "add", input: { text: "$item.text" } },
+      { id: "each", foreach: "$item.slices", steps: [inner] },
     ]),
   );
   const outside = problems.filter((problem) => problem.message.includes("$item is used outside a foreach"));
   assert.deepEqual(
     outside.map((problem) => problem.path),
-    ["/steps/0/input/text", "/steps/1/foreach"],
+    ["/steps/0/input/text", "/steps/1/input/text", "/steps/2/foreach"],
   );
 });
 

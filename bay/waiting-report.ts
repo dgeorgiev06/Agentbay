@@ -15,6 +15,8 @@ type State = Run["state"];
 
 type Waiting = Extract<State, { readonly status: "waiting" }>["waiting"];
 
+const sourceWords = '[--via terminal | --via chat --quote "<the owner\'s exact words>"]';
+
 const issuedNotice = "A task token was issued with this task; it is shown only now.";
 
 const replacedNotice = "A new task token was issued; the token shown earlier for this task no longer works.";
@@ -85,6 +87,25 @@ function decideLine(run: Run, waiting: Extract<Waiting, { readonly reason: "appr
     : `${decide} --choice <name> --hash ${waiting.hash}`;
 }
 
+function stopCommand(run: Run): string {
+  return `bay resume ${run.id} --stop ${sourceWords}`;
+}
+
+function stopLine(run: Run): string {
+  return `or stop with: ${stopCommand(run)}`;
+}
+
+function stopsAtUntil(run: Run, waiting: Extract<Waiting, { readonly reason: "owner" }>): boolean {
+  return run.target.part?.until === waiting.stepKey;
+}
+
+function ownerLines(run: Run, waiting: Extract<Waiting, { readonly reason: "owner" }>): readonly string[] {
+  if (stopsAtUntil(run, waiting)) {
+    return [waiting.question, `stop with: ${stopCommand(run)}`];
+  }
+  return [waiting.question, `run again with: bay resume ${run.id} --rerun ${sourceWords}`, stopLine(run)];
+}
+
 export function waitingText(run: Run, waiting: Waiting): string {
   switch (waiting.reason) {
     case "skill":
@@ -94,9 +115,13 @@ export function waitingText(run: Run, waiting: Waiting): string {
     case "time":
       return `wakes at ${waiting.until}; bay resume --due wakes it then`;
     case "budget":
-      return `the budget is spent: ${pretty(toJson(waiting.overrun))}`;
+      return [
+        `the budget is spent: ${pretty(toJson(waiting.overrun))}`,
+        `raise it with: bay resume ${run.id} --extend <measure>=<amount> ${sourceWords}`,
+        stopLine(run),
+      ].join("\n");
     case "owner":
-      return `${waiting.question}\nresume with: bay resume ${run.id} --rerun`;
+      return ownerLines(run, waiting).join("\n");
   }
 }
 

@@ -2,7 +2,7 @@ import { join, relative } from "node:path/posix";
 import type { Interface } from "./generated/interface.ts";
 import type { Mode } from "./generated/mode.ts";
 import { homeFolder, isProjectTheKit, shownPath, type Home, type Layout } from "./layout.ts";
-import type { FileSystem } from "./ports.ts";
+import type { FileListing, FileSystem } from "./ports.ts";
 import type { InspectedFolder, Inspection } from "./manifests/manifests.ts";
 import type { Problem } from "./outcome.ts";
 
@@ -11,10 +11,6 @@ export type Severity = "error" | "warning";
 export type Finding = Problem & { readonly severity: Severity };
 
 export type Wording = Pick<Problem, "message" | "fix">;
-
-export type FileListing = {
-  readonly projectFiles: (folder: string) => Promise<readonly string[]>;
-};
 
 type FolderFiles = {
   readonly label: string;

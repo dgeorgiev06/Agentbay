@@ -167,7 +167,7 @@ async function proved(
 
 async function runMark(context: ScriptContext, round: Round): Promise<string> {
   const kept = round.number === 1 ? undefined : await keptMark(context, round.name);
-  return kept ?? newMark();
+  return kept ?? (await newMark(context));
 }
 
 function buildingOf(context: ScriptContext, round: Round, plan: RoundPlan): Promise<Building> {

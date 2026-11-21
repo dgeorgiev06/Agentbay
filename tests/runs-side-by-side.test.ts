@@ -106,7 +106,9 @@ test("when items fail, the others run to their end, every failure is named, and 
   });
   const { runs, close } = await openedRuns({ scripts: { "notes:scripts/log.ts": log }, changes: withFlow(eachLog(2)) });
   const started = runOf(await runs.start(flow, [0, 1, 2, 3]));
-  const sentence = "Step each failed for 2 of 4 items: item 0 (each[0]): item 0 broke; item 2 (each[2]): item 2 broke";
+  const sentence =
+    "Step each failed for 2 of 4 items: the 1st of 4 items at each[0]: item 0 broke; " +
+    "the 3rd of 4 items at each[2]: item 2 broke";
   assert.deepEqual(started.state, {
     status: "waiting",
     waiting: {
@@ -126,7 +128,7 @@ test("when items fail, the others run to their end, every failure is named, and 
   assert.equal(again.state.status, "waiting");
   assert.equal(tally.runsOf.get(0), 1);
   failing.clear();
-  const rerun = runOf(await runs.resume(started.id, { rerun: true }));
+  const rerun = runOf(await runs.rerun(started.id, "The owner"));
   assert.deepEqual(rerun.state, { status: "done", output: [{ n: 0 }, { n: 1 }, { n: 2 }, { n: 3 }] });
   assert.deepEqual([...tally.runsOf.entries()].sort(), [
     [0, 2],
@@ -152,9 +154,46 @@ test("stopping a run whose side-by-side items failed fails it with every failure
   const log: Script = (request) => (itemOf(request) === 1 ? failure("item 1 broke") : finished({ n: itemOf(request) }));
   const { runs, close } = await openedRuns({ scripts: { "notes:scripts/log.ts": log }, changes: withFlow(eachLog(3)) });
   const started = runOf(await runs.start(flow, [0, 1, 2]));
-  const stopped = runOf(await runs.stop(started.id));
+  const stopped = runOf(await runs.stop(started.id, "The owner"));
   assert.ok(stopped.state.status === "undone", JSON.stringify(stopped.state));
-  assert.equal(stopped.state.reason, "Step each failed for 1 of 3 items: item 1 (each[1]): item 1 broke");
+  assert.equal(stopped.state.reason, "Step each failed for 1 of 3 items: the 2nd of 3 items at each[1]: item 1 broke");
+  close();
+});
+
+const namedItems = [
+  { slice: { name: "TD1" }, n: 0 },
+  { slice: { name: "TD2", title: "The td2 mode" }, n: 1 },
+  { slice: {}, n: 2 },
+];
+
+function namedEach(sideBySide: number): Workflow["steps"] {
+  const itemName = { id: "$item.slice.name", title: "$item.slice.title" };
+  const steps = [{ id: "do", action: "log", input: { n: "$item.n" } }];
+  return [{ id: "each", foreach: "$trigger", sideBySide, itemName, steps }];
+}
+
+test("a step in an item reads its own value from the item by a dotted path", async () => {
+  const log: Script = (request) => finished({ n: itemOf(request) });
+  const changes = withFlow(namedEach(2));
+  const { runs, close } = await openedRuns({ scripts: { "notes:scripts/log.ts": log }, changes });
+  const run = runOf(await runs.start(flow, namedItems));
+  assert.deepEqual(run.state, { status: "done", output: [{ n: 0 }, { n: 1 }, { n: 2 }] });
+  close();
+});
+
+test("the owner is told which items failed by the names the foreach declares, or by their place", async () => {
+  const log: Script = (request) => (itemOf(request) === 0 ? finished({ n: 0 }) : failure("it broke"));
+  const changes = withFlow(namedEach(3));
+  const { runs, close } = await openedRuns({ scripts: { "notes:scripts/log.ts": log }, changes });
+  const started = runOf(await runs.start(flow, namedItems));
+  const [asked] = waitsOf(started);
+  assert.ok(asked?.reason === "owner", JSON.stringify(started.state));
+  assert.equal(
+    asked.question,
+    "Step each failed for 2 of 3 items: TD2 (The td2 mode) at each[1]: it broke; " +
+      "the 3rd of 3 items at each[2]: it broke " +
+      "Resume with --rerun to run the failed items again, or stop the run.",
+  );
   close();
 });
 
@@ -443,11 +482,11 @@ test("the spend of a failed attempt stays counted in the run after the rerun has
   const { runs, close } = await openedRuns({ scripts, changes: { ...withFlow(steps), notesActions } });
   const started = runOf(await runs.start(flow, [0, 1]));
   assert.equal(started.spent.usd, 3);
-  const failedAgain = runOf(await runs.resume(started.id, { rerun: true }));
+  const failedAgain = runOf(await runs.rerun(started.id, "The owner"));
   assert.equal(failedAgain.spent.usd, 4);
   assert.equal(runOf(await runs.resume(started.id)).spent.usd, 4);
   failing.clear();
-  const rerun = runOf(await runs.resume(started.id, { rerun: true }));
+  const rerun = runOf(await runs.rerun(started.id, "The owner"));
   assert.equal(rerun.spent.usd, 6);
   const [approval] = waitsOf(rerun);
   assert.ok(approval?.reason === "approval");

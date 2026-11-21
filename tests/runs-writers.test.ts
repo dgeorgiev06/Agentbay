@@ -30,7 +30,7 @@ test("a second openRuns on the same kernel.db is refused while the first advance
   assert.ok(running?.status === "running");
   const id = running.id;
   assert.match(messagesOf(await second.resume(id)), /being advanced by engine-\S+ \(last heartbeat /);
-  assert.match(messagesOf(await second.stop(id)), /only one writer may advance a run/);
+  assert.match(messagesOf(await second.stop(id, "The owner")), /only one writer may advance a run/);
   assert.match(messagesOf(await runs.resume(id)), /being advanced by engine-/);
   held.resolve(undefined);
   assert.equal(runOf(await first).state.status, "done");

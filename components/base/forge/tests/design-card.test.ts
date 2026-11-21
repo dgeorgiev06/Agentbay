@@ -49,7 +49,7 @@ function printedDesign(input: DesignCardInput): string {
   const reason = drawn.card.withheld.approve;
   const approve = { name: "approve", does: "Commit the design and its schema files" };
   const choices = [reason === undefined ? approve : { ...approve, withheld: reason }];
-  return printed(drawn.card, [...choices, { name: "stop", does: "Stop; nothing is committed" }], skills);
+  return printed(drawn.card, [...choices, { name: "stop", does: "Stop; nothing is committed" }], { skills });
 }
 
 async function lightInput(practices: readonly PracticeAnswer[]): Promise<DesignCardInput> {

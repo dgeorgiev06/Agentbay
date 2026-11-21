@@ -4,13 +4,16 @@ import { existsSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { parse, stringify } from "yaml";
+import type * as BayCommandModule from "../bay/bay-command.ts";
 import type { Json, ModeList, RunEvent, Spend, StepPlace, Tier } from "../bay/contracts.ts";
 import type { Config } from "../bay/generated/config.ts";
 import type { Budget } from "../bay/generated/mode.ts";
 import { fieldOf, isRecord, numberField, toJson } from "../bay/json.ts";
 import { layoutOf } from "../bay/layout.ts";
-import { loadKernel, nodeKernelPorts, type Kernel } from "../bay/kernel.ts";
+import { loadKernel, type Kernel } from "../bay/kernel.ts";
+import { nodeKernelPorts } from "../bay/kernel-ports.ts";
 import type { Outcome } from "../bay/outcome.ts";
 import { listOf } from "../bay/policy.ts";
 import type { Clock } from "../bay/ports.ts";
@@ -158,7 +161,7 @@ export type ModeProject = {
   readonly newToken: (runId: string, stepKey?: string) => Promise<Run>;
   readonly newTokenRefusal: (runId: string) => Promise<string>;
   readonly show: (runId: string) => Promise<Run>;
-  readonly resume: (runId: string, options?: { readonly rerun: boolean }) => Promise<Run>;
+  readonly resume: (runId: string) => Promise<Run>;
   readonly extend: (runId: string, extra: Budget) => Promise<Run>;
   readonly runs: () => Promise<readonly ListedRun[]>;
   readonly partition: (mode: string, name: string) => DatabasePartition;
@@ -194,6 +197,8 @@ const noHookRuns = { run: "without-the-hook" };
 const nothingSpent: Spend = { items: 0, usd: 0, tokens: 0, minutes: 0 };
 
 const trustedBy = "a test";
+
+const extendedBy = "the owner, in a test";
 
 function settableClock(startAt: string | undefined): SettableClock {
   let fixed = startAt === undefined ? undefined : Date.parse(startAt);
@@ -459,8 +464,8 @@ async function projectIn(root: string, opening: Opening): Promise<ModeProject> {
     newToken: async (runId, stepKey) => accepted(await runs.reissueTask(runId, stepKey)),
     newTokenRefusal: async (runId) => refusalOf(await runs.reissueTask(runId), "the new token"),
     show: async (runId) => accepted(await runs.show(runId)),
-    resume: async (runId, options) => accepted(await runs.resume(runId, options)),
-    extend: async (runId, extra) => accepted(await runs.extend(runId, extra)),
+    resume: async (runId) => accepted(await runs.resume(runId)),
+    extend: async (runId, extra) => accepted(await runs.extend(runId, extra, extendedBy)),
     runs: async () => (await runs.list()).map((listed) => ({ id: listed.id, status: listed.status })),
     partition: (mode, name) => partitionOf(kernel, mode, name),
     setTime: clock.set,
@@ -481,4 +486,25 @@ async function projectIn(root: string, opening: Opening): Promise<ModeProject> {
       await rm(root, { recursive: true, force: true });
     },
   };
+}
+
+export type CommandLineIn = (words: readonly string[]) => ReturnType<typeof BayCommandModule.bayCommand>;
+
+const noTerminal = {
+  isInteractive: () => false,
+  ask: () => Promise.resolve(""),
+  readAll: () => Promise.resolve(""),
+};
+
+function isBayCommandModule(value: unknown): value is typeof BayCommandModule {
+  return isRecord(value) && typeof value.bayCommand === "function";
+}
+
+export async function commandLineIn(copy: string): Promise<CommandLineIn> {
+  const loaded: unknown = await import(pathToFileURL(join(copy, "bay/bay-command.ts")).href);
+  if (!isBayCommandModule(loaded)) {
+    throw new Error(`${copy} holds no kernel whose command line can run in this process.`);
+  }
+  const invocation = { kit: copy, workingDirectory: copy, environment: process.env, terminal: noTerminal };
+  return (words) => loaded.bayCommand(words, invocation);
 }

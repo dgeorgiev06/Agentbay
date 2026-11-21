@@ -71,6 +71,23 @@ describe("workflows", () => {
     close();
   });
 
+  test("a step takes one field of the trigger along a dotted path, and a path that leads nowhere fails it", async () => {
+    const changes = withFlow([
+      { id: "seed", action: "copy", input: { count: "$trigger.given.count" } },
+      { id: "again", action: "copy", input: { count: "$trigger.given.total" } },
+    ]);
+    const { runs, close } = await openedRuns({ changes });
+    const run = runOf(await runs.start(flow, { given: { count: 2 } }));
+    assert.deepEqual(run.steps.find((step) => step.key === "seed")?.input, { count: 2 });
+    assert.equal(run.state.status, "failed");
+    assert.equal(
+      run.state.reason,
+      "Step again cannot start: input.count: $trigger.given.total resolves to nothing: $trigger.given " +
+        "has no total; it is a mapping with the keys count.",
+    );
+    close();
+  });
+
   test("foreach runs its steps once per element, in order, saved under the element's index", async () => {
     const changes = withFlow([
       {
@@ -435,7 +452,7 @@ test("a run of a mode that is no longer active is refused when it would advance,
   assert.equal(waiting.state.status, "waiting");
   const onlyStore = await fixtureSystem({ ...withFlow(reviewSteps), activeModes: ["store"] });
   const inactive = await reopen(onlyStore.system);
-  for (const result of [await inactive.resume(waiting.id), await inactive.stop(waiting.id)]) {
+  for (const result of [await inactive.resume(waiting.id), await inactive.stop(waiting.id, "The owner")]) {
     assert.deepEqual(problemsOf(result), ["Mode notes is not active in this project, so nothing of it runs here."]);
   }
   assert.equal(runOf(await runs.show(waiting.id)).state.status, "waiting");
@@ -452,7 +469,7 @@ test("one representative run emits every event kind, in order, with ids and size
   const started = runOf(await runs.start(flow, "staking"));
   const submitted = await runs.submit(tokenOf(started), answer({ id: "d1", text: "PRIVATE-DRAFT-BODY" }));
   assert.equal(waitingOf(submitted).reason, "budget");
-  const approval = waitingOf(await runs.extend(started.id, { items: 5 }));
+  const approval = waitingOf(await runs.extend(started.id, { items: 5 }, "The owner"));
   assert.ok(approval.reason === "approval");
   const decision = { stepKey: "keep", hash: approval.hash, verdict: "reject", by: "owner" } as const;
   const run = runOf(await runs.approve(started.id, decision));

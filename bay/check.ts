@@ -5,11 +5,11 @@ import {
   isLoaded,
   warnings,
   type CheckContext,
-  type FileListing,
   type Finding,
   type LoadedModeFolder,
 } from "./check-context.ts";
 import { checkImports, checkKernelImports } from "./check-imports.ts";
+import type { FileListing } from "./ports.ts";
 import { checkKitLayout, checkLayout } from "./check-layout.ts";
 import { checkLimits } from "./check-limits.ts";
 import { checkSkills } from "./check-skills.ts";

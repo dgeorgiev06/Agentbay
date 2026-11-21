@@ -57,7 +57,7 @@
       "pattern": "^(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*$"
     },
     "reference": {
-      "description": "Resolved whole: $trigger, $steps.<id>.output[.path], $item in a foreach, $settings.<key>.",
+      "description": "Resolved whole: $trigger[.path], $steps.<id>.output[.path], $item[.path] in a foreach, $settings.<key>.",
       "type": "string",
       "pattern": "^\\$"
     },
@@ -175,11 +175,21 @@
               "oneOf": [
                 { "type": "integer", "minimum": 2, "maximum": 8 },
                 {
-                  "description": "A reference to a whole number from 2 to 8: $settings.<key>, $steps.<id>.output with an optional path, $trigger, or $item of an enclosing foreach.",
+                  "description": "A reference to a whole number from 2 to 8: $settings.<key>, or $trigger, $steps.<id>.output or $item of an enclosing foreach, each with an optional path.",
                   "type": "string",
                   "pattern": "^\\$"
                 }
               ]
+            },
+            "itemName": {
+              "description": "How a card names an item of this foreach where a line cites a step in it: id and title are each $item or $item.<path>, read by the kernel from the item the foreach recorded. The card says for <id> (<title>), each made one line and cut, the id to 40 characters and the title to 80; without itemName, or when the id reads no text, it names the item by its place, such as the 1st of 3 items of step <foreach>.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id"],
+              "properties": {
+                "id": { "$ref": "#/$defs/reference" },
+                "title": { "$ref": "#/$defs/reference" }
+              }
             },
             "id": {
               "description": "The step's id, unique in the whole file; its output is saved under it.",

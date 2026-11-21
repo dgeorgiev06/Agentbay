@@ -29,7 +29,7 @@ async function race(): Promise<void> {
   while (!existsSync(goFile)) {
     await sleep(10);
   }
-  const result = await engine.extendBudget(runId, { items: 5 });
+  const result = await engine.extendBudget(runId, { items: 5 }, "The owner");
   const summary = result.ok
     ? { ok: true, status: result.value.state.status }
     : { ok: false, problems: result.problems };

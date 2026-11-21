@@ -7,7 +7,6 @@ import {
   type CommandResult,
   type Invocation,
 } from "../command-context.ts";
-import type { Command } from "../command-line.ts";
 import type { Json } from "../contracts.ts";
 import type { Kernel } from "../kernel.ts";
 import { runResult } from "../run-report.ts";
@@ -18,8 +17,6 @@ type Form =
   | { readonly kind: "action"; readonly reference: string; readonly input: string | undefined }
   | { readonly kind: "workflow"; readonly mode: string; readonly path: string; readonly input: string | undefined }
   | { readonly kind: "tool"; readonly name: string; readonly input: string | undefined };
-
-const usage = "call <mode.action> ['<json>'] | call --workflow <mode>:<path> ['<json>'] | call --tool <name> '<json>'";
 
 function workflowForm(target: string, input: string | undefined): Form | string {
   const separator = target.indexOf(":");
@@ -68,28 +65,14 @@ async function callForm(kernel: Kernel, form: Form, input: Json): Promise<Comman
   }
 }
 
-async function runCall(invocation: Invocation): Promise<CommandResult> {
+export async function runCall(invocation: Invocation): Promise<CommandResult> {
   const form = formOf(invocation);
   if (typeof form === "string") {
-    return usageResult(form, usage);
+    return usageResult(form, invocation.usage);
   }
   const input = jsonArgument(form.input, "input");
   if (!input.ok) {
-    return usageResult(problemText(input.problems), usage);
+    return usageResult(problemText(input.problems), invocation.usage);
   }
   return withKernel(invocation, (kernel) => callForm(kernel, form, input.value));
 }
-
-export const callCommand: Command = {
-  name: "call",
-  summary:
-    "Start an action or a workflow and print the run; or call a kernel tool, which needs a task token " +
-    "unless it is actions.",
-  usage,
-  options: [
-    { name: "workflow", takesValue: true },
-    { name: "tool", takesValue: true },
-  ],
-  positionals: { least: 0, most: 2 },
-  handler: runCall,
-};

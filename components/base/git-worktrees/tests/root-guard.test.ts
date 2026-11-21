@@ -36,6 +36,7 @@ function recordingContext(ran: CommandRequest[]): ScriptContext {
     settings: {},
     now: () => new Date(0),
     spend: answeredUnused,
+    random: answeredUnused,
     caller: undefined,
     skillInput: undefined,
   };

@@ -387,6 +387,8 @@ Held by: review; linter (`prefer-const`) for part. Source: Google TypeScript sty
 
 No `export let`. No variable at the top of a module that changes after the module loads. State lives in a value that is passed in (TS-17).
 
+One exception: a cache, filled when first used, of a pure function's result, such as a compiled schema validator. It is held only through one small named helper (in this kit `madeOnFirstUse` in `bay/value-check.ts`), or in a map keyed by the content it was made from, and only when the result depends on nothing but that content, is the same for every caller in the process, and holds no trust, approvals, config or anything a test must reset. A make that throws is not kept: the next use makes it again and fails again.
+
 ```ts
 // good
 function counted(tally: Tally, word: string): Tally {

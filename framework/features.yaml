@@ -22,6 +22,7 @@ features:
       - bay/generated/workflow.ts
       - bay/answers.ts
       - bay/protocol-json.ts
+      - bay/item-words.ts
       - bay/yaml-text.ts
       - bay/value-check.ts
       - bay/given-schema.ts
@@ -33,6 +34,7 @@ features:
     purpose: The real adapters for the ports - files, clock, processes, network, terminal.
     entry:
       - bay/node-ports.ts
+      - bay/kernel-ports.ts
     private:
       - bay/owner-only.ts
     may_import:
@@ -142,11 +144,13 @@ features:
       - bay/runs/choices.ts
       - bay/runs/card.ts
       - bay/runs/cited-step.ts
+      - bay/runs/item-name.ts
       - bay/runs/hook-seen.ts
       - bay/runs/packed-output.ts
       - bay/runs/foreach-steps.ts
       - bay/runs/workflow-scope.ts
       - bay/runs/script-steps.ts
+      - bay/runs/drawn-values.ts
       - bay/runs/run-answers.ts
       - bay/runs/run-ending.ts
       - bay/runs/sqlite-rows.ts
@@ -233,6 +237,7 @@ features:
     entry:
       - bay/cli.ts
       - bay/mcp.ts
+      - bay/bay-command.ts
     private:
       - bay/command-line.ts
       - bay/command-context.ts
@@ -252,6 +257,7 @@ features:
       - bay/run-report.ts
       - bay/waiting-report.ts
       - bay/approval-card.ts
+      - bay/owner-source.ts
       - bay/terminal.ts
       - bay/trust-card.ts
       - bay/last-resort.ts

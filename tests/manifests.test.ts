@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
+import { layoutOf } from "../bay/layout.ts";
+import { nodeFileSystem } from "../bay/node-ports.ts";
 import {
   inspectSystem,
   loadSystem,
@@ -612,6 +617,10 @@ const written = { items: [{ id: "a" }, { id: "b" }] };
 
 const afterWrite = { trigger: { topic: "tea" }, outputs: new Map([["write", written]]) };
 
+const grammar =
+  "write $trigger, $item, $settings.<key> or $steps.<id>.output; $trigger, $item and $steps.<id>.output take " +
+  "an optional dotted path such as .items.0. Every value that starts with $ is read as a reference.";
+
 describe("a workflow target's resolve", () => {
   test("$trigger resolves to the trigger", async () => {
     const target = await workflowTarget("briefing", "workflows/morning.yaml");
@@ -685,12 +694,7 @@ describe("a workflow target's resolve", () => {
     const target = await workflowTarget("briefing", "workflows/morning.yaml");
     assert.deepEqual(target.resolve("$nothing", afterWrite), {
       ok: false,
-      problems: [
-        sentence(
-          "$nothing is not a reference: write $trigger, $item, $settings.<key> or $steps.<id>.output with an optional " +
-            "dotted path such as .items.0. Every value that starts with $ is read as a reference.",
-        ),
-      ],
+      problems: [sentence(`$nothing is not a reference: ${grammar}`)],
     });
     assert.deepEqual(target.resolve("$steps.write.output.count", afterWrite), {
       ok: false,
@@ -719,17 +723,79 @@ describe("a workflow target's resolve", () => {
     assert.deepEqual(target.resolve("$item", withItem), { ok: true, value: "x" });
     assert.deepEqual(target.resolve("$settings.lookback", withItem), { ok: true, value: "3d" });
     assert.deepEqual(target.resolve("$steps.write.output.items.0.id", withItem), { ok: true, value: "a" });
-    for (const text of ["$", "$trigger.topic", "$item.id", "$steps.write", "$steps.write.input", "$settings", "$x"]) {
+    for (const text of [
+      "$",
+      "$trigger.",
+      "$trigger..topic",
+      "$triggers",
+      "$trigger.a b",
+      "$trigger.tags.1+",
+      "$item.a b",
+      "$item.slice/name",
+      "$item.",
+      "$item..id",
+      "$steps.write",
+      "$steps.write.input",
+      "$settings",
+      "$x",
+    ]) {
       const resolved = target.resolve(text, withItem);
       assert.ok(!resolved.ok, text);
       assert.deepEqual(
         resolved.problems.map((problem) => problem.message),
-        [
-          `${text} is not a reference: write $trigger, $item, $settings.<key> or $steps.<id>.output with an optional ` +
-            "dotted path such as .items.0. Every value that starts with $ is read as a reference.",
-        ],
+        [`${text} is not a reference: ${grammar}`],
       );
     }
+  });
+
+  test("$trigger takes a dotted path as an output does, and a path that leads nowhere says what is there", async () => {
+    const target = await workflowTarget("briefing", "workflows/morning.yaml");
+    const scope = { ...afterWrite, trigger: { request: { slice: "TD1" }, tags: ["a", "b"] } };
+    assert.deepEqual(target.resolve("$trigger.request.slice", scope), { ok: true, value: "TD1" });
+    assert.deepEqual(target.resolve("$trigger.tags.0", scope), { ok: true, value: "a" });
+    assert.deepEqual(target.resolve("$trigger.tags.2", scope), {
+      ok: false,
+      problems: [sentence("$trigger.tags.2 resolves to nothing: $trigger.tags has no 2; it is a list of 2 elements.")],
+    });
+    assert.deepEqual(target.resolve("$trigger.tags.1x", scope), {
+      ok: false,
+      problems: [
+        sentence("$trigger.tags.1x resolves to nothing: $trigger.tags has no 1x; it is a list of 2 elements."),
+      ],
+    });
+    assert.deepEqual(target.resolve("$trigger.tags.01", scope), {
+      ok: false,
+      problems: [
+        sentence("$trigger.tags.01 resolves to nothing: $trigger.tags has no 01; it is a list of 2 elements."),
+      ],
+    });
+    assert.deepEqual(target.resolve("$trigger.request.title", afterWrite), {
+      ok: false,
+      problems: [
+        sentence(
+          "$trigger.request.title resolves to nothing: $trigger has no request; it is a mapping with the keys topic.",
+        ),
+      ],
+    });
+  });
+
+  test("$item takes a dotted path as an output does, and a path that leads nowhere says what is there", async () => {
+    const target = await workflowTarget("briefing", "workflows/morning.yaml");
+    const withItem = { ...afterWrite, item: { slice: { name: "TD1" }, tags: ["a"] } };
+    assert.deepEqual(target.resolve("$item.slice.name", withItem), { ok: true, value: "TD1" });
+    assert.deepEqual(target.resolve("$item.tags.0", withItem), { ok: true, value: "a" });
+    assert.deepEqual(target.resolve("$item.tags.0x", withItem), {
+      ok: false,
+      problems: [sentence("$item.tags.0x resolves to nothing: $item.tags has no 0x; it is a list of 1 element.")],
+    });
+    assert.deepEqual(target.resolve("$item.slice.title", withItem), {
+      ok: false,
+      problems: [
+        sentence(
+          "$item.slice.title resolves to nothing: $item.slice has no title; it is a mapping with the keys name.",
+        ),
+      ],
+    });
   });
 
   test("references resolve whole against the trigger, step outputs, the item and settings", async () => {
@@ -786,10 +852,7 @@ describe("a workflow target's resolve", () => {
         sentence(
           "input.first: $steps.nope.output resolves to nothing: no step nope has finished before it (available: write).",
         ),
-        sentence(
-          "input.second: $bad is not a reference: write $trigger, $item, $settings.<key> or $steps.<id>.output " +
-            "with an optional dotted path such as .items.0. Every value that starts with $ is read as a reference.",
-        ),
+        sentence(`input.second: $bad is not a reference: ${grammar}`),
       ],
     });
   });
@@ -1253,6 +1316,45 @@ describe("inspectSystem", () => {
       inspection.notices.map((notice) => [notice.file, notice.message.split(" (")[0]]),
       [["kit:components/modes/todo/mode.yaml", "Mode todo of the kit does not load"]],
     );
+  });
+
+  test("a broken workflow of a kit mode stops nothing while the mode is not active, and is a problem once it is", async () => {
+    const briefing = { ...briefingMode, workflows: ["workflows/broken.yaml"] };
+    const files = {
+      ...projectFiles(),
+      "/kit/components/modes/briefing/mode.yaml": yamlText(briefing),
+      "/kit/components/modes/briefing/workflows/broken.yaml": "name: broken\nsteps: [\n",
+    };
+    const inactive = await inspectionOf({ files, layout: separateLayout });
+    assert.deepEqual([inactive.problems, inactive.notices], [[], []]);
+    const activeConfig = yamlText({ ...config, modes: ["notes", "briefing"] });
+    const active = await inspectionOf({
+      files: { ...files, "/project/agentbay.config.yaml": activeConfig },
+      layout: separateLayout,
+    });
+    assert.deepEqual(
+      active.problems.map((problem) => problem.file),
+      ["kit:components/modes/briefing/workflows/broken.yaml"],
+    );
+  });
+
+  test("a kit mode not active whose workflow path is a folder on disk stops nothing", async () => {
+    const root = await mkdtemp(join(tmpdir(), "agentbay-folder-workflow-"));
+    try {
+      const briefing = { ...briefingMode, workflows: ["workflows/daily.yaml"] };
+      const files = { ...projectFiles(), "/kit/components/modes/briefing/mode.yaml": yamlText(briefing) };
+      for (const [path, text] of Object.entries(files)) {
+        await mkdir(dirname(join(root, path)), { recursive: true });
+        await writeFile(join(root, path), text, "utf8");
+      }
+      await mkdir(join(root, "kit/components/modes/briefing/workflows/daily.yaml"), { recursive: true });
+      const onDisk = layoutOf({ kit: join(root, "kit"), project: join(root, "project") });
+      const inspection = await inspectSystem(nodeFileSystem, onDisk);
+      assert.deepEqual([inspection.problems, inspection.notices], [[], []]);
+      assert.ok((await loadSystem(nodeFileSystem, onDisk)).ok);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
 

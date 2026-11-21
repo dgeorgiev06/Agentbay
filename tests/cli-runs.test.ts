@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync, readdirSync, readlinkSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { Json } from "../bay/contracts.ts";
@@ -321,6 +322,7 @@ test("runs shows which run and step asked for a run that call_action started", a
 test("resume --extend raises a spent budget and the run continues; too little waits again; --stop ends it", async () => {
   await withProject(async (project) => {
     const root = ["--project", project.root];
+    const owner = { terminal: fakeTerminal({ interactive: true, answer: "yes" }) };
     const started = runOf((await bay(["call", "greeter.tally", '{"name":"Ada"}', ...root, "--json"])).json);
     const runId = textField(started, "id") ?? "";
     assert.equal(textField(started, "waitingFor"), "budget");
@@ -329,9 +331,9 @@ test("resume --extend raises a spent budget and the run continues; too little wa
       limit: 5,
       spent: 10,
     });
-    const little = runOf((await bay(["resume", runId, "--extend", "tokens=2", ...root, "--json"])).json);
+    const little = runOf((await bay(["resume", runId, "--extend", "tokens=2", ...root, "--json"], owner)).json);
     assert.equal(textField(little, "waitingFor"), "budget");
-    const enough = await bay(["resume", runId, "--extend", "tokens=3, usd=1", ...root, "--json"]);
+    const enough = await bay(["resume", runId, "--extend", "tokens=3, usd=1", ...root, "--json"], owner);
     assert.equal(enough.exitCode, 0);
     assert.equal(textField(runOf(enough.json), "status"), "done");
     assert.deepEqual(fieldOf(runOf(enough.json), "output"), { greeting: "Hello, Ada" });
@@ -339,9 +341,9 @@ test("resume --extend raises a spent budget and the run continues; too little wa
       runOf((await bay(["call", "greeter.tally", '{"name":"Bo"}', ...root, "--json"])).json),
       "id",
     );
-    const stopped = await bay(["resume", other ?? "", "--stop", ...root, "--json"]);
+    const stopped = await bay(["resume", other ?? "", "--stop", ...root, "--json"], owner);
     assert.equal(stopped.exitCode, 1);
-    assert.equal(textField(runOf(stopped.json), "reason"), "The owner stopped the run.");
+    assert.equal(textField(runOf(stopped.json), "reason"), "owner at the terminal stopped the run.");
   });
 });
 
@@ -384,8 +386,38 @@ test("resume --rerun runs again a step with effects that an unexpected error lef
     );
     const asked = runOf((await bay(["resume", runId ?? "", ...root, "--json"])).json);
     assert.equal(textField(asked, "waitingFor"), "owner");
-    const rerun = await bay(["resume", runId ?? "", "--rerun", ...root, "--json"]);
+    const owner = { terminal: fakeTerminal({ interactive: true, answer: "yes" }) };
+    const rerun = await bay(["resume", runId ?? "", "--rerun", ...root, "--json"], owner);
     assert.equal(rerun.exitCode, 0, rerun.output);
     assert.equal(textField(runOf(rerun.json), "waitingFor"), "skill");
   });
 });
+
+const openFiles = "/proc/self/fd";
+
+function filesHeldOpen(): readonly string[] {
+  return readdirSync(openFiles).flatMap((handle) => {
+    try {
+      return [readlinkSync(join(openFiles, handle))];
+    } catch {
+      return [];
+    }
+  });
+}
+
+test(
+  "a command has closed the kernel's database before it returns",
+  { skip: existsSync(openFiles) ? false : `${openFiles} lists no open files on this platform` },
+  async () => {
+    await withProject(async (project) => {
+      const database = join(project.root, ".agentbay", "kernel.db");
+      const ran = await bay(["call", "writer.compose", '{"name":"Ada"}', "--project", project.root, "--json"]);
+      assert.ok(existsSync(database), JSON.stringify(ran.json));
+      await bay(["runs", taskOf(ran.json).runId, "--project", project.root, "--json"]);
+      assert.deepEqual(
+        filesHeldOpen().filter((file) => file.startsWith(database)),
+        [],
+      );
+    });
+  },
+);

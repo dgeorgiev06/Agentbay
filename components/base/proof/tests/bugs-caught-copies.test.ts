@@ -83,6 +83,7 @@ function contextOf(asked: Asked, unmade: boolean): ScriptContext {
     settings: { links: ["node_modules"] },
     now: () => new Date("2026-11-18T10:00:00Z"),
     spend: unanswered,
+    random: unanswered,
     caller: undefined,
     skillInput: undefined,
   };

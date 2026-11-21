@@ -26,6 +26,7 @@ import { skillWaiting, storedWaiting } from "./waiting.ts";
 import { answerableSkill } from "./run-answers.ts";
 import { isLockedError } from "../database-lock.ts";
 import { markIn, type PartMark } from "./workflow-part.ts";
+import { shownStepDetail } from "./step-detail.ts";
 
 type RunsNeeds = {
   readonly project: string;
@@ -112,9 +113,10 @@ export type Runs = {
   readonly show: (runId: string) => Promise<Outcome<Run>>;
   readonly list: () => Promise<readonly RunSummary[]>;
   readonly approve: (runId: string, decision: Decision) => Promise<Outcome<Run>>;
-  readonly resume: (runId: string, options?: { readonly rerun: boolean }) => Promise<Outcome<Run>>;
-  readonly extend: (runId: string, extra: Budget) => Promise<Outcome<Run>>;
-  readonly stop: (runId: string) => Promise<Outcome<Run>>;
+  readonly resume: (runId: string) => Promise<Outcome<Run>>;
+  readonly rerun: (runId: string, by: string) => Promise<Outcome<Run>>;
+  readonly extend: (runId: string, extra: Budget, by: string) => Promise<Outcome<Run>>;
+  readonly stop: (runId: string, by: string) => Promise<Outcome<Run>>;
   readonly wakeDue: () => Promise<readonly Outcome<Run>[]>;
   readonly reissueTask: (runId: string, stepKey?: string) => Promise<Outcome<Run>>;
   readonly task: (token: string, tool: string) => Promise<Outcome<Task>>;
@@ -152,8 +154,8 @@ function refusal(message: string, fix?: string): Outcome<never> {
 }
 
 function stepOf(record: StepRecord): RunStep {
-  const { key, kind, startedAt, input, detail } = record;
-  const base = { key, kind, startedAt, input, detail };
+  const { key, kind, startedAt, input } = record;
+  const base = { key, kind, startedAt, input, detail: shownStepDetail(record) };
   switch (record.status) {
     case "started":
       return { ...base, status: record.status };
@@ -504,10 +506,10 @@ function runsOf(opened: Opened): Runs {
             };
       return changed(opened, runId, () => engine.approve(runId, stepKey, { hash, by, ...answer }));
     },
-    resume: (runId, options) =>
-      changed(opened, runId, () => engine.resume(runId, { rerunUnfinished: options?.rerun ?? false })),
-    extend: (runId, extra) => changed(opened, runId, () => engine.extendBudget(runId, extra)),
-    stop: (runId) => changed(opened, runId, () => engine.stop(runId)),
+    resume: (runId) => changed(opened, runId, () => engine.resume(runId)),
+    rerun: (runId, by) => changed(opened, runId, () => engine.rerun(runId, by)),
+    extend: (runId, extra, by) => changed(opened, runId, () => engine.extendBudget(runId, extra, by)),
+    stop: (runId, by) => changed(opened, runId, () => engine.stop(runId, by)),
     wakeDue: async () => {
       const woken = await engine.tick(needs.clock.now());
       return Promise.all(woken.map((result) => resultOf(opened, result, shownOnly.issue)));

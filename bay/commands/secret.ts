@@ -1,11 +1,8 @@
 import { refusedResult, succeeded, usageResult, type CommandResult, type Invocation } from "../command-context.ts";
-import type { Command } from "../command-line.ts";
 import { secretStoreOf } from "../kernel.ts";
 import { secretNamePattern } from "../policy.ts";
 
 type Action = "set" | "check";
-
-const usage = "secret set <NAME> | secret check <NAME>";
 
 function environmentHint(name: string): string {
   return `Set AGENTBAY_SECRET_${name} in the environment that runs bay, for example in your shell profile.`;
@@ -44,7 +41,7 @@ function actionOf(text: string): Action | undefined {
   return text === "set" || text === "check" ? text : undefined;
 }
 
-function runSecret(invocation: Invocation): Promise<CommandResult> {
+export function runSecret(invocation: Invocation): Promise<CommandResult> {
   const [actionText = "", name = ""] = invocation.positionals;
   const action = actionOf(actionText);
   if (action === undefined || !secretNamePattern.test(name)) {
@@ -52,7 +49,7 @@ function runSecret(invocation: Invocation): Promise<CommandResult> {
       action === undefined
         ? `secret takes set or check, not ${actionText}.`
         : `${name} is not a secret name such as API_TOKEN.`;
-    return Promise.resolve(usageResult(message, usage));
+    return Promise.resolve(usageResult(message, invocation.usage));
   }
   switch (action) {
     case "set":
@@ -61,12 +58,3 @@ function runSecret(invocation: Invocation): Promise<CommandResult> {
       return checkSecret(invocation, name);
   }
 }
-
-export const secretCommand: Command = {
-  name: "secret",
-  summary: "Store a secret in the macOS keychain from an interactive terminal, or check that one can be found.",
-  usage,
-  options: [],
-  positionals: { least: 2, most: 2 },
-  handler: runSecret,
-};

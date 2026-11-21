@@ -94,7 +94,9 @@ test("config prints every setting of the config schema and of each mode's settin
       'skillSteps.run: one of "with-the-hook", "without-the-hook" (with-the-hook, the default: the kernel takes a ' +
         "skill step's output only when the agentbay hook saw the step's agent hand it in. without-the-hook: the " +
         'kernel takes it, and the run records for each skill step that no hook saw it.)\n  current: "without-the-hook"',
-      'approvals.from: list of one of "terminal", "chat" (The channels approve accepts; without this setting only terminal.)\n  current: not set',
+      'approvals.from: list of one of "terminal", "chat" (The channels an approval of a run and the ' +
+        "owner's answers to bay resume are taken from; without this setting only terminal. Trust is given at a " +
+        "terminal whatever it lists, and from chat only when it lists chat.)\n  current: not set",
       'settings.writer.signature: string (The words that end every note.)\n  current: "Yours, the writer"',
     ]) {
       assert.ok(ran.output.includes(expected), `missing:\n${expected}\nin:\n${ran.output}`);

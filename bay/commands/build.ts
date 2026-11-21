@@ -1,5 +1,4 @@
 import { problemsResult, succeeded, withKernel, type CommandResult, type Invocation } from "../command-context.ts";
-import type { Command } from "../command-line.ts";
 import { loadAdapter, planAgents } from "../build.ts";
 import type { Kernel } from "../kernel.ts";
 import type { Outcome } from "../outcome.ts";
@@ -28,7 +27,7 @@ async function built(invocation: Invocation, kernel: Kernel): Promise<Outcome<re
   });
 }
 
-function runBuild(invocation: Invocation): Promise<CommandResult> {
+export function runBuild(invocation: Invocation): Promise<CommandResult> {
   return withKernel(invocation, async (kernel) => {
     const outcome = await built(invocation, kernel);
     if (!outcome.ok) {
@@ -39,15 +38,3 @@ function runBuild(invocation: Invocation): Promise<CommandResult> {
     return succeeded({ paths: [...outcome.value] }, lines.join("\n"));
   });
 }
-
-export const buildCommand: Command = {
-  name: "build",
-  summary: "Write the adapter's agent files for every skill step; --clean removes what a build wrote.",
-  usage: "build [--clean] [--adapter <name>]",
-  options: [
-    { name: "clean", takesValue: false },
-    { name: "adapter", takesValue: true },
-  ],
-  positionals: { least: 0, most: 0 },
-  handler: runBuild,
-};

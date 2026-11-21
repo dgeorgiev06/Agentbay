@@ -36,6 +36,7 @@ const fitting: { readonly [Name in OperationName]: Json } = {
   "events.emit": null,
   call: { called: true },
   spend: null,
+  random: "0f1e2d3c",
   "commands.run": ran,
   "schemas.read": { state: "valid", schema: { type: "object", required: ["day"] }, parts: {} },
 };
@@ -98,6 +99,7 @@ async function everyMember(context: ScriptContext): Promise<readonly Answer<Json
     await context.commands.run(command),
     await context.call("items-store.put", { day: "2026-11-17" }),
     await context.spend({ items: 2, usd: 0.25 }),
+    await context.random(4),
     await context.schemas.check("schemas/day.json", { day: "2026-11-17" }),
     await context.schemas.checkAgainst({ type: "object", required: ["day"] }, { day: "2026-11-17" }),
   ];
@@ -129,6 +131,7 @@ test("each member of the context asks for its own operation with the request bui
     ["commands.run", { name: "changes", arguments: ["--short"], folder: ".", timeLimitSeconds: 30 }],
     ["call", { reference: "items-store.put", input: { day: "2026-11-17" } }],
     ["spend", { spending: { items: 2, usd: 0.25 } }],
+    ["random", { bytes: 4 }],
     ["schemas.read", { schema: "schemas/day.json" }],
   ]);
 });
@@ -159,6 +162,7 @@ test("an answer that fits its operation's result reaches the script as it came",
     { ok: true, value: ran },
     { ok: true, value: { called: true } },
     { ok: true, value: null },
+    { ok: true, value: "0f1e2d3c" },
     { ok: true, value: { passed: true, value: { day: "2026-11-17" } } },
     { ok: true, value: { passed: true, value: { day: "2026-11-17" } } },
   ]);

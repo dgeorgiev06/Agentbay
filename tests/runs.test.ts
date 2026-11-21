@@ -169,7 +169,7 @@ test("resume with rerun runs again a step with effects that did not finish", asy
   const asked = runOf(await runs.resume(id));
   assert.ok(asked.state.status === "waiting" && asked.state.waiting.reason === "owner");
   assert.equal(asked.state.waiting.stepKey, "0");
-  const rerun = runOf(await runs.resume(id, { rerun: true }));
+  const rerun = runOf(await runs.rerun(id, "The owner"));
   assert.deepEqual(rerun.state, { status: "done", output: { note: 1 } });
   close();
 });
@@ -181,9 +181,9 @@ test("extend continues a run that waits for budget, and show gives the same over
   assert.ok(state.status === "waiting" && state.waiting.reason === "budget");
   assert.deepEqual(state.waiting.overrun, { measure: "items", limit: 1, spent: 2 });
   assert.deepEqual(runOf(await runs.show(started.id)).state, state);
-  const little = runOf(await runs.extend(started.id, { items: 0 }));
+  const little = runOf(await runs.extend(started.id, { items: 0 }, "The owner"));
   assert.equal(little.state.status, "waiting");
-  const extended = runOf(await runs.extend(started.id, { items: 10 }));
+  const extended = runOf(await runs.extend(started.id, { items: 10 }, "The owner"));
   assert.equal(extended.state.status, "done");
   close();
 });
@@ -196,7 +196,7 @@ test("an extend too small for the step waits again there, and show gives the new
     waiting: { reason: "budget", stepKey: "2", overrun: { measure: "usd", limit: 1.5, spent: 2 } },
   };
   assert.deepEqual(started.state, first);
-  const little = runOf(await runs.extend(started.id, { usd: 0.25 }));
+  const little = runOf(await runs.extend(started.id, { usd: 0.25 }, "The owner"));
   const again = {
     status: "waiting",
     waiting: { reason: "budget", stepKey: "2", overrun: { measure: "usd", limit: 1.75, spent: 2 } },
@@ -209,9 +209,9 @@ test("an extend too small for the step waits again there, and show gives the new
 test("stop ends a waiting run, and an ended run refuses to be stopped again", async () => {
   const { runs, close } = await openedRuns();
   const started = runOf(await runs.start({ action: "notes.draft" }, {}));
-  const stopped = runOf(await runs.stop(started.id));
+  const stopped = runOf(await runs.stop(started.id, "The owner"));
   assert.deepEqual(stopped.state, { status: "failed", reason: "The owner stopped the run." });
-  assert.match(messagesOf(await runs.stop(started.id)), /has ended \(failed\)/);
+  assert.match(messagesOf(await runs.stop(started.id, "The owner")), /has ended \(failed\)/);
   close();
 });
 

@@ -319,6 +319,7 @@ const brokerMethods: { readonly [Name in Parameters<StepBroker["ask"]>[0]]: Meth
     usesPorts: true,
   },
   spend: { call: (broker) => broker.ask("spend", { spending: { usd: 1 } }), needs: ["spend"], usesPorts: false },
+  random: { call: (broker) => broker.ask("random", { bytes: 16 }), needs: [], usesPorts: false },
   call: {
     call: (broker) => broker.ask("call", { reference: "items-store.put", input: {} }),
     needs: [],

@@ -102,9 +102,10 @@ every kind the table maps to `notBuilt` (`components/base/proof/scripts/kinds.ts
 ### Step by step
 
 **1, `slice`. Carried with a change inside forge's folder.** A new script `scripts/slice.ts` and its schemas.
-It is needed because a reference to the trigger has no path: `$trigger` is resolved whole, and only
-`$steps.<id>.output` takes a dotted path (`bay/manifests/references.ts:33`, `:45-47`, `:55-59`). So the first
-step hands the trigger's parts on as its output. The first step receives the trigger as its input because a step
+It was needed because a reference to the trigger had no path when this was written: `$trigger` was resolved
+whole, and only `$steps.<id>.output` took a dotted path. Since KW2, `$trigger` takes one too (`$trigger.<path>`,
+`bay/manifests/references.ts`), so a later step may read one field of the trigger; the first step still hands the
+trigger's parts on as its output, as it did. The first step receives the trigger as its input because a step
 without `input` gets the output of the step before, and the first step's "before" is the trigger
 (`workflow-steps.ts:97-103`, `:348-356`). It checks the slice against proof@1's schema with
 `context.schemas.check` (`bay/sdk.ts:108-110`, TB1), which may name an interface's schema by reference, as W1's

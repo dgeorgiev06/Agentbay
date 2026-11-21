@@ -4,7 +4,7 @@ import type { Json } from "../bay/contracts.ts";
 import { toJson } from "../bay/json.ts";
 import { runCommandLine, type CommandLineOutput } from "../bay/command-line.ts";
 import { commands } from "../bay/commands.ts";
-import { nodeKernelPorts, type KernelPorts } from "../bay/kernel.ts";
+import { nodeKernelPorts, type KernelPorts } from "../bay/kernel-ports.ts";
 import { testEnvironment } from "./kernel-fixture.ts";
 import { kit } from "./project-fixture.ts";
 
@@ -59,6 +59,14 @@ export async function bay(argv: readonly string[], changes: ContextChanges = {})
     json = JSON.parse(output.output);
   }
   return { ...output, json };
+}
+
+export async function commandNames(): Promise<readonly string[]> {
+  const listed = (await bay(["--help"])).output.split("\n\n")[1] ?? "";
+  return listed
+    .split("\n")
+    .slice(1)
+    .map((line) => line.trim().split(" ")[0] ?? "");
 }
 
 export function listOf(value: Json | undefined): readonly Json[] {

@@ -1,6 +1,6 @@
 import { type Answer, failed, manifestOf } from "../answers.ts";
 import type { ChildProcesses, Clock, FileInspector, FileSystem, Http, Processes, ThrowawayFolders } from "../ports.ts";
-import type { ActionCaller, EventSink, Json, Permissions, StepPlace } from "../contracts.ts";
+import type { ActionCaller, EventSink, Json, Permissions, RandomDrawer, StepPlace } from "../contracts.ts";
 import { DatabaseProcess } from "./database-process.ts";
 import { databaseEntries } from "./database-operations.ts";
 import { fileEntries } from "./file-operations.ts";
@@ -45,6 +45,7 @@ type StepOptions = StepServices & {
   readonly place: StepPlace;
   readonly limits?: Partial<StepBrokerLimits>;
   readonly call?: ActionCaller;
+  readonly random?: RandomDrawer;
   readonly stepTime?: StepTime;
 };
 
@@ -85,6 +86,14 @@ function noCaller(stepKey: string): ActionCaller {
       status: "failed",
       reason: `The step ${stepKey} cannot call an action: only a script's step calls actions.`,
       spent: { items: 0, usd: 0, tokens: 0, minutes: 0 },
+    });
+}
+
+function noDrawer(stepKey: string): RandomDrawer {
+  return () =>
+    Promise.resolve({
+      status: "failed",
+      reason: `The step ${stepKey} cannot draw random values: only a script's step does.`,
     });
 }
 
@@ -210,6 +219,7 @@ function doingOf(options: StepOptions, state: StepState): Doing {
     limits: state.limits,
     record: state.record,
     call: options.call ?? noCaller(options.place.stepKey),
+    random: options.random ?? noDrawer(options.place.stepKey),
     addSpending: (amounts) => {
       spent.items += amounts.items;
       spent.usd += amounts.usd;

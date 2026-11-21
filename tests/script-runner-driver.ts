@@ -37,6 +37,8 @@ async function main(root: string): Promise<void> {
     timeLimitSetBy: "kernel",
     call: () =>
       Promise.resolve({ status: "failed", reason: "no calls", spent: { items: 0, usd: 0, tokens: 0, minutes: 0 } }),
+    random: () => Promise.resolve({ status: "failed", reason: "no random values" }),
+    startedAt: new Date(),
   });
   process.stdout.write(JSON.stringify(outcome));
 }

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import type { Drawn, Json, ScriptRequest } from "../bay/contracts.ts";
 import type { Action } from "../bay/generated/mode.ts";
@@ -48,9 +49,18 @@ function recorded(attempts: Attempt[], request: ScriptRequest, values: readonly 
   attempts.push({ values, now: request.startedAt.toISOString() });
 }
 
-function drawnOf(run: Run, key: string): Json | undefined {
-  const step = run.steps.find((candidate) => candidate.key === key);
-  return fieldOf(step?.detail ?? null, "drawn");
+function shownDetailOf(run: Run, key: string): Json | undefined {
+  return run.steps.find((candidate) => candidate.key === key)?.detail;
+}
+
+function storedDetailOf(database: string, key: string): string {
+  const opened = new DatabaseSync(database, { readOnly: true });
+  try {
+    const row = opened.prepare("select detail from steps where key = ?").get(key);
+    return typeof row?.detail === "string" ? row.detail : "";
+  } finally {
+    opened.close();
+  }
 }
 
 async function drawnIdOf(runs: Awaited<ReturnType<typeof openedRuns>>["runs"]): Promise<string> {
@@ -58,7 +68,7 @@ async function drawnIdOf(runs: Awaited<ReturnType<typeof openedRuns>>["runs"]): 
   return listed?.id ?? "";
 }
 
-test("a step that died after drawing gets the same values and time when the owner runs it again", async () => {
+test("a step that died after drawing gets the same values and time when the owner runs it again, kept packed", async () => {
   const attempts: Attempt[] = [];
   const draw: Script = async (request) => {
     const values = [valueOf(await request.random(16)), valueOf(await request.random(8))];
@@ -67,7 +77,7 @@ test("a step that died after drawing gets the same values and time when the owne
       throw new Error("the process died");
     }
     recorded(attempts, request, [...values, valueOf(await request.random(4))]);
-    return finished({ values });
+    return finished({ drawn: values.length });
   };
   const opened = await openedRuns({ scripts: { "notes:scripts/log.ts": draw }, changes });
   assert.match(messagesOf(await opened.runs.start({ action: "notes.draw" }, {})), /the process died/);
@@ -84,7 +94,13 @@ test("a step that died after drawing gets the same values and time when the owne
   assert.match(first.values[1] ?? "", /^[0-9a-f]{16}$/);
   assert.match(second.values[2] ?? "", /^[0-9a-f]{8}$/);
   assert.deepEqual([first.now, second.now], [startTime.toISOString(), startTime.toISOString()]);
-  assert.deepEqual(drawnOf(done, "0"), second.values);
+  assert.deepEqual(shownDetailOf(done, "0"), { script: "scripts/log.ts", drawnValues: 3 });
+  const stored = storedDetailOf(opened.database, "0");
+  assert.ok(stored.includes('"drawn":'), stored);
+  for (const value of second.values) {
+    assert.ok(!stored.includes(value), "a drawn value is stored as text");
+    assert.ok(!JSON.stringify(done).includes(value), "a drawn value is shown in the run");
+  }
   opened.close();
 });
 
@@ -129,8 +145,8 @@ test("a foreach item's new attempt draws new values, and the first attempt's sta
   const [first, again] = byItem.get(0) ?? [];
   assert.ok(first !== undefined && again !== undefined);
   assert.notEqual(again, first);
-  assert.deepEqual(drawnOf(done, "each[0].do/0"), [first]);
-  assert.deepEqual(drawnOf(done, "each[0]~2.do/0"), [again]);
+  assert.equal(fieldOf(shownDetailOf(done, "each[0].do/0") ?? null, "drawnValues"), 1);
+  assert.equal(fieldOf(shownDetailOf(done, "each[0]~2.do/0") ?? null, "drawnValues"), 1);
   opened.close();
 });
 

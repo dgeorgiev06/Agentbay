@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import type { RandomDrawer } from "../contracts.ts";
+import type { Json, RandomDrawer } from "../contracts.ts";
+import { storedText, unpackedText } from "./packed-output.ts";
 
 const mostDrawnPerStep = 64;
 
@@ -37,6 +38,29 @@ function nextDraw(recorded: readonly string[], asked: Asked): NextDraw {
     };
   }
   return { kind: "fresh" };
+}
+
+export function packedDrawn(drawn: readonly string[]): string {
+  return storedText(JSON.stringify(drawn), "kept-packed");
+}
+
+function parsedList(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+export function unpackedDrawn(packed: Json | undefined): readonly string[] | undefined {
+  if (packed === undefined) {
+    return [];
+  }
+  const list = typeof packed === "string" ? parsedList(unpackedText(packed, "kept-packed")) : undefined;
+  if (!Array.isArray(list) || !list.every((value) => typeof value === "string")) {
+    return undefined;
+  }
+  return list.filter((value) => typeof value === "string");
 }
 
 type DrawnRecorder = (drawn: readonly string[]) => Promise<void>;

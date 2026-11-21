@@ -42,16 +42,29 @@ const clockMessage = "A mode script reads the time with context.now(), which a s
 const randomMessage =
   "A mode script draws random values with context.random(bytes), which a step run again gets back unchanged.";
 
-async function syntaxMessages(file: string, code: string): Promise<readonly string[]> {
+function isRuleEntry(value: unknown): value is Linter.RuleEntry {
+  return Array.isArray(value) && (value[0] === "error" || value[0] === 2);
+}
+
+async function syntaxRule(file: string): Promise<Linter.RuleEntry> {
   const config: unknown = await kitLint.calculateConfigForFile(file);
   const rules = typeof config === "object" && config !== null && "rules" in config ? config.rules : undefined;
   const rule =
     typeof rules === "object" && rules !== null && "no-restricted-syntax" in rules
       ? rules["no-restricted-syntax"]
       : undefined;
-  const linter = new Linter({ configType: "flat" });
-  const only = { files: ["**/*.ts"], languageOptions: { parser }, rules: { "no-restricted-syntax": rule } };
-  return linter.verify(code, [only], { filename: "probe.ts" }).map((found) => found.message);
+  return isRuleEntry(rule) ? rule : "off";
+}
+
+async function syntaxMessages(file: string, code: string): Promise<readonly string[]> {
+  const only = {
+    files: ["**/*.ts"],
+    languageOptions: { parser },
+    rules: { "no-restricted-syntax": await syntaxRule(file) },
+  };
+  return new Linter({ configType: "flat" })
+    .verify(code, [only], { filename: "probe.ts" })
+    .map((found) => found.message);
 }
 
 const scriptFile = "components/modes/notes/scripts/lib/probe.ts";

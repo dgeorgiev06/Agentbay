@@ -31,8 +31,12 @@ Both values are kept with the script step's own record:
   with the value appended, and only then answers the script. A value the script has seen is therefore always in
   the record. A step that draws nothing stores the same detail as before.
 
-No migration is needed: a detail is JSON and `drawn` is optional when read. Under a call kept packed
-(`calledOutputs: kept-packed`) the detail is packed with the record, as its input and output are.
+`drawn` is stored packed, as a kept output is (`bay/runs/packed-output.ts`), so a text search of `kernel.db`
+does not find a value, and a run shows only how many values a step drew (`drawnValues`), never the values. A
+value may be a secret of the mode's own, such as forge's leak mark, which a builder must not find in the project
+(forge's leak tests look for it in every file). Packing is not encryption: it keeps a value out of a search and
+out of `bay runs`, as it does a kept output, and nothing more. No migration is needed: a detail is JSON and
+`drawn` is optional when read.
 
 ## Replay or a fresh value
 

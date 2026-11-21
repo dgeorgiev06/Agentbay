@@ -365,6 +365,17 @@ describe("the wave's answer", () => {
         "as its own proof did not pass.",
     );
   });
+  test("a long title is shortened in the answer, both where a slice is left out and where it conflicts", () => {
+    const long = "The td3 mode counts what was added, removed and moved across every folder";
+    const third = { ...settled("TD3", ownFailed("TD3"), "1 must item failed."), title: long };
+    const conflict: Joined = { kind: "conflict", slice: "TD3", onto: ["TD1"], reason: "It conflicts in a.ts." };
+    assert.equal(
+      waveAnswer([...two, third], conflict, { kind: "not asked" }).words,
+      "Merge is not offered: TD3 (The td3 mode counts what was added, remo...) does not merge cleanly onto TD1 " +
+        "in the combined head; left out: TD3 (The td3 mode counts what was added, remo...), as its own proof did " +
+        "not pass.",
+    );
+  });
 });
 
 describe("which slices go into the combined head", () => {

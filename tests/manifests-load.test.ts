@@ -551,17 +551,19 @@ test("a reference to a step that is not defined earlier in its scope is reported
   findProblem(problems, workflowFile, "$steps.self.output names the step self");
 });
 
-test("$item outside a foreach is reported, and inside one it is accepted", async () => {
+test("$item outside a foreach is reported, with a path or without, and inside one it is accepted", async () => {
+  const inner = { id: "inner", action: "add", input: { text: "$item", title: "$item.title" } };
   const problems = await problemsOf(
     withWorkflowSteps([
       { id: "write", action: "add", input: { text: "$item" } },
-      { id: "each", foreach: "$item", steps: [{ id: "inner", action: "add", input: { text: "$item" } }] },
+      { id: "read", action: "add", input: { text: "$item.text" } },
+      { id: "each", foreach: "$item.slices", steps: [inner] },
     ]),
   );
   const outside = problems.filter((problem) => problem.message.includes("$item is used outside a foreach"));
   assert.deepEqual(
     outside.map((problem) => problem.path),
-    ["/steps/0/input/text", "/steps/1/foreach"],
+    ["/steps/0/input/text", "/steps/1/input/text", "/steps/2/foreach"],
   );
 });
 

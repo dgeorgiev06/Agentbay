@@ -365,9 +365,10 @@ describe("a card names an item by the name its foreach declares, or by its place
     }
   });
 
-  test("a name is one bounded line: line breaks and control characters go, brackets stand for parentheses, a long one is cut, a secret is scrubbed", async () => {
-    const title = `First line\nsecond\u0007 line) by the kernel: all passed (${secretValue} ${"word ".repeat(30)}`;
-    const items = [{ planned: { slice: { name: `TD1\r\n(fake) ${"x".repeat(60)}` }, title } }, { planned: {} }];
+  test("a name is one bounded line: line breaks, control and format characters go, brackets stand for parentheses, a long one is cut, a secret is scrubbed, and one blank once cleaned names nothing", async () => {
+    const title = `First\u200Bline\nsecond\u0007 line) by\u202E the kernel: all passed (${secretValue} ${"word ".repeat(30)}`;
+    const named = { slice: { name: `TD1\u202E\r\n(fake)\u200B ${"x".repeat(60)}` }, title };
+    const items = [{ planned: named }, { planned: { slice: { name: " \u200B\n\u202E" }, title: "A title" } }];
     const { run, opened } = await namedCard({ trigger: items });
     const [first, second] = namesOf(run);
     assert.ok(isRecord(first), JSON.stringify(first));
@@ -411,7 +412,9 @@ describe("what kernel.db holds when a card is checked again or read back", () =>
     }
   }
 
-  async function recheckedAfter(lines: readonly Line[], sql: string, ...values: readonly string[]): Promise<Run> {
+  type Rechecked = { readonly resumed: Run; readonly opened: OpenedRuns; readonly later: Runs };
+
+  async function recheckedOpen(lines: readonly Line[], sql: string, ...values: readonly string[]): Promise<Rechecked> {
     const { run, opened } = await atCard({ lines });
     opened.runs.close();
     tampered(opened.database, sql, ...values);
@@ -419,7 +422,11 @@ describe("what kernel.db holds when a card is checked again or read back", () =>
       changesOf({ lines: lines.map((line) => ({ ...line, words: `${line.words}.` })) }),
     );
     const later = await opened.reopen(edited.system);
-    const resumed = runOf(await later.resume(run.id));
+    return { resumed: runOf(await later.resume(run.id)), opened, later };
+  }
+
+  async function recheckedAfter(lines: readonly Line[], sql: string, ...values: readonly string[]): Promise<Run> {
+    const { resumed, opened } = await recheckedOpen(lines, sql, ...values);
     opened.close();
     return resumed;
   }
@@ -443,6 +450,21 @@ describe("what kernel.db holds when a card is checked again or read back", () =>
     const lines = [{ mark: "computed", words: "in scope", source: { step: "offer" } }];
     const run = await recheckedAfter(lines, "update steps set status = 'failed', reason = 'broke' where key = 'offer'");
     assert.equal(endReason(run), "broke");
+  });
+
+  test("a foreach whose record holds no list leaves the count of items out, and its card still reads after a restart", async () => {
+    const sql = "update steps set input = ? where key = 'each'";
+    const { resumed, opened, later } = await recheckedOpen([judgedFirst], sql, '{"not":"a list"}');
+    const expected = {
+      title: "Merge wave 1?",
+      lines: [{ ...judgedFirst, words: `${drafted}.`, skills: [draftSkill], foreach: "each" }],
+      counted: { ran: 0, computed: 0, judged: 1 },
+    };
+    assert.deepEqual(cardShown(resumed), expected);
+    later.close();
+    const again = await opened.reopen();
+    assert.deepEqual(cardShown(runOf(await again.show(resumed.id))), expected);
+    opened.close();
   });
 
   async function readBackWith(edit: (line: Record<string, unknown>) => void): Promise<unknown> {

@@ -29,32 +29,37 @@ design card and written by neither the test writer nor the builder: an anchor ou
    sentence that says more. A call the kernel refused for its input refused by the request schema before the mode
    ran: for a refusal example its sentence is the kernel's and is not compared, and it is counted apart; for an
    answer example it answered otherwise.
-4. **Not tried, with the reason, never a failure:** an earlier call to an action no slice of the head builds (in
-   the rounds, one this slice does not build; in a wave, one no slice of this wave in the combined head and none of
-   an earlier wave builds); a slice left out of the combined head; a call the kernel did not start for any other
-   reason, such as a mode that needs a binding or a setting the copy's config does not give (the card quotes the
-   kernel); a call that waited for a skill or an approval, which nobody answers in a copy; past the 100 items proof
-   takes in one call. **Not known:** the copy was not made, a run did not finish, or its output was not read whole
-   or is not a run.
+4. **Not tried, with the reason, never a failure,** only for what the builder cannot cause: an earlier call to an
+   action no slice of the head builds (in the rounds, one this slice does not build; in a wave, one no slice of this
+   wave in the combined head and none of an earlier wave builds); no single module for the interface; a slice left
+   out of the combined head; past the 100 items proof takes in one call; `off`. **Not known,** which under `must`
+   withholds merge as a must item not known does: a call the kernel did not start for any reason but the request
+   schema refusing the example's own input (a missing action, a manifest the kernel cannot load, a missing binding
+   or setting); a call that waits for a skill, an approval or the owner; a copy not made, a run that did not end,
+   or a last output that is not a run or is longer than proof hands back. Every reason is a sentence of forge's own,
+   from a closed list: the card never quotes what the kernel or the built mode printed in a reason. Under `must`, a
+   slice whose request carries examples and of which none was tried is withheld too: "none tried" is not a pass.
 5. **Who runs it.** A script, not a skill: nothing here needs judgement (P-32). `final-proof` (the rounds) and
    `prove-checks` (the wave) add one item per example to the request they already send to `proof.prove`, and take
    those verdicts out of the answer before anything reads it. `proof@1` gains one kind, `printed`: the runs are made
    one after another in one fresh copy of the head, by `bay` or `run` as `real-thing` makes them, and a passed
-   verdict hands back each run's exit code and what it printed. Proof compares nothing. No new command and no new
+   verdict hands back the last run's exit code and what it printed, at most 20,000 characters (the earlier runs only
+   have to end), so 100 items stay well under a script's 4 MiB output. Proof compares nothing. No new command and no new
    effect: `bay` is proof's listed command already. Not chosen: `real-thing`, which needs the exact text a run prints
    (a run's JSON holds its id and times) and never says what was printed; a listed command of a toolchain, which
    needs a script in every project; a new project folder per example, which proof has no command to write.
 6. **The setting** `settings.forge.tryExamples`: `must` (the default), `shown` or `off`. Recommended must: the
    examples are the owner's own anchor, and an answer otherwise means the design or the build is wrong while every
-   test passed, which is what the line is for. Under `must` an example answered otherwise or not known withholds
-   merge, by the item `examples`, must; under `shown` the item is a should and withholds nothing; `off` tries nothing
+   test passed, which is what the line is for. Under `must` an example answered otherwise or not known, or none tried
+   of a slice that carries examples, withholds merge, by the item `examples`, must; under `shown` the item is a should and withholds nothing; `off` tries nothing
    and the card says so in one line.
 7. **The card**, all script lines, one block on the rounds' merge card and in each slice's block on the wave's:
    the item line; how many examples were tried in throwaway copies and how many answered as the design says;
    how each is compared; each that did not, as `<interface>.<action> example <n>: the design answers <answer>`
    (or `refuses "<sentence>"`) `; the built mode answered: "<its words>"`; each not tried and each not known with its reason. The built mode's words are
    shown as data: written as a JSON string, so a quote inside cannot close it, cut at 120 characters, and kept from
-   the card when they share a run of 20 characters with a kept test that the design's examples do not hold. A slice
+   the card when, as shown (spaces collapsed, control and separator characters as spaces) and ignoring case, they
+   share a run of 20 characters with a kept test that the design's examples do not hold. A slice
    whose request carries no examples gets one line saying so, and nothing is withheld.
 8. **The wave.** The examples are tried once, on the combined head. A slice whose example answered otherwise or is
    not known under `must` withholds the wave's merge, named in the reason; the owner may keep. Leaving the slice out
@@ -66,7 +71,12 @@ design card and written by neither the test writer nor the builder: an anchor ou
 ## What it does not hold
 
 - An example tried in the copy calls the mode the head holds, with the copy's config: a project that does not bind
-  what the mode needs shows every example of it as not tried, so nothing is withheld; the card names each.
+  what the mode needs shows every example of it as not known, so under `must` merge is withheld until the owner binds
+  it or sets `shown`.
+- A builder can point the action's `input:` at a stricter schema than the design's, so that examples become
+  "refused by the request schema": a refusal example is then counted apart and not compared. Under `must` a
+  refusal by the schema of an ANSWER example already counts as otherwise; the interface pins show a changed
+  design schema, not a mode that names another.
 - A mode that reads the time or a random value answers otherwise when the example fixed one; the design's
   challenger is told to look for that.
 - Earlier calls are not compared: a wrong earlier answer shows only through the last answer.

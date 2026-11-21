@@ -49,7 +49,7 @@ Built. The item's runs are made one after another in one fresh copy of the head,
 
 ### printed
 
-Built. The item's runs are made one after another in one fresh copy of the head, each with `bay` or with `run`, as `real-thing` makes them. Proof compares nothing: a passed verdict hands back, in `printed`, each run's exit code and what it printed to its standard output, whole, for the caller to judge. Passed when every run ended and what it printed was read whole. A run that is not known, and a copy that could not be made, make the item inconclusive, and an inconclusive verdict hands back nothing printed. This is the kind forge uses to try a design's worked examples against a built mode, one item, and so one copy, per example. What `printed` holds is the head's own code's output, never a sentence of proof's; no detail or reason holds any of it.
+Built. The item's runs are made one after another in one fresh copy of the head, each with `bay` or with `run`, as `real-thing` makes them. Proof compares nothing: a passed verdict hands back, in `printed`, the last run's exit code and what it printed to its standard output, whole, for the caller to judge; the earlier runs only have to end. Passed when every run ended and the last printed at most 20,000 characters, so a hundred such items stay well inside a script's output limit. A run that is not known, and a copy that could not be made, make the item inconclusive, and an inconclusive verdict hands back nothing printed. This is the kind forge uses to try a design's worked examples against a built mode, one item, and so one copy, per example. What `printed` holds is the head's own code's output, never a sentence of proof's; no detail or reason holds any of it.
 
 ### count
 

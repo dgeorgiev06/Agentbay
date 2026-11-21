@@ -49,6 +49,17 @@ The values belong to one record, so the rule is the rule for finished calls: sam
 | A foreach item's new attempt after the owner's `--rerun` | new (`~<attempt>`) | fresh |
 | A workflow step or a called action run after another step | new | fresh |
 | The undo of an action | new (an undo key) | fresh |
+| The same key, run again by another script or mode than the one that drew (the action was changed between the two attempts) | same | dropped, fresh |
+
+Values are replayed only to the script that drew them: the detail records `mode` beside `drawn`, and a rerun
+compares the recorded script and mode with the step's. When they differ, the kernel drops the values, writes
+the detail with the script that runs now, and says so in the rerun's `step.started` event, in a field
+`changed`: "Step 0 ran scripts/log.ts of mode notes before and runs scripts/double.ts of mode notes now, so its 1
+recorded random value is dropped and fresh ones are drawn." With none drawn, the sentence ends "so it had drawn
+no random values." The run does not stop to ask the owner: the owner has already chosen to run the step again
+(or the action only reads), and the only other answer, replaying the old values, would hold the new script to
+values another script drew for its own decisions; a question would offer the owner nothing worth choosing.
+Calls a script made are still replayed by key whatever script runs (see "Not done here").
 
 ## Asking for more, or other, values on replay
 
@@ -92,6 +103,9 @@ Date(value)` is untouched.
 T1 to T5 are untouched. An agent's tools do not gain `random`, so an agent's step can do nothing it could not.
 
 ## Not done here
+
+- A finished call of a script is replayed by its key even when the script that runs again is another one. That
+  is older than KW3 and not changed here.
 
 - A clock that moves within a step. No script in the kit needs one; a step's time limits are the kernel's.
 - `performance.now()` and `process.hrtime()` are not refused: they measure, and no kit script uses them.

@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import type { Json, RandomDrawer } from "../contracts.ts";
+import { errorLine } from "../answers.ts";
+import type { Drawn, Json, RandomDrawer } from "../contracts.ts";
 import { storedText, unpackedText } from "./packed-output.ts";
 
 const mostDrawnPerStep = 64;
@@ -44,26 +45,36 @@ export function packedDrawn(drawn: readonly string[]): string {
   return storedText(JSON.stringify(drawn), "kept-packed");
 }
 
-function parsedList(text: string): unknown {
+function unpackedList(packed: string): unknown {
   try {
-    return JSON.parse(text);
+    return JSON.parse(unpackedText(packed, "kept-packed"));
   } catch {
     return undefined;
   }
+}
+
+function isText(value: unknown): value is string {
+  return typeof value === "string";
 }
 
 export function unpackedDrawn(packed: Json | undefined): readonly string[] | undefined {
   if (packed === undefined) {
     return [];
   }
-  const list = typeof packed === "string" ? parsedList(unpackedText(packed, "kept-packed")) : undefined;
-  if (!Array.isArray(list) || !list.every((value) => typeof value === "string")) {
-    return undefined;
-  }
-  return list.filter((value) => typeof value === "string");
+  const list = typeof packed === "string" ? unpackedList(packed) : undefined;
+  return Array.isArray(list) && list.every(isText) ? list : undefined;
 }
 
 type DrawnRecorder = (drawn: readonly string[]) => Promise<void>;
+
+function unrecorded(stepKey: string, index: number, error: unknown): Drawn {
+  return {
+    status: "failed",
+    reason:
+      `Random value ${String(index + 1)} of step ${stepKey} could not be recorded, so it is not given: ` +
+      errorLine(error),
+  };
+}
 
 export function drawerFor(stepKey: string, recorded: readonly string[], record: DrawnRecorder): RandomDrawer {
   const drawn = [...recorded];
@@ -82,8 +93,13 @@ export function drawerFor(stepKey: string, recorded: readonly string[], record: 
         const value = randomBytes(bytes).toString("hex");
         drawn.push(value);
         const snapshot = [...drawn];
-        written = written.then(() => record(snapshot));
-        await written;
+        const writing = written.then(() => record(snapshot));
+        written = writing.catch(() => undefined);
+        try {
+          await writing;
+        } catch (error) {
+          return unrecorded(stepKey, index, error);
+        }
         return { status: "done", value };
       }
     }

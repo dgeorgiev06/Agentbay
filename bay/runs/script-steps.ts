@@ -200,9 +200,55 @@ async function stopForCall(walk: Walk, stopped: StoppedAttempt): Promise<Progres
   return stopped.waiting;
 }
 
-async function noteRerun(walk: Walk, leaf: ScriptLeaf): Promise<void> {
-  const event = eventOf(walk, "step.started", { stepKey: leaf.key, kind: leaf.kind, rerun: true });
+async function noteRerun(walk: Walk, leaf: ScriptLeaf, changed: string | undefined): Promise<void> {
+  const told = changed === undefined ? {} : { changed };
+  const event = eventOf(walk, "step.started", { stepKey: leaf.key, kind: leaf.kind, rerun: true, ...told });
   await walk.services.store.append(event);
+}
+
+type Ran = {
+  readonly script: string;
+  readonly mode: string;
+};
+
+function droppedWords(count: number): string {
+  switch (count) {
+    case 0:
+      return "it had drawn no random values";
+    case 1:
+      return "its 1 recorded random value is dropped and fresh ones are drawn";
+    default:
+      return `its ${String(count)} recorded random values are dropped and fresh ones are drawn`;
+  }
+}
+
+function changedScript(recorded: ScriptDetail, leaf: ScriptLeaf): string | undefined {
+  const before: Ran = { script: recorded.script, mode: recorded.mode ?? leaf.place.mode };
+  const now: Ran = { script: leaf.script, mode: leaf.place.mode };
+  if (before.script === now.script && before.mode === now.mode) {
+    return undefined;
+  }
+  return (
+    `Step ${leaf.key} ran ${before.script} of mode ${before.mode} before and runs ${now.script} of mode ` +
+    `${now.mode} now, so ${droppedWords(recorded.drawn?.length ?? 0)}.`
+  );
+}
+
+function withoutValues(recorded: ScriptDetail, leaf: ScriptLeaf): ScriptDetail {
+  const { stoppedForCall } = recorded;
+  return stoppedForCall === undefined ? { script: leaf.script } : { script: leaf.script, stoppedForCall };
+}
+
+async function rerunDetail(walk: Walk, leaf: ScriptLeaf, record: StepRecord): Promise<ScriptDetail> {
+  const recorded = scriptDetailOf(record) ?? { script: leaf.script };
+  const changed = changedScript(recorded, leaf);
+  await noteRerun(walk, leaf, changed);
+  if (changed === undefined) {
+    return recorded;
+  }
+  const detail = withoutValues(recorded, leaf);
+  await changeDetail(walk, { key: leaf.key, kind: leaf.kind, detail });
+  return detail;
 }
 
 export async function runScript(walk: Walk, frame: ActionFrame, script: ScriptStep): Promise<Progress> {
@@ -240,7 +286,7 @@ function gatedScript(
 function drawerOf(walk: Walk, leaf: ScriptLeaf, detail: ScriptDetail): RandomDrawer {
   return drawerFor(leaf.key, detail.drawn ?? [], async (drawn) => {
     const latest = latestDetail(walk, leaf, detail);
-    await changeDetail(walk, { key: leaf.key, kind: leaf.kind, detail: { ...latest, drawn } });
+    await changeDetail(walk, { key: leaf.key, kind: leaf.kind, detail: { ...latest, mode: leaf.place.mode, drawn } });
   });
 }
 
@@ -249,11 +295,10 @@ async function startedRecord(
   at: { leaf: ScriptLeaf; record: StepRecord | undefined },
 ): Promise<Omit<StartedScript, "random">> {
   const { leaf, record } = at;
-  const detail = scriptDetailOf(record) ?? { script: leaf.script };
   if (record !== undefined) {
-    await noteRerun(walk, leaf);
-    return { detail, startedAt: record.startedAt };
+    return { detail: await rerunDetail(walk, leaf, record), startedAt: record.startedAt };
   }
+  const detail = { script: leaf.script };
   const started = await startRecord(walk, {
     key: leaf.key,
     kind: leaf.kind,

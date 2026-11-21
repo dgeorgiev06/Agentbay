@@ -12,6 +12,7 @@ export type StepKind = (typeof stepKinds)[number];
 export type ScriptDetail = {
   readonly script: string;
   readonly stoppedForCall?: Spend;
+  readonly mode?: string;
   readonly drawn?: readonly string[];
 };
 
@@ -101,6 +102,7 @@ function optionalSpend(value: Json, field: string): Spend | undefined {
 
 function scriptDetailOf(value: Json, kind: StepKind): ScriptDetail {
   const stoppedForCall = optionalSpend(value, "stoppedForCall");
+  const mode = textField(value, "mode");
   const drawn = unpackedDrawn(fieldOf(value, "drawn"));
   if (drawn === undefined) {
     throw malformed(kind, "drawn");
@@ -108,6 +110,7 @@ function scriptDetailOf(value: Json, kind: StepKind): ScriptDetail {
   return {
     script: requiredText(value, "script", kind),
     ...(stoppedForCall === undefined ? {} : { stoppedForCall }),
+    ...(mode === undefined ? {} : { mode }),
     ...(drawn.length === 0 ? {} : { drawn }),
   };
 }
@@ -245,22 +248,34 @@ export function decodedStepDetail(kind: StepKind, value: Json): StepDetail {
   }
 }
 
-function drawnIn(step: StepDetail | RefusedDetail): ScriptDetail | undefined {
-  return (step.kind === "script" || step.kind === "check") && step.detail?.drawn !== undefined
-    ? step.detail
-    : undefined;
+type DrawnStep = {
+  readonly kind: "script" | "check";
+  readonly rest: Omit<ScriptDetail, "drawn">;
+  readonly drawn: readonly string[];
+};
+
+function drawnIn(step: StepDetail | RefusedDetail): DrawnStep | undefined {
+  if ((step.kind !== "script" && step.kind !== "check") || step.detail?.drawn === undefined) {
+    return undefined;
+  }
+  const { drawn, ...rest } = step.detail;
+  return { kind: step.kind, rest, drawn };
 }
 
 export function stepDetailJson(step: StepDetail | RefusedDetail): Json {
-  const script = drawnIn(step);
-  return script?.drawn === undefined ? step.detail : { ...script, drawn: packedDrawn(script.drawn) };
+  const drawn = drawnIn(step);
+  return drawn === undefined ? step.detail : { ...drawn.rest, drawn: packedDrawn(drawn.drawn) };
 }
 
 export function shownStepDetail(step: StepDetail | RefusedDetail): Json {
-  const script = drawnIn(step);
-  if (script?.drawn === undefined) {
-    return step.detail;
+  const drawn = drawnIn(step);
+  return drawn === undefined ? step.detail : { ...drawn.rest, drawnValues: drawn.drawn.length };
+}
+
+export function redactedStepDetail(step: StepDetail, redact: (value: Json) => Json): StepDetail {
+  const drawn = drawnIn(step);
+  if (drawn === undefined) {
+    return decodedStepDetail(step.kind, redact(stepDetailJson(step)));
   }
-  const { drawn, ...rest } = script;
-  return { ...rest, drawnValues: drawn.length };
+  return { kind: drawn.kind, detail: { ...scriptDetailOf(redact(drawn.rest), drawn.kind), drawn: drawn.drawn } };
 }

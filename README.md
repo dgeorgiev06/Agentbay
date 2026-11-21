@@ -148,8 +148,7 @@ tests/           python3 tests/run.py (the tests of a component live in its own 
 | `bay show <mode> --resolved` | a mode's features after `extends`, with the file each comes from |
 | `bay call <mode>.<endpoint> '<json>'` | run a feature |
 | `bay submit '<json>' --token <token>`, `bay show <callId>`, `bay show reclaim <runId>`, `bay show close <callId> --reason <text>` | hand back a step's output; current state; mark a stuck run reclaimed; end an open call as abandoned |
-| `bay approve <callId\|runId> [--reject]` | pass an approval gate in your terminal, or from chat when `approve.from` lists chat |
-| `bay approve <F-id> [--defer\|--wontfix]` | decide a backlog item from the analysis mode (follows `approve.from`, like a gate) |
+| `bay approve <run> <stepKey> --hash <hash> [--reject\|--choice <name>]`, `bay approve --trust <mode> [--reject]` | answer a run's approval, or give or withdraw trust in a mode: in your terminal, where you type yes, or with `--via chat --quote "<your exact words>"` (trust also with `--hash`) when `approvals.from` in agentbay.config.yaml lists chat |
 | `bay status [--agents\|--log]`, `bay note <ref> "text"` | calls, steps, cost, agent runs (grouped by role, mode, model, tier); the raw run log; a note |
 | `bay note task`, `bay note dispatch <taskId> --agent <name> --input <x> [--unguarded <reason>]`, `bay note done <taskId>`, `bay note review <taskId> '<json>'`, `bay plan <taskId> [--done <n>]` | agent run records: a fresh taskId; the Chief of Staff logs each dispatch, its finish and outside review; a subagent first records its outcome and to-do (`bay plan` is its only `bay` command) |
 | `bay new mode <name>`, `bay new feature <name> --mode <mode>`, `bay new connector <name> --implements <interface> --mode <mode>`, `bay new content-type <name> --mode <mode>`, `bay new env <name> --mode <mode>` | create a mode, or a feature, a source connector, a content type or an env inside a mode in `components/modes/`, from a template |
@@ -191,9 +190,10 @@ Where it runs, the guard hook narrows what subagents can ask to do; it is defens
 cannot contain code once something runs it. A project whose config sets `skillSteps.run: without-the-hook` runs
 skill steps with no hook: the kernel takes their outputs, and each run records that no hook saw them. Nothing that runs code is auto-approved except a role's own read-only data shim;
 the main thread is pre-approved only for `bay show|status|note|catalog`. `bay secret set`
-needs your terminal. Approval gates and backlog approvals follow `approve.from` in agentbay.config.yaml (default
-`[terminal]`; chat is recorded as `user@chat-via-cos`). `approve.plans` makes a listed step show its plan for your
-approval before it runs. `bay auth` asks first in Claude Code.
+needs your terminal. An approval and the owner's answers to `bay resume` are taken only from a channel that
+`approvals.from` in agentbay.config.yaml lists, `terminal` or `chat` (default `[terminal]`); trust is given at a
+terminal always, and from chat only when it lists chat. An answer is recorded as `owner at the terminal` or
+`owner via chat, quoted: "<the owner's words>"`. `bay auth` asks first in Claude Code.
 Details: [docs/DESIGN.md#safety-model](docs/DESIGN.md#safety-model).
 
 ## A skill's output kept packed
@@ -260,8 +260,8 @@ advances the run is recorded and answered as accepted; the run takes it once, wh
 When items fail, the others still run to their end or to their wait, and are recorded. The run then waits for the
 owner with one sentence that names every failed item, by the name its foreach declares (below) or else by its
 place, such as `the 3rd of 4 items`, then its key and its reason, each reason cut to 200 characters:
-`Step each failed for 1 of 4 items: the 3rd of 4 items at each[2]: <reason>`. `bay resume <run> --rerun` runs only the failed items again, under a new key such as `each[2]~2`;
-items that finished are not run again and keep their outputs. `bay resume <run> --stop` fails the foreach with that
+`Step each failed for 1 of 4 items: the 3rd of 4 items at each[2]: <reason>`. `bay resume <run> --rerun [--via terminal | --via chat --quote "<the owner's exact words>"]` runs only the failed items again, under a new key such as `each[2]~2`;
+items that finished are not run again and keep their outputs. `bay resume <run> --stop [--via terminal | --via chat --quote "<the owner's exact words>"]` fails the foreach with that
 sentence, and the run ends as any failed run: `failed` only when every finished action only read, so there is
 nothing to undo; otherwise `undone`. The kernel then runs, latest first, the undo of each finished action that has
 one and does not delete, and lists what it undid and what failed to undo; an action that deletes is listed as a
@@ -333,7 +333,8 @@ file: one that backtracks without end stops the script at its own time limit, an
 again after a crash, a stop for a called action or the owner's rerun reads the same time and the same values in the
 same order; asked for more, it gets fresh ones. A skill's next round, a foreach item's new attempt and every other
 step have their own values. A step records at most 64, and on a rerun a value asked in another size than the one
-recorded is a failed answer. The kit's lint refuses `Date.now()`, `new Date()` with no arguments, `Math.random()`
+recorded is a failed answer. The values are stored packed, and a run shows only how many a step drew
+(`drawnValues`). The kit's lint refuses `Date.now()`, `new Date()` with no arguments, `Math.random()`
 and the random calls of `node:crypto` in a mode's `scripts/` (`docs/designs/runs/replay-safe-clock.md`).
 
 ## Testing a part of a workflow
@@ -356,7 +357,8 @@ command ran there.
 
 A run started this way says so. `bay runs <run> --json` shows its target with `part`, the given steps and
 `until`; `--events` shows a `step.given` event for each given step; and a run stopped by `until` waits for its
-owner with a question that says a test stopped it there. Resuming it stops there again. `bay` itself has no way
+owner with a question that says a test stopped it there. Resuming it stops there again, so `bay runs <run>` offers
+only `bay resume <run> --stop`, with the owner's source, to end it. `bay` itself has no way
 to start one: a test that drives `bay` in a process of its own runs `node tests/start-part.ts <mode>:<path>
 '<trigger json>' '<part json>'` in its project, which works only in a folder under the temporary folder.
 

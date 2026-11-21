@@ -580,7 +580,7 @@ function partStarted(
   return { status: ran.status, answer: parseJson(ran.stdout) };
 }
 
-test("a test that drives bay in its own process starts a part with tests/start-part.ts, and the shipped command line shows the run and its part", async () => {
+test("a test that drives bay in its own process starts a part with tests/start-part.ts, and the shipped command line shows the run, its part and only the stop that ends it", async () => {
   const beside = await projectWithParts();
   try {
     const part = JSON.stringify({ given: { first: firstGiven, pick: { choice: "go" } }, until: "second" });
@@ -598,7 +598,15 @@ test("a test that drives bay in its own process starts a part with tests/start-p
     });
     assert.deepEqual(fieldOf(report, "waiting"), { reason: "owner", stepKey: "second", question: untilQuestion });
     const text = bayRan(beside.root, ["runs", id]).stdout;
-    assert.ok(text.includes(`waiting for owner at second`), text);
+    const source = '[--via terminal | --via chat --quote "<the owner\'s exact words>"]';
+    const lines = text.split("\n");
+    const waitingAt = lines.findIndex((line) => line.endsWith("waiting for owner at second"));
+    assert.ok(waitingAt >= 0, text);
+    assert.deepEqual(lines.slice(waitingAt + 1, waitingAt + 3), [
+      untilQuestion,
+      `stop with: bay resume ${id} --stop ${source}`,
+    ]);
+    assert.ok(!text.includes("--rerun"), text);
   } finally {
     await beside.remove();
   }

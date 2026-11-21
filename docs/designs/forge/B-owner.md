@@ -62,7 +62,7 @@ The harness session presents the choices as selectable options. His tap is recor
 | "where is it?" | `bay runs <run> --brief` | Five lines: kind, stage, slice k of n, the latest headline (a verified fact), spent against budget, and who it waits for |
 | "why did it fail?" | `bay runs <run> --brief` on a waiting or failed run | The failing check's name, its last 10 lines as the kernel saw them, the rounds tried, and choices: one more round with a fresh builder, or stop |
 | "show me" | `bay runs <run> --full` | The pending card with its details, or the latest card |
-| "stop" | `bay resume <run> --stop` | The run stops. Branches with commits are kept and the reply says how to discard them. Nothing on main changes |
+| "stop" | `bay resume <run> --stop [--via terminal \| --via chat --quote "<the owner's exact words>"]` | The run stops. Branches with commits are kept and the reply says how to discard them. Nothing on main changes |
 | "go on" | `bay resume <run>` | The run continues from its last finished step |
 
 ### When he is away and the session stops
@@ -213,7 +213,7 @@ Practices come from the toolchain mode, from `forge` (language-neutral ones), an
 | 1 | Approval choices | One tap needs named choices; Merge, Keep, Discard and A, B, C are not approve or reject | `choices` on an approval (list or reference); the hash covers them; the step's output is the choice; `bay approve --choice` | runs, schemas, command-line | Before the first job |
 | 2 | Commands for scripts | Worktrees, toolchains and the fresh project need `git`, `tsc`, `bay.sh` | `context.commands.run(prefix, args)` for a base mode's listed prefixes, run by the kernel, time limit, output scrubbed | scripts, broker | Before |
 | 3 | A check may be a skill | Review must send a slice back like a script check does | `checks` takes `skill:`; each round is a new task with the whole scope and every finding, so a fresh agent takes it (P-25); `rounds` settable | runs | Before |
-| 4 | Rounds wait like a budget | After two rounds the owner decides; today the step fails | `rounds` is a budget measure; at the limit the run waits; `--extend rounds=1` or `--stop` | runs | Before |
+| 4 | Rounds wait like a budget | After two rounds the owner decides; today the step fails | `rounds` is a budget measure; at the limit the run waits; `--extend rounds=1` or `--stop`, each with `[--via terminal \| --via chat --quote "<the owner's exact words>"]` | runs | Before |
 | 5 | A headline per run | "Where is it?" on a phone needs one verified line | toolbox `context.say(text)` writes a `run.headline` event; `bay runs --brief` shows the latest | runs, command-line | Before |
 | 6 | Write scope per task | Stop writes outside scope instead of catching them after | a skill step's `writes: $input.scope` narrows the grant; the adapter's hook enforces it | harness | After; `forge-git.scope` catches it meanwhile |
 | 7 | Binding to a list, call by name | Five kinds and several toolchains behind one interface | as plan 0022's addition | manifests, broker | After, with the second kind |

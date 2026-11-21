@@ -42,6 +42,8 @@ const finding = "TD2's item 2 names no refusal; add the refused id 99 to its sen
 
 const left = "TD2's title is longer than the card shows.";
 
+const alsoLeft = "TD1's item 1 names no test of the refused add.";
+
 const p34Sentence = "TD2 writes the folder TD1 makes, and nothing orders them.";
 
 const answeredPlan = {
@@ -212,7 +214,7 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
       planChallenger: (task) => {
         tasks.push(task);
         const step = textAt(task, "stepKey");
-        const answer = answers(task, step.startsWith("challenge-1") ? [finding] : [left]);
+        const answer = answers(task, step.startsWith("challenge-1") ? [finding] : [left, alsoLeft]);
         const short = { ...fieldsOf(answer), practices: listOf(fieldsOf(answer).practices).slice(1) };
         return Promise.resolve(step === "challenge-1/0#1" ? short : answer);
       },
@@ -241,7 +243,7 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
     const card = waitingOf(await shown(root, textAt(run, "id")), "card");
     const expected = {
       plan: answered,
-      challenge: answers(tasks[2] ?? null, [left]),
+      challenge: answers(tasks[2] ?? null, [left, alsoLeft]),
       challenger: "challenge-2",
       answer: { kind: "answered", changes: ["TD2's title"], notHeld: [], findings: 1 },
     } as const;
@@ -252,7 +254,7 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
     const judged = listOf(fieldsOf(card.card).lines).filter((line) => textAt(line, "mark") === "judged");
     assert.deepEqual(
       judged.map((line) => textAt(fieldsOf(line).source ?? null, "step")),
-      ["challenge-2"],
+      ["challenge-2", "challenge-2"],
     );
     const stopped = runOf(await decided(root, card, { step: "card", choice: "stop" }));
     assert.equal(textAt(stopped, "reason"), "The owner chose stop on the plan card, so nothing is committed.");

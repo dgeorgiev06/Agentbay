@@ -80,7 +80,7 @@
       "items": {
         "type": "object"
       },
-      "description": "The rules of the committed design that the slice's actions apply, as the slice request carries them; handed on to the test writer and the builder. Left out or empty when it carries none."
+      "description": "The rules of the committed design that the slice's actions apply, as the slice request carries them; handed on to the test writer and the builder. Empty when it carries none."
     }
   }
 }

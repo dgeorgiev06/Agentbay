@@ -1,7 +1,6 @@
 import { defineScript, fail, fieldsOf, type Json, type JsonFields, type ScriptContext } from "../../../../bay/sdk.ts";
 import { answerOf } from "./lib/called.ts";
 import { builtOf, type Built } from "./lib/builder-answer.ts";
-import { rulesGiven } from "./lib/design-summary.ts";
 import type { Leak } from "./lib/leaks.ts";
 import { sliceOf } from "./lib/slice-form.ts";
 import type { Stayed } from "./lib/branch-endings.ts";
@@ -50,7 +49,7 @@ function roundOf(input: Json, into: string): Round {
     into,
     slice,
     interface: fields.interface ?? [],
-    rules: fields.rules ?? [],
+    rules: [...listOf(fields.rules)],
     fixed: fields.fixed ?? [],
     cut: { folder: textOf(cut.folder), branch: textOf(cut.branch), commit: textOf(cut.commit) },
     declared: fields.declared ?? null,
@@ -89,7 +88,7 @@ async function builderFolder(context: ScriptContext, round: Round, before: Round
 
 function builderAsked(round: Round, folder: string): JsonFields {
   const { slice, fixed, declared, practices } = round;
-  const asked = { slice, interface: round.interface, ...rulesGiven(round.rules), fixed, folder, practices, declared };
+  const asked = { slice, interface: round.interface, rules: round.rules, fixed, folder, practices, declared };
   const { before } = round;
   return before === undefined ? asked : { ...asked, findings: [...before.toBuilder], failing: before.failing };
 }

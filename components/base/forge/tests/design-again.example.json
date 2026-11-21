@@ -587,7 +587,7 @@
                       }
                     }
                   },
-                  "serves": ["O2-C3", "O2-C5"],
+                  "serves": ["O2-C3", "O2-C4", "O2-C5"],
                   "rule": "remove-todo",
                   "reads": ["todos"],
                   "writes": ["todos"],
@@ -1065,7 +1065,7 @@
                     }
                   }
                 },
-                "serves": ["O2-C3", "O2-C5"],
+                "serves": ["O2-C3", "O2-C4", "O2-C5"],
                 "rule": "remove-todo",
                 "reads": ["todos"],
                 "writes": ["todos"],
@@ -1538,7 +1538,7 @@
                   }
                 }
               },
-              "serves": ["O2-C3", "O2-C5"],
+              "serves": ["O2-C3", "O2-C4", "O2-C5"],
               "rule": "remove-todo",
               "reads": ["todos"],
               "writes": ["todos"],

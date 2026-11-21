@@ -67,7 +67,7 @@
       "items": {
         "type": "object"
       },
-      "description": "The rules of the committed design that the slice's actions apply, each a pure function: its name, what it decides, what it takes and gives, and the actions that apply it. A test may call a rule with values and compare the value it gives. Left out when there is none."
+      "description": "The rules of the committed design that the slice's actions apply, each a pure function: its name, what it decides, what it takes and gives, and the actions that apply it. A test may call a rule with values and compare the value it gives. Empty when there is none."
     }
   },
   "$defs": {

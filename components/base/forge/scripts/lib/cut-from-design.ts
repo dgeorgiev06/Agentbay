@@ -18,7 +18,14 @@ export type CutProblem =
       readonly modules: readonly string[];
       readonly sentence: string;
     }
-  | { readonly kind: "not vertical"; readonly level: "error"; readonly slice: string; readonly sentence: string };
+  | { readonly kind: "not vertical"; readonly level: "error"; readonly slice: string; readonly sentence: string }
+  | {
+      readonly kind: "no request file";
+      readonly level: "error";
+      readonly slice: string;
+      readonly conditions: readonly string[];
+      readonly sentence: string;
+    };
 
 type Rule = (slice: PlannedSlice, design: DesignSummary) => readonly CutProblem[];
 
@@ -65,7 +72,39 @@ const notVertical: Rule = (slice) => {
   return [{ kind: "not vertical", level: "error", slice: slice.name, sentence }];
 };
 
-const rules: readonly Rule[] = [namesNoInterface, interfaceNotCommitted, crossesModules, notVertical];
+function servedWithoutRequest(slice: PlannedSlice, design: DesignSummary, condition: string): readonly string[] {
+  const named = slice.interface ?? [];
+  const servers = design.actions.filter((action) => action.serves.includes(condition));
+  return servers.length > 0 && !servers.some((action) => named.includes(action.request))
+    ? servers.map((action) => action.request)
+    : [];
+}
+
+const requestFilesLeftOut: Rule = (slice, design) => {
+  const missing = (slice.meets ?? []).map((condition) => ({
+    condition,
+    requests: servedWithoutRequest(slice, design, condition),
+  }));
+  const left = missing.filter((each) => each.requests.length > 0);
+  const [first] = left;
+  if (first === undefined) {
+    return [];
+  }
+  const conditions = left.map((each) => each.condition);
+  const sentence =
+    `${slice.name} meets ${joined(conditions)}, but its interface names the request file of no action of ` +
+    `${design.file} that serves ${conditions.length === 1 ? "it" : "them"}. Name the request file of each ` +
+    `action it builds, such as ${first.requests[0] ?? ""}, so the slice is given that action's rules.`;
+  return [{ kind: "no request file", level: "error", slice: slice.name, conditions, sentence }];
+};
+
+const rules: readonly Rule[] = [
+  namesNoInterface,
+  interfaceNotCommitted,
+  crossesModules,
+  notVertical,
+  requestFilesLeftOut,
+];
 
 export function cutFromDesignProblems(plan: Plan, design: DesignSummary): readonly CutProblem[] {
   return plan.slices.flatMap((slice) => rules.flatMap((rule) => rule(slice, design)));

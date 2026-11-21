@@ -2,7 +2,6 @@ import { defineScript, fieldsOf, type Json, type ScriptContext } from "../../../
 import { branchesAfter } from "./lib/branch-endings.ts";
 import { answerOf } from "./lib/called.ts";
 import { codeAt, readIn } from "./lib/code.ts";
-import { rulesGiven } from "./lib/design-summary.ts";
 import { keepFindings, keptTests } from "./lib/kept-tests.ts";
 import { pinnedFiles } from "./lib/pinned-files.ts";
 import { intoOf, settled } from "./lib/drops.ts";
@@ -20,7 +19,7 @@ import {
   type ReviewPlan,
   type RoundsState,
 } from "./lib/rounds.ts";
-import { textsOf } from "./lib/json-values.ts";
+import { listOf, textsOf } from "./lib/json-values.ts";
 
 type Asked = AfterRound & {
   readonly practices: readonly string[];
@@ -31,7 +30,7 @@ type Asked = AfterRound & {
 function askedOf(input: Json): Asked {
   const fields = fieldsOf(input);
   const after = afterRoundOf(fields, "review-round");
-  const rules = fields.rules ?? [];
+  const rules = [...listOf(fields.rules)];
   return { ...after, practices: textsOf(fields.practices), interface: textsOf(fields.interface), rules };
 }
 
@@ -61,7 +60,7 @@ async function reviewed(context: ScriptContext, asked: Asked, folder: string): P
     verdicts: [...state.verdicts],
     failing: state.failing,
     practices: [...practices.reviewers],
-    ...rulesGiven(asked.rules),
+    rules: asked.rules,
   });
   await answerOf(context, "worktrees.remove", { folder, branchAfter: "kept" });
   const review = reviewOf(answer);

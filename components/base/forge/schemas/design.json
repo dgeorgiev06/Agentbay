@@ -175,8 +175,8 @@
           "uniqueItems": true,
           "items": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 300
+            "pattern": "^[A-Za-z0-9_.][A-Za-z0-9_./-]*$",
+            "maxLength": 200
           },
           "description": "The tables and files of its module the action reads before it applies its rule: exactly what the rule takes from them."
         },
@@ -186,8 +186,8 @@
           "uniqueItems": true,
           "items": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 300
+            "pattern": "^[A-Za-z0-9_.][A-Za-z0-9_./-]*$",
+            "maxLength": 200
           },
           "description": "The tables and files of its module the action writes after: exactly what the rule gives to them."
         },
@@ -290,9 +290,9 @@
         },
         "store": {
           "type": "string",
-          "minLength": 1,
-          "maxLength": 300,
-          "description": "A table or file of the rule's module: in takes, what the action reads from it before the rule; in gives, what the action writes to it after. Left out, the value comes from the request or is handed in by the thin function, such as the time, in takes, and is the answer, in gives."
+          "maxLength": 200,
+          "description": "A table or file of the rule's module: in takes, what the action reads from it before the rule; in gives, what the action writes to it after. Left out, the value comes from the request or is handed in by the thin function, such as the time, in takes, and is the answer, in gives.",
+          "pattern": "^[A-Za-z0-9_.][A-Za-z0-9_./-]*$"
         },
         "schema": {
           "type": "object",

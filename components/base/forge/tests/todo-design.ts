@@ -140,7 +140,7 @@ export const todoDesign: Json = {
             required: ["removed"],
             properties: { removed: { type: "integer", minimum: 1 } },
           },
-          serves: ["O2-C3", "O2-C5"],
+          serves: ["O2-C3", "O2-C4", "O2-C5"],
           rule: "remove-todo",
           ...kept,
           examples: [

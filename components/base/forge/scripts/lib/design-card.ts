@@ -1,5 +1,5 @@
 import type { Chosen, Finding } from "./challenge-answer.ts";
-import { computed, counted, joined, judged, safeText, type Card, type CardLine } from "./card-lines.ts";
+import { computed, counted, joined, judged, safeText, shortened, type Card, type CardLine } from "./card-lines.ts";
 import {
   actionsOf,
   type Action,
@@ -60,6 +60,10 @@ const secondChallenger = "challenge-again";
 
 const differencesShown = 8;
 
+const storeShownLength = 80;
+
+const storePattern = /^[A-Za-z0-9_.][A-Za-z0-9_./-]*$/;
+
 const answers: Readonly<Record<Chosen, string>> = {
   first: "the first design of two written apart",
   second: "the second design of two written apart",
@@ -97,9 +101,13 @@ function ownsWords(module: Module): string {
   return owned.length === 0 ? "owns nothing" : `owns ${joined(owned)}`;
 }
 
+function storeShown(store: string): string {
+  return storePattern.test(store) ? shortened(store, storeShownLength) : `"${shortened(store, storeShownLength)}"`;
+}
+
 function valueWords(values: readonly Value[], into: string): string {
   return values
-    .map((value) => (value.store === undefined ? value.name : `${value.name} ${into} ${value.store}`))
+    .map((value) => (value.store === undefined ? value.name : `${value.name} ${into} ${storeShown(value.store)}`))
     .join(", ");
 }
 
@@ -121,7 +129,7 @@ function moduleLines(module: Module, by: string): readonly CardLine[] {
 }
 
 function storesWords(verb: string, stores: readonly string[]): string {
-  return `${verb} ${stores.length === 0 ? "nothing" : joined(stores)}`;
+  return `${verb} ${stores.length === 0 ? "nothing" : joined(stores.map(storeShown))}`;
 }
 
 function appliesWords(action: Action): string {

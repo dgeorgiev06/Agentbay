@@ -24,6 +24,11 @@ export type CommittedRule = {
   readonly appliedBy: readonly AppliedBy[];
 };
 
+export type ServingAction = {
+  readonly request: string;
+  readonly serves: readonly string[];
+};
+
 export type DesignSummary = {
   readonly file: string;
   readonly job: string;
@@ -31,12 +36,14 @@ export type DesignSummary = {
   readonly schemaFiles: readonly string[];
   readonly modules: readonly DesignModule[];
   readonly rules: readonly CommittedRule[];
+  readonly actions: readonly ServingAction[];
 };
 
 type Implemented = {
   readonly name: string;
   readonly files: readonly string[];
   readonly applied: readonly { readonly rule: string; readonly by: AppliedBy }[];
+  readonly serving: readonly ServingAction[];
 };
 
 function filesOf(action: JsonFields): readonly string[] {
@@ -58,7 +65,8 @@ function implementedOf(value: Json): Implemented {
         writes: textsOf(action.writes),
       },
     }));
-  return { name, files: actions.flatMap(filesOf), applied };
+  const serving = actions.map((action) => ({ request: textOf(action.request), serves: textsOf(action.serves) }));
+  return { name, files: actions.flatMap(filesOf), applied, serving };
 }
 
 function rulesIn(module: Json, interfaces: readonly Implemented[]): readonly CommittedRule[] {
@@ -99,6 +107,7 @@ export function designSummaryOf(file: string, document: Json): DesignSummary {
     schemaFiles: interfaces.flatMap((each) => each.files),
     modules: listOf(fields.modules).map((module) => moduleOf(module, interfaces)),
     rules: listOf(fields.modules).flatMap((module) => rulesIn(module, interfaces)),
+    actions: interfaces.flatMap((each) => each.serving),
   };
 }
 
@@ -125,11 +134,6 @@ export function rulesDocument(rules: readonly CommittedRule[]): Json {
     gives: rule.gives,
     appliedBy: rule.appliedBy.map(({ action, reads, writes }) => ({ action, reads: [...reads], writes: [...writes] })),
   }));
-}
-
-export function rulesGiven(value: Json | undefined): JsonFields {
-  const rules = listOf(value);
-  return rules.length === 0 ? {} : { rules: [...rules] };
 }
 
 export function modulesReached(slice: PlannedSlice, design: DesignSummary): readonly string[] {

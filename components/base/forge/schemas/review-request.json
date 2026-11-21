@@ -111,7 +111,7 @@
       "items": {
         "type": "object"
       },
-      "description": "The rules of the committed design that the slice's actions apply; P-52 is answered by holding the code to them. Left out when there is none."
+      "description": "The rules of the committed design that the slice's actions apply; P-52 is answered by holding the code to them. Empty when there is none."
     }
   },
   "$defs": {

@@ -63,7 +63,8 @@ function talliedWords(results: readonly Result[]): string {
 
 function summaryWords(block: TriedBlock): string {
   const { results } = block;
-  const left = `; ${String(countOf(results, "not tried"))} not tried`;
+  const notTried = countOf(results, "not tried");
+  const left = notTried === 0 ? "" : `; ${String(notTried)} not tried`;
   const tried = triedCount(results);
   if (tried === 0) {
     return `the design's examples: none tried${left}`;

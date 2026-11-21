@@ -3,8 +3,8 @@ import { listOf, textOf, textsOf } from "./lib/json-values.ts";
 import { keptTests } from "./lib/kept-tests.ts";
 import { provedOf } from "./lib/proof-answer.ts";
 import { sliceOf } from "./lib/slice-form.ts";
-import { waveTrials, type Entry, type Result, type SliceToTry } from "./lib/tried-examples.ts";
-import { provedTrying, settingOf, toTryOf, type Setting } from "./lib/tried-block.ts";
+import { waveTrials, type Entry, type SliceToTry } from "./lib/tried-examples.ts";
+import { blocksBySlice, provedTrying, settingOf, toTryOf, type Setting } from "./lib/tried-block.ts";
 import { checksVerdict } from "./lib/wave-answer.ts";
 
 const mostItems = 100;
@@ -24,20 +24,6 @@ function entriesOf(asked: Json, trying: Json | undefined, setting: Setting): rea
   return waveTrials(slicesToTry(trying), { built: textsOf(fieldsOf(trying).built), room });
 }
 
-function triedBySlice(
-  trying: Json | undefined,
-  at: { readonly setting: Setting; readonly head: string },
-  results: readonly Result[],
-): Json {
-  return slicesToTry(trying).map((each) => ({
-    slice: each.slice,
-    setting: at.setting,
-    head: at.head,
-    carried: each.toTry.length > 0,
-    results: results.filter((result) => result.slice === each.slice),
-  }));
-}
-
 export const run = defineScript(async (input, context) => {
   const fields = fieldsOf(fieldsOf(input).proving ?? null);
   if (fields.kind !== "asked") {
@@ -54,6 +40,6 @@ export const run = defineScript(async (input, context) => {
   const checked = { slice: sliceOf(fieldsOf(asked).slice), proof: provedOf(proved.proof) };
   const alone = checksVerdict(checked) === "failed" ? listOf(fields.whenFailed) : [];
   const head = textOf(fieldsOf(asked).head);
-  const tried = triedBySlice(fields.trying, { setting, head }, proved.results);
+  const tried = blocksBySlice(slicesToTry(fields.trying), { setting, head }, proved.results);
   return { kind: "asked", proof: proved.proof, alone: [...alone], tried };
 });

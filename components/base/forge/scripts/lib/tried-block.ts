@@ -11,6 +11,7 @@ import {
   type Proved,
   type Result,
   type Side,
+  type SliceToTry,
   type ToTry,
   type Trial,
 } from "./tried-examples.ts";
@@ -184,4 +185,18 @@ export function slicesTriedOf(value: Json | undefined): readonly SliceTried[] {
     const block = triedBlockOf(entry);
     return block === undefined ? [] : [{ ...block, slice: textOf(fieldsOf(entry).slice) }];
   });
+}
+
+export function blocksBySlice(
+  slices: readonly SliceToTry[],
+  at: { readonly setting: Setting; readonly head: string },
+  results: readonly Result[],
+): readonly SliceTried[] {
+  return slices.map((each) => ({
+    slice: each.slice,
+    setting: at.setting,
+    head: at.head,
+    carried: each.toTry.length > 0,
+    results: results.filter((result) => result.slice === each.slice),
+  }));
 }

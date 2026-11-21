@@ -121,7 +121,7 @@ test("a script whose call waits for budget waits too, and on resume its finished
   assert.equal(waiting.reason, "budget");
   assert.equal(waiting.stepKey, "0.call1/end");
   assert.equal(runner.runsOf("store:scripts/put.ts").length, 2);
-  const run = runOf(await runs.extend(runOf(started).id, { items: 5 }));
+  const run = runOf(await runs.extend(runOf(started).id, { items: 5 }, "The owner"));
   assert.deepEqual(run.state, { status: "done", output: { first: "done", second: "done" } });
   assert.equal(runner.runsOf("store:scripts/put.ts").length, 2);
   assert.equal(runner.runsOf("notes:scripts/log.ts").length, 2);
@@ -140,7 +140,7 @@ test("a script that ignores the failed answer of a waiting call still waits, its
   const { runs, runner, close } = await openedRuns({ scripts, changes: { config: { budget: { items: 3 } } } });
   const started = await runs.start({ action: "notes.log" }, {});
   assert.equal(waitingOf(started).reason, "budget");
-  const stopped = runOf(await runs.stop(runOf(started).id));
+  const stopped = runOf(await runs.stop(runOf(started).id, "The owner"));
   assert.deepEqual(stopped.state, {
     status: "undone",
     reason: "The owner stopped the run.",

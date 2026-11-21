@@ -275,7 +275,7 @@ describe("a card on an approval after a foreach", () => {
     const started = runOf(await opened.runs.start(flow, [0, 1]));
     const asked = await answerSkills(opened.runs, started);
     assert.equal(waitsOf(asked)[0]?.reason, "owner");
-    const rerun = await answerSkills(opened.runs, runOf(await opened.runs.resume(started.id, { rerun: true })));
+    const rerun = await answerSkills(opened.runs, runOf(await opened.runs.rerun(started.id, "The owner")));
     assert.deepEqual(cardShown(rerun), {
       title: "Merge wave 1?",
       lines: [{ ...lines[0], skills: [draftSkill], foreach: "each", itemCount: 2 }],

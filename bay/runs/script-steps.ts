@@ -88,7 +88,7 @@ function unfinishedWaiting(frame: ActionFrame, key: string): Progress {
     question:
       `Step ${key} started and did not finish, and ${frameLabel(frame)} has the effects ` +
       `${frame.action.effects.join(", ")}, so running it again could repeat them. ` +
-      "Resume with rerunUnfinished to run it again, or stop the run.",
+      "Resume with --rerun to run it again, or stop the run.",
   });
 }
 

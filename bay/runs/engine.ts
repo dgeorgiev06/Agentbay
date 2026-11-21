@@ -73,21 +73,13 @@ type SkillCall = {
   readonly input: Json;
 };
 
-type ResumeOptions = {
-  readonly rerunUnfinished?: boolean;
-};
-
 type RunBody = (run: RunWithSteps, writer: Writer, now: Date) => Promise<Outcome<AdvancedRun>>;
 
 export type Submitted = AdvancedRun | { readonly id: string; readonly recorded: string };
 
-type Cause = "submit" | "approve" | "resume" | "tick" | "extend" | "stop" | "charge";
-
-type Advance = {
-  readonly now: Date;
-  readonly cause: Cause;
-  readonly rerunUnfinished: boolean;
-};
+type Advance =
+  | { readonly now: Date; readonly cause: "submit" | "approve" | "resume" | "tick" | "charge" }
+  | { readonly now: Date; readonly cause: "rerun" | "extend" | "stop"; readonly by: string };
 
 type ControlPatch = {
   readonly extra?: Budget;
@@ -110,8 +102,6 @@ type GivenPart = {
   readonly mark: PartMark;
   readonly records: readonly GivenRecord[];
 };
-
-const stopReason = "The owner stopped the run.";
 
 const answerRecordedKind = "answer.recorded";
 
@@ -305,14 +295,19 @@ export class Engine {
       const detail = { ...found.value.detail, verdict: verdictOf(decision) };
       const change = { key: stepKey, kind: "approval" as const, detail, at: now.toISOString() };
       await this.#services.store.saveStepDetail(writer, change, []);
-      return this.#continue(writer, { now, cause: "approve", rerunUnfinished: false }, {});
+      return this.#continue(writer, { now, cause: "approve" }, {});
     });
   }
 
-  resume(runId: string, options: ResumeOptions = {}): Promise<Outcome<AdvancedRun>> {
+  resume(runId: string): Promise<Outcome<AdvancedRun>> {
     return this.#withRun(runId, this.#services.clock.now(), async (run, writer, now) => {
-      const rerunUnfinished = options.rerunUnfinished ?? false;
-      return endedRefusal(run) ?? this.#continue(writer, { now, cause: "resume", rerunUnfinished }, {});
+      return endedRefusal(run) ?? this.#continue(writer, { now, cause: "resume" }, {});
+    });
+  }
+
+  rerun(runId: string, by: string): Promise<Outcome<AdvancedRun>> {
+    return this.#withRun(runId, this.#services.clock.now(), async (run, writer, now) => {
+      return endedRefusal(run) ?? this.#continue(writer, { now, cause: "rerun", by }, {});
     });
   }
 
@@ -322,7 +317,7 @@ export class Engine {
     for (const run of waitingRuns.filter((candidate) => isDueAt(candidate.state, now))) {
       const result = await this.#withRun(run.id, now, (current, writer) =>
         isDueAt(current.state, now)
-          ? this.#continue(writer, { now, cause: "tick", rerunUnfinished: false }, {})
+          ? this.#continue(writer, { now, cause: "tick" }, {})
           : Promise.resolve(refusal(run.id, { message: `Run ${run.id} is no longer waiting for time.` })),
       );
       results.push(result);
@@ -330,24 +325,22 @@ export class Engine {
     return results;
   }
 
-  extendBudget(runId: string, extra: Budget): Promise<Outcome<AdvancedRun>> {
+  extendBudget(runId: string, extra: Budget, by: string): Promise<Outcome<AdvancedRun>> {
     return this.#withRun(runId, this.#services.clock.now(), async (run, writer, now) => {
       const problems = budgetProblems(extra);
       if (problems.length > 0) {
         return refusal(run.id, { message: `The extension is not valid: ${problems.join(" ")}` });
       }
       const total = addBudgets(run.extra, extra);
-      return (
-        endedRefusal(run) ?? this.#continue(writer, { now, cause: "extend", rerunUnfinished: false }, { extra: total })
-      );
+      const advance = { now, cause: "extend" as const, by };
+      return endedRefusal(run) ?? this.#continue(writer, advance, { extra: total });
     });
   }
 
-  stop(runId: string): Promise<Outcome<AdvancedRun>> {
+  stop(runId: string, by: string): Promise<Outcome<AdvancedRun>> {
     return this.#withRun(runId, this.#services.clock.now(), async (run, writer, now) => {
-      return (
-        endedRefusal(run) ?? this.#continue(writer, { now, cause: "stop", rerunUnfinished: false }, { stopReason })
-      );
+      const advance = { now, cause: "stop" as const, by };
+      return endedRefusal(run) ?? this.#continue(writer, advance, { stopReason: `${by} stopped the run.` });
     });
   }
 
@@ -373,7 +366,7 @@ export class Engine {
       const detail = { ...before, calledSpent: addSpend(before.calledSpent, called.spent), calledRuns };
       const change = { key: found.value.key, kind: "skill" as const, detail, at: now.toISOString() };
       await this.#services.store.saveStepDetail(writer, change, []);
-      return this.#advance(writer, { now, cause: "charge", rerunUnfinished: false });
+      return this.#advance(writer, { now, cause: "charge" });
     });
   }
 
@@ -399,7 +392,7 @@ export class Engine {
     const writer = await this.#services.store.createRun(newRun, this.#owner, [started]);
     return this.#holding(writer, async () => {
       await this.#saveGiven(writer, part?.records ?? [], now.toISOString());
-      return this.#advance(writer, { now, cause: "resume", rerunUnfinished: false });
+      return this.#advance(writer, { now, cause: "resume" });
     });
   }
 
@@ -475,7 +468,7 @@ export class Engine {
       await this.#takeAnswer(writer, answer, now.toISOString());
     }
     const run = await this.#read(writer.runId);
-    return endedRefusal(run) ?? this.#continue(writer, { now, cause: "submit", rerunUnfinished: false }, {});
+    return endedRefusal(run) ?? this.#continue(writer, { now, cause: "submit" }, {});
   }
 
   async #takeAnswer(writer: Writer, answer: RecordedAnswer, at: string): Promise<void> {
@@ -504,7 +497,7 @@ export class Engine {
       at: advance.now.toISOString(),
       runId: writer.runId,
       kind: "run.resumed",
-      detail: { cause: advance.cause },
+      detail: { cause: advance.cause, ...("by" in advance ? { by: advance.by } : {}) },
     };
     const update = { ...patch, state: { status: "running" as const }, at: advance.now.toISOString() };
     await this.#services.store.updateRun(writer, update, [resumed]);
@@ -520,7 +513,7 @@ export class Engine {
       records: new Map(run.steps.map((step) => [step.key, step])),
       events,
       now: advance.now,
-      rerunUnfinished: advance.rerunUnfinished,
+      rerunUnfinished: advance.cause === "rerun",
       stopReason: run.stopReason,
       extra: run.extra,
       until: untilIn(events),

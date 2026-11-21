@@ -224,6 +224,10 @@ export async function decided(
   return bay(root, [...words, "--via", "chat", "--quote", "as the owner"]);
 }
 
+export async function ownerAnswered(root: string, runId: string, answer: "--rerun" | "--stop"): Promise<Json> {
+  return bay(root, ["resume", runId, answer, "--via", "chat", "--quote", "as the owner"]);
+}
+
 export async function printedCard(root: string, runId: string, heading = "Merge "): Promise<readonly string[]> {
   const widest = 44;
   const printed = (await bayRan(root, ["runs", runId])).stdout.split("\n");

@@ -221,7 +221,7 @@ describe("every call that brings a run to an approval returns its content redact
     const { runs, close } = await openedRuns({ changes: { ...withFlow(steps), config } });
     const started = await runs.start(flow, null);
     assert.equal(waitingOf(started).reason, "budget");
-    assertRedactedApproval(await runs.extend(runOf(started).id, { items: 5 }));
+    assertRedactedApproval(await runs.extend(runOf(started).id, { items: 5 }, "The owner"));
     close();
   });
 });

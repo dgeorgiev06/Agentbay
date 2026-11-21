@@ -56,7 +56,7 @@ actions:
     effects: [read]
     run:
       - skill: skills/declare
-        tier: balanced
+        role: builder
         checks: [scripts/declared-in-scope.ts]
   build:
     description: When a declared slice is to be written in its worktree by a builder.
@@ -65,7 +65,7 @@ actions:
     effects: [read, write]
     run:
       - skill: skills/build
-        tier: deep
+        role: builder
   write-tests:
     description: When a slice's tests are to be written from its conditions and interface, before any builder works, and handed in as data.
     input: schemas/write-tests-request.json
@@ -74,7 +74,7 @@ actions:
     skillOutput: kept-packed
     run:
       - skill: skills/write-tests
-        tier: balanced
+        role: test writer
         checks: [scripts/tests-handed-in.ts]
   build-without-tests:
     description: When a declared slice whose tests another wrote is to be written in its worktree by a builder who never has the tests.
@@ -83,7 +83,7 @@ actions:
     effects: [read, write]
     run:
       - skill: skills/build-without-tests
-        tier: balanced
+        role: builder
   round:
     description: When one of a slice's three rounds is to run, the test writer and the builder each when the round before gave them something to correct, ending with proof's verdicts on one commit that holds the builder's work and the tests.
     input: schemas/round-request.json
@@ -100,7 +100,7 @@ actions:
     skillOutput: kept-packed
     run:
       - skill: skills/review
-        tier: deep
+        role: reviewer
         checks: [scripts/no-test-text.ts]
   review-round:
     description: When a round has been proved and is to be reviewed, or its failing cases sent to the builder, and the rounds' next step decided.
@@ -116,7 +116,7 @@ actions:
     effects: [read]
     run:
       - skill: skills/plant
-        tier: balanced
+        role: planter
         checks: [scripts/bugs-in-the-code.ts]
   bugs:
     description: When a slice's rounds are done and proof is to be given the bugs to plant, the owner's and then the planter's.
@@ -252,7 +252,7 @@ actions:
     skillOutput: kept-packed
     run:
       - skill: skills/design
-        tier: deep
+        role: designer
         checks: [scripts/design-checked.ts]
   designs:
     description: When the owner has chosen a path on the design's first card, it reads the practices held by design from the integration branch, and one designer writes the design, or two write apart, the second given nothing of the first, each given those practices.
@@ -268,7 +268,7 @@ actions:
     effects: [read]
     run:
       - skill: skills/challenge
-        tier: deep
+        role: challenger
         checks: [scripts/challenge-checked.ts]
   challenge-designs:
     description: When the designs are written, it lists where two differ and asks the challenger, with the practices the designers were given.
@@ -319,7 +319,7 @@ actions:
     effects: [read]
     run:
       - skill: skills/plan
-        tier: balanced
+        role: planner
         checks: [scripts/plan-checked.ts]
   challenge-plan:
     description: When a plan is to be judged practice by practice for the practices held by a plan, with findings for its planner.
@@ -328,7 +328,7 @@ actions:
     effects: [read]
     run:
       - skill: skills/challenge-plan
-        tier: deep
+        role: challenger
         checks: [scripts/plan-challenge-checked.ts]
   plan-again:
     description: When the first challenge of a plan is in, it asks the planner to answer its findings, only when there are any, and hands on the plan as it then stands.

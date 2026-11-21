@@ -272,15 +272,15 @@ describe("the design's first card and the design card, for the todo mode", () =>
     assert.equal(printed(pathCard(file, await todoRequirements()), pathChoices), firstCard);
   });
 
-  test("the mode's designer and challenger run at tier deep, which the first card names", async () => {
+  test("the mode's design and challenge steps name the designer and the challenger, whose tier deep the first card names", async () => {
     const read = readYaml(await readFile(new URL("../mode.yaml", import.meta.url), "utf8"));
     assert.ok(read.ok);
     const actions = fieldsOf(fieldsOf(read.value).actions ?? null);
-    const tierOf = (name: string): Json => {
+    const roleOf = (name: string): Json => {
       const [first = null] = listOf(fieldsOf(actions[name] ?? null).run);
-      return fieldsOf(first).tier ?? null;
+      return fieldsOf(first).role ?? null;
     };
-    assert.deepEqual([tierOf("design"), tierOf("challenge")], ["deep", "deep"]);
+    assert.deepEqual([roleOf("design"), roleOf("challenge")], ["designer", "challenger"]);
   });
 
   test("the design card on the light path, every practice held, offers approve, line by line", async () => {

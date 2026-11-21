@@ -26,7 +26,7 @@ export const alreadyDone = "Todo 1 is already done, so it is not marked again.";
 
 export const todoHides = "How todos are kept, numbered and never given a removed id again.";
 
-export const todoSaid: Json = [
+const todoSaid: Json = [
   { id: "P-32", sentence: "The mode has no skill step, so no step that needs no judgement is a skill." },
   { id: "P-35", sentence: "The one module names its interface todo before anything else." },
   { id: "P-52", sentence: "The rules of a todo are pure functions over the stored todos." },

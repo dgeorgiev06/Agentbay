@@ -127,6 +127,15 @@ function answeredDesign(): Json {
   };
 }
 
+function assertSecondPassAsked([first = {}, , again = {}, rejudged = {}]: readonly Record<string, Json>[]): void {
+  assert.deepEqual(again.answering, { design: todoDesign, practices: [notHeldP52], findings: [finding] });
+  assert.equal(again.stance, first.stance);
+  assert.deepEqual(again.practices, first.practices);
+  assert.deepEqual(rejudged.designs, [answeredDesign()]);
+  assert.deepEqual(rejudged.differences, []);
+  assert.deepEqual(rejudged.answered, { practices: [notHeldP52], findings: [finding] });
+}
+
 function actionsAsked(asked: readonly Asked[]): readonly string[] {
   return asked.map((each) => `${each.step.split("/")[0] ?? ""} ${each.action}`);
 }
@@ -249,13 +258,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
       "design-again design",
       "challenge-again challenge",
     ]);
-    const [first, , again, rejudged] = asked.map((each) => inputOf(each.task));
-    assert.deepEqual(again?.answering, { design: todoDesign, practices: [notHeldP52], findings: [finding] });
-    assert.equal(again?.stance, first?.stance);
-    assert.deepEqual(again?.practices, first?.practices);
-    assert.deepEqual(rejudged?.designs, [answeredDesign()]);
-    assert.deepEqual(rejudged?.differences, []);
-    assert.deepEqual(rejudged?.answered, { practices: [notHeldP52], findings: [finding] });
+    assertSecondPassAsked(asked.map((each) => inputOf(each.task)));
     const requirements = await requirementsIn(root);
     const changes = differences(
       { first: designOf(todoDesign), second: designOf(answeredDesign()) },

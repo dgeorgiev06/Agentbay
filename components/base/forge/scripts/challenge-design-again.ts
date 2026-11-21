@@ -2,7 +2,7 @@ import { defineScript, fieldsOf } from "../../../../bay/sdk.ts";
 import { challengeOf } from "./lib/challenge-answer.ts";
 import { foundOf } from "./lib/design-again.ts";
 import { textOf } from "./lib/json-values.ts";
-import { onlyWhenNeeded } from "./lib/second-round.ts";
+import { askedWhenNeeded } from "./lib/second-round.ts";
 
 export const run = defineScript(async (input, context) => {
   const fields = fieldsOf(input);
@@ -16,7 +16,7 @@ export const run = defineScript(async (input, context) => {
     practices: fieldsOf(fields.designs ?? null).practices ?? [],
     answered: foundOf(challengeOf(first)),
   };
-  const round = await onlyWhenNeeded(context, {
+  const round = await askedWhenNeeded(context, {
     needed: again.answered === true,
     action: "challenge",
     asked,

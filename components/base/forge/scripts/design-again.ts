@@ -3,7 +3,7 @@ import { challengeOf } from "./lib/challenge-answer.ts";
 import { answeringStance, foundOf, secondPassNeeded } from "./lib/design-again.ts";
 import { textOf } from "./lib/json-values.ts";
 import { pathOf, stanceOf } from "./lib/path-card.ts";
-import { onlyWhenNeeded } from "./lib/second-round.ts";
+import { askedWhenNeeded } from "./lib/second-round.ts";
 
 export const run = defineScript(async (input, context) => {
   const fields = fieldsOf(input);
@@ -19,7 +19,7 @@ export const run = defineScript(async (input, context) => {
     practices: designs.practices ?? [],
     answering: { design: chosen, ...foundOf(challenge) },
   };
-  const round = await onlyWhenNeeded(context, {
+  const round = await askedWhenNeeded(context, {
     needed: secondPassNeeded(challenge),
     action: "design",
     asked,

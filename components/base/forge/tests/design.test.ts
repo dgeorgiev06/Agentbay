@@ -19,6 +19,7 @@ import {
   kitTemplate,
   playedTo,
   printedCard,
+  processProject,
   project,
   removeAll,
   runOf,
@@ -182,7 +183,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
   });
 
   test("a design that serves no action for a condition goes back to its designer with the problem, and the run stops with it", async () => {
-    const root = await project(template);
+    const root = await processProject(template);
     const start = waitingOf(await startedDesign(root), "path");
     await decided(root, start, { step: "path", choice: "light" });
     const [todo = null] = listOf(fieldsOf(todoDesign).interfaces);

@@ -154,6 +154,8 @@ export async function removeAll(): Promise<void> {
   for (const root of roots) {
     await rm(root, { recursive: true, force: true });
   }
+  commandLines.clear();
+  rootsRunByProcess.clear();
 }
 
 export async function project(template: string): Promise<string> {
@@ -164,10 +166,13 @@ export async function project(template: string): Promise<string> {
   return root;
 }
 
-export async function processProject(template: string): Promise<string> {
-  const root = await project(template);
+export function byProcess(root: string): string {
   rootsRunByProcess.add(root);
   return root;
+}
+
+export async function processProject(template: string): Promise<string> {
+  return byProcess(await project(template));
 }
 
 async function inProcessRan(root: string, words: readonly string[]): Promise<Ran> {

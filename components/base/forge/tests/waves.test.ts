@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -66,17 +66,31 @@ function listOf(value: Json | undefined): readonly Json[] {
   return isList(value) ? value : [];
 }
 
-async function called(plan: string): Promise<Json> {
-  const ran = await bay(["call", "forge.waves", JSON.stringify({ plan }), "--json"]);
+type Printed = { readonly output: string };
+
+function outputOf(ran: Printed): Json {
   const run = fieldsOf(fieldsOf(jsonOf(ran.output)).run ?? null);
   assert.equal(run.status, "done", ran.output);
   return run.output ?? null;
 }
 
-async function waves(name: string, plan: Json): Promise<Json> {
+function wordsFor(plan: string): readonly string[] {
+  return ["call", "forge.waves", JSON.stringify({ plan }), "--json"];
+}
+
+async function called(plan: string): Promise<Json> {
+  return outputOf(await bay(wordsFor(plan)));
+}
+
+function calledInAProcess(plan: string): Promise<Json> {
+  const ran = spawnSync(process.execPath, ["bay/cli.ts", ...wordsFor(plan)], { cwd: copy, encoding: "utf8" });
+  return Promise.resolve(outputOf({ output: ran.stdout }));
+}
+
+async function waves(name: string, plan: Json, call = called): Promise<Json> {
   const file = `docs/plans/${name}.yaml`;
   await writeFile(join(copy, file), `${JSON.stringify(plan, null, 2)}\n`, "utf8");
-  return called(file);
+  return call(file);
 }
 
 function planned(name: string, scope: readonly string[], afterNames: readonly string[] = []): Planned {
@@ -284,8 +298,8 @@ test("three problems together are all reported", async () => {
   ]);
 });
 
-test("a plan of one slice has one wave and no problem", async () => {
-  const output = await waves("one", plan("One", [planned("A", ["a/**"])]));
+test("a plan of one slice has one wave and no problem, as a bay process works it out", async () => {
+  const output = await waves("one", plan("One", [planned("A", ["a/**"])]), calledInAProcess);
   assert.deepEqual(linesFrom(output, "One"), [
     "One",
     "1 slice in 1 wave. Longest chain, 1 slice: A.",

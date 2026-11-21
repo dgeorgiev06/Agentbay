@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { after, before, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
-import { answered, bayRan, submitted } from "./kit-copy.ts";
+import { answered, bayRan, byProcess, submitted } from "./kit-copy.ts";
 
 type Answer = { readonly verdict: "approve" | "reject" } | { readonly choice: string };
 
@@ -495,7 +495,7 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
   });
 
   test("3. a rejected start card fails the run, and nothing is cut", async () => {
-    const root = await project();
+    const root = byProcess(await project());
     const start = await started(root, planned("A3", ["docs/a3/**"], [item("DOD-A3-1", "must", "checks")]));
     const rejected = runOf(await decided(root, start, { step: "start", verdict: "reject" }));
     assert.equal(textAt(rejected, "status"), "failed");

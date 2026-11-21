@@ -352,9 +352,14 @@ to start one: a test that drives `bay` in a process of its own runs `node tests/
 
 Forge's end-to-end tests run their `bay` commands inside the test's own process. `commandLineIn(copy)`, from the
 test toolbox, loads `bay/bay-command.ts` from the case's copy of the kit and runs a command line there as
-`./bay.sh` would, with the same output and exit code, without the second or so a new `bay` process costs to start.
-Script steps still run in their own hosts, from the copy's kernel. The one case about a fresh kernel for each
-answer (`one-round.test.ts` case 6) starts a `bay` process per command, through `processProject`.
+`./bay.sh` would, without the second or so a new `bay` process costs to start. It answers the exit code and the
+text `bay` prints on stdout, without the trailing newline. It does not give what `bay` writes on stderr, and on an
+error that escapes the command line it rejects with that error where `bay` would print `internal error` and exit 70.
+Script steps still run in their own hosts, from the copy's kernel. One whole case of each workflow still starts a
+`bay` process per command, through `processProject` (or `byProcess`): rounds (`one-round.test.ts` case 6, a fresh
+kernel for each answer), design (a design that serves no action for a condition), plan (a condition no slice
+meets), one-slice (case 3, a rejected start card), wave (a wave stopped after a slice failed as a run), and one
+`forge.waves` call (`waves.test.ts`, a plan of one slice).
 
 Forge's tests give outputs captured from whole runs, in `components/base/forge/tests/given-*.json`. When a
 workflow or an output schema changes, they no longer start, and the refusal names the step. `node

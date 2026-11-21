@@ -20,6 +20,7 @@ import {
   kitTemplate,
   playedTo,
   printedCard,
+  processProject,
   project,
   removeAll,
   runOf,
@@ -51,8 +52,7 @@ after(async () => {
   await removeAll();
 });
 
-async function designed(): Promise<string> {
-  const root = await project(template);
+async function designed(root: string): Promise<string> {
   const folder = join(root, ".designed");
   git(root, ["worktree", "add", "-q", folder, into]);
   await writtenIn(folder, todoDesignFiles());
@@ -119,7 +119,7 @@ function actions(asked: readonly Asked[]): readonly string[] {
 
 describe("the workflow plan, from the committed todo design", { concurrency: true }, () => {
   test("with no finding the card is as printed, the planner and the challenger run once, and approve commits the plan with the first wave's slice requests", async () => {
-    const root = await designed();
+    const root = await designed(await project(template));
     const run = await startedPlan(root);
     const challenges: Json[] = [];
     const asked = await playedTo(root, textAt(run, "id"), {
@@ -188,7 +188,7 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
   });
 
   test("a challenge that leaves out a practice is sent back; one with a finding runs the planner's second round and a second challenge, whose finding left the card cites", async () => {
-    const root = await designed();
+    const root = await designed(await project(template));
     const run = await startedPlan(root);
     const tasks: Json[] = [];
     const answered = {
@@ -244,7 +244,7 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
   });
 
   test("a plan with a condition no slice meets goes back to its planner with the problem, and the run stops with it", async () => {
-    const root = await designed();
+    const root = await designed(await processProject(template));
     const run = await startedPlan(root);
     const short = { ...fieldsOf(tdTwo), meets: ["O2-C1", "O2-C2", "O2-C3", "O2-C5", "O2-C6"] };
     const feedback: Json[] = [];
@@ -269,7 +269,7 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
   });
 
   test("a refused requirements file stops the run with every problem and its line, and no plan is written", async () => {
-    const root = await designed();
+    const root = await designed(await project(template));
     const text = await readFile(join(root, requirementsFile), "utf8");
     await writeFile(join(root, requirementsFile), text.replace("        then: 0 todos are listed\n", ""), "utf8");
     const run = await startedPlan(root);

@@ -28,7 +28,7 @@
         }
       ]
     },
-    "base": "e24a3b1",
+    "base": "5ebe438",
     "bugs": [
       {
         "name": "the count is one too many",
@@ -42,6 +42,7 @@
       }
     ],
     "interface": [],
+    "rules": [],
     "fixed": ["components/modes/p2/tests/quill.test.ts"],
     "card": {
       "title": "Build slice P2?",
@@ -55,7 +56,7 @@
         },
         {
           "mark": "computed",
-          "words": "kind mode; base e24a3b1",
+          "words": "kind mode; base 5ebe438",
           "source": {
             "step": "slice"
           }
@@ -191,7 +192,7 @@
         },
         {
           "mark": "computed",
-          "words": "kind mode; base e24a3b1",
+          "words": "kind mode; base 5ebe438",
           "source": {
             "step": "slice"
           }
@@ -280,7 +281,7 @@
   "cut": {
     "folder": ".forge/worktrees/P2",
     "branch": "forge/P2",
-    "commit": "e24a3b143698e091cacf3309219ee5df9b74fe61"
+    "commit": "5ebe438953f1f75cdbec280c5bb5abd07919ac01"
   },
   "pin": {
     "pinned": []
@@ -297,7 +298,7 @@
     "round": 1,
     "stage": "proved",
     "done": false,
-    "base": "e24a3b143698e091cacf3309219ee5df9b74fe61",
+    "base": "5ebe438953f1f75cdbec280c5bb5abd07919ac01",
     "built": {
       "outcome": "stopped",
       "missing": {
@@ -307,10 +308,10 @@
     },
     "builder": {
       "branch": "forge/P2",
-      "commit": "e24a3b143698e091cacf3309219ee5df9b74fe61"
+      "commit": "5ebe438953f1f75cdbec280c5bb5abd07919ac01"
     },
     "builtAt": "round-1",
-    "head": "d9f6fbd501991aa2bc271f59d17dfc82128b8d96",
+    "head": "bc53255829ab2a0ac10a018538ba43aa0dcf3f3a",
     "branch": "forge/P2-tests-1",
     "folder": ".forge/worktrees/P2-tests-1",
     "declared": {
@@ -359,7 +360,7 @@
     "round": 1,
     "stage": "reviewed",
     "done": true,
-    "base": "e24a3b143698e091cacf3309219ee5df9b74fe61",
+    "base": "5ebe438953f1f75cdbec280c5bb5abd07919ac01",
     "built": {
       "outcome": "stopped",
       "missing": {
@@ -369,9 +370,9 @@
     },
     "builder": {
       "branch": "forge/P2",
-      "commit": "e24a3b143698e091cacf3309219ee5df9b74fe61"
+      "commit": "5ebe438953f1f75cdbec280c5bb5abd07919ac01"
     },
-    "head": "d9f6fbd501991aa2bc271f59d17dfc82128b8d96",
+    "head": "bc53255829ab2a0ac10a018538ba43aa0dcf3f3a",
     "branch": "forge/P2-tests-1",
     "declared": {
       "files": ["components/modes/p2/scripts/quill.ts", "components/modes/p2/tests/quill.test.ts"],
@@ -421,7 +422,7 @@
     "round": 1,
     "stage": "reviewed",
     "done": true,
-    "base": "e24a3b143698e091cacf3309219ee5df9b74fe61",
+    "base": "5ebe438953f1f75cdbec280c5bb5abd07919ac01",
     "built": {
       "outcome": "stopped",
       "missing": {
@@ -431,9 +432,9 @@
     },
     "builder": {
       "branch": "forge/P2",
-      "commit": "e24a3b143698e091cacf3309219ee5df9b74fe61"
+      "commit": "5ebe438953f1f75cdbec280c5bb5abd07919ac01"
     },
-    "head": "d9f6fbd501991aa2bc271f59d17dfc82128b8d96",
+    "head": "bc53255829ab2a0ac10a018538ba43aa0dcf3f3a",
     "branch": "forge/P2-tests-1",
     "declared": {
       "files": ["components/modes/p2/scripts/quill.ts", "components/modes/p2/tests/quill.test.ts"],
@@ -483,7 +484,7 @@
     "round": 1,
     "stage": "reviewed",
     "done": true,
-    "base": "e24a3b143698e091cacf3309219ee5df9b74fe61",
+    "base": "5ebe438953f1f75cdbec280c5bb5abd07919ac01",
     "built": {
       "outcome": "stopped",
       "missing": {
@@ -493,9 +494,9 @@
     },
     "builder": {
       "branch": "forge/P2",
-      "commit": "e24a3b143698e091cacf3309219ee5df9b74fe61"
+      "commit": "5ebe438953f1f75cdbec280c5bb5abd07919ac01"
     },
-    "head": "d9f6fbd501991aa2bc271f59d17dfc82128b8d96",
+    "head": "bc53255829ab2a0ac10a018538ba43aa0dcf3f3a",
     "branch": "forge/P2-tests-1",
     "declared": {
       "files": ["components/modes/p2/scripts/quill.ts", "components/modes/p2/tests/quill.test.ts"],
@@ -545,7 +546,7 @@
     "round": 1,
     "stage": "reviewed",
     "done": true,
-    "base": "e24a3b143698e091cacf3309219ee5df9b74fe61",
+    "base": "5ebe438953f1f75cdbec280c5bb5abd07919ac01",
     "built": {
       "outcome": "stopped",
       "missing": {
@@ -555,9 +556,9 @@
     },
     "builder": {
       "branch": "forge/P2",
-      "commit": "e24a3b143698e091cacf3309219ee5df9b74fe61"
+      "commit": "5ebe438953f1f75cdbec280c5bb5abd07919ac01"
     },
-    "head": "d9f6fbd501991aa2bc271f59d17dfc82128b8d96",
+    "head": "bc53255829ab2a0ac10a018538ba43aa0dcf3f3a",
     "branch": "forge/P2-tests-1",
     "declared": {
       "files": ["components/modes/p2/scripts/quill.ts", "components/modes/p2/tests/quill.test.ts"],
@@ -607,7 +608,7 @@
     "round": 1,
     "stage": "reviewed",
     "done": true,
-    "base": "e24a3b143698e091cacf3309219ee5df9b74fe61",
+    "base": "5ebe438953f1f75cdbec280c5bb5abd07919ac01",
     "built": {
       "outcome": "stopped",
       "missing": {
@@ -617,9 +618,9 @@
     },
     "builder": {
       "branch": "forge/P2",
-      "commit": "e24a3b143698e091cacf3309219ee5df9b74fe61"
+      "commit": "5ebe438953f1f75cdbec280c5bb5abd07919ac01"
     },
-    "head": "d9f6fbd501991aa2bc271f59d17dfc82128b8d96",
+    "head": "bc53255829ab2a0ac10a018538ba43aa0dcf3f3a",
     "branch": "forge/P2-tests-1",
     "declared": {
       "files": ["components/modes/p2/scripts/quill.ts", "components/modes/p2/tests/quill.test.ts"],

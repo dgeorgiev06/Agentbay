@@ -13,6 +13,7 @@ import {
   type ActionCaller,
   type Json,
   type Permissions,
+  type RandomDrawer,
   type ScriptRequest,
   type Spend,
   type StepOutcome,
@@ -21,6 +22,7 @@ import {
 } from "../contracts.ts";
 import type { Budget, Keeping } from "../generated/mode.ts";
 import type { StepRecord } from "./run-store.ts";
+import { drawerFor } from "./drawn-values.ts";
 import type { ScriptDetail } from "./step-detail.ts";
 import { scriptCallKey } from "./step-key.ts";
 import {
@@ -119,6 +121,13 @@ type ScriptAt = {
   readonly calls: CallRunner;
   readonly held: HeldWait;
   readonly startedAt: Date;
+  readonly step: StartedScript;
+};
+
+type StartedScript = {
+  readonly detail: ScriptDetail;
+  readonly startedAt: string;
+  readonly random: RandomDrawer;
 };
 
 function minutesSince(walk: Walk, time: Date): number {
@@ -172,14 +181,21 @@ function scriptRequest(walk: Walk, frame: ActionFrame, at: ScriptAt): ScriptRequ
     remaining,
     ...stepTimeLimit(ownTimeLimit(frame, leaf), remaining),
     call: actionCaller(walk, frame, at),
+    random: at.step.random,
+    startedAt: new Date(at.step.startedAt),
     ...(frame.caller === undefined ? {} : { caller: frame.caller }),
     ...(leaf.skillInput === undefined ? {} : { skillInput: leaf.skillInput }),
   };
 }
 
+function latestDetail(walk: Walk, leaf: ScriptLeaf, started: ScriptDetail): ScriptDetail {
+  return scriptDetailOf(walk.records.get(leaf.key)) ?? started;
+}
+
 async function stopForCall(walk: Walk, stopped: StoppedAttempt): Promise<Progress> {
-  const stoppedForCall = addSpend(stopped.detail.stoppedForCall ?? noSpend, stopped.outcome.spent);
-  const detail = { ...stopped.detail, stoppedForCall };
+  const latest = latestDetail(walk, stopped.leaf, stopped.detail);
+  const stoppedForCall = addSpend(latest.stoppedForCall ?? noSpend, stopped.outcome.spent);
+  const detail = { ...latest, stoppedForCall };
   await changeDetail(walk, { key: stopped.leaf.key, kind: stopped.leaf.kind, detail });
   return stopped.waiting;
 }
@@ -221,18 +237,39 @@ function gatedScript(
   return attemptScript(walk, frame, at);
 }
 
-async function startedScript(
+function drawerOf(walk: Walk, leaf: ScriptLeaf, detail: ScriptDetail): RandomDrawer {
+  return drawerFor(leaf.key, detail.drawn ?? [], async (drawn) => {
+    const latest = latestDetail(walk, leaf, detail);
+    await changeDetail(walk, { key: leaf.key, kind: leaf.kind, detail: { ...latest, drawn } });
+  });
+}
+
+async function startedRecord(
   walk: Walk,
   at: { leaf: ScriptLeaf; record: StepRecord | undefined },
-): Promise<ScriptDetail> {
+): Promise<Omit<StartedScript, "random">> {
   const { leaf, record } = at;
   const detail = scriptDetailOf(record) ?? { script: leaf.script };
   if (record !== undefined) {
     await noteRerun(walk, leaf);
-    return detail;
+    return { detail, startedAt: record.startedAt };
   }
-  await startRecord(walk, { key: leaf.key, kind: leaf.kind, input: leaf.input, kept: leaf.kept, detail });
-  return detail;
+  const started = await startRecord(walk, {
+    key: leaf.key,
+    kind: leaf.kind,
+    input: leaf.input,
+    kept: leaf.kept,
+    detail,
+  });
+  return { detail, startedAt: started.startedAt };
+}
+
+async function startedScript(
+  walk: Walk,
+  at: { leaf: ScriptLeaf; record: StepRecord | undefined },
+): Promise<StartedScript> {
+  const { detail, startedAt } = await startedRecord(walk, at);
+  return { detail, startedAt, random: drawerOf(walk, at.leaf, detail) };
 }
 
 async function attemptScript(
@@ -241,14 +278,15 @@ async function attemptScript(
   at: ScriptStep & { readonly record: StepRecord | undefined },
 ): Promise<Progress> {
   const leaf = { ...at.leaf, input: at.record?.input ?? at.leaf.input };
-  const detail = await startedScript(walk, { leaf, record: at.record });
+  const step = await startedScript(walk, { leaf, record: at.record });
+  const { detail } = step;
   const startedAt = walk.services.clock.now();
   await walk.services.store.heartbeat(walk.writer, startedAt);
   const before = frame.budget.spent;
   charge(frame.budget, detail.stoppedForCall ?? noSpend);
   const held: HeldWait = { waiting: undefined };
   const outcome = await walk.services.runner.run(
-    scriptRequest(walk, frame, { leaf, calls: at.calls, held, startedAt }),
+    scriptRequest(walk, frame, { leaf, calls: at.calls, held, startedAt, step }),
   );
   charge(frame.budget, outcome.spent);
   if (held.waiting !== undefined) {

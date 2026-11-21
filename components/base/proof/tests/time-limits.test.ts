@@ -38,6 +38,7 @@ function contextOf(asked: Asked, answers: Readonly<Record<string, Json>>): Scrip
     settings: { stepSeconds: 3600, longestCallSeconds: 2400 },
     now: () => new Date("2026-11-20T10:00:00Z"),
     spend: unanswered,
+    random: unanswered,
     caller: undefined,
     skillInput: undefined,
   };

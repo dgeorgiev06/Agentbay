@@ -87,6 +87,26 @@ const dynamicImportSyntax = {
   message: "Mode and adapter code uses static imports only.",
 };
 
+const clockMessage = "A mode script reads the time with context.now(), which a step run again gets back unchanged.";
+
+const randomMessage =
+  "A mode script draws random values with context.random(bytes), which a step run again gets back unchanged.";
+
+const randomCalls = "/^(randomBytes|randomUUID|randomInt|randomFill|randomFillSync|getRandomValues)$/";
+
+const replaySafeSyntax = [
+  { selector: "CallExpression[callee.object.name='Date'][callee.property.name='now']", message: clockMessage },
+  { selector: "NewExpression[callee.name='Date'][arguments.length=0]", message: clockMessage },
+  { selector: "CallExpression[callee.name='Date']", message: clockMessage },
+  { selector: "CallExpression[callee.object.name='Math'][callee.property.name='random']", message: randomMessage },
+  { selector: `CallExpression[callee.name=${randomCalls}]`, message: randomMessage },
+  { selector: `CallExpression[callee.property.name=${randomCalls}]`, message: randomMessage },
+  {
+    selector: `ImportDeclaration[source.value=/^(node:)?crypto$/] ImportSpecifier[imported.name=${randomCalls}]`,
+    message: randomMessage,
+  },
+];
+
 const noComments = {
   meta: {
     type: "problem",
@@ -155,6 +175,12 @@ export default defineConfig(
     rules: {
       "no-restricted-imports": ["error", { patterns: [kernelImportsForModes, kitSpecifiersForModes] }],
       "no-restricted-syntax": ["error", ...bannedSyntax, dynamicImportSyntax],
+    },
+  },
+  {
+    files: ["components/**/scripts/**/*.ts"],
+    rules: {
+      "no-restricted-syntax": ["error", ...bannedSyntax, dynamicImportSyntax, ...replaySafeSyntax],
     },
   },
   ...modeBoundaryConfigs,

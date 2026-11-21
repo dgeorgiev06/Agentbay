@@ -11,6 +11,7 @@ export type StepKind = (typeof stepKinds)[number];
 export type ScriptDetail = {
   readonly script: string;
   readonly stoppedForCall?: Spend;
+  readonly drawn?: readonly string[];
 };
 
 export type SkillDetail = {
@@ -99,9 +100,11 @@ function optionalSpend(value: Json, field: string): Spend | undefined {
 
 function scriptDetailOf(value: Json, kind: StepKind): ScriptDetail {
   const stoppedForCall = optionalSpend(value, "stoppedForCall");
+  const drawn = textsField(value, "drawn");
   return {
     script: requiredText(value, "script", kind),
     ...(stoppedForCall === undefined ? {} : { stoppedForCall }),
+    ...(drawn.length === 0 ? {} : { drawn }),
   };
 }
 

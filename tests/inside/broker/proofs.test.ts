@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { Answer } from "../../../bay/answers.ts";
 import { openStep, type OpenStep } from "../../../bay/broker/step-broker.ts";
-import type { ActionCaller, Effect, Json, ModeGrants } from "../../../bay/contracts.ts";
+import type { ActionCaller, Effect, Json, ModeGrants, RandomDrawer } from "../../../bay/contracts.ts";
 import {
   nodeChildProcesses,
   nodeFileInspector,
@@ -36,6 +36,7 @@ type Asking = {
   readonly effects: readonly Effect[];
   readonly grants?: (root: string) => Partial<ModeGrants>;
   readonly call?: ActionCaller;
+  readonly random?: RandomDrawer;
 };
 
 type Refusing = Asking & { readonly change: string; readonly detail?: { readonly [key: string]: Json } };
@@ -85,6 +86,12 @@ const commandNeeds = (effect: Effect): string => `To allow it, add ${effect} to 
 const brokerKinds = "Choose another kind for the event.";
 
 const spendingShape = "Report spending as { items, usd, tokens } with numbers of at least 0.";
+
+const randomSize = "Ask for at most 64, and ask again for more.";
+
+function drawerAnswering(value: string): RandomDrawer {
+  return () => Promise.resolve({ status: "done", value });
+}
 
 const projectFolderOnly =
   'Give a folder of the project in the call to context.commands.run, such as "."; no manifest line allows another.';
@@ -749,6 +756,29 @@ const proofs: Proofs = {
       },
     ],
   },
+  random: {
+    withoutEffect: "needs no effect",
+    outsideGrant: [
+      { ask: (broker) => broker.entries.random({ bytes: 65 }), effects: allFive, change: randomSize },
+      { ask: (broker) => broker.entries.random({ bytes: 0.5 }), effects: allFive, change: randomSize },
+    ],
+    allowed: [
+      {
+        ask: (broker) => broker.entries.random({ bytes: 2 }),
+        effects: [],
+        random: drawerAnswering("ab12"),
+        value: "ab12",
+        recorded: [],
+      },
+      {
+        ask: (broker) => broker.entries.random({ bytes: 64 }),
+        effects: [],
+        random: drawerAnswering("cd".repeat(64)),
+        value: "cd".repeat(64),
+        recorded: [],
+      },
+    ],
+  },
   "commands.run": {
     withoutEffect: [
       {
@@ -946,6 +976,7 @@ async function asked(asking: Asking): Promise<Asked> {
       commandSearchPath: "/usr/bin:/bin",
       interfaceSchemas: noInterfaceSchemas,
       ...(asking.call === undefined ? {} : { call: asking.call }),
+      ...(asking.random === undefined ? {} : { random: asking.random }),
     });
     const before = (await treeOf(root)).join("\n");
     try {

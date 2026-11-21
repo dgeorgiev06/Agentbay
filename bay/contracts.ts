@@ -91,9 +91,16 @@ export type ScriptRequest = StepTimeLimit & {
   readonly settings: Readonly<Record<string, unknown>>;
   readonly remaining: Budget;
   readonly call: ActionCaller;
+  readonly random: RandomDrawer;
+  readonly startedAt: Date;
   readonly caller?: string;
   readonly skillInput?: Json;
 };
+
+export type Drawn =
+  { readonly status: "done"; readonly value: string } | { readonly status: "failed"; readonly reason: string };
+
+export type RandomDrawer = (bytes: number) => Promise<Drawn>;
 
 export type Settled =
   { readonly status: "done"; readonly output: Json } | { readonly status: "failed"; readonly reason: string };

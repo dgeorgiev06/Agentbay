@@ -16,13 +16,17 @@ import {
   type Step,
 } from "./rule.ts";
 
-type OtherOperationName = Extract<OperationName, "secrets.get" | "events.emit" | "spend" | "call">;
+type OtherOperationName = Extract<OperationName, "secrets.get" | "events.emit" | "spend" | "call" | "random">;
 
 type DeclaredSecret = { readonly secret: string };
 
 type ScriptEvent = { readonly eventKind: string; readonly detail: Json };
 
 type CallToMake = { readonly target: string; readonly input: Json };
+
+type RandomToDraw = { readonly size: number };
+
+const mostRandomBytes = 64;
 
 const brokerKinds: readonly string[] = ["refused", "http", "redacted", "command", "throwaway"];
 
@@ -174,11 +178,40 @@ const call: Definition<"call", CallToMake> = {
   refusalDetail: noRefusalDetail,
 };
 
+function isRandomSize(bytes: number): boolean {
+  return Number.isInteger(bytes) && bytes >= 1 && bytes <= mostRandomBytes;
+}
+
+const random: Definition<"random", RandomToDraw> = {
+  operation: "random",
+  needs: () => [],
+  described: (request) => `draw ${String(request.bytes)} random bytes`,
+  rule: (request, asking) => {
+    if (isRandomSize(request.bytes)) {
+      return Promise.resolve(allowedWith({ size: request.bytes }));
+    }
+    return Promise.resolve(
+      refusedWith({
+        resource: "random",
+        asked: `${askingSentence(asking)} for ${String(request.bytes)} random bytes in one value`,
+        declared: `a value is a whole number of 1 to ${String(mostRandomBytes)} bytes`,
+        change: `Ask for at most ${String(mostRandomBytes)}, and ask again for more.`,
+      }),
+    );
+  },
+  handler: async (asked, doing) => {
+    const drawn = await doing.random(asked.size);
+    return drawn.status === "done" ? granted(drawn.value) : failed(drawn.reason);
+  },
+  refusalDetail: noRefusalDetail,
+};
+
 export function otherEntries(step: Step): Entries<OtherOperationName> {
   return {
     "secrets.get": (request) => answered(secretsGet, request, step),
     "events.emit": (request) => answered(eventsEmit, request, step),
     spend: (request) => answered(spend, request, step),
     call: (request) => answered(call, request, step),
+    random: (request) => answered(random, request, step),
   };
 }

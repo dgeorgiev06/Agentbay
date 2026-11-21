@@ -113,10 +113,10 @@ export function scriptCommand(scriptFile: string, request: ScriptRequest): reado
   ];
 }
 
-function startMessage(request: ScriptRequest, now: Date): Readonly<Record<string, unknown>> {
+function startMessage(request: ScriptRequest): Readonly<Record<string, unknown>> {
   const caller = request.caller === undefined ? {} : { caller: request.caller };
   const skillInput = request.skillInput === undefined ? {} : { skillInput: request.skillInput };
-  const fields = { input: request.input, settings: request.settings, now: now.toISOString() };
+  const fields = { input: request.input, settings: request.settings, now: request.startedAt.toISOString() };
   return { type: "start", ...fields, ...caller, ...skillInput };
 }
 
@@ -282,8 +282,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
   async function runChild(started: Started, milliseconds: number): Promise<StepOutcome> {
     const { request, state, broker } = started;
     const running = { ...started, answering: answeringFor(started) };
-    const startTime = options.clock.now();
-    const startedAt = startTime.getTime();
+    const startedAt = options.clock.now().getTime();
     const childRequest: ChildRequest = {
       command: process.execPath,
       arguments: scriptCommand(resolve(request.permissions.grants.modeFolder, request.script), request),
@@ -295,7 +294,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
     const child = options.childProcesses.start(childRequest, (line) => {
       heard(running, child, line);
     });
-    child.send(JSON.stringify(startMessage(request, startTime)));
+    child.send(JSON.stringify(startMessage(request)));
     const end = await child.ended;
     broker.close();
     await Promise.all(state.inFlight);
@@ -330,6 +329,7 @@ export function createScriptRunner(options: ScriptRunnerOptions): ScriptRunner {
       commandSearchPath: options.commandSearchPath,
       interfaceSchemas: options.interfaceSchemas,
       call: request.call,
+      random: request.random,
       stepTime: { startedAt, milliseconds },
       limits: { databaseMilliseconds: milliseconds, ...options.limits },
     });

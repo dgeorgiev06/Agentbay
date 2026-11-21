@@ -64,6 +64,7 @@ const resources: { readonly [Name in Resource]: Name } = {
   events: "events",
   call: "call",
   spend: "spend",
+  random: "random",
   script: "script",
   commands: "commands",
   schemas: "schemas",

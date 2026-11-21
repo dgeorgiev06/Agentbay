@@ -118,6 +118,17 @@ function runnerFor(root: string, options: RunOptions, events: RecordingSink): Sc
   }).scripts;
 }
 
+function drawingOf(options: RunOptions, draws: number[]): Pick<ScriptRequest, "random" | "startedAt"> {
+  const recording: RandomDrawer = (bytes) => {
+    draws.push(bytes);
+    return Promise.resolve({ status: "done", value: "ab".repeat(bytes) });
+  };
+  return {
+    random: options.random ?? recording,
+    startedAt: options.startedAt ?? new Date("2026-11-14T09:00:00.000Z"),
+  };
+}
+
 async function runScript(root: string, options: RunOptions): Promise<Run> {
   const events = options.events ?? recordingSink();
   const calls: (readonly [string, Json])[] = [];
@@ -138,13 +149,7 @@ async function runScript(root: string, options: RunOptions): Promise<Run> {
         calls.push([reference, input]);
         return Promise.resolve({ status: "done", output: { called: reference }, spent: noSpend });
       }),
-    random:
-      options.random ??
-      ((bytes) => {
-        draws.push(bytes);
-        return Promise.resolve({ status: "done", value: "ab".repeat(bytes) });
-      }),
-    startedAt: options.startedAt ?? new Date("2026-11-14T09:00:00.000Z"),
+    ...drawingOf(options, draws),
     ...(options.caller === undefined ? {} : { caller: options.caller }),
     ...(options.skillInput === undefined ? {} : { skillInput: options.skillInput }),
   };
@@ -1255,7 +1260,8 @@ test("context.random asks the kernel for each value, and a size outside 1 to 64 
 test("a value the kernel cannot give reaches the script as a failed answer with the kernel's sentence", async () => {
   await withProject(async (root) => {
     const random: RandomDrawer = () => Promise.resolve({ status: "failed", reason: "Step 0 has drawn enough." });
-    const body = "  const drawn = await context.random(4);\n  return drawn.ok ? drawn.value : [drawn.kind, drawn.message];";
+    const body =
+      "  const drawn = await context.random(4);\n  return drawn.ok ? drawn.value : [drawn.kind, drawn.message];";
     const run = await attempt(root, body, { random });
     assert.deepEqual(outputOf(run), ["failed", "Step 0 has drawn enough."]);
   });

@@ -45,7 +45,10 @@ const randomMessage =
 async function syntaxMessages(file: string, code: string): Promise<readonly string[]> {
   const config: unknown = await kitLint.calculateConfigForFile(file);
   const rules = typeof config === "object" && config !== null && "rules" in config ? config.rules : undefined;
-  const rule = typeof rules === "object" && rules !== null ? Reflect.get(rules, "no-restricted-syntax") : undefined;
+  const rule =
+    typeof rules === "object" && rules !== null && "no-restricted-syntax" in rules
+      ? rules["no-restricted-syntax"]
+      : undefined;
   const linter = new Linter({ configType: "flat" });
   const only = { files: ["**/*.ts"], languageOptions: { parser }, rules: { "no-restricted-syntax": rule } };
   return linter.verify(code, [only], { filename: "probe.ts" }).map((found) => found.message);

@@ -326,6 +326,16 @@ validator cannot compile or that sends it round without end. The validator has n
 cannot find stops the compile; it never fetches. A `pattern` is a regular expression as written, as in a schema
 file: one that backtracks without end stops the script at its own time limit, and nothing else.
 
+## The time and random values a script uses
+
+`context.now()` is the time the script's step first started, and `context.random(bytes)` answers a value of 1 to
+64 random bytes as hex. The kernel records each value in the step before the script sees it, so a step that runs
+again after a crash, a stop for a called action or the owner's rerun reads the same time and the same values in the
+same order; asked for more, it gets fresh ones. A skill's next round, a foreach item's new attempt and every other
+step have their own values. A step records at most 64, and on a rerun a value asked in another size than the one
+recorded is a failed answer. The kit's lint refuses `Date.now()`, `new Date()` with no arguments, `Math.random()`
+and the random calls of `node:crypto` in a mode's `scripts/` (`docs/designs/runs/replay-safe-clock.md`).
+
 ## Testing a part of a workflow
 
 A mode's test can run one part of a workflow alone. `project.runWorkflowPart(mode, path, { input, given, until })`,

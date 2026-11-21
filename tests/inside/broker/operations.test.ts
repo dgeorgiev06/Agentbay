@@ -129,6 +129,10 @@ const examples: Examples = {
     requests: [{ spending: { items: 1, usd: 0.25, tokens: 100 } }, { spending: {} }],
     results: [null, null],
   },
+  random: {
+    requests: [{ bytes: 16 }, { bytes: 1.5 }],
+    results: ["00112233445566778899aabbccddeeff", "ab"],
+  },
   "commands.run": {
     requests: [
       { name: "changes", arguments: [], folder: ".", timeLimitSeconds: 30, input: "y\n" },
@@ -162,11 +166,12 @@ const operationNames: readonly OperationName[] = [
   "events.emit",
   "call",
   "spend",
+  "random",
   "commands.run",
   "schemas.read",
 ];
 
-test("the table holds the seventeen operations a script can ask for, each with its resource", () => {
+test("the table holds the eighteen operations a script can ask for, each with its resource", () => {
   assert.deepEqual(
     Object.entries(shapes).map(([name, shape]) => `${name} ${shape.resource}`),
     [
@@ -185,6 +190,7 @@ test("the table holds the seventeen operations a script can ask for, each with i
       "events.emit events",
       "call call",
       "spend spend",
+      "random random",
       "commands.run commands",
       "schemas.read schemas",
     ],

@@ -84,7 +84,7 @@ function listed(names: readonly string[]): string {
 
 function keysOf(value: Json): string {
   if (Array.isArray(value)) {
-    return `a list of ${String(value.length)} elements`;
+    return value.length === 1 ? "a list of 1 element" : `a list of ${String(value.length)} elements`;
   }
   if (isRecord(value)) {
     return `a mapping with the keys ${listed(Object.keys(value))}`;

@@ -521,3 +521,25 @@ test("a run waiting on several steps prints each wait, and each task with its no
   );
   close();
 });
+
+function untilRun(stepKey: string, question: string): Run {
+  return {
+    ...endedRun({ status: "waiting", waiting: { reason: "owner", stepKey, question } }),
+    target: { kind: "workflow", mode: "parts", name: "workflows/flow.yaml", part: { given: [], until: "second" } },
+  };
+}
+
+test("a run started with until offers only the stop at its until step, and at any other step the rerun too", () => {
+  const source = '[--via terminal | --via chat --quote "<the owner\'s exact words>"]';
+  const atUntil = runResult(layout, { ok: true, value: untilRun("second", "Stopped after second.") }).text;
+  assert.deepEqual(atUntil.split("\n").slice(1), [
+    "Stopped after second.",
+    `stop with: bay resume r1 --stop ${source}`,
+  ]);
+  const elsewhere = runResult(layout, { ok: true, value: untilRun("first", "Run first again?") }).text;
+  assert.deepEqual(elsewhere.split("\n").slice(1), [
+    "Run first again?",
+    `run again with: bay resume r1 --rerun ${source}`,
+    `or stop with: bay resume r1 --stop ${source}`,
+  ]);
+});

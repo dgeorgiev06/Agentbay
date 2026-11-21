@@ -723,6 +723,10 @@ describe("a workflow target's resolve", () => {
       "$trigger.",
       "$trigger..topic",
       "$triggers",
+      "$trigger.a b",
+      "$trigger.tags.1+",
+      "$item.a b",
+      "$item.slice/name",
       "$item.",
       "$item..id",
       "$steps.write",
@@ -748,6 +752,18 @@ describe("a workflow target's resolve", () => {
       ok: false,
       problems: [sentence("$trigger.tags.2 resolves to nothing: $trigger.tags has no 2; it is a list of 2 elements.")],
     });
+    assert.deepEqual(target.resolve("$trigger.tags.1x", scope), {
+      ok: false,
+      problems: [
+        sentence("$trigger.tags.1x resolves to nothing: $trigger.tags has no 1x; it is a list of 2 elements."),
+      ],
+    });
+    assert.deepEqual(target.resolve("$trigger.tags.01", scope), {
+      ok: false,
+      problems: [
+        sentence("$trigger.tags.01 resolves to nothing: $trigger.tags has no 01; it is a list of 2 elements."),
+      ],
+    });
     assert.deepEqual(target.resolve("$trigger.request.title", afterWrite), {
       ok: false,
       problems: [
@@ -763,6 +779,10 @@ describe("a workflow target's resolve", () => {
     const withItem = { ...afterWrite, item: { slice: { name: "TD1" }, tags: ["a"] } };
     assert.deepEqual(target.resolve("$item.slice.name", withItem), { ok: true, value: "TD1" });
     assert.deepEqual(target.resolve("$item.tags.0", withItem), { ok: true, value: "a" });
+    assert.deepEqual(target.resolve("$item.tags.0x", withItem), {
+      ok: false,
+      problems: [sentence("$item.tags.0x resolves to nothing: $item.tags has no 0x; it is a list of 1 element.")],
+    });
     assert.deepEqual(target.resolve("$item.slice.title", withItem), {
       ok: false,
       problems: [

@@ -60,7 +60,7 @@
     "answered": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["practices", "findings"],
+      "required": ["practices", "findings", "changes"],
       "properties": {
         "practices": {
           "type": "array",
@@ -118,6 +118,16 @@
             }
           },
           "description": "The first challenge's findings."
+        },
+        "changes": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "description": "What changed between the first and the answered one, one line each, worked out by script; empty when nothing the script compares changed."
         }
       },
       "description": "Only on a second reading: what the first challenge answered not held and found, which the one design given now answers."

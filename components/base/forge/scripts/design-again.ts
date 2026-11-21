@@ -1,4 +1,4 @@
-import { defineScript, fieldsOf } from "../../../../bay/sdk.ts";
+import { defineScript, fail, fieldsOf } from "../../../../bay/sdk.ts";
 import { challengeOf } from "./lib/challenge-answer.ts";
 import { answeringStance } from "./lib/design-again.ts";
 import { textOf } from "./lib/json-values.ts";
@@ -11,7 +11,12 @@ export const run = defineScript(async (input, context) => {
   const first = fields.challenge ?? null;
   const challenge = challengeOf(first);
   const chosen = fieldsOf(first).design ?? null;
-  const path = pathOf(textOf(designs.path)) ?? "light";
+  const path =
+    pathOf(textOf(designs.path)) ??
+    fail(
+      `The designs step names the path "${textOf(designs.path)}", which is neither light nor full, so no designer ` +
+        "is asked again.",
+    );
   const asked = {
     file: textOf(fields.file),
     requirements: fields.requirements ?? null,

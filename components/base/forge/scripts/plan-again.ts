@@ -1,6 +1,6 @@
 import { defineScript, fieldsOf } from "../../../../bay/sdk.ts";
-import { planChallengeFound } from "./lib/plan-sources.ts";
-import { foundOf, onlyWhenNeeded, secondPassNeeded } from "./lib/second-round.ts";
+import { onlyWhenNeeded, planChallengeFound } from "./lib/plan-sources.ts";
+import { foundOf, secondPassNeeded } from "./lib/second-round.ts";
 
 export const run = defineScript(async (input, context) => {
   const { start = null, first = null, challenge = null } = fieldsOf(input);

@@ -5,13 +5,13 @@ import { after, before, describe, test } from "node:test";
 import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
 import { challengeOf } from "../scripts/lib/challenge-answer.ts";
 import { designCard, type DesignCardInput } from "../scripts/lib/design-card.ts";
-import { differences } from "../scripts/lib/design-compare.ts";
 import { designerAnswersOf, designOf } from "../scripts/lib/design-form.ts";
 import { listOf } from "../scripts/lib/json-values.ts";
 import { pathCard } from "../scripts/lib/path-card.ts";
 import { designPractices } from "../scripts/lib/practices.ts";
-import { conditionsOf, requirementsOf, type Requirements } from "../scripts/lib/requirements-form.ts";
+import { requirementsOf, type Requirements } from "../scripts/lib/requirements-form.ts";
 import {
+  answered,
   assertTheMainCheckoutIsUntouched,
   bay,
   branches,
@@ -27,6 +27,7 @@ import {
   removeAll,
   runOf,
   shown,
+  task as taskOf,
   textAt,
   waitingOf,
   worktrees,
@@ -127,13 +128,20 @@ function answeredDesign(): Json {
   };
 }
 
+const answeredChanges = [
+  "module todo: what it hides is worded differently",
+  "O1-C5: served by todo.add in the first, by todo.add, todo.list in the answered",
+  "O1-C6: served by todo.add in the first, by todo.add, todo.list in the answered",
+  "O1-C7: served by todo.add in the first, by todo.add, todo.list in the answered",
+];
+
 function assertSecondPassAsked([first = {}, , again = {}, rejudged = {}]: readonly Record<string, Json>[]): void {
   assert.deepEqual(again.answering, { design: todoDesign, practices: [notHeldP52], findings: [finding] });
   assert.equal(again.stance, first.stance);
   assert.deepEqual(again.practices, first.practices);
   assert.deepEqual(rejudged.designs, [answeredDesign()]);
   assert.deepEqual(rejudged.differences, []);
-  assert.deepEqual(rejudged.answered, { practices: [notHeldP52], findings: [finding] });
+  assert.deepEqual(rejudged.answered, { practices: [notHeldP52], findings: [finding], changes: answeredChanges });
 }
 
 function actionsAsked(asked: readonly Asked[]): readonly string[] {
@@ -190,7 +198,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     );
     assert.deepEqual(inputOf(designerTasks[0] ?? null).practices, practices);
     assert.deepEqual(inputOf(challengerTasks[0] ?? null).practices, practices);
-    const answered = allHeld(challengerTasks[0] ?? null);
+    const firstAnswer = allHeld(challengerTasks[0] ?? null);
     const card: Waiting = waitingOf(await shown(root, start.id), "card");
     const expected = await cardExpected(root, {
       path: "light",
@@ -199,7 +207,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
       design: designOf(todoDesign),
       problems: [],
       refusedSchemas: 0,
-      practices: challengeOf(answered).practices,
+      practices: challengeOf(firstAnswer).practices,
       findings: [],
       said: designerAnswersOf(todoDesign),
       differences: [],
@@ -226,6 +234,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     const kept = readYaml(git(root, ["show", `${into}:docs/designs/todo/design.yaml`]));
     assert.ok(kept.ok);
     assert.deepEqual(fieldsOf(kept.value).requirements, { file, version: 1 });
+    assert.equal("practices" in fieldsOf(kept.value), false);
     assert.deepEqual(worktrees(root), []);
     assert.deepEqual(branches(root), []);
     assertTheMainCheckoutIsUntouched(root);
@@ -259,17 +268,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
       "challenge-again challenge",
     ]);
     assertSecondPassAsked(asked.map((each) => inputOf(each.task)));
-    const requirements = await requirementsIn(root);
-    const changes = differences(
-      { first: designOf(todoDesign), second: designOf(answeredDesign()) },
-      conditionsOf(requirements),
-      { first: "the first", second: "the answered" },
-    );
-    assert.deepEqual(changes, [
-      "O1-C5: served by todo.add in the first, by todo.add, todo.list in the answered",
-      "O1-C6: served by todo.add in the first, by todo.add, todo.list in the answered",
-      "O1-C7: served by todo.add in the first, by todo.add, todo.list in the answered",
-    ]);
+    const changes = answeredChanges;
     const expected = await cardExpected(root, {
       path: "light",
       chosen: "first",
@@ -338,12 +337,50 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
       "           has answered the challenge once,",
       "           which is the most a design run",
       "           asks.",
-      "checked: 0 ran, 21 computed, 4 judged",
+      "checked: 0 ran, 22 computed, 4 judged",
     ]);
     const stopped = runOf(await decided(root, card, { step: "card", choice: "stop" }));
     assert.equal(textAt(stopped, "reason"), "The owner chose stop on the design card, so nothing is committed.");
     assert.deepEqual(worktrees(root), []);
     assert.deepEqual(branches(root), []);
+  });
+
+  test("a practice the first challenge held and the second answers not held withholds approve: the second challenge's answers decide", async () => {
+    const root = await project(template);
+    const start = waitingOf(await startedDesign(root), "path");
+    await decided(root, start, { step: "path", choice: "light" });
+    await playedTo(root, start.id, {
+      designer: (task) => Promise.resolve(inputOf(task).answering === undefined ? todoDesign : answeredDesign()),
+      challenger: (task) =>
+        Promise.resolve(
+          inputOf(task).answered === undefined
+            ? { ...fieldsOf(allHeld(task)), findings: [finding] }
+            : p52NotHeld(task, []),
+        ),
+    });
+    const card = waitingOf(await shown(root, start.id), "card");
+    const words = listOf(fieldsOf(card.card).lines).map((line) => textAt(line, "words"));
+    assert.ok(words.includes(`P-52, not held: ${notHeldP52.sentence}`), words.join("\n"));
+    assert.ok(words.includes("the first challenge gave 1 finding; the designer answered once"));
+    const rows = await printedCard(root, start.id, "Commit the design");
+    assert.ok(rows.includes("Not available:"), rows.join("\n"));
+  });
+
+  test("a finding past the tenth, a finding's words past their bound, and a designer's sentence past its bound are sent back by their schemas", async () => {
+    const root = await project(template);
+    const start = waitingOf(await startedDesign(root), "path");
+    await decided(root, start, { step: "path", choice: "light" });
+    const long = "x".repeat(501);
+    const overlong = { ...fieldsOf(todoDesign), practices: [{ id: "P-52", sentence: long }] };
+    assert.notEqual(fieldsOf(await answered(root, start.id, overlong)).ok, true);
+    assert.equal(fieldsOf(await answered(root, start.id, todoDesign)).ok, true);
+    const challengerTask = await taskOf(root, start.id);
+    const eleven = Array.from({ length: 11 }, (_, at) => ({ ...finding, where: `todo.add ${String(at)}` }));
+    const tooMany = { ...fieldsOf(allHeld(challengerTask)), findings: eleven };
+    assert.notEqual(fieldsOf(await answered(root, start.id, tooMany)).ok, true);
+    const tooLong = { ...fieldsOf(allHeld(challengerTask)), findings: [{ ...finding, wrong: "y".repeat(301) }] };
+    assert.notEqual(fieldsOf(await answered(root, start.id, tooLong)).ok, true);
+    assert.equal(fieldsOf(await answered(root, start.id, allHeld(challengerTask))).ok, true);
   });
 
   test("a design that does not say how it holds each practice it was given goes back to its designer with one sentence for each", async () => {

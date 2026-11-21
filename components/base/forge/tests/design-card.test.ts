@@ -6,7 +6,7 @@ import { challengeOf, refusedChallenge, type Challenge, type Finding } from "../
 import { answeringStance } from "../scripts/lib/design-again.ts";
 import { foundOf, secondPassNeeded } from "../scripts/lib/second-round.ts";
 import { designCard, type DesignCardInput, type SecondPass } from "../scripts/lib/design-card.ts";
-import { differences } from "../scripts/lib/design-compare.ts";
+import { answerChanges, differences } from "../scripts/lib/design-compare.ts";
 import { designOf } from "../scripts/lib/design-form.ts";
 import { listOf } from "../scripts/lib/json-values.ts";
 import { pathCard } from "../scripts/lib/path-card.ts";
@@ -456,5 +456,66 @@ describe("the comparison and the challenger's answer", () => {
       "The design answers P-52 more than once; answer each practice once.",
     ]);
     assert.deepEqual(designerPracticeProblems([], []), []);
+  });
+
+  test("the answer's changes list a module's hides worded anew, an example dropped and a practice's sentence changed, and nothing for the same design", () => {
+    const fields = fieldsOf(todoDesign);
+    const [module = null] = listOf(fields.modules);
+    const [todo = null] = listOf(fields.interfaces);
+    const [add = null, ...others] = listOf(fieldsOf(todo).actions);
+    const [, ...laterExamples] = listOf(fieldsOf(add).examples);
+    const reworded = { ...fields, modules: [{ ...fieldsOf(module), hides: "How todos are kept." }] };
+    const dropped = {
+      ...fields,
+      interfaces: [{ ...fieldsOf(todo), actions: [{ ...fieldsOf(add), examples: laterExamples }, ...others] }],
+    };
+    const [said = null, ...rest] = listOf(fields.practices);
+    const resaid = { ...fields, practices: [{ ...fieldsOf(said), sentence: "No skill step at all." }, ...rest] };
+    const conditions = ["O1-C1"];
+    assert.deepEqual(answerChanges(todoDesign, todoDesign, conditions), []);
+    assert.deepEqual(answerChanges(todoDesign, reworded, conditions), [
+      "module todo: what it hides is worded differently",
+    ]);
+    assert.deepEqual(answerChanges(todoDesign, dropped, conditions), ["todo.add: 1 example removed"]);
+    assert.deepEqual(answerChanges(todoDesign, resaid, conditions), [
+      "practice P-32: the designer's sentence is worded differently",
+    ]);
+    assert.deepEqual(answerChanges(dropped, todoDesign, conditions), ["todo.add: 1 example added"]);
+  });
+
+  test("an example changed in place and an action's reason worded anew are listed as changes", () => {
+    const fields = fieldsOf(todoDesign);
+    const [todo = null] = listOf(fields.interfaces);
+    const [add = null, ...others] = listOf(fieldsOf(todo).actions);
+    const [first = null, ...rest] = listOf(fieldsOf(add).examples);
+    const changed = { ...fieldsOf(first), input: { text: "buy bread" } };
+    const reasoned = (because: string, examples: readonly Json[]): Json => ({
+      ...fields,
+      interfaces: [{ ...fieldsOf(todo), actions: [{ ...fieldsOf(add), because, examples }, ...others] }],
+    });
+    assert.deepEqual(answerChanges(reasoned("One.", [first, ...rest]), reasoned("Two.", [changed, ...rest]), []), [
+      "todo.add: why it serves no condition is worded differently",
+      "todo.add: 1 example changed",
+    ]);
+  });
+
+  test("an action that serves no condition shows its reason as a judged line signed by the designer", async () => {
+    const input = await lightInput(allHeld);
+    const [todo] = input.design.interfaces;
+    assert.ok(todo !== undefined);
+    const [add, ...others] = todo.actions;
+    assert.ok(add !== undefined);
+    const operator = { ...add, name: "count", serves: [], because: "The operator counts the todos." };
+    const design = { ...input.design, interfaces: [{ ...todo, actions: [operator, add, ...others] }] };
+    const lines = designCard({ ...input, design }).card.lines;
+    const shown = lines.filter((line) => line.words.startsWith("count"));
+    assert.deepEqual(shown, [
+      { mark: "computed", words: "count: serves no condition; 3 examples", source: { step: "draw" } },
+      {
+        mark: "judged",
+        words: "count, why it serves none: The operator counts the todos.",
+        source: { step: "designs" },
+      },
+    ]);
   });
 });

@@ -6,7 +6,7 @@ import type { Plan } from "./plan.ts";
 import type { Conditions } from "./plan-conditions.ts";
 import { practiceAnswersOf } from "./practice-answers.ts";
 import { conditionsOf, requirementsOf } from "./requirements-form.ts";
-import type { Found } from "./second-round.ts";
+import { askedWhenNeeded, type Found, type Round } from "./second-round.ts";
 
 export type Sources = {
   readonly conditions?: Conditions;
@@ -42,7 +42,15 @@ export function givenOf(value: Json): Given {
   };
 }
 
-export function plannerAsked(start: Json, adds: JsonFields): JsonFields {
+export type SecondRound = {
+  readonly needed: boolean;
+  readonly action: "plan" | "challenge-plan";
+  readonly start: Json;
+  readonly adds: JsonFields;
+  readonly kept: Json;
+};
+
+function plannerAsked(start: Json, adds: JsonFields): JsonFields {
   const { file = null, requirements = null, design = null, document = null, practices = null } = fieldsOf(start);
   return { file, requirements, design, document, practices, ...adds };
 }
@@ -121,4 +129,9 @@ export async function readSources(context: ScriptContext, plan: Plan): Promise<S
 export function planChallengeFound(challenge: Json): Found<string> {
   const fields = fieldsOf(challenge);
   return { practices: practiceAnswersOf(fields.practices), findings: textsOf(fields.findings) };
+}
+
+export function onlyWhenNeeded(context: ScriptContext, round: SecondRound): Promise<Round> {
+  const { needed, action, kept } = round;
+  return askedWhenNeeded(context, { needed, action, kept, asked: plannerAsked(round.start, round.adds) });
 }

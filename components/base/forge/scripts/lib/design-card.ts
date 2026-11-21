@@ -1,5 +1,5 @@
 import type { Chosen, Finding } from "./challenge-answer.ts";
-import { computed, counted, joined, judged, type Card, type CardLine } from "./card-lines.ts";
+import { computed, counted, joined, judged, safeText, type Card, type CardLine } from "./card-lines.ts";
 import {
   actionsOf,
   type Action,
@@ -100,22 +100,23 @@ function moduleLines(module: Module, by: string): readonly CardLine[] {
   ];
 }
 
-function servesWords(action: Action): string {
-  if (action.serves.length === 0) {
-    return `serves no condition: ${action.because ?? ""}`;
+function actionLines(action: Action, by: string): readonly CardLine[] {
+  const examples = counted(action.examples.length, "example");
+  if (action.serves.length > 0) {
+    return [computed("draw", `${action.name}: serves ${action.serves.join(", ")}; ${examples}`)];
   }
-  return `serves ${action.serves.join(", ")}`;
+  return [
+    computed("draw", `${action.name}: serves no condition; ${examples}`),
+    judged(by, `${action.name}, why it serves none: ${safeText(action.because ?? "")}`),
+  ];
 }
 
-function interfaceLines(each: Interface): readonly CardLine[] {
+function interfaceLines(each: Interface, by: string): readonly CardLine[] {
   const heading = `interface ${each.name}: ${counted(each.actions.length, "action")}, ${counted(
     each.actions.length * 2,
     "schema file",
   )}`;
-  const actions = each.actions.map((action) =>
-    computed("draw", `${action.name}: ${servesWords(action)}; ${counted(action.examples.length, "example")}`),
-  );
-  return [computed("draw", heading), ...actions];
+  return [computed("draw", heading), ...each.actions.flatMap((action) => actionLines(action, by))];
 }
 
 function coverageWords(input: DesignCardInput): string {
@@ -220,7 +221,7 @@ export function designCard(input: DesignCardInput): DesignCard {
       `requirements: ${input.file}: ${counted(input.requirements.outcomes.length, "outcome")}, ${conditions}`,
     ),
     ...input.design.modules.flatMap((module) => moduleLines(module, by)),
-    ...input.design.interfaces.flatMap(interfaceLines),
+    ...input.design.interfaces.flatMap((each) => interfaceLines(each, by)),
     ...checkLines(input),
     ...passLines(input),
     ...practiceLines({ answers: input.practices, heldByRules, challenger: challengerStep(input) }),

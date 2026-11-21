@@ -443,6 +443,88 @@
         }
       ]
     },
+    "plan": {
+      "title": "The todo mode",
+      "oneAfterAnotherBecause": "Both slices write the one mode's folder, and the second adds to what the first makes.",
+      "slices": [
+        {
+          "title": "A todo mode that adds a todo and lists the open ones",
+          "meets": ["O1-C1", "O1-C2", "O1-C3", "O1-C4", "O1-C5", "O1-C6", "O1-C7"],
+          "interface": [
+            "docs/designs/todo/schemas/todo/add-request.json",
+            "docs/designs/todo/schemas/todo/add-response.json",
+            "docs/designs/todo/schemas/todo/list-request.json",
+            "docs/designs/todo/schemas/todo/list-response.json"
+          ],
+          "slice": {
+            "name": "TD1",
+            "kind": "mode",
+            "scope": ["components/modes/todo/**"],
+            "after": [],
+            "done": [
+              {
+                "id": "DOD-TD1-1",
+                "says": "The kit's checks pass with the todo mode in it.",
+                "level": "must",
+                "proof": {
+                  "kind": "checks"
+                }
+              },
+              {
+                "id": "DOD-TD1-2",
+                "says": "The mode's own test fails without the mode's code and passes with it.",
+                "level": "must",
+                "proof": {
+                  "kind": "fails-first",
+                  "tests": ["components/modes/todo/tests/todo.test.ts"]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "title": "The todo mode marks a todo done and removes one",
+          "meets": ["O2-C1", "O2-C2", "O2-C3", "O2-C4", "O2-C5", "O2-C6"],
+          "interface": [
+            "docs/designs/todo/schemas/todo/add-response.json",
+            "docs/designs/todo/schemas/todo/done-request.json",
+            "docs/designs/todo/schemas/todo/done-response.json",
+            "docs/designs/todo/schemas/todo/remove-request.json",
+            "docs/designs/todo/schemas/todo/remove-response.json"
+          ],
+          "slice": {
+            "name": "TD2",
+            "kind": "mode",
+            "scope": ["components/modes/todo/**"],
+            "after": [
+              {
+                "slice": "TD1",
+                "because": "It adds two actions to the mode TD1 makes."
+              }
+            ],
+            "done": [
+              {
+                "id": "DOD-TD2-1",
+                "says": "The kit's checks pass with the todo mode in it.",
+                "level": "must",
+                "proof": {
+                  "kind": "checks"
+                }
+              },
+              {
+                "id": "DOD-TD2-2",
+                "says": "The mode's own test fails without the mode's code and passes with it.",
+                "level": "must",
+                "proof": {
+                  "kind": "fails-first",
+                  "tests": ["components/modes/todo/tests/done-remove.test.ts"]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
     "again": {
       "answered": false,
       "plan": {

@@ -35,6 +35,7 @@ steps:
     action: challenge-again
     input:
       start: $steps.start.output
+      plan: $steps.plan-1.output
       again: $steps.plan-2.output
       first: $steps.challenge-1.output
   - id: draw
@@ -49,7 +50,7 @@ steps:
   - id: card
     approval: Commit this plan?
     show: $steps.draw.output.card
-    quotes: [challenge-1, challenge-2]
+    quotes: [plan-1, plan-2, challenge-1, challenge-2]
     choices:
       approve: { does: Commit the plan, when: $steps.draw.output.offered.approve }
       stop: { does: Stop; nothing is committed }

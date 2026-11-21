@@ -128,12 +128,43 @@ test("on the full path the second designer's task holds nothing of the first des
   const card = waitingOf(await shown(root, start.id), "card");
   const printed = (await printedCard(root, start.id, "Commit the design")).join(" ").replace(/ {2,}/g, " ");
   assert.match(printed, /the second design of two written apart, answered once after the first challenge;/);
-  assert.match(printed, /where the two designs differed: 2 module todo: only in the first design/);
-  assert.match(printed, /module todo-list: only in the second design/);
+  assert.match(printed, /where the two designs differed: 4 module todo: only in the first design/);
+  assert.match(printed, /module todo-list: only in the second design todo.done: 2 examples changed todo.remove: 1/);
   assert.match(printed, /judged chosen because: It names the/);
   const done = runOf(await decided(root, card, { step: "card", choice: "approve" }));
   assert.equal(textAt(done, "status"), "done", JSON.stringify(done));
   const committed = git(root, ["show", `${into}:docs/designs/todo/design.yaml`]);
   assert.ok(committed.includes(answeredHides));
+  assert.ok(!committed.includes(todoHides));
+});
+
+test("on the full path with nothing found, no designer is asked again and approve commits the design the challenger chose", async () => {
+  const root = await project(template);
+  const startedRun = runOf(
+    await bay(root, ["call", "--workflow", "forge:workflows/design.yaml", JSON.stringify({ file })]),
+  );
+  const start = waitingOf(startedRun, "path");
+  await decided(root, start, { step: "path", choice: "full" });
+  const asked = await playedTo(root, start.id, {
+    designer: (task) =>
+      Promise.resolve(textAt(fieldsOf(task).input ?? null, "stance").startsWith("Split") ? secondDesign : todoDesign),
+    challenger: (task) => {
+      const practices = listOf(fieldsOf(fieldsOf(task).input ?? null).practices).map((practice) => ({
+        id: textAt(practice, "id"),
+        answer: "held",
+        sentence: "It holds.",
+      }));
+      return Promise.resolve({ chosen: "second", because: "It names the module for the list it keeps.", practices });
+    },
+  });
+  assert.deepEqual(
+    asked.map((each) => each.action),
+    ["design", "design", "challenge"],
+  );
+  const card = waitingOf(await shown(root, start.id), "card");
+  const done = runOf(await decided(root, card, { step: "card", choice: "approve" }));
+  assert.equal(textAt(done, "status"), "done", JSON.stringify(done));
+  const committed = git(root, ["show", `${into}:docs/designs/todo/design.yaml`]);
+  assert.ok(committed.includes(secondHides));
   assert.ok(!committed.includes(todoHides));
 });

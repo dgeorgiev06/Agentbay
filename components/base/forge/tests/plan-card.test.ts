@@ -13,6 +13,8 @@ import { printed } from "./printed-card.ts";
 import { designFile, requirementsFile, tdOne, tdTwo, todoDesignFiles, todoPlan } from "./todo-plan.ts";
 
 const skills = {
+  "plan-1": "forge skills/plan, tier balanced",
+  "plan-2": "forge skills/plan, tier balanced",
   "challenge-1": "forge skills/challenge-plan, tier deep",
   "challenge-2": "forge skills/challenge-plan, tier deep",
 };
@@ -66,13 +68,18 @@ const todoCard = `Commit the plan for todo?
   cut from docs/designs/todo/design.yaml and
     docs/requirements/todo.yaml: 13
     conditions
-  wave 1: TD1, module todo: A todo mode that
-    adds a todo and lists the open ones;
-    meets O1-C1, O1-C2, O1-C3, O1-C4, O1-C5,
-    O1-C6, O1-C7
-  wave 2: TD2, module todo: The todo mode
-    marks a todo done and removes one; meets
-    O2-C1, O2-C2, O2-C3, O2-C4, O2-C5, O2-C6
+  wave 1: TD1, module todo; meets O1-C1,
+    O1-C2, O1-C3, O1-C4, O1-C5, O1-C6, O1-C7
+judged   TD1: A todo mode that adds a todo
+judged     and lists the open ones
+judged    by forge skills/plan, tier
+judged      balanced
+  wave 2: TD2, module todo; meets O2-C1,
+    O2-C2, O2-C3, O2-C4, O2-C5, O2-C6
+judged   TD2: The todo mode marks a todo
+judged     done and removes one
+judged    by forge skills/plan, tier
+judged      balanced
   TD2 after TD1: It adds two actions to the
     mode TD1 makes.
   one after another because: Both slices
@@ -95,11 +102,11 @@ const todoCard = `Commit the plan for todo?
   approve commits it into integration as
     docs/plans/NNNN-todo.yaml, NNNN the next
     free number
-All lines worked out by script.
+Unmarked lines were worked out by script.
 You can:
   approve  Commit the plan
   stop     Stop; nothing is committed
-checked: 0 ran, 14 computed, 0 judged`;
+checked: 0 ran, 14 computed, 2 judged`;
 
 const answeredNotHeld = `Commit the plan for todo?
   2 slices in 2 waves; longest chain: TD1,
@@ -107,13 +114,18 @@ const answeredNotHeld = `Commit the plan for todo?
   cut from docs/designs/todo/design.yaml and
     docs/requirements/todo.yaml: 13
     conditions
-  wave 1: TD1, module todo: A todo mode that
-    adds a todo and lists the open ones;
-    meets O1-C1, O1-C2, O1-C3, O1-C4, O1-C5,
-    O1-C6, O1-C7
-  wave 2: TD2, module todo: The todo mode
-    marks a todo done and removes one; meets
-    O2-C1, O2-C2, O2-C3, O2-C4, O2-C5, O2-C6
+  wave 1: TD1, module todo; meets O1-C1,
+    O1-C2, O1-C3, O1-C4, O1-C5, O1-C6, O1-C7
+judged   TD1: A todo mode that adds a todo
+judged     and lists the open ones
+judged    by forge skills/plan, tier
+judged      balanced
+  wave 2: TD2, module todo; meets O2-C1,
+    O2-C2, O2-C3, O2-C4, O2-C5, O2-C6
+judged   TD2: The todo mode marks a todo
+judged     done and removes one
+judged    by forge skills/plan, tier
+judged      balanced
   TD2 after TD1: It adds two actions to the
     mode TD1 makes.
   one after another because: Both slices
@@ -161,7 +173,7 @@ Not available:
            has answered the challenge once,
            which is the most a plan run
            asks.
-checked: 0 ran, 16 computed, 2 judged`;
+checked: 0 ran, 16 computed, 4 judged`;
 
 function withMeets(planned: Json, meets: readonly string[]): Json {
   return { ...fieldsOf(planned), meets: [...meets] };
@@ -221,7 +233,10 @@ describe("the plan card", () => {
       rows.filter((row) => Array.from(row).length > 44),
       [],
     );
-    assert.ok(rows.includes(`    ${"A".repeat(20)}...; meets O1-C1,`), rows.join("\n"));
+    assert.ok(
+      rows.some((row) => row.startsWith("judged") && row.endsWith("A...")),
+      rows.join("\n"),
+    );
   });
 });
 

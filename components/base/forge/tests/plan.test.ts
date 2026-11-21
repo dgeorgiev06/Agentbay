@@ -34,6 +34,8 @@ import { printed } from "./printed-card.ts";
 import { designFile, requirementsFile, tdOne, tdTwo, todoDesignFiles, todoPlan, writtenIn } from "./todo-plan.ts";
 
 const skills = {
+  "plan-1": "forge skills/plan, tier balanced",
+  "plan-2": "forge skills/plan, tier balanced",
   "challenge-1": "forge skills/challenge-plan, tier deep",
   "challenge-2": "forge skills/challenge-plan, tier deep",
 };
@@ -239,6 +241,7 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
     assert.deepEqual(fieldsOf(fieldsOf(tasks[2] ?? null).input ?? null).answered, {
       practices: [],
       findings: [finding],
+      changes: ["TD2's title"],
     });
     const card = waitingOf(await shown(root, textAt(run, "id")), "card");
     const expected = {
@@ -254,7 +257,7 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
     const judged = listOf(fieldsOf(card.card).lines).filter((line) => textAt(line, "mark") === "judged");
     assert.deepEqual(
       judged.map((line) => textAt(fieldsOf(line).source ?? null, "step")),
-      ["challenge-2", "challenge-2"],
+      ["plan-2", "plan-2", "challenge-2", "challenge-2"],
     );
     const stopped = runOf(await decided(root, card, { step: "card", choice: "stop" }));
     assert.equal(textAt(stopped, "reason"), "The owner chose stop on the plan card, so nothing is committed.");
@@ -287,7 +290,11 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
       practices: notHeld,
       findings: [],
     });
-    assert.deepEqual(fieldsOf(fieldsOf(tasks[1] ?? null).input ?? null).answered, { practices: notHeld, findings: [] });
+    assert.deepEqual(fieldsOf(fieldsOf(tasks[1] ?? null).input ?? null).answered, {
+      practices: notHeld,
+      findings: [],
+      changes: ["TD2's title"],
+    });
     const card = waitingOf(await shown(root, textAt(run, "id")), "card");
     const expected = {
       plan: answeredPlan,

@@ -50,12 +50,23 @@ function withheldReason(input: PlanCardInput): string | undefined {
   return reasons.length === 0 ? undefined : reasons.join(" ");
 }
 
-export function sliceWords(slice: PlannedSlice, design: DesignSummary): string {
+function plannerStep(answer: PlannerAnswer): string {
+  return answer.kind === "answered" ? "plan-2" : "plan-1";
+}
+
+function sliceWords(slice: PlannedSlice, design: DesignSummary): string {
   const modules = modulesReached(slice, design);
   const module = modules.length === 0 ? "no module of the design" : `module ${joined(modules)}`;
   const meets = slice.meets ?? [];
   const met = meets.length === 0 ? "meets no condition" : `meets ${meets.join(", ")}`;
-  return `${slice.name}, ${module}: ${shortened(slice.title, titleShown)}; ${met}`;
+  return `${slice.name}, ${module}; ${met}`;
+}
+
+function sliceLines(input: PlanCardInput, wave: number, slice: PlannedSlice): readonly CardLine[] {
+  return [
+    computed("draw", `wave ${String(wave)}: ${sliceWords(slice, input.design)}`),
+    judged(plannerStep(input.answer), `${slice.name}: ${shortened(slice.title, titleShown)}`),
+  ];
 }
 
 function waveLines(input: PlanCardInput): readonly CardLine[] {
@@ -63,9 +74,7 @@ function waveLines(input: PlanCardInput): readonly CardLine[] {
   const waves = input.workedOut.waves.flatMap((wave) =>
     wave.slices.flatMap((name) => {
       const slice = named.get(name);
-      return slice === undefined
-        ? []
-        : [computed("draw", `wave ${String(wave.wave)}: ${sliceWords(slice, input.design)}`)];
+      return slice === undefined ? [] : sliceLines(input, wave.wave, slice);
     }),
   );
   const { notPlaced } = input.workedOut;

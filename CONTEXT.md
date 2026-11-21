@@ -7,6 +7,7 @@ One meaning per word. Briefs, plans, code names and reviews use these words and 
 | Term | Meaning | Do not say |
 |---|---|---|
 | **Kit** | The agentbay checkout: the kernel, the adapters and the modes that ship with it. | framework folder, repo root |
+| **Coordinator** | The owner's own harness session, outside every step, that runs agentbay through its command line and hands each skill step's task to the agent made for it. The block `bay build` writes into `CLAUDE.md` tells it what to do. The adapter's README calls it the main thread. | Chief of Staff, main thread, main agent |
 | **Project** | The owner's folder. It holds `agentbay.config.yaml`, the project's own modes and the `.agentbay/` data folder. | workspace, app |
 | **Mode** | A folder with a `mode.yaml`. The unit that is installed, composed and permitted. | plugin, component, connector |
 | **Action** | A named thing a mode can do, with typed input and output and declared effects. A mode's actions are its interface. | feature, command, endpoint |
@@ -71,7 +72,7 @@ One meaning per word. Briefs, plans, code names and reviews use these words and 
 | **Kernel** | The code in `bay/`. It loads modes, enforces grants and effects, and runs runs. It never drives a model. | engine (see below), core |
 | **Engine** | The part of the kernel that advances a run step by step. | kernel, runner |
 | **Broker** | The part of the kernel every resource request passes through. It applies grants and effects. | gateway, proxy |
-| **Harness** | The agent program that does skill work: Claude Code, Codex and others. Named only in `adapters/`. | runtime, agent |
+| **Harness** | The agent program that does skill work: Claude Code, Codex and others. Named in `adapters/`; the kernel names Claude Code only in its sentences that tell the owner where the hook runs. | runtime, agent |
 | **Adapter (harness)** | The code in `adapters/<harness>/` that fits one harness to the kernel. | plugin, integration |
 | **Tier** | `fast`, `balanced` or `deep`. A skill names a tier; the project config maps tiers to models. | model |
 | **Effort** | How hard a tier's model works on a step: `low`, `medium`, `high`, `xhigh` or `max`. The config's `tiers` sets it with the model; a tier without one runs at the harness's own effort. | reasoning level, thinking budget |

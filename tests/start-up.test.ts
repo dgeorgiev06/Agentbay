@@ -23,14 +23,13 @@ const kitPrefix = `${kit}/`;
 
 const metaSchema = "Core and Validation specifications meta-schema";
 
-const commandLineFiles = [
+const commandLine = [
   "bay/answers.ts",
   "bay/bay-command.ts",
   "bay/cli.ts",
   "bay/command-context.ts",
   "bay/command-line.ts",
   "bay/commands.ts",
-  "bay/commands/not-built.ts",
   "bay/json.ts",
   "bay/kernel-ports.ts",
   "bay/last-resort.ts",
@@ -42,16 +41,46 @@ const commandLineFiles = [
   "bay/terminal.ts",
 ];
 
-const notForRuns = [
-  "bay/build.ts",
-  "bay/new.ts",
-  "bay/tools.ts",
-  "bay/settings-listing.ts",
-  "bay/mcp.ts",
-  "bay/mcp-server.ts",
+const readers = [
+  "bay/contracts.ts",
+  "bay/given-schema.ts",
+  "bay/policy.ts",
+  "bay/protocol-json.ts",
+  "bay/schema-files.ts",
+  "bay/trust.ts",
+  "bay/value-check.ts",
+  "bay/yaml-text.ts",
+];
+
+const forRuns = [
+  ...commandLine,
+  ...readers,
+  "bay/adapter.ts",
+  "bay/approval-card.ts",
+  "bay/database-lock.ts",
+  "bay/item-words.ts",
+  "bay/kernel.ts",
+  "bay/run-report.ts",
+  "bay/secrets.ts",
+  "bay/skill-tools.ts",
+  "bay/trust-card.ts",
+  "bay/waiting-report.ts",
+];
+
+const forCheck = [
+  ...commandLine,
+  ...readers,
+  "bay/check-context.ts",
+  "bay/check-imports.ts",
+  "bay/check-layout.ts",
+  "bay/check-limits.ts",
+  "bay/check-skills.ts",
+  "bay/check-trust.ts",
   "bay/check.ts",
   "bay/import-scanner.ts",
 ];
+
+const kitSchemas = ["Config", "Interface", "Mode", "Workflow"];
 
 let project: Project;
 let records: string;
@@ -103,39 +132,44 @@ async function started(argv: readonly string[]): Promise<Started> {
   };
 }
 
-function commandModules(files: readonly string[]): readonly string[] {
-  return files.filter((file) => file.startsWith("bay/commands/") && file !== "bay/commands/not-built.ts");
+function folderOf(file: string): string {
+  return file.slice(0, file.lastIndexOf("/"));
+}
+
+function filesIn(start: Started, folder: string): readonly string[] {
+  return start.kernelFiles.filter((file) => folderOf(file) === folder);
+}
+
+function foldersOf(start: Started): readonly string[] {
+  return [...new Set(start.kernelFiles.map(folderOf))].sort();
 }
 
 test("bay --help and a command's --help load only the command line: no command module, Ajv or YAML", async () => {
   for (const argv of [["--help"], ["runs", "--help"], ["approve", "--help"]]) {
     const start = await started(argv);
-    assert.deepEqual(start.kernelFiles, commandLineFiles, `bay ${argv.join(" ")}`);
+    assert.deepEqual(filesIn(start, "bay"), [...commandLine].sort(), `bay ${argv.join(" ")}`);
+    assert.deepEqual(filesIn(start, "bay/commands"), ["bay/commands/not-built.ts"], `bay ${argv.join(" ")}`);
+    assert.deepEqual(foldersOf(start), ["bay", "bay/commands"], `bay ${argv.join(" ")}`);
     assert.deepEqual(start.packages, [], `bay ${argv.join(" ")}`);
     assert.deepEqual(start.compiled, [], `bay ${argv.join(" ")}`);
   }
 });
 
-test("bay runs <run> loads its own command and the kernel, not the build, an adapter, check, new or the tools", async () => {
+test("bay runs <run> loads its command and the kernel, not the build, an adapter, check, new or the tools", async () => {
   const start = await started(["runs", runId, "--json"]);
-  assert.deepEqual(commandModules(start.kernelFiles), ["bay/commands/runs.ts"]);
-  assert.ok(start.kernelFiles.includes("bay/kernel.ts"));
-  assert.deepEqual(
-    start.kernelFiles.filter((file) => notForRuns.includes(file) || file.startsWith("adapters/")),
-    [],
-  );
-  assert.deepEqual(start.compiled, ["Config", metaSchema, "Interface", "Mode", "Workflow", "a project schema"].sort());
+  assert.deepEqual(filesIn(start, "bay"), [...forRuns].sort());
+  assert.deepEqual(filesIn(start, "bay/commands"), ["bay/commands/not-built.ts", "bay/commands/runs.ts"]);
+  assert.deepEqual(foldersOf(start), ["bay", "bay/broker", "bay/commands", "bay/manifests", "bay/runs", "schemas"]);
+  assert.deepEqual(start.compiled, [...kitSchemas, metaSchema, "a project schema"].sort());
 });
 
 test("bay check loads the checks and no run, broker or kernel module, and compiles the meta-schema once", async () => {
   const start = await started(["check", "--json"]);
-  assert.deepEqual(commandModules(start.kernelFiles), ["bay/commands/check.ts"]);
+  assert.deepEqual(filesIn(start, "bay"), [...forCheck].sort());
+  assert.deepEqual(filesIn(start, "bay/commands"), ["bay/commands/check.ts", "bay/commands/not-built.ts"]);
+  assert.deepEqual(foldersOf(start), ["bay", "bay/commands", "bay/manifests", "schemas"]);
   assert.deepEqual(
-    start.kernelFiles.filter(
-      (file) => file.startsWith("bay/runs/") || file.startsWith("bay/broker/") || file === "bay/kernel.ts",
-    ),
-    [],
+    start.compiled.filter((name) => name !== "a project schema"),
+    [...kitSchemas, metaSchema, "SkillFrontMatter"].sort(),
   );
-  assert.equal(start.compiled.filter((name) => name === metaSchema).length, 1);
-  assert.ok(start.compiled.includes("SkillFrontMatter"), start.compiled.join(", "));
 });

@@ -1,5 +1,5 @@
 import { defineScript, fieldsOf, type Json } from "../../../../bay/sdk.ts";
-import { stayedOf, withStayedLines } from "./lib/branch-endings.ts";
+import { stayedOf } from "./lib/branch-endings.ts";
 import { challengeOf, type Challenge } from "./lib/challenge-answer.ts";
 import { designCard, type SecondPass } from "./lib/design-card.ts";
 import { answerChanges } from "./lib/design-compare.ts";
@@ -31,7 +31,7 @@ export const run = defineScript(async (input, context) => {
   const design = designOf(final);
   const byCheck = problemsByCheck({ job: requirements.job, file, conditions, design });
   const examples = await checkedExamples(context, design);
-  const drawn = designCard({
+  return designCard({
     file,
     requirements,
     path: firstFields.path === "full" ? "full" : "light",
@@ -48,6 +48,6 @@ export const run = defineScript(async (input, context) => {
     ...(answeredOf(again)
       ? { second: secondPass(first, answerChanges(firstFields.design ?? null, final, conditions)) }
       : {}),
+    stayed: stayedOf(firstFields.stayed),
   });
-  return withStayedLines(drawn, stayedOf(firstFields.stayed));
 });

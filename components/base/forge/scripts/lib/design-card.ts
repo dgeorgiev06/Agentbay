@@ -1,5 +1,18 @@
 import type { Chosen, Finding } from "./challenge-answer.ts";
-import { computed, counted, joined, judged, safeText, shortened, type Card, type CardLine } from "./card-lines.ts";
+import {
+  computed,
+  counted,
+  facts,
+  joined,
+  judged,
+  safeText,
+  shortened,
+  shortFacts,
+  type CardLine,
+  type Fact,
+  type Screen,
+} from "./card-lines.ts";
+import { stayedLines, type Stayed } from "./branch-endings.ts";
 import {
   actionsOf,
   type Action,
@@ -17,7 +30,9 @@ import {
   decidingWords,
   firstFoundWords,
   notHeldIds,
-  practiceLines,
+  notHeldLine,
+  tallyOf,
+  tallyWords,
   withheldAfterAnswer,
   type FirstFound,
   type PracticeAnswer,
@@ -39,6 +54,7 @@ export type DesignCardInput = {
   readonly said: readonly DesignerAnswer[];
   readonly differences: readonly string[];
   readonly second?: SecondPass;
+  readonly stayed?: readonly Stayed[];
 };
 
 export type SecondPass = FirstFound & {
@@ -46,7 +62,7 @@ export type SecondPass = FirstFound & {
 };
 
 export type DesignCard = {
-  readonly card: Card & { readonly withheld: { readonly approve?: string } };
+  readonly card: Screen & { readonly withheld: { readonly approve?: string } };
   readonly offered: { readonly approve: boolean };
 };
 
@@ -158,10 +174,17 @@ function interfaceLines(each: Interface, by: string): readonly CardLine[] {
 
 function coverageWords(input: DesignCardInput): string {
   const served = actionsOf(input.design).flatMap((action) => action.serves);
-  const missed = conditionsOf(input.requirements).filter((condition) => !served.includes(condition));
+  const conditions = conditionsOf(input.requirements);
+  const missed = conditions.filter((condition) => !served.includes(condition));
   return missed.length === 0
-    ? "coverage: every condition is served by an action: yes"
-    : `coverage: no action serves ${missed.join(", ")}`;
+    ? `Covers all ${String(conditions.length)} of your conditions.`
+    : `Leaves ${String(missed.length)} of your ${String(conditions.length)} conditions unserved: ${joined(missed)}.`;
+}
+
+function summaryWords(design: Design): string {
+  const actions = actionsOf(design);
+  const modules = counted(design.modules.length, "module");
+  return `${modules}, ${counted(actions.length, "action")}: ${joined(actions.map((action) => action.name))}.`;
 }
 
 function examplesWords(input: DesignCardInput): string {
@@ -193,15 +216,19 @@ function spelledLines(input: DesignCardInput): readonly CardLine[] {
   ];
 }
 
-function checkLines(input: DesignCardInput): readonly CardLine[] {
+function checkWords(input: DesignCardInput): string {
   const found = input.problems.length === 0 ? "no problem" : counted(input.problems.length, "problem");
-  return [
-    computed("draw", coverageWords(input)),
-    computed("draw", `checked by script: ${String(input.checks)} checks of the design, ${found}`),
-    ...input.problems.map((problem) => computed("draw", `problem: ${problem}`)),
-    computed("draw", examplesWords(input)),
-    ...spelledLines(input),
-  ];
+  return `${String(input.checks)} automatic checks: ${found} found.`;
+}
+
+function reviewWords(input: DesignCardInput): string {
+  const notHeld = notHeldIds(input.practices);
+  const findings = input.findings.length === 0 ? "no findings" : counted(input.findings.length, "finding");
+  const practices =
+    notHeld.length === 0
+      ? "no practice not held"
+      : `${counted(notHeld.length, "practice")} not held (${joined(notHeld)})`;
+  return `A second model reviewed it and reported ${findings} and ${practices}.`;
 }
 
 function listedLines(heading: string, listed: readonly string[]): readonly CardLine[] {
@@ -260,26 +287,52 @@ function findingLines(input: DesignCardInput): readonly CardLine[] {
   ];
 }
 
+function notHeldLines(input: DesignCardInput): readonly CardLine[] {
+  return input.practices
+    .filter((practice) => practice.answer === "not-held")
+    .map((practice) => notHeldLine(challengerStep(input), { id: practice.id, sentence: practice.sentence }));
+}
+
+function whatFacts(input: DesignCardInput, offered: string): readonly Fact[] {
+  const by = designerStep(input);
+  const conditions = counted(conditionsOf(input.requirements).length, "condition");
+  const requirements = `requirements: ${input.file}: ${counted(input.requirements.outcomes.length, "outcome")}, ${conditions}`;
+  return [
+    ...shortFacts("what", [computed("draw", summaryWords(input.design)), computed("draw", coverageWords(input))]),
+    ...facts("what", [
+      computed("draw", `${answerWords(input)}; ${offered}`),
+      computed("draw", requirements),
+      ...input.design.modules.flatMap((module) => moduleLines(module, by)),
+      ...input.design.interfaces.flatMap((each) => interfaceLines(each, by)),
+      ...differenceLines(input),
+      ...stayedLines(input.stayed ?? []),
+    ]),
+  ];
+}
+
+function checkFacts(input: DesignCardInput): readonly Fact[] {
+  return [
+    ...shortFacts("checks", [computed("draw", checkWords(input)), computed("draw", reviewWords(input))]),
+    ...facts("checks", [
+      computed("draw", examplesWords(input)),
+      ...spelledLines(input),
+      computed("draw", `practices held by the script's checks: ${joined(heldByRules)}`),
+      computed("draw", tallyWords("the challenger", tallyOf(input.practices))),
+      ...passLines(input),
+      ...findingLines(input),
+    ]),
+  ];
+}
+
+function problemFacts(input: DesignCardInput): readonly Fact[] {
+  const problems = input.problems.map((problem) => computed("draw", `problem: ${problem}`));
+  return [...shortFacts("problems", [...problems, ...notHeldLines(input)]), ...facts("problems", saidLines(input))];
+}
+
 export function designCard(input: DesignCardInput): DesignCard {
   const reason = withheldReason(input);
   const offered = reason === undefined ? "approve is offered" : "approve is not offered";
-  const by = designerStep(input);
-  const conditions = counted(conditionsOf(input.requirements).length, "condition");
-  const lines = [
-    computed("draw", `${answerWords(input)}; ${offered}`),
-    computed(
-      "draw",
-      `requirements: ${input.file}: ${counted(input.requirements.outcomes.length, "outcome")}, ${conditions}`,
-    ),
-    ...input.design.modules.flatMap((module) => moduleLines(module, by)),
-    ...input.design.interfaces.flatMap((each) => interfaceLines(each, by)),
-    ...checkLines(input),
-    ...passLines(input),
-    ...practiceLines({ answers: input.practices, heldByRules, challenger: challengerStep(input) }),
-    ...saidLines(input),
-    ...findingLines(input),
-    ...differenceLines(input),
-  ];
+  const lines = [...whatFacts(input, offered), ...checkFacts(input), ...problemFacts(input)];
   const title = `Commit the design of ${input.requirements.job}?`;
   return {
     card: { title, lines, withheld: reason === undefined ? {} : { approve: reason } },

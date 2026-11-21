@@ -270,6 +270,45 @@ export async function printedCard(root: string, runId: string, heading = "Merge 
   return card;
 }
 
+export type Fact = {
+  readonly section: string;
+  readonly short: boolean;
+  readonly mark: string;
+  readonly words: string;
+  readonly step: string;
+};
+
+export function factOf(line: Json): Fact {
+  const fields = fieldsOf(line);
+  return {
+    section: textAt(line, "section"),
+    short: fields.short === true,
+    mark: textAt(line, "mark"),
+    words: textAt(line, "words"),
+    step: textAt(fields.source ?? null, "step"),
+  };
+}
+
+export function factsOf(waiting: Waiting, section?: string): readonly Fact[] {
+  const facts = listOf(fieldsOf(waiting.card).lines).map(factOf);
+  return section === undefined ? facts : facts.filter((fact) => fact.section === section);
+}
+
+export function offeredOf(waiting: Waiting): readonly string[] {
+  return listOf(waiting.choices)
+    .filter((choice) => textAt(choice, "status") === "offered")
+    .map((choice) => textAt(choice, "name"));
+}
+
+export function withheldOf(waiting: Waiting): Readonly<Record<string, string>> {
+  const withheld = listOf(waiting.choices).filter((choice) => textAt(choice, "status") === "withheld");
+  return Object.fromEntries(withheld.map((choice) => [textAt(choice, "name"), textAt(choice, "reason")]));
+}
+
+export async function printedScreen(root: string, runId: string, more: readonly string[] = []): Promise<string> {
+  return (await bayRan(root, ["runs", runId, ...more])).stdout;
+}
+
 export async function shown(root: string, runId: string): Promise<Json> {
   return runOf(await bay(root, ["runs", runId]));
 }

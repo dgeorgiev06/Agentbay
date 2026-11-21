@@ -5,7 +5,7 @@ import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
 import { challengeOf, refusedChallenge, type Challenge, type Finding } from "../scripts/lib/challenge-answer.ts";
 import { answeringStance } from "../scripts/lib/design-again.ts";
 import { foundOf, secondPassNeeded } from "../scripts/lib/second-round.ts";
-import { designCard, type DesignCardInput, type SecondPass } from "../scripts/lib/design-card.ts";
+import { designCard, type DesignCard, type DesignCardInput, type SecondPass } from "../scripts/lib/design-card.ts";
 import { answerChanges, differences } from "../scripts/lib/design-compare.ts";
 import { problemsByCheck } from "../scripts/lib/design-rules.ts";
 import { designOf } from "../scripts/lib/design-form.ts";
@@ -13,6 +13,7 @@ import { listOf } from "../scripts/lib/json-values.ts";
 import { pathCard } from "../scripts/lib/path-card.ts";
 import { designerPracticeProblems, type PracticeAnswer } from "../scripts/lib/practice-answers.ts";
 import { conditionsOf, requirementsOf, type Requirements } from "../scripts/lib/requirements-form.ts";
+import { factOf, type Fact } from "./kit-copy.ts";
 import { printed } from "./printed-card.ts";
 import { todoDesign, todoHides } from "./todo-design.ts";
 import { todoVersionOne } from "./todo-plan.ts";
@@ -20,13 +21,6 @@ import { todoVersionOne } from "./todo-plan.ts";
 const file = "docs/requirements/todo.yaml";
 
 const checksRun = problemsByCheck({ job: "todo", file, conditions: [], design: designOf(todoDesign) }).length;
-
-const skills = {
-  designs: "forge skills/design, tier deep",
-  challenge: "forge skills/challenge, tier deep",
-  "design-again": "forge skills/design, tier deep",
-  "challenge-again": "forge skills/challenge, tier deep",
-};
 
 const pathChoices = [
   { name: "light", does: "One designer, then a challenger" },
@@ -52,12 +46,14 @@ async function todoRequirements(): Promise<Requirements> {
   return requirementsOf(read.value);
 }
 
-function printedDesign(input: DesignCardInput): string {
-  const drawn = designCard(input);
-  const reason = drawn.card.withheld.approve;
-  const approve = { name: "approve", does: "Commit the design and its schema files" };
-  const choices = [reason === undefined ? approve : { ...approve, withheld: reason }];
-  return printed(drawn.card, [...choices, { name: "stop", does: "Stop; nothing is committed" }], { skills });
+function factsIn(drawn: DesignCard, section: string): readonly Fact[] {
+  return drawn.card.lines.map((line) => factOf({ ...line })).filter((fact) => fact.section === section);
+}
+
+function shortWords(drawn: DesignCard, section: string): readonly string[] {
+  return factsIn(drawn, section)
+    .filter((fact) => fact.short)
+    .map((fact) => fact.words);
 }
 
 async function lightInput(practices: readonly PracticeAnswer[]): Promise<DesignCardInput> {
@@ -125,170 +121,6 @@ You can:
   stop   Stop; nothing is designed
 checked: 0 ran, 7 computed, 0 judged`;
 
-const designHead = `Commit the design of todo?
-  the one design, on the light path; approve
-    is offered
-  requirements: docs/requirements/todo.yaml:
-    2 outcomes, 13 conditions
-  module todo: implements todo; owns the
-    table todos
-judged   todo hides: How todos are kept,
-judged     numbered and never given a
-judged     removed id again.
-judged    by forge skills/design, tier deep
-  rule add-todo, in todo: takes request,
-    todos from todos; gives todos into
-    todos, answer
-judged   add-todo decides: Whether a text
-judged     may be added, and the id the new
-judged     todo gets.
-judged    by forge skills/design, tier deep
-  rule mark-done, in todo: takes request,
-    todos from todos; gives todos into
-    todos, answer
-judged   mark-done decides: Whether a todo
-judged     may be marked done.
-judged    by forge skills/design, tier deep
-  rule remove-todo, in todo: takes request,
-    todos from todos; gives todos into
-    todos, answer
-judged   remove-todo decides: Whether a todo
-judged     may be removed.
-judged    by forge skills/design, tier deep
-  interface todo: 4 actions, 8 schema files
-  add: serves O1-C1, O1-C4, O1-C5, O1-C6,
-    O1-C7, O2-C4; applies the rule add-todo,
-    reads todos, writes todos; 3 examples
-  list: serves O1-C1, O1-C2, O1-C3, O2-C1,
-    O2-C2, O2-C3; applies no rule, reads
-    todos, writes nothing; 2 examples
-  done: serves O2-C1, O2-C2, O2-C5, O2-C6;
-    applies the rule mark-done, reads todos,
-    writes todos; 3 examples
-  remove: serves O2-C3, O2-C4, O2-C5;
-    applies the rule remove-todo, reads
-    todos, writes todos; 2 examples
-  coverage: every condition is served by an
-    action: yes
-  checked by script: 34 checks of the
-    design, no problem
-  examples: 10, checked against their
-    actions' schemas, but not the input of
-    the 4 refusals`;
-
-const askedOnce = `  the designer was asked once; a second
-    answer is asked only when the challenger
-    answers a practice not held or gives a
-    finding
-  practices held by the script's checks:
-    P-35, P-36, P-38 and P-42`;
-
-const answeredOnce = `  the first challenge answered P-52 not held
-    and gave 1 finding; the designer
-    answered once
-  what the answer changed, by script: 2
-  module todo-rules: only in the answered
-    design
-  module todo: implements or owns differ
-  the second challenge's answers decide the
-    card
-  practices held by the script's checks:
-    P-35, P-36, P-38 and P-42`;
-
-const answeredHead = designHead.replace(
-  "the one design, on the light path; approve\n    is offered",
-  "the one design, on the light path,\n    answered once after the first challenge;\n    approve is offered",
-);
-
-const lightAllHeld = `${designHead}
-${askedOnce}
-  practices answered by the challenger: 3; 2
-    held, 0 not held, 1 do not apply
-  findings of the challenger: none
-  one design was written, so none was
-    compared
-Unmarked lines were worked out by script.
-You can:
-  approve  Commit the design and its schema
-           files
-  stop     Stop; nothing is committed
-checked: 0 ran, 19 computed, 4 judged`;
-
-const answeredAndHeld = `${answeredHead}
-${answeredOnce}
-  practices answered by the challenger: 3; 2
-    held, 0 not held, 1 do not apply
-  findings left after the answer: none
-  one design was written, so none was
-    compared
-Unmarked lines were worked out by script.
-You can:
-  approve  Commit the design and its schema
-           files
-  stop     Stop; nothing is committed
-checked: 0 ran, 23 computed, 4 judged`;
-
-const answeredNotHeld = `${answeredHead.replace("approve is offered", "approve is not offered")}
-${answeredOnce}
-  practices answered by the challenger: 3; 1
-    held, 1 not held, 1 do not apply
-judged   P-52, not held: The add action
-judged     still decides the next id and
-judged     writes it in one script.
-judged    by forge skills/challenge, tier
-judged      deep
-judged   P-52, as the designer answered: The
-judged     module todo-rules decides the
-judged     next id; todo reads and writes
-judged     around it.
-judged    by forge skills/design, tier deep
-  findings left after the answer: 1
-judged   finding, in todo.add: No example
-judged     shows the open list after a
-judged     refusal. Fix: Add an example that
-judged     lists the open todos after the
-judged     refused add.
-judged    by forge skills/challenge, tier
-judged      deep
-  one design was written, so none was
-    compared
-Unmarked lines were worked out by script.
-You can:
-  stop  Stop; nothing is committed
-Not available:
-  approve  Commit the design and its schema
-           files
-           why: The challenger answered P-52
-           not held, and a practice held by
-           design must be held. The designer
-           has answered the challenge once,
-           which is the most a design run
-           asks.
-checked: 0 ran, 23 computed, 7 judged`;
-
-const lightNotHeld = `${designHead.replace("approve\n    is offered", "approve\n    is not offered")}
-${askedOnce}
-  practices answered by the challenger: 3; 1
-    held, 1 not held, 1 do not apply
-judged   P-52, not held: The add action
-judged     decides the next id and writes it
-judged     in one script.
-judged    by forge skills/challenge, tier
-judged      deep
-  findings of the challenger: none
-  one design was written, so none was
-    compared
-Unmarked lines were worked out by script.
-You can:
-  stop  Stop; nothing is committed
-Not available:
-  approve  Commit the design and its schema
-           files
-           why: The challenger answered P-52
-           not held, and a practice held by
-           design must be held.
-checked: 0 ran, 19 computed, 5 judged`;
-
 function renamed(design: Json): Json {
   const fields = fieldsOf(design);
   const [module = null] = listOf(fields.modules);
@@ -312,19 +144,69 @@ describe("the design's first card and the design card, for the todo mode", () =>
     assert.deepEqual([roleOf("design"), roleOf("challenge")], ["designer", "challenger"]);
   });
 
-  test("the design card on the light path, every practice held, offers approve, line by line", async () => {
-    assert.equal(printedDesign(await lightInput(allHeld)), lightAllHeld);
+  test("the design card on the light path, every practice held, offers approve and leads with what it is and its checks", async () => {
+    const drawn = designCard(await lightInput(allHeld));
+    assert.deepEqual(drawn.offered, { approve: true });
+    assert.deepEqual(drawn.card.withheld, {});
+    assert.equal(drawn.card.title, "Commit the design of todo?");
+    assert.deepEqual(shortWords(drawn, "what"), [
+      "1 module, 4 actions: add, list, done and remove.",
+      "Covers all 13 of your conditions.",
+    ]);
+    assert.deepEqual(shortWords(drawn, "checks"), [
+      `${String(checksRun)} automatic checks: no problem found.`,
+      "A second model reviewed it and reported no findings and no practice not held.",
+    ]);
+    assert.deepEqual(factsIn(drawn, "problems"), []);
+    assert.deepEqual(factsIn(drawn, "open"), []);
+    const judged = factsIn(drawn, "what").filter((fact) => fact.mark === "judged");
+    assert.deepEqual([judged.length, [...new Set(judged.map((fact) => fact.step))]], [4, ["designs"]]);
+    assert.deepEqual([factsIn(drawn, "what").length, factsIn(drawn, "checks").length], [18, 7]);
   });
 
   test("a practice held by design that the challenger answered not held withholds approve with its reason", async () => {
-    assert.equal(printedDesign(await lightInput(p52NotHeld)), lightNotHeld);
+    const drawn = designCard(await lightInput(p52NotHeld));
+    assert.deepEqual(drawn.offered, { approve: false });
+    assert.deepEqual(drawn.card.withheld, {
+      approve: "The challenger answered P-52 not held, and a practice held by design must be held.",
+    });
+    assert.deepEqual(factsIn(drawn, "problems"), [
+      {
+        section: "problems",
+        short: true,
+        mark: "judged",
+        words: "P-52, not held: The add action decides the next id and writes it in one script.",
+        step: "challenge",
+      },
+    ]);
+    assert.equal(
+      shortWords(drawn, "checks")[1],
+      "A second model reviewed it and reported no findings and 1 practice not held (P-52).",
+    );
   });
 
-  test("after a second pass that holds every practice, the card says what the first challenge found, that the designer answered once and what changed, and offers approve, line by line", async () => {
-    assert.equal(printedDesign({ ...(await lightInput(allHeld)), second: answeredP52 }), answeredAndHeld);
+  test("after a second pass that holds every practice, the checks say what the first challenge found, that the designer answered once and what changed, and approve is offered", async () => {
+    const drawn = designCard({ ...(await lightInput(allHeld)), second: answeredP52 });
+    assert.deepEqual(drawn.offered, { approve: true });
+    const checks = factsIn(drawn, "checks").map((fact) => fact.words);
+    const changed = checks.indexOf("what the answer changed, by script: 2");
+    assert.deepEqual(checks.slice(changed - 1, changed + 4), [
+      "the first challenge answered P-52 not held and gave 1 finding; the designer answered once",
+      "what the answer changed, by script: 2",
+      ...answeredP52.changes,
+      "the second challenge's answers decide the card",
+    ]);
+    assert.ok(checks.includes("findings left after the answer: none"), checks.join("\n"));
+    assert.ok(
+      factsIn(drawn, "what").some(
+        (fact) =>
+          fact.words ===
+          "the one design, on the light path, answered once after the first challenge; approve is offered",
+      ),
+    );
   });
 
-  test("after a second pass that leaves a practice not held, the card shows the second challenge's answers, the designer's own sentence and the findings left, and offers only stop, saying the designer answered once", async () => {
+  test("after a second pass that leaves a practice not held, the second challenge's answer and the designer's own sentence are the problems, the finding left is a check, and only stop is offered", async () => {
     const input = {
       ...(await lightInput(stillNotHeld)),
       second: answeredP52,
@@ -334,7 +216,31 @@ describe("the design's first card and the design card, for the todo mode", () =>
       ],
       findings: [refusalExample],
     };
-    assert.equal(printedDesign(input), answeredNotHeld);
+    const drawn = designCard(input);
+    assert.deepEqual(drawn.offered, { approve: false });
+    assert.equal(
+      drawn.card.withheld.approve,
+      "The challenger answered P-52 not held, and a practice held by design must be held. The designer has " +
+        "answered the challenge once, which is the most a design run asks.",
+    );
+    assert.deepEqual(
+      factsIn(drawn, "problems").map((fact) => [fact.short, fact.mark, fact.step, fact.words]),
+      [
+        [true, "judged", "challenge-again", `P-52, not held: ${stillNotHeld[0]?.sentence ?? ""}`],
+        [
+          false,
+          "judged",
+          "design-again",
+          "P-52, as the designer answered: The module todo-rules decides the next id; todo reads and writes around it.",
+        ],
+      ],
+    );
+    const finding = factsIn(drawn, "checks").find((fact) => fact.words.startsWith("finding, in todo.add:"));
+    assert.deepEqual([finding?.mark, finding?.step, finding?.short], ["judged", "challenge-again", false]);
+    assert.equal(
+      shortWords(drawn, "checks")[1],
+      "A second model reviewed it and reported 1 finding and 1 practice not held (P-52).",
+    );
   });
 
   test("a finding with every practice held is shown as judged by the challenger and withholds nothing, as on the plan card", async () => {
@@ -394,9 +300,9 @@ describe("the design's first card and the design card, for the todo mode", () =>
     });
     const hides = drawn.card.lines.find((line) => line.words === `todo hides: ${todoHides}`);
     assert.deepEqual(hides?.source, { step: "challenge" });
-    const words = drawn.card.lines.map((line) => line.words);
-    assert.deepEqual(words.slice(0, 1), ["a design the challenger merged from two written apart; approve is offered"]);
-    assert.deepEqual(words.slice(-4), [
+    const what = factsIn(drawn, "what").map((fact) => fact.words);
+    assert.ok(what.includes("a design the challenger merged from two written apart; approve is offered"));
+    assert.deepEqual(what.slice(-4), [
       "where the two designs differed: 2",
       "module store: only in the second design",
       "module todo: implements or owns differ",
@@ -556,11 +462,13 @@ describe("the comparison and the challenger's answer", () => {
         mark: "computed",
         words: "count: serves no condition; applies the rule add-todo, reads todos, writes todos; 3 examples",
         source: { step: "draw" },
+        section: "what",
       },
       {
         mark: "judged",
         words: "count, why it serves none: The operator counts the todos.",
         source: { step: "designs" },
+        section: "what",
       },
     ]);
   });

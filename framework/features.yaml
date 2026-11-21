@@ -10,6 +10,7 @@ features:
       refers to, a value checked against a schema. No behaviour of its own beyond reading and checking.
     entry:
       - bay/contracts.ts
+      - bay/roles.ts
       - bay/outcome.ts
       - bay/json.ts
       - bay/layout.ts

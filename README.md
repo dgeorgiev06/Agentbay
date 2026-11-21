@@ -132,6 +132,11 @@ so any listed command can still be pointed at the config, and one that runs code
 can edit the config: the block in `CLAUDE.md` tells it to change
 `approvals` or `skillSteps` only when the owner asks for exactly that, and nothing enforces it.
 
+A skill step in a `mode.yaml` names the tier its agent runs at, `tier: deep`, or a role, `role: reviewer`, and then
+runs at the role's tier. The kit's roles are builder, test writer, reviewer, planter, designer, challenger and
+planner, each with its tier in `bay/roles.ts`. A step names one or the other, never both. A role is only a name for
+a tier: the step's agent has the same tools and roots either way, and the role is in no list's hash.
+
 A workflow's `trigger` may name a schedule or an event, but no part of the kernel starts a workflow by either yet:
 `bay call --workflow` starts it, and `bay resume --due` wakes the runs whose wait is over.
 

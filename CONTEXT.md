@@ -74,7 +74,7 @@ One meaning per word. Briefs, plans, code names and reviews use these words and 
 | **Broker** | The part of the kernel every resource request passes through. It applies grants and effects. | gateway, proxy |
 | **Harness** | The agent program that does skill work: Claude Code, Codex and others. Named in `adapters/`; the kernel names Claude Code only in its sentences that tell the owner where the hook runs. | runtime, agent |
 | **Adapter (harness)** | The code in `adapters/<harness>/` that fits one harness to the kernel. | plugin, integration |
-| **Tier** | `fast`, `balanced` or `deep`. A skill names a tier; the project config maps tiers to models. | model |
+| **Tier** | `fast`, `balanced` or `deep`. A skill step names a tier, or a role that gives one; the project config maps tiers to models. | model |
 | **Effort** | How hard a tier's model works on a step: `low`, `medium`, `high`, `xhigh` or `max`. The config's `tiers` sets it with the model; a tier without one runs at the harness's own effort. | reasoning level, thinking budget |
 | **Role** | One of a closed set the kit owns, in `bay/roles.ts`: builder, test writer, reviewer, planter, designer, challenger, planner. Each names a tier, and a skill step that names a role in place of a tier runs at the role's tier. A ceiling and standing rules for each role are proposed (`docs/designs/roles/design.md`), and so is the card naming it. It decides no step's reads: who may see what is the step's, in its workflow. | persona, agent type, profile |
 | **Ceiling** (of a role, proposed) | The tools and roots a role's agents never get, whatever the step's grants and effects give. It only takes away. | permission, tool profile, sandbox |

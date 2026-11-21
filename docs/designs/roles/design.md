@@ -473,7 +473,7 @@ Each slice is small and vertical, with its write scope. RL1 comes first; RL2, RL
 run side by side; RL5 comes after RL2 and RL4; RL6 is built only if question 2 is answered (b), and the owner
 answered (a), so it is not planned. RL3 waits for question 6. Size is reported before and after each (P-13).
 
-### RL1. A skill step may name a role, which gives its tier
+### RL1. A skill step may name a role, which gives its tier (built)
 
 - **Scope.** `schemas/mode.schema.json`, `bay/generated/mode.ts`, `bay/roles.ts` (new), `bay/contracts.ts`,
   `bay/manifests/**`, `bay/check-skills.ts`, `bay/build.ts`, `bay/adapter.ts`, `tests/roles*.test.ts`,
@@ -487,6 +487,20 @@ answered (a), so it is not planned. RL3 waits for question 6. Size is reported b
   - A step with both `role` and `tier` is refused with a sentence that says to keep one.
   - A step with `tier:` and no role loads exactly as before.
   - The role enum in the schema and the kernel's table hold the same names.
+- **As built.** `tests/roles.test.ts` and `tests/roles-agents.test.ts`. What differs from the plan above:
+  - The schema holds the roles as an enum, so it refuses `role: lead` first, in the words it uses for an unknown
+    tier: `actions.add.run.0.role must be one of "builder", "test writer", "reviewer", "planter", "designer",
+    "challenger", "planner", but it is "lead".` It has no fix line. The load and `bay check` give that sentence.
+  - The kernel refuses a step that names both, and one that names neither, which the schema now allows since
+    `tier` is no longer required (`bay/manifests/action-problems.ts`).
+  - The step record and the task carry the role beside the tier. The task the coordinator prints is unchanged: it
+    names its agent, and holds neither tier nor role.
+  - The adapter is unchanged and is handed no role. With every mode of the kit active, the twelve agent files and
+    `steps.json` are the same bytes when each step names a role of its tier as when it names the tier, and the
+    same bytes as before the slice.
+  - The trust hash of a list is the same when the mode's steps name roles, and a list trusted with tier steps stays
+    trusted.
+  - `bay/roles.ts` is in the feature `vocabulary`, and in the files `bay check` and `bay runs` load.
 
 ### RL2. Forge's skill steps name their roles
 

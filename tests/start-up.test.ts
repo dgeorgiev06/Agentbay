@@ -47,6 +47,7 @@ const readers = [
   "bay/given-schema.ts",
   "bay/policy.ts",
   "bay/protocol-json.ts",
+  "bay/roles.ts",
   "bay/schema-files.ts",
   "bay/trust.ts",
   "bay/value-check.ts",

@@ -3,11 +3,9 @@ import { listOf, textOf, textsOf } from "./lib/json-values.ts";
 import { keptTests } from "./lib/kept-tests.ts";
 import { provedOf } from "./lib/proof-answer.ts";
 import { sliceOf } from "./lib/slice-form.ts";
-import { waveTrials, type Entry, type SliceToTry } from "./lib/tried-examples.ts";
+import { roomBeside, waveTrials, type Entry, type SliceToTry } from "./lib/tried-examples.ts";
 import { blocksBySlice, provedTrying, settingOf, toTryOf, type Setting } from "./lib/tried-block.ts";
 import { checksVerdict } from "./lib/wave-answer.ts";
-
-const mostItems = 100;
 
 function slicesToTry(trying: Json | undefined): readonly SliceToTry[] {
   return listOf(fieldsOf(trying ?? null).slices).map((each) => {
@@ -20,7 +18,7 @@ function entriesOf(asked: Json, trying: Json | undefined, setting: Setting): rea
   if (setting === "off" || trying === undefined) {
     return [];
   }
-  const room = mostItems - sliceOf(fieldsOf(asked).slice).done.length;
+  const room = roomBeside(sliceOf(fieldsOf(asked).slice).done.length);
   return waveTrials(slicesToTry(trying), { built: textsOf(fieldsOf(trying).built), room });
 }
 

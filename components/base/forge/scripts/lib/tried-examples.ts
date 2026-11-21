@@ -58,6 +58,12 @@ type Spelled = { readonly calls: readonly Call[]; readonly expected: Expected } 
 
 export const triedPrefix = "tried-";
 
+const mostItems = 100;
+
+export function roomBeside(items: number): number {
+  return mostItems - items;
+}
+
 const longestWord = 50_000;
 
 function interfaceOf(action: string): string {
@@ -115,7 +121,7 @@ function entryOf(named: Named, toTry: ToTry, at: TrialsAt & { readonly example: 
     return notTried("a request in it is longer than proof takes in one word");
   }
   if (at.room < 1) {
-    return notTried("proof takes at most 100 items in one call");
+    return notTried(`proof takes at most ${String(mostItems)} items in one call`);
   }
   const runs = spelled.calls.map((call) => wordsOf(mode, call));
   return { ...named, outcome: "to try", runs, expected: spelled.expected };
@@ -234,6 +240,17 @@ function asDesigned(expected: Expected, ran: Ran & { readonly kind: "answered" |
   return expected.kind === "refusal" && expected.sentence === ran.reason;
 }
 
+const awaited: Readonly<Record<string, string>> = {
+  skill: "a skill's answer",
+  approval: "an approval",
+  owner: "the owner's answer",
+  budget: "a larger budget",
+};
+
+function awaitedWords(reason: string): string {
+  return awaited[reason] ?? "an answer";
+}
+
 function comparedResult(trial: Trial, ran: Ran): Result {
   const named = { slice: trial.slice, action: trial.action, number: trial.number };
   switch (ran.kind) {
@@ -253,7 +270,7 @@ function comparedResult(trial: Trial, ran: Ran): Result {
       return {
         ...named,
         outcome: "not tried",
-        reason: `the call waits for ${ran.reason === "" ? "an answer" : `a ${ran.reason}`}, which nobody gives in a throwaway copy`,
+        reason: `the call waits for ${awaitedWords(ran.reason)}, which nobody gives in a throwaway copy`,
       };
     case "schema refused":
       if (trial.expected.kind === "refusal") {

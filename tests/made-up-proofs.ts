@@ -77,7 +77,8 @@ export type Proof =
   | { readonly kind: "bugs-caught" }
   | { readonly kind: "same-output"; readonly differ: readonly string[] }
   | { readonly kind: "count"; readonly count: Count }
-  | { readonly kind: "real-thing"; readonly runs: readonly Run[] };
+  | { readonly kind: "real-thing"; readonly runs: readonly Run[] }
+  | { readonly kind: "printed"; readonly runs: readonly Command[] };
 
 export type ProvenItem = { readonly id: string; readonly proof: Proof };
 
@@ -150,6 +151,8 @@ function proofOf(fields: JsonFields): Proof {
         kind,
         runs: records(fields, "runs").map((run) => ({ command: commandOf(run), stdout: text(run, "stdout"), exitCode: number(run, "exitCode") })),
       };
+    case "printed":
+      return { kind, runs: records(fields, "runs").map(commandOf) };
     case "bugs-caught":
       return { kind };
     default:
@@ -186,7 +189,9 @@ export function requestOf(input: Json, settings: Readonly<Record<string, Json>>)
 
 const verdictsLibrary = String.raw`import type { Cases } from "./calls.ts";
 
-export type Kind = "checks" | "fails-first" | "in-scope" | "as-declared" | "bugs-caught" | "same-output" | "count" | "real-thing";
+export type Kind = "checks" | "fails-first" | "in-scope" | "as-declared" | "bugs-caught" | "same-output" | "count" | "real-thing" | "printed";
+
+export type Printed = { readonly exitCode: number; readonly stdout: string };
 
 export type Part =
   | { readonly verdict: "passed" }
@@ -194,7 +199,7 @@ export type Part =
   | { readonly verdict: "inconclusive"; readonly reason: string };
 
 export type Verdict =
-  | { readonly item: string; readonly kind: Kind; readonly verdict: "passed"; readonly detail: string }
+  | { readonly item: string; readonly kind: Kind; readonly verdict: "passed"; readonly detail: string; readonly printed?: readonly Printed[] }
   | { readonly item: string; readonly kind: Kind; readonly verdict: "failed"; readonly detail: string; readonly cases?: Cases }
   | { readonly item: string; readonly kind: Kind; readonly verdict: "inconclusive"; readonly reason: string };
 
@@ -639,8 +644,8 @@ const baseRunFunction = String.raw`async function baseRun(context: ScriptContext
 
 const codeKinds = String.raw`import type { ScriptContext } from "${sdkFromLibrary}";
 import { called, commandIn, inCopy, onlyFilesThatDidNotLoad, testRun, type Copy } from "./calls.ts";
-import type { Bug, Request, Run } from "./request.ts";
-import { broken, brokenShowing, counted, decided, held, unknown, type Part, type Verdict } from "./verdicts.ts";
+import type { Bug, Command, Request, Run } from "./request.ts";
+import { broken, brokenShowing, counted, decided, held, unknown, type Part, type Printed, type Verdict } from "./verdicts.ts";
 
 function partOfCheck(name: string, verdict: string, reason: string): Part {
   if (verdict === "passed") {
@@ -749,12 +754,29 @@ export async function realThing(context: ScriptContext, request: Request, item: 
   });
   return decided(item.id, "real-thing", parts, "Every run printed the expected text and exit code.");
 }
+
+export async function printedBy(context: ScriptContext, request: Request, item: { readonly id: string; readonly runs: readonly Command[] }): Promise<Verdict> {
+  return inCopy(context, request.head, async (copy): Promise<Verdict> => {
+    if (!copy.made) {
+      return decided(item.id, "printed", [unknown(copy.reason)], "");
+    }
+    const printed: Printed[] = [];
+    for (const [index, command] of item.runs.entries()) {
+      const ended = await commandIn(context, copy.folder, command);
+      if (ended.how === "unknown") {
+        return decided(item.id, "printed", [unknown("Run " + String(index + 1) + " did not end. " + ended.reason)], "");
+      }
+      printed.push({ exitCode: ended.exitCode, stdout: ended.stdout });
+    }
+    return { item: item.id, kind: "printed", verdict: "passed", detail: "Every run ended.", printed };
+  });
+}
 `;
 
 const proveScript = String.raw`import { defineScript, type ScriptContext } from "${sdkFromScripts}";
 import { inCopy, type Copy } from "./lib/calls.ts";
 import { asDeclared, changedBetween, inScope, sizes } from "./lib/changes.ts";
-import { bugsCaught, checks, failsFirst, realThing } from "./lib/code-kinds.ts";
+import { bugsCaught, checks, failsFirst, printedBy, realThing } from "./lib/code-kinds.ts";
 import { countVerdict, sameOutput } from "./lib/reading-kinds.ts";
 import { requestOf, type ProvenItem, type Request } from "./lib/request.ts";
 import type { Verdict } from "./lib/verdicts.ts";
@@ -776,6 +798,8 @@ function verdictOf(context: ScriptContext, request: Request, item: ProvenItem, c
       return countVerdict(context, request, { id, count: proof.count }, copies);
     case "real-thing":
       return realThing(context, request, { id, runs: proof.runs });
+    case "printed":
+      return printedBy(context, request, { id, runs: proof.runs });
   }
 }
 

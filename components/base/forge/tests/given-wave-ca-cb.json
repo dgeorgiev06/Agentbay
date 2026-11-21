@@ -1,10 +1,10 @@
 {
   "commits": {
-    "integration": "49a5668d2f74b9aa1c1d8c99421e215fd50ab85d",
-    "forge/CA": "30ef9a73893ab0c8507dbae8d1fa8dc225fc0eb7",
-    "forge/CA-tests-1": "72b542e26f6afb2ec59aec44dde8fe06e68a5bcc",
-    "forge/CB": "0f09c46b766726056b673f5853d6c6ce1306efe8",
-    "forge/CB-tests-1": "b44b4c9f57584dab3151097901bad83e2f97405a"
+    "integration": "6a73bd57a7609816c9ecf59c7acc432ff7792f04",
+    "forge/CA": "1f07f38e9ea35ddf3da7188bd9092e93661666a7",
+    "forge/CA-tests-1": "c5f28e46a05ac32087c7800f47c54c8dcf74c057",
+    "forge/CB": "602adf6a84d4349e490e74e2bae022bf08995662",
+    "forge/CB-tests-1": "da3ea00b40506672d93377baa63aaaeab5bbc59c"
   },
   "given": {
     "wave": {
@@ -12,7 +12,7 @@
       "plan": "docs/plans/0099-wave.yaml",
       "wave": 1,
       "into": "integration",
-      "base": "49a5668d2f74b9aa1c1d8c99421e215fd50ab85d",
+      "base": "6a73bd57a7609816c9ecf59c7acc432ff7792f04",
       "card": {
         "title": "Build wave 1 of 0099-wave.yaml?",
         "lines": [
@@ -25,7 +25,7 @@
           },
           {
             "mark": "computed",
-            "words": "base 49a5668, the head of integration",
+            "words": "base 6a73bd5, the head of integration",
             "source": {
               "step": "wave"
             }
@@ -120,7 +120,7 @@
               ]
             }
           },
-          "base": "49a5668d2f74b9aa1c1d8c99421e215fd50ab85d",
+          "base": "6a73bd57a7609816c9ecf59c7acc432ff7792f04",
           "bugs": [],
           "interface": ["components/base/interfaces/proof.yaml"]
         },
@@ -153,11 +153,12 @@
               ]
             }
           },
-          "base": "49a5668d2f74b9aa1c1d8c99421e215fd50ab85d",
+          "base": "6a73bd57a7609816c9ecf59c7acc432ff7792f04",
           "bugs": [],
           "interface": ["components/base/interfaces/proof.yaml"]
         }
       ],
+      "builtBefore": [],
       "sideBySide": 3
     },
     "start": {
@@ -174,7 +175,7 @@
           },
           {
             "mark": "computed",
-            "words": "base 49a5668, the head of integration",
+            "words": "base 6a73bd5, the head of integration",
             "source": {
               "step": "wave"
             }
@@ -242,8 +243,8 @@
       {
         "name": "CA",
         "title": "The ca mode counts what was added",
-        "base": "49a5668d2f74b9aa1c1d8c99421e215fd50ab85d",
-        "head": "72b542e26f6afb2ec59aec44dde8fe06e68a5bcc",
+        "base": "6a73bd57a7609816c9ecf59c7acc432ff7792f04",
+        "head": "c5f28e46a05ac32087c7800f47c54c8dcf74c057",
         "work": "forge/CA-tests-1",
         "builder": "forge/CA",
         "slice": {
@@ -304,15 +305,15 @@
           "round": 1,
           "stage": "reviewed",
           "done": true,
-          "base": "49a5668d2f74b9aa1c1d8c99421e215fd50ab85d",
+          "base": "6a73bd57a7609816c9ecf59c7acc432ff7792f04",
           "built": {
             "outcome": "built"
           },
           "builder": {
             "branch": "forge/CA",
-            "commit": "30ef9a73893ab0c8507dbae8d1fa8dc225fc0eb7"
+            "commit": "1f07f38e9ea35ddf3da7188bd9092e93661666a7"
           },
-          "head": "72b542e26f6afb2ec59aec44dde8fe06e68a5bcc",
+          "head": "c5f28e46a05ac32087c7800f47c54c8dcf74c057",
           "branch": "forge/CA-tests-1",
           "declared": {
             "files": ["components/modes/ca/scripts/ca.ts", "components/modes/ca/tests/ca.test.ts"],
@@ -404,13 +405,14 @@
         "built": {
           "outcome": "built"
         },
-        "reason": null
+        "reason": null,
+        "examples": []
       },
       {
         "name": "CB",
         "title": "The cb mode counts what was added",
-        "base": "49a5668d2f74b9aa1c1d8c99421e215fd50ab85d",
-        "head": "b44b4c9f57584dab3151097901bad83e2f97405a",
+        "base": "6a73bd57a7609816c9ecf59c7acc432ff7792f04",
+        "head": "da3ea00b40506672d93377baa63aaaeab5bbc59c",
         "work": "forge/CB-tests-1",
         "builder": "forge/CB",
         "slice": {
@@ -471,15 +473,15 @@
           "round": 1,
           "stage": "reviewed",
           "done": true,
-          "base": "49a5668d2f74b9aa1c1d8c99421e215fd50ab85d",
+          "base": "6a73bd57a7609816c9ecf59c7acc432ff7792f04",
           "built": {
             "outcome": "built"
           },
           "builder": {
             "branch": "forge/CB",
-            "commit": "0f09c46b766726056b673f5853d6c6ce1306efe8"
+            "commit": "602adf6a84d4349e490e74e2bae022bf08995662"
           },
-          "head": "b44b4c9f57584dab3151097901bad83e2f97405a",
+          "head": "da3ea00b40506672d93377baa63aaaeab5bbc59c",
           "branch": "forge/CB-tests-1",
           "declared": {
             "files": ["components/modes/cb/scripts/cb.ts", "components/modes/cb/tests/cb.test.ts"],
@@ -571,7 +573,8 @@
         "built": {
           "outcome": "built"
         },
-        "reason": null
+        "reason": null,
+        "examples": []
       }
     ]
   }

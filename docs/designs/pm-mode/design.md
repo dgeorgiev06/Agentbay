@@ -9,7 +9,7 @@ The design of the PM mode that ADR 25 gives the requirements to. It proposes; th
 - Only his yes on a start card starts an interview, and a turn left unanswered or stopped needs that card again (3.2).
 - The requirements file carries neither his words nor the practices. His words stay in the kernel's record of each card he answered (section 2).
 - The interviewer is the eighth role, at tier deep (ADR 30).
-- Built: the role, the coordinator's line, the settings, the start card, and one whole turn answered with choices (section 8.1).
+- Built: the role, the settings, the start card, and one whole turn answered with choices (section 8.1). A review then took the coordinator's new line out again (3.8): a turn now says, in a sentence, the command for the next turn, run when the owner asks.
 
 ## The design in ten lines
 
@@ -19,7 +19,7 @@ The design of the PM mode that ADR 25 gives the requirements to. It proposes; th
 4. He answers each card by naming a letter, or `later`, or `stop`. The kernel records his choice with his words, as for every approval. No kernel change is needed.
 5. A fact is looked up in the project's files and shown on its own card, with the words a script found in the file. It counts only when he answers "That is so".
 6. The interviewer never settles a question. Its check, the cards and the record read the tree from the mode's own records, never from what the interviewer hands in.
-7. Each turn's output says what comes next. The coordinator starts that turn at once (its step 7). A turn put to him and not answered, or stopped, blocks the next until he starts the interview again.
+7. Each turn's output is a sentence that says what was kept and the command for the next turn; the coordinator runs it when the owner asks. A turn put to him and not answered, or stopped, blocks the next until he starts the interview again. A safe way for a run to continue by itself is a kernel slice, KC1, for him to decide.
 8. When nothing is left to ask, `sign-off` drafts, checks, critiques and shows him the card, open questions counted first, and writes the file on his approval (not built yet).
 9. A settled term is offered as a glossary row, and a hard decision as an ADR, each shown whole, with its number and status line, and written only on his yes (not built yet).
 10. Answers in his own words, read back to him before they are kept, are the setting `freeTextAnswers`, off by default; turning it on needs slice KQ1, a kernel change.
@@ -432,13 +432,17 @@ The workflow `start` (built):
 
 1. `open` draws the start card from the job and his words: the words, what the interview does, and, for a job already interviewed, how many questions are settled. With `freeTextAnswers` on, `start` is withheld with the sentence "Free-text answers are on in settings.pm, and they are not built yet; set freeTextAnswers to false to start."
 2. The approval `card`: `start`, "Start the interview; its first turn comes next", or `stop`, "Stop; nothing is started". He names the choice in his own words; the kernel records it with them.
-3. `begin` keeps the interview in the mode's records only on `start`, and names the first turn as `next`. On `stop` it fails the run: "Nothing was started: the owner chose stop on the card for the interview of todo."
+3. `begin` keeps the interview in the mode's records only on `start`, and says, in its output's sentence, the command for the first turn. On `stop` it fails the run: "Nothing was started: the owner chose stop on the card for the interview of todo."
 
 The workflow `ask` refuses, in its first step, a job with no interview: "No interview of todo was started; only the owner starts one, with the workflow pm:workflows/start.yaml." It refuses one he stopped, and one whose last turn was put to him and not answered, each with the sentence that he starts it again on the start card.
 
 **What stops the coordinator from spending interview calls by itself.** Each turn costs one call of the interviewer at tier deep. The first step of `ask` marks the turn open, and only `record`, after every card of the turn is answered, closes it. So every call of the interviewer comes after either his `start` or his answers to every card of the turn before. A turn whose run fails, or that he stops, needs the start card again. Each run also has its budget, 30 minutes.
 
-**What does not stop it, said plainly.** Any action can be called alone with `bay call`. A coordinator that calls `pm.begin` with `choice: start`, or `pm.record` with answers, does what only the cards should do. `record` checks the turn against the records again and refuses answers that do not fit it, but it cannot tell an answer the owner gave from one typed for him. Such a run is recorded as an action run with no approval, and `bay runs` shows it; the coordinator's block already says never to approve on its own. Closing it needs a kernel change: an action that only a step of its own workflow may run, refused by `bay call` (question 14).
+**What does not stop it, said plainly.** Any action can be called alone with `bay call`, and a script cannot see whether an approval of the owner came before it in the same run. So:
+
+- `begin` draws the start card again from the records and the settings, and starts only when the card it is given is that card, so a card drawn before a stop, or one made up, starts nothing. It refuses while `freeTextAnswers` is on. It records who the start request named, as `namedBy`, never that the owner said yes.
+- `frontier` writes a token for the turn it opens, and `record` keeps a turn only with that token.
+- Still possible: a caller who calls `pm.open` and then `pm.begin` with the card `open` drew starts an interview with no card shown; one who calls `pm.frontier` and then `pm.record` with its token keeps answers he typed. Each such run is recorded as an action run with no approval, and `bay runs` shows it. Closing it needs a kernel change: an action that only a step of its own workflow may run, refused by `bay call` (slice WO1, question 14).
 
 ### 3.3 The question tree and its frontier
 
@@ -473,15 +477,16 @@ The cost, for question 7: with choices only, one message from him for each card,
 
 The interviewer is given the turn: the job, the turn's number, the words given for the work, the tree, the questions to ask and the facts it may look up (`schemas/frontier.json`). It hands in `schemas/turn.json`: the questions it adds, the questions asked with their choices and recommendation, and the facts. That form has no place to settle a question.
 
+- **A turn shows at least one card.** `frontier` refuses to open a turn with nothing to ask and no fact to look up. The check sends back a turn that shows no card: "The turn shows no card; give a fact for Q4, with its file and the words it rests on." After the kernel's three rounds the run fails, the turn stays open, and only the start card opens the interview again. So a frontier with only facts the interviewer cannot find costs at most one run, never a loop of turns.
 - **The check** (`scripts/check-turn.ts`, the skill step's check) takes the tree from the mode's records and the setting from the settings, and the job from the step's own input; never from the skill's output. It checks each added question against `schemas/question.json`, and then: that the turn asks exactly the questions the frontier gives, each once; that an added question has a new id, is not settled, and comes after questions the tree has, never after itself or in a circle; that each question has two or three choices that differ and a recommendation that names one of them; and the facts (3.6).
 - **`draw`** draws the cards from the records' tree and the files the facts name.
-- **`record`** checks the turn again against the records, and the answers against the turn: each card answered once, by one of its letters or `later`, and no card the turn did not ask. It keeps nothing when any fails, and names every problem.
+- **`record`** checks the turn again against the records, and the answers against the turn: each card answered once, by one of its letters or `later`, and no card the turn did not ask. It refuses a turn that shows no card, and keeps nothing when any rule fails, naming every problem. It also keeps a turn only with the token `frontier` wrote for it.
 
 So a turn the check never saw, handed to `draw` or `record` by a direct call, is refused or held to the same rules. Pinned by `tests/check-turn.test.ts`.
 
 ### 3.6 Facts, and the owner's yes
 
-The interviewer looks a fact up in the files the mode may read: `CONTEXT.md`, `README.md`, `docs/`, and the code folders `src/`, `lib/`, `app/`, `packages/` and `tests/` (question 10). It gives each fact with its question, what it found, the file, and words of the file that it rests on. The check sends a fact back when:
+The interviewer looks a fact up in the files the mode may read: `CONTEXT.md`, `README.md`, `docs/`, and the code folders `src/`, `lib/`, `app/` and `packages/` (question 10). `tests/` is not read: in this kit it holds test fixtures that are config files, which the build refuses in a granted folder, and a test is not where a project says what it does. It gives each fact with its question, what it found, the file, and words of the file that it rests on. The check sends a fact back when:
 
 - its question is a decision, one talking cannot settle, settled, or not in the tree;
 - its question's earlier questions are not settled;
@@ -490,7 +495,16 @@ The interviewer looks a fact up in the files the mode may read: `CONTEXT.md`, `R
 
 A fact is shown on its own card: the title and what was found, judged; then the script's line "CONTEXT.md holds these words: "…"", which claims only that the file holds the words, not that the fact follows from them; then "Is it so?" and the answers `a`, "That is so", and `b`, "That is not so: ask it as a question". It counts only on his `a`. A decision the interviewer added as a fact is therefore still his: he sees it, and on `b` it is asked.
 
-What the mode may never read, as the kernel holds it: `.agentbay/`, `.git/` and the config file, which no mode may name; `bay/`, `schemas/`, `adapters/` and `framework/`, which only forge may name; another mode's folder, which only forge may name. Its manifest names no secret, no host, and neither `.claude/` nor `.mcp.json`. A project whose code lives in another folder gives the interviewer no reach into it: a grant is fixed in the kit's manifest, and a project choosing its own reach would need a kernel change, not proposed. The practices files under `framework/` are not read, and are not needed since question 9's answer.
+What the mode may never read, and where that is held:
+
+- The config file, `.agentbay/` and `.git/`, which no mode may name; `bay/`, `schemas/`, `adapters/` and `framework/`, which only forge may name; another mode's folder, which only forge may name. The kernel refuses these when it loads the manifest, and `bay check` reports them.
+- A granted folder that holds a closed file: `.env`, `.env.*`, `agentbay.config.yaml`, `CLAUDE.md`, `.mcp.json`, or a `.agentbay`, `.claude` or `.git` folder. The Claude Code adapter's build refuses such a grant (`adapters/claude-code/root-scan.ts`), and `bay check` now reports the same, from the same rule (`adapters/claude-code/granted-folders.ts`, called by `bay/check-granted-folders.ts`), so check and build agree (ADR 13).
+- A fact whose file is hidden or in a hidden folder: `schemas/turn.json` refuses a source with a part that starts with a dot.
+- With the hook, the interviewer's own reads are confined to the granted folders, which by the rule above hold no closed file; this holds once `bay build` passes.
+
+What is still possible: a closed file added to a granted folder after the build is read by a script that names it, since the broker does not refuse closed names at run time; only the next `bay check` or `bay build` reports it. A secret written as plain prose in a document, which no pattern finds, can reach a card and the records: the kernel scrubs only the secrets whose form it knows (S6). The skill is told never to quote a secret, and that is all that stands against it.
+
+The manifest names no secret and no host. A project whose code lives in another folder gives the interviewer no reach into it: a grant is fixed in the kit's manifest. The practices files under `framework/` are not read, and are not needed since question 9's answer.
 
 ### 3.7 Glossary rows and ADR offers (slice GR3, designed)
 
@@ -501,11 +515,11 @@ What the mode may never read, as the kernel holds it: `.agentbay/`, `.git/` and 
 
 ### 3.8 How one turn leads to the next
 
-Each run of `ask` is one turn, and its output names the next under `next`, as `{ "workflow": "pm:workflows/ask.yaml", "input": { "job": "todo" } }`. The coordinator's block has one new line, step 7 (built):
+Each run of `ask` is one turn. Its output is one sentence, `summary`, which `bay runs` prints with the output: "Turn 1 of the interview of todo is kept: 2 questions settled, 3 open. When the owner asks for turn 2, run: bay call --workflow pm:workflows/ask.yaml '{"job": "todo"}' --json". The job is held to `^[a-z][a-z0-9-]*$` before any record is made, so the command holds no quote. The coordinator runs it only when the owner asks for the next turn, his "go on".
 
-"7. When a run is done and its output has `next`, run `./bay.sh call --workflow <next.workflow> '<next.input as JSON>' --json` at once, then step 3."
+The owner chose on 21 November that the coordinator starts the next turn (question 8). A first build did that with a line in the coordinator's block and a `next` field in the run's output, and a review took both out: nothing in the kernel checks such a field, so any mode's run, trusted or not, could make the coordinator start any workflow of any mode; and the command put a mode's JSON in single quotes in the main session's shell, where a `'` breaks out. To stay within the block's 59 lines that build had also joined two lines, which is the packing the owner forbids. The run's output now carries no field a machine reads as a next step.
 
-The block's limit is 59 lines; two lines of its opening were joined to make room. The cost, for question 8: one line of the block, and each turn's interviewer call starts without asking him, which is safe only because of 3.2: no turn starts unless the one before was answered card by card. A kernel "bounded repeat" (a step that repeats inner steps until an output says stop, with keys and budget for each pass) was weighed and left: no second mode needs it yet.
+The safe form is a kernel slice, KC1, written up in `docs/designs/runs/continues.md`: a workflow lists `continues:` naming workflows of its own mode only; only a run with an approval the owner answered may continue; the input is checked against the target's trigger schema; a chain stops for the owner after N runs; `bay runs` prints a command with no JSON, such as `bay resume <runId> --continue`; the coordinator's line becomes "run the command it prints", with the block's limit raised openly if it needs the line. Whether to build it is question 15. Until then his answer to question 8 waits on KC1.
 
 ### 3.9 Answers in his own words (slice FW1 with KQ1, designed, not built)
 
@@ -538,7 +552,7 @@ The owner chose a new role on 21 November: "New role: interviewer (Recommended)"
 
 ### 3.13 The mode as built
 
-`components/modes/pm/mode.yaml`, version 0.2.0, requires `requirements@1` (its job's name is that interface's), reads the files of 3.6, and writes only its own records. Actions: `open`, `begin`, `frontier`, `interview` (skill, role interviewer, check `scripts/check-turn.ts`), `draw`, `show-card`, `took`, `record`. Each shape is written once: a question in `schemas/question.json`, a turn in `schemas/turn.json`, a card's item in `schemas/item.json`, the turn's input in `schemas/frontier.json`; a schema that carries a shape made elsewhere names it in its description and leaves it to the step that made it, as forge's schemas do. A schema may refer only to an interface's schemas (`bay/schema-files.ts`), so the job's name refers to `requirements@1`. The settings (`schemas/settings.json`):
+`components/modes/pm/mode.yaml`, version 0.2.0, requires `requirements@1` (its job's name is that interface's), reads the files of 3.6 (`CONTEXT.md`, `README.md`, `docs/`, `src/`, `lib/`, `app/`, `packages/`), and writes only its own records. Actions: `open`, `begin`, `frontier`, `interview` (skill, role interviewer, check `scripts/check-turn.ts`), `draw`, `show-card`, `took`, `record`. Each shape is written once: a question in `schemas/question.json`, a turn in `schemas/turn.json`, a card's item in `schemas/item.json`, the turn's input in `schemas/frontier.json`; a schema that carries a shape made elsewhere names it in its description and leaves it to the step that made it, as forge's schemas do. A schema may refer only to an interface's schemas (`bay/schema-files.ts`), so the job's name refers to `requirements@1`. The settings (`schemas/settings.json`):
 
 - `questionsPerTurn`: "How many questions one turn of an interview asks at most, from 1 to 12, each on its own card; 12 when not given."
 - `freeTextAnswers`: "Whether you may answer a turn in your own words; off when not given. Off: you answer each question with one of its lettered choices. On is not built yet: it needs a change to the kernel, and an interview does not start while it is on."
@@ -608,6 +622,7 @@ steps:
     action: record
     input:
       job: $steps.frontier.output.job
+      opened: $steps.frontier.output.opened
       turn: $steps.interview.output
       answers: $steps.cards.output
 ```
@@ -622,14 +637,14 @@ As in the first version: `draft`, `requirements.check`, `critique`, `draw-sign-o
 
 | Step | Who | Why |
 |---|---|---|
-| `open`, `begin` | script | The start card, and keeping the interview on his `start` |
+| `open`, `begin` | script | The start card, and keeping the interview on his `start` when the card is the one `open` draws now |
 | `frontier` | script | Which questions the turn asks, and which facts it may look up, from the records |
 | `interview` | skill, role interviewer | Seeing what his words leave open, and writing a question worth answering, is judgement |
 | `check-turn.ts` | script | Every rule of 3.5 and 3.6 |
 | `draw`, `show-card` | script | The cards, and whether a fact's file holds its words |
 | `answer` | approval | His letter, `later` or `stop`, one card at a time |
 | `took` | script | Passes the letter on, or stops the interview |
-| `record` | script | Checks the turn and answers again, keeps them, names the next turn |
+| `record` | script | Checks the turn, its token and the answers again, keeps them, and says the command for the next turn |
 
 Nothing that needs no judgement is a model's (P-32).
 
@@ -982,15 +997,16 @@ That is a forge slice, FV1 in section 8, not the PM mode's. The PM mode never re
 
 | Path | Read or written by | When |
 |---|---|---|
-| `CONTEXT.md`, `README.md`, `docs/`, `src/`, `lib/`, `app/`, `packages/`, `tests/` | read by the interviewer, `check-turn.ts` and `draw` | A fact names one of them (built) |
+| `CONTEXT.md`, `README.md`, `docs/`, `src/`, `lib/`, `app/`, `packages/` | read by the interviewer, `check-turn.ts` and `draw` | A fact names one of them (built) |
 | The mode's records, its database partition `interviews` | `begin`, `frontier`, `took`, `record` | On his `start`; when a turn opens; on his `stop`; when every card of a turn is answered (built) |
 | `docs/requirements/<job>.yaml` | written by the sign-off's `write` | He approves the sign-off card (GR4) |
 | `CONTEXT.md` | written by `record` | He answers `a` on a glossary row's card (GR3) |
 | `docs/adr/<number>-<title>.md` | written by `record` | He answers `a` on an ADR's card, and no file has that name (GR3) |
 
-- **Grants and effects.** As built the manifest declares `read: [CONTEXT.md, README.md, docs/, src/, lib/, app/, packages/, tests/]` and no write path. GR3 and GR4 add `write: [docs/requirements/, docs/adr/, CONTEXT.md]`, and move exported sources from `docs/requirements/sources/` to `docs/requirements-sources/<job>/`, so that the requirements write grant holds no source. Every read and write is a `files` operation, which passes the broker's one rule (S1), is allowed only on a declared path (S3) and is recorded as an event (S5). His words reach the mode only through the kernel's record of each approval, which scrubs secrets (S6).
+- **Grants and effects.** As built the manifest declares `read: [CONTEXT.md, README.md, docs/, src/, lib/, app/, packages/]` and no write path. GR3 and GR4 add `write: [docs/requirements/, docs/adr/, CONTEXT.md]`, and move exported sources from `docs/requirements/sources/` to `docs/requirements-sources/<job>/`, so that the requirements write grant holds no source. Every read and write is a `files` operation, which passes the broker's one rule (S1), is allowed only on a declared path (S3) and is recorded as an event (S5). His words reach the mode only through the kernel's record of each approval, which scrubs secrets (S6).
 - **What it may never name.** The config file, `.agentbay/` and `.git/`, which no mode may name; `bay/`, `schemas/`, `adapters/` and `framework/`, which only forge may name; another mode's folder, which only forge may name. Its manifest names neither `.claude/` nor `.mcp.json`, no secret and no host. An earlier draft of this design listed `framework/` in the read grant; `bay check` refuses that for any mode but forge, and the design no longer needs it.
-- **The hook.** `interview` has the effect read only, so its agent's file gives it no write tool (`adapters/claude-code/agent-file.ts`). With the hook, its reads are confined to the read grants.
+- **The hook.** `interview` has the effect read only, so its agent's file gives it no write tool (`adapters/claude-code/agent-file.ts`). With the hook, its reads are confined to the read grants. That holds only once `bay build` passes: the build writes the agent's roots, and it refuses a granted folder that holds a closed file (3.6). An earlier version granted `tests/`, which in this kit holds config files as fixtures; the build refused it while `bay check` said 0 errors. Now `bay check` reports what the build refuses, from the same rule.
+- **Secrets.** A closed file added to a granted folder after the build, and a secret written as plain prose, are what is still possible (3.6).
 - **Trust.** Trust is about a mode's list: its commands and throwaway folders. The PM mode lists none, so it needs no trust. Nothing here gives, widens or renews trust, so T1 to T5 of `docs/designs/trust/0-frame.md` hold as they are, and S1 to S7 of `docs/designs/operations/0-frame.md` hold as above.
 - **What a grant does not hold.** That `record` writes only the row or the ADR he saw, and never over an existing ADR. Those are `record`'s rules, pinned by GR3's tests.
 
@@ -1020,14 +1036,15 @@ That is a forge slice, FV1 in section 8, not the PM mode's. The PM mode never re
 
 ## 8. The slices to build it
 
-**Conclusion.** Four slices are built (8.1). Next come GR3, glossary rows and ADRs on his yes, and GR4, the sign-off that writes the file; then, when the owner wants them, KQ1 and FW1 for answers in his own words, and WO1 if he wants actions only a workflow may run. RD1 and FT1 of the first revision are gone: the owner answered question 9 "Neither". This is a fragment in the form of `docs/plans/0024-forge-whole.yaml`, to be added to a plan; it was not run through `forge.waves`.
+**Conclusion.** Four slices are built (8.1), and one built slice was taken out again. Next come GR3, glossary rows and ADRs on his yes, and GR4, the sign-off that writes the file; then, when the owner wants them, KQ1 and FW1 for answers in his own words, and WO1 if he wants actions only a workflow may run. RD1 and FT1 of the first revision are gone: the owner answered question 9 "Neither". This is a fragment in the form of `docs/plans/0024-forge-whole.yaml`, to be added to a plan; it was not run through `forge.waves`.
 
 ### 8.1 Built
 
 - **GR1, the turn by script, as reworked after review.** The frontier, the turn's check, the cards. Its first form also read free text; that part is taken out until FW1, with the review's points kept in 3.9.
 - **IR1, the role.** `bay/roles.ts` has eight roles; ADR 30; the README and the glossary's Role row; `tests/roles.test.ts` pins all three, ADR 29 to its seven roles and ADR 30 to the one it adds.
-- **CL1, the coordinator's line.** Step 7 of the block (3.8), within its 59 lines, pinned by `adapters/claude-code/tests/agent-file.test.ts`.
-- **GR2, an interview started on a card and one whole turn answered with choices.** The settings; `start` and `ask`; the skill `interview`; the glossary's new words and the changed practices row; `check-turn.ts`, `draw` and `record` reading the records. Tests: `start.test.ts` (5 cases), `ask.test.ts` (10), `check-turn.test.ts` (13), with the test toolbox playing the interviewer. Sixteen bugs were put in by hand, one at a time, and a test failed for each.
+- **CL1, the coordinator's line, built and taken out again.** Its step 7 trusted a field nothing checks and put a mode's JSON in the shell (3.8). The block is as it was; KC1 is the safe form.
+- **GF1, check and build agree on granted folders.** `bay check` reports, as an error, a granted folder that holds a closed file, from the adapter's own rule, which the build applies (`tests/check-granted-folders.test.ts`).
+- **GR2, an interview started on a card and one whole turn answered with choices.** The settings; `start` and `ask`; the skill `interview`; the glossary's new words and the changed practices row; `check-turn.ts`, `draw` and `record` reading the records. Tests: `start.test.ts` (5 cases), `ask.test.ts` (10), `check-turn.test.ts` (15), `direct.test.ts` (8), with the test toolbox playing the interviewer. Twenty-nine bugs were put in by hand, one at a time, over two reviews, and a test failed for each.
 
 ### 8.2 To build
 
@@ -1118,6 +1135,24 @@ slices:
         kind: fails-first
         tests:
         - components/modes/pm/tests/free-text.test.ts
+- title: 'A run continues into a workflow of its own mode only after the owner answered a card, by a command that takes no JSON'
+  slice:
+    name: KC1
+    kind: capability
+    scope:
+    - bay/**
+    - schemas/workflow.schema.json
+    - adapters/claude-code/coordinator.ts
+    - tests/continues.test.ts
+    after: []
+    done:
+    - id: DOD-KC1-1
+      says: A workflow's continues naming another mode's workflow is refused at load and by bay check; a run with no approval the owner answered does not continue; an input its target's trigger refuses starts nothing; the Nth run of a chain waits for the owner; bay runs prints bay resume <runId> --continue and no JSON.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - tests/continues.test.ts
 - title: 'An action only a step of its own workflow may run: bay call refuses it'
   slice:
     name: WO1
@@ -1142,7 +1177,7 @@ PM3 (a change after building has started), FV1 (forge names each condition chang
 ### 8.3 The order
 
 1. **GR3**, then **GR4**: after GR4 the PM mode can replace writing `docs/requirements/<job>.yaml` by hand.
-2. **KQ1** and **WO1** are kernel slices that wait for the owner: KQ1 when he wants answers in his own words, WO1 on question 14. **FW1** after KQ1 and GR4.
+2. **KQ1**, **WO1** and **KC1** are kernel slices that wait for the owner: KQ1 when he wants answers in his own words, WO1 on question 14, KC1 on question 15. **FW1** after KQ1 and GR4.
 3. **PM3**, then **FV1** and **PS1**.
 
 ## 9. Questions only the owner can answer
@@ -1156,7 +1191,7 @@ PM3 (a change after building has started), FV1 (forge names each condition chang
 5. **Sources at the job.** On 20 November, "Agree with pm recommendations": exported files in a folder first.
 6. **The interviewer's role.** On 21 November: "New role: interviewer (Recommended)". An eighth role at tier deep, ADR 30.
 7. **How your words reach the next step.** On 21 November he typed: "Grill is optional. And configurable". Asked which settings, he chose "Questions per turn" and "Free-text answers on or off". Not chosen: glossary and ADR offers on or off, and fact look-ups on or off, so both stay always on. As put to him: questions per turn from 1 to 12, default 12; free-text answers default off, lettered choices only, with no kernel change; on needs the kernel change KQ1. Optional means forge keeps accepting a requirements file written by hand, with no interview.
-8. **How one turn leads to the next.** On 21 November: "Coordinator starts it (Recommended)". One turn a run; one new line in the coordinator's block.
+8. **How one turn leads to the next.** On 21 November: "Coordinator starts it (Recommended)". One turn a run; one new line in the coordinator's block. Built, then taken out after review (3.8); it waits on question 15.
 9. **What the file carries for forge.** On 21 November: "Neither". No `quote` on decisions and no `practices` in the file; forge's own DA1 tells the designer the practices.
 10. **What the interviewer may read.** On 21 November: "Documents and code" (not the recommendation).
 11. **Signing with questions open.** On 21 November: "Yes, with a count (Recommended)".
@@ -1164,6 +1199,13 @@ PM3 (a change after building has started), FV1 (forge names each condition chang
 
 **Open.**
 
-14. **Actions only a workflow may run.** Any action can be called alone with `bay call`, so a coordinator could call `pm.begin` or `pm.record` itself, with no card (3.2). The kernel cannot tell such a call from the workflow's step.
+14. **Actions only a workflow may run.** Any action of a mode can be run alone with `bay call`. So the coordinator, or anyone with your shell, could start an interview or keep answers without showing you a card. Such a run shows in `bay runs` with no approval; nothing stops it.
     - a. Build WO1: an action may say it runs only as a step of its own workflows, and `bay call` refuses it. **Recommended:** it closes the gap where it is, for every mode with steps that should follow a card, such as forge's commit steps. The cost is one manifest field and a refusal in `bay call`.
     - b. Leave it: the coordinator's block forbids approving on its own, and `bay runs` shows an action run that no card preceded.
+15. **Letting a turn start the next by itself (KC1).** Today each turn ends by printing the command for the next, and the coordinator runs it only when you say "go on". Letting a run start the next one safely needs a kernel change: a workflow may continue only into a workflow of its own mode, only after you answered one of its cards, a chain stops for you after a few runs, and the command it prints holds no text from the mode.
+    - a. Build KC1, then put back the coordinator's line as "run the command it prints". **Recommended:** it gives you question 8's answer without letting any mode start another mode's work.
+    - b. Keep saying "go on" between turns. Nothing is built.
+16. **An approval's words must name the choice they take.** Today an answer from chat is taken with any words as its quote: words like "nothing like a choice" took choice `a`. Trust already refuses words that do not name the mode.
+    - a. Propose a kernel slice: in chat, the owner's words must contain the choice's name, or the kernel refuses the answer and says so. **Recommended:** the record then shows that his words chose it.
+    - b. Leave it to the coordinator's block, which says to quote only his words.
+

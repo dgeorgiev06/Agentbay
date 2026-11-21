@@ -1,0 +1,20 @@
+{
+  "input": {
+    "choice": "start",
+    "opened": {
+      "job": "todo",
+      "words": "A todo mode.",
+      "by": "owner"
+    }
+  },
+  "output": {
+    "job": "todo",
+    "summary": "The interview of todo is started; its turn 1 comes next.",
+    "next": {
+      "workflow": "pm:workflows/ask.yaml",
+      "input": {
+        "job": "todo"
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TookRequest",
+  "description": "The owner's choice on one card.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["choice", "item"],
+  "properties": {
+    "choice": {
+      "type": "string"
+    },
+    "item": {
+      "type": "object",
+      "description": "As schemas/item.json gives it."
+    }
+  }
+}

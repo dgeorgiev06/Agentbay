@@ -2,14 +2,14 @@ import type { Json } from "../../../../../bay/sdk.ts";
 import { listAt, textAt, textsAt } from "./json.ts";
 import {
   frontierOf,
+  notReadyWords,
   questionNamed,
-  settledIds,
-  unsettledBefore,
-  type Frontier,
+  questionOf,
+  treeProblems,
   type Question,
   type Tree,
 } from "./tree.ts";
-import { each, holds, indexOfLetter, joined, lettersOf } from "./words.ts";
+import { counted, holds, joined, lettersOf, namesChoice, wordCount } from "./words.ts";
 
 export type Asked = {
   readonly question: string;
@@ -26,6 +26,7 @@ export type Fact = {
 };
 
 export type Turn = {
+  readonly added: readonly Question[];
   readonly asked: readonly Asked[];
   readonly facts: readonly Fact[];
 };
@@ -33,6 +34,15 @@ export type Turn = {
 export type Source = { readonly text: string } | { readonly reason: string };
 
 export type Sources = ReadonlyMap<string, Source>;
+
+export type Given = {
+  readonly tree: Tree;
+  readonly perTurn: number;
+};
+
+const fewestQuotedWords = 3;
+
+export const factChoices: readonly string[] = ["That is so", "That is not so: ask it as a question"];
 
 function askedOf(value: Json): Asked {
   return {
@@ -53,23 +63,42 @@ function factOf(value: Json): Fact {
 }
 
 export function turnOf(value: Json): Turn {
-  return { asked: listAt(value, "asked").map(askedOf), facts: listAt(value, "facts").map(factOf) };
+  return {
+    added: listAt(value, "added").map(questionOf),
+    asked: listAt(value, "asked").map(askedOf),
+    facts: listAt(value, "facts").map(factOf),
+  };
 }
 
 export function sourcePaths(turn: Turn): readonly string[] {
   return [...new Set(turn.facts.map((fact) => fact.source))];
 }
 
-function notReadyWhy(question: Question, tree: Tree): string {
-  const before = unsettledBefore(question, settledIds(tree));
-  const which = each(before.length, "which is", "which are");
-  return `${question.id} cannot be asked yet: it comes after ${joined(before)}, ${which} not settled.`;
+function twice(ids: readonly string[]): readonly string[] {
+  return [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
 }
 
-function notAskedWhy(id: string, tree: Tree, found: Frontier): string {
+function addedProblems(tree: Tree, turn: Turn): readonly string[] {
+  const known = (id: string): boolean => questionNamed(tree, id) !== undefined;
+  const combined = { questions: [...tree.questions, ...turn.added.filter((question) => !known(question.id))] };
+  return [
+    ...turn.added
+      .filter((question) => known(question.id))
+      .map((question) => `${question.id} is in the tree already; give a question you add a new id.`),
+    ...turn.added
+      .filter((question) => question.settled || question.answer !== undefined)
+      .map((question) => `${question.id} is added as settled; only the owner's answer settles a question.`),
+    ...treeProblems(combined),
+  ];
+}
+
+function notDueWhy(id: string, given: Given, turn: Turn): string {
+  const { tree, perTurn: due } = given;
   const question = questionNamed(tree, id);
   if (question === undefined) {
-    return `${id} is not in the tree; ask only questions the tree has.`;
+    return turn.added.some((added) => added.id === id)
+      ? `${id} is added in this turn; it is asked from the next turn on.`
+      : `${id} is not in the tree; ask only questions the tree has.`;
   }
   if (question.settled) {
     return `${id} is settled; ask it no more.`;
@@ -80,41 +109,46 @@ function notAskedWhy(id: string, tree: Tree, found: Frontier): string {
     case "prototype":
       return `${id} is one talking cannot settle; leave it out of the turn.`;
     case "decision":
-      return found.frontier.includes(question)
-        ? `${id} waits for a later turn: this turn asks ${String(found.asks.length)} questions at most.`
-        : notReadyWhy(question, tree);
+      return frontierOf(tree, due).frontier.includes(question)
+        ? `${id} waits for a later turn: this turn asks ${counted(due, "question", "questions")} at most.`
+        : `${id} cannot be asked yet: ${notReadyWords(question, tree)}.`;
   }
 }
 
-function coverageProblems(tree: Tree, turn: Turn, found: Frontier): readonly string[] {
+function coverageProblems(given: Given, turn: Turn): readonly string[] {
   const asked = turn.asked.map((entry) => entry.question);
-  const due = found.asks.map((question) => question.id);
-  const twice = [...new Set(asked.filter((id, index) => asked.indexOf(id) !== index))];
+  const due = frontierOf(given.tree, given.perTurn).asks.map((question) => question.id);
   return [
-    ...twice.map((id) => `${id} is asked twice in the turn; ask it once.`),
-    ...[...new Set(asked)].filter((id) => !due.includes(id)).map((id) => notAskedWhy(id, tree, found)),
+    ...twice(asked).map((id) => `${id} is asked twice in the turn; ask it once.`),
+    ...[...new Set(asked)].filter((id) => !due.includes(id)).map((id) => notDueWhy(id, given, turn)),
     ...due
       .filter((id) => !asked.includes(id))
       .map((id) => `${id} can be asked now and the turn does not ask it; ask it.`),
   ];
 }
 
-function recommendedProblems(asked: Asked): readonly string[] {
-  const index = indexOfLetter(asked.recommended);
-  if (index >= 0 && index < asked.choices.length) {
-    return [];
+function choiceProblems(asked: Asked): readonly string[] {
+  const repeated = twice(asked.choices).map(
+    (choice) => `${asked.question} gives the choice "${choice}" twice; give each choice once.`,
+  );
+  if (namesChoice(asked.recommended, asked.choices.length)) {
+    return repeated;
   }
+  const choices = counted(asked.choices.length, "choice", "choices");
   const letters = joined(lettersOf(asked.choices.length));
   return [
-    `${asked.question} recommends ${asked.recommended}, but it has ${String(asked.choices.length)} choices, ` +
-      `${letters}; recommend one of them.`,
+    ...repeated,
+    `${asked.question} recommends ${asked.recommended}, but it has ${choices}, ${letters}; recommend one of them.`,
   ];
 }
 
-function factKindProblem(fact: Fact, tree: Tree): string | undefined {
+function factQuestionProblem(fact: Fact, tree: Tree): string | undefined {
   const question = questionNamed(tree, fact.question);
   if (question === undefined) {
     return `The fact for ${fact.question} names a question the tree does not have.`;
+  }
+  if (question.settled) {
+    return `${fact.question} is settled; give no fact for it.`;
   }
   switch (question.kind) {
     case "decision":
@@ -122,11 +156,19 @@ function factKindProblem(fact: Fact, tree: Tree): string | undefined {
     case "prototype":
       return `${fact.question} is one talking cannot settle; no fact settles it.`;
     case "fact":
-      return undefined;
+      return frontierOf(tree, 0).lookUp.includes(question)
+        ? undefined
+        : `${fact.question} cannot be looked up yet: ${notReadyWords(question, tree)}.`;
   }
 }
 
 function factSourceProblem(fact: Fact, sources: Sources): string | undefined {
+  if (wordCount(fact.quote) < fewestQuotedWords) {
+    return (
+      `The fact for ${fact.question} quotes "${fact.quote}", too few words to find; ` +
+      `quote at least ${String(fewestQuotedWords)} words of its file.`
+    );
+  }
   const source = sources.get(fact.source) ?? { reason: "it was not read." };
   if ("reason" in source) {
     return `The fact for ${fact.question} names ${fact.source}, which cannot be read: ${source.reason}`;
@@ -137,25 +179,20 @@ function factSourceProblem(fact: Fact, sources: Sources): string | undefined {
 }
 
 function factProblems(tree: Tree, turn: Turn, sources: Sources): readonly string[] {
-  return turn.facts.flatMap((fact) =>
-    [factKindProblem(fact, tree), factSourceProblem(fact, sources)].filter((problem) => problem !== undefined),
-  );
+  const ids = turn.facts.map((fact) => fact.question);
+  return [
+    ...twice(ids).map((id) => `${id} has more than one fact; give one fact for a question.`),
+    ...turn.facts.flatMap((fact) =>
+      [factQuestionProblem(fact, tree), factSourceProblem(fact, sources)].filter((problem) => problem !== undefined),
+    ),
+  ];
 }
 
-export type TurnChecked = {
-  readonly tree: Tree;
-  readonly turn: Turn;
-  readonly oneAtATime: boolean;
-  readonly sources: Sources;
-};
-
-export function turnProblems(checked: TurnChecked): readonly string[] {
-  const { tree, turn, oneAtATime, sources } = checked;
-  const found = frontierOf(tree, oneAtATime);
+export function turnProblems(given: Given, turn: Turn, sources: Sources): readonly string[] {
   return [
-    ...found.problems,
-    ...coverageProblems(tree, turn, found),
-    ...turn.asked.flatMap(recommendedProblems),
-    ...factProblems(tree, turn, sources),
+    ...addedProblems(given.tree, turn),
+    ...coverageProblems(given, turn),
+    ...turn.asked.flatMap(choiceProblems),
+    ...factProblems(given.tree, turn, sources),
   ];
 }

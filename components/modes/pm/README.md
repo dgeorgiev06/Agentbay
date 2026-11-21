@@ -1,19 +1,25 @@
 # pm
 
-The PM mode interviews the owner about a piece of work, turn by turn, until nothing important is left assumed, and then writes a requirements file other modes build from. Its design is `docs/designs/pm-mode/design.md`. This folder holds its first slice, GR1: the scripts of a turn. No skill, workflow or write is built yet.
+The PM mode interviews the owner about a piece of work before anyone designs it, a turn of questions at a time, and keeps what he answers. Its design is `docs/designs/pm-mode/design.md`. The interview is optional: forge reads a requirements file written by hand as well. No file of the project is written yet; the sign-off that writes the requirements file is a later slice.
 
-An interview keeps a tree of questions. Each question names the questions it comes after, and is a decision, which is the owner's; a fact, which the repository answers; or one talking cannot settle. The frontier is every open decision whose earlier questions are all settled. A turn asks the whole frontier at once, at most twelve questions, or one question when the owner asks for one at a time.
+An interview keeps a tree of questions. Each question names the questions it comes after, and is a decision, which is the owner's; a fact, which the project's files answer and the owner confirms; or one talking cannot settle. The frontier is every open decision whose earlier questions are all settled. A turn asks the frontier, at most `questionsPerTurn` questions, each on its own card with lettered answers and the interviewer's recommendation.
 
-## Actions
+## Workflows
 
-| action | effects | runs |
-|---|---|---|
-| `frontier` | read | `scripts/frontier.ts`: the frontier, the questions this turn asks, the facts to look up, the questions talking cannot settle, the counts, and each problem of the tree: an id used twice, a question after one the tree does not have, questions that come after each other. |
-| `check-turn` | read | `scripts/check-turn.ts`: a turn asks exactly the questions the frontier gives, each once; each recommendation names one of its question's choices; a fact answers a fact, never a decision, and the file it names holds its quoted words. It answers `passed`, or `feedback` with every problem. It is the check the interviewer's skill step will name. |
-| `draw-turn` | read | `scripts/draw-turn.ts`: the turn's card. The counts and whether a fact's file holds its words are computed lines. Each question, its choices and the recommendation are judged lines that cite the step `interview`, the interviewer's step in the workflow `ask` still to be built. |
-| `read-short` | read | `scripts/read-short.ts`: an answer such as `1a 2b` is read by script, each answer with his own words for it. Anything else answers `short: false`, for a model to read. |
-| `check-reading` | read | `scripts/check-reading.ts`: each question is read once; a choice names one of its question's letters, and nothing else names a letter; and the words given for each answer are his, exactly, spaces aside. |
+| workflow               | what it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workflows/start.yaml` | `open` draws the start card with the owner's words; on `start`, `begin` keeps the interview and names its first turn. Only this card starts an interview, and only it opens one again after a stop or a turn left unanswered.                                                                                                                                                                                                                                                                                                                     |
+| `workflows/ask.yaml`   | One turn. `frontier` refuses a job not started, stopped, or with a turn left unanswered, and marks the turn open. The `interview` skill (role interviewer) writes the turn; `scripts/check-turn.ts` holds it to the frontier taken from the mode's own records. `draw` makes one card for each fact and question, facts first. Each card is an approval with the choices a, b, c (withheld for a card with two answers), later and stop. `record` checks the turn and the answers again against the records, keeps them, and names the next turn. |
 
-The mode reads `CONTEXT.md` and `docs/`, the files a fact may quote. It writes nothing.
+The run's output says what was kept and, under `next`, the turn that comes next.
 
-Each action can be called by hand, for example `bay call pm.frontier '{"tree": {"questions": []}}' --json`, which answers an empty frontier.
+## Settings
+
+| setting            | what it does                                                                                                                            |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `questionsPerTurn` | How many questions a turn asks at most, from 1 to 12; 12 when not given.                                                                |
+| `freeTextAnswers`  | Whether the owner may answer in his own words; off when not given. On is not built yet, and an interview does not start while it is on. |
+
+The mode reads `CONTEXT.md`, `README.md`, `docs/`, `src/`, `lib/`, `app/`, `packages/` and `tests/`, the files a fact may quote. It writes only its own records.
+
+Each action can be called by hand, for example `bay call pm.frontier '{"job": "todo"}' --json`, which refuses a job whose interview the owner did not start.

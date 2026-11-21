@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RecordRequest",
+  "description": "A turn and the owner's answer to each of its cards.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["job", "turn", "answers"],
+  "properties": {
+    "job": {
+      "type": "string"
+    },
+    "turn": {
+      "type": "object",
+      "description": "As schemas/turn.json gives it."
+    },
+    "answers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "description": "As schemas/took.json gives it."
+      }
+    }
+  }
+}

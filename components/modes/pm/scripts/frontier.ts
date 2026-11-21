@@ -1,21 +1,34 @@
-import { defineScript, fieldsOf } from "../../../../bay/sdk.ts";
-import { flagAt } from "./lib/json.ts";
-import { frontierOf, treeOf, type Question } from "./lib/tree.ts";
+import { defineScript, fail } from "../../../../bay/sdk.ts";
+import { opened, turnRefusal } from "./lib/interview.ts";
+import { textAt } from "./lib/json.ts";
+import { settingsOf } from "./lib/settings.ts";
+import { readInterview, writeInterview } from "./lib/store.ts";
+import { frontierOf, type Question } from "./lib/tree.ts";
 
 function idsOf(questions: readonly Question[]): readonly string[] {
   return questions.map((question) => question.id);
 }
 
-export const run = defineScript((input) => {
-  const found = frontierOf(treeOf(fieldsOf(input).tree ?? null), flagAt(input, "oneAtATime"));
-  return Promise.resolve({
-    frontier: idsOf(found.frontier),
+export const run = defineScript(async (input, context) => {
+  const job = textAt(input, "job");
+  const interview = await readInterview(context, job);
+  const refusal = turnRefusal(interview, job);
+  if (interview === undefined || refusal !== undefined) {
+    return fail(refusal ?? "");
+  }
+  const { perTurn } = settingsOf(context.settings);
+  const found = frontierOf(interview, perTurn);
+  if (found.asks.length === 0 && found.lookUp.length === 0) {
+    return fail(`Nothing is left to ask in the interview of ${job}; the sign-off is not built yet.`);
+  }
+  await writeInterview(context, opened(interview));
+  return {
+    job,
+    turn: interview.turn,
+    perTurn,
+    asked: interview.asked,
+    questions: interview.questions,
     asks: idsOf(found.asks),
     lookUp: idsOf(found.lookUp),
-    untalkable: idsOf(found.untalkable),
-    settled: found.settled,
-    waiting: found.waiting,
-    total: found.total,
-    problems: found.problems,
-  });
+  };
 });

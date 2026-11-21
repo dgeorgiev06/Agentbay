@@ -1,50 +1,37 @@
 {
   "input": {
-    "tree": {
-      "questions": [
-        {
-          "id": "Q1",
-          "title": "Ids",
-          "asks": "Is the id of a removed todo given to a new one?",
-          "after": [],
-          "kind": "decision",
-          "settled": true
-        },
-        {
-          "id": "Q2",
-          "title": "Done twice",
-          "asks": "What happens when a todo already done is marked done again?",
-          "after": [
-            "Q1"
-          ],
-          "kind": "decision",
-          "settled": false
-        },
-        {
-          "id": "Q3",
-          "title": "Order with due dates",
-          "asks": "In what order are open todos with due dates listed?",
-          "after": [
-            "Q2"
-          ],
-          "kind": "decision",
-          "settled": false
-        }
-      ]
-    }
+    "job": "todo"
   },
   "output": {
-    "frontier": [
-      "Q2"
+    "job": "todo",
+    "turn": 1,
+    "perTurn": 1,
+    "asked": [
+      {
+        "by": "owner",
+        "on": "2026-11-21",
+        "words": "A todo mode."
+      }
     ],
-    "asks": [
-      "Q2"
+    "questions": [
+      {
+        "id": "Q1",
+        "title": "Who it is for",
+        "asks": "Who is this work for, and what do they do with it?",
+        "after": [],
+        "kind": "decision",
+        "settled": false
+      },
+      {
+        "id": "Q2",
+        "title": "Seen working",
+        "asks": "What does a person see when it works?",
+        "after": [],
+        "kind": "decision",
+        "settled": false
+      }
     ],
-    "lookUp": [],
-    "untalkable": [],
-    "settled": 1,
-    "waiting": 1,
-    "total": 3,
-    "problems": []
+    "asks": ["Q1"],
+    "lookUp": []
   }
 }

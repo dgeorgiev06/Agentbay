@@ -1,27 +1,48 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Frontier",
-  "description": "Which questions a turn may ask now, by id, and the counts the card shows.",
+  "description": "What the interviewer is given for one turn, read from the PM mode's records.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "frontier",
-    "asks",
-    "lookUp",
-    "untalkable",
-    "settled",
-    "waiting",
-    "total",
-    "problems"
-  ],
+  "required": ["job", "turn", "perTurn", "asked", "questions", "asks", "lookUp"],
   "properties": {
-    "frontier": {
+    "job": {
+      "type": "string"
+    },
+    "turn": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "perTurn": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "asked": {
       "type": "array",
       "items": {
-        "type": "string",
-        "pattern": "^Q[1-9][0-9]{0,3}$"
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["by", "on", "words"],
+        "properties": {
+          "by": {
+            "type": "string"
+          },
+          "on": {
+            "type": "string"
+          },
+          "words": {
+            "type": "string"
+          }
+        }
       },
-      "description": "Open decisions whose earlier questions are all settled."
+      "description": "Each time words were given for the work, by whom and when."
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "description": "A question, as schemas/question.json gives it."
+      }
     },
     "asks": {
       "type": "array",
@@ -29,7 +50,7 @@
         "type": "string",
         "pattern": "^Q[1-9][0-9]{0,3}$"
       },
-      "description": "The ones this turn asks: at most twelve, or one at a time."
+      "description": "The questions this turn asks, in order."
     },
     "lookUp": {
       "type": "array",
@@ -37,35 +58,7 @@
         "type": "string",
         "pattern": "^Q[1-9][0-9]{0,3}$"
       },
-      "description": "Open facts whose earlier questions are settled, to be looked up."
-    },
-    "untalkable": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "pattern": "^Q[1-9][0-9]{0,3}$"
-      },
-      "description": "Open questions talking cannot settle."
-    },
-    "settled": {
-      "type": "integer",
-      "minimum": 0
-    },
-    "waiting": {
-      "type": "integer",
-      "minimum": 0,
-      "description": "Open decisions that wait for earlier questions."
-    },
-    "total": {
-      "type": "integer",
-      "minimum": 0
-    },
-    "problems": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "What is wrong with the tree, each with what to change."
+      "description": "The facts this turn may look up."
     }
   }
 }

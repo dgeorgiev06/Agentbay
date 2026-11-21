@@ -1,0 +1,40 @@
+name: ask
+trigger: { manual: true }
+budget: { minutes: 30 }
+steps:
+  - id: frontier
+    action: frontier
+  - id: interview
+    action: interview
+  - id: draw
+    action: draw
+    input:
+      job: $steps.frontier.output.job
+      turn: $steps.interview.output
+  - id: cards
+    foreach: $steps.draw.output.items
+    itemName: { id: $item.id, title: $item.title }
+    steps:
+      - id: show
+        action: show-card
+      - id: answer
+        approval: Your answer?
+        show: $steps.show.output.card
+        quotes: [interview]
+        choices:
+          a: { does: Take answer a on the card }
+          b: { does: Take answer b on the card }
+          c: { does: Take answer c on the card, when: $steps.show.output.offer.c }
+          later: { does: Keep it open for a later turn }
+          stop: { does: Stop the interview; nothing of this turn is kept }
+      - id: took
+        action: took
+        input:
+          choice: $steps.answer.output.choice
+          item: $item
+  - id: record
+    action: record
+    input:
+      job: $steps.frontier.output.job
+      turn: $steps.interview.output
+      answers: $steps.cards.output

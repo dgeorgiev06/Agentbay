@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BeginRequest",
+  "description": "The owner's choice on the start card, and what the card showed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["choice", "opened"],
+  "properties": {
+    "choice": {
+      "type": "string"
+    },
+    "opened": {
+      "type": "object",
+      "description": "As schemas/opened.json gives it."
+    }
+  }
+}

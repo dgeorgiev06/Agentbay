@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OpenRequest",
+  "description": "What starts an interview: the job and the owner's words for it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["job", "words"],
+  "properties": {
+    "job": {
+      "$ref": "requirements@1/check-response.json#/$defs/requirements/properties/job"
+    },
+    "words": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000,
+      "description": "The owner's words for the work, as he gave them."
+    },
+    "by": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Who gave the words; owner when not given."
+    }
+  }
+}

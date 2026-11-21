@@ -7,8 +7,11 @@ import {
   type DesignerAnswer,
   type Interface,
   type Module,
+  type Rule,
+  type Value,
 } from "./design-form.ts";
-import { heldByRules, ruleCount } from "./design-rules.ts";
+import { examplesSpelled } from "./design-examples.ts";
+import { checkCount, heldByRules } from "./design-rules.ts";
 import type { DesignPath } from "./path-card.ts";
 import {
   decidingWords,
@@ -93,15 +96,40 @@ function ownsWords(module: Module): string {
   return owned.length === 0 ? "owns nothing" : `owns ${joined(owned)}`;
 }
 
+function valueWords(values: readonly Value[], into: string): string {
+  return values
+    .map((value) => (value.store === undefined ? value.name : `${value.name} ${into} ${value.store}`))
+    .join(", ");
+}
+
+function ruleLines(rule: Rule, module: Module, by: string): readonly CardLine[] {
+  const takes = valueWords(rule.takes, "from");
+  const gives = valueWords(rule.gives, "into");
+  return [
+    computed("draw", `rule ${rule.name}, in ${module.name}: takes ${takes}; gives ${gives}`),
+    judged(by, `${rule.name} decides: ${rule.decides}`),
+  ];
+}
+
 function moduleLines(module: Module, by: string): readonly CardLine[] {
   return [
     computed("draw", `module ${module.name}: implements ${joined(module.implements)}; ${ownsWords(module)}`),
     judged(by, `${module.name} hides: ${module.hides}`),
+    ...module.rules.flatMap((rule) => ruleLines(rule, module, by)),
   ];
 }
 
+function storesWords(verb: string, stores: readonly string[]): string {
+  return `${verb} ${stores.length === 0 ? "nothing" : joined(stores)}`;
+}
+
+function appliesWords(action: Action): string {
+  const rule = action.rule === undefined ? "applies no rule" : `applies the rule ${action.rule}`;
+  return `${rule}, ${storesWords("reads", action.reads)}, ${storesWords("writes", action.writes)}`;
+}
+
 function actionLines(action: Action, by: string): readonly CardLine[] {
-  const examples = counted(action.examples.length, "example");
+  const examples = `${appliesWords(action)}; ${counted(action.examples.length, "example")}`;
   if (action.serves.length > 0) {
     return [computed("draw", `${action.name}: serves ${action.serves.join(", ")}; ${examples}`)];
   }
@@ -143,13 +171,27 @@ function examplesWords(input: DesignCardInput): string {
   return `${counts}, checked against their actions' schemas, but not ${joined(notChecked)}`;
 }
 
+function spelledLines(input: DesignCardInput): readonly CardLine[] {
+  const spelled = examplesSpelled(input.design);
+  if (spelled === 0) {
+    return [];
+  }
+  return [
+    computed(
+      "draw",
+      `examples that say a long text by rule: ${String(spelled)}, each text spelled out by forge before its check`,
+    ),
+  ];
+}
+
 function checkLines(input: DesignCardInput): readonly CardLine[] {
   const found = input.problems.length === 0 ? "no problem" : counted(input.problems.length, "problem");
   return [
     computed("draw", coverageWords(input)),
-    computed("draw", `checked by script: ${String(ruleCount)} rules of the design, ${found}`),
+    computed("draw", `checked by script: ${String(checkCount)} checks of the design, ${found}`),
     ...input.problems.map((problem) => computed("draw", `problem: ${problem}`)),
     computed("draw", examplesWords(input)),
+    ...spelledLines(input),
   ];
 }
 

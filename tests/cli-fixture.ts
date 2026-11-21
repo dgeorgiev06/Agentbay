@@ -61,6 +61,14 @@ export async function bay(argv: readonly string[], changes: ContextChanges = {})
   return { ...output, json };
 }
 
+export async function commandNames(): Promise<readonly string[]> {
+  const listed = (await bay(["--help"])).output.split("\n\n")[1] ?? "";
+  return listed
+    .split("\n")
+    .slice(1)
+    .map((line) => line.trim().split(" ")[0] ?? "");
+}
+
 export function listOf(value: Json | undefined): readonly Json[] {
   assert.ok(Array.isArray(value), `expected a list, got ${JSON.stringify(value)}`);
   return value.map((element: unknown) => toJson(element));

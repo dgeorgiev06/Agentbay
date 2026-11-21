@@ -1,142 +1,157 @@
 # agentbay
 
-agentbay is a framework for extending AI agents with **modes**. You write a mode as configuration files, YAML
-plus Markdown playbooks, not code: what it does, which role does each step, and what each step may touch. agentbay
-checks that the pieces fit, turns them into agents for your runtime, and runs every step through one dispatcher.
-The dispatcher lets an agent touch only what its environment allows, keeps secrets out of the agent's reach, stops
-at the approvals you require, and logs every step. Claude Code is the supported runtime today; another LLM product
-needs one new adapter, not new modes.
+agentbay runs work for its owner through **modes**. A mode is a folder with a `mode.yaml`: its actions, the
+steps each action runs, what the mode may reach, and its workflows. A step is a script, a skill or a call of
+another action. The kernel loads the modes a project uses, checks them, and runs each action or workflow as a
+**run**, which it records in `.agentbay/kernel.db` so that it can wait, resume and be undone. The kernel never
+drives a model. A skill step becomes a task for an agent of the harness, Claude Code today; the agent hands
+its output back, and the kernel checks it against the step's output schema and the step's checks.
 
-- **Chief of Staff**: your main agent session (in Claude Code today). You talk to it; it routes each request to a
-  mode and runs the steps.
-- **Mode**: an extension that adds a capability to agentbay, such as a daily digest of your inbox. It exposes
-  **features**, the endpoints you call (`mail-briefing.digest`). Each feature is a list of steps with a
-  definition of done and rules.
-- **Role**: who does a step: `lead`, `analyst`, `researcher`, `builder` or `reviewer`. The framework owns the
-  roles; a step names one.
-- **Adapter and agent profile**: an adapter compiles agentbay for one LLM product, and its agent profile maps each
-  tier to that product's models. `adapters/claude-code/` is the one adapter today and the only place models are named.
-- **Environment (env)**: what a step may touch: which files, commands, network hosts and secrets.
-- **Connector**: deterministic code that does the work agents must not do directly, such as reading Gmail or
-  storing items. Agents never see a connector or a secret; they call it through an interface.
-- **Capability interface**: a versioned contract, such as `items.source/v1`, between a mode and the
-  connectors that serve it. A mode names interfaces, never connectors, so a source can be swapped.
-- **Component**: one folder with one manifest, under `components/base/` (shipped with the framework) or
-  `components/modes/` (yours). It holds one mode with its envs, interfaces, tests, source connectors
-  (`connectors/`) and content types (`content-types/`), or one shared set. A mode that uses another mode's
-  connectors or content types lists it in `composes:` in its `mode.yaml`.
-- **Kernel**: the framework itself (`bay/`, `schemas/`, `framework/`, `adapters/`). Only the framework's
-  change process may edit it.
+The kit is TypeScript that Node runs directly, with no build step. The words are defined in
+[CONTEXT.md](CONTEXT.md), and each decision and its reason is in [docs/adr/](docs/adr/).
+[docs/DESIGN.md](docs/DESIGN.md) says where to read about each part.
+
+## The parts
+
+- **Kernel** (`bay/`). It loads modes, applies their grants and their actions' effects, and runs runs. A mode's
+  script runs in a child process and reaches the kernel only through the toolbox, `bay/sdk.ts`.
+- **Modes** (`components/`). `components/base/` holds the modes that ship with the kit: `store`, `forge`,
+  `proof`, `git-worktrees`, `requirements` and `typescript`. `components/modes/` holds the kit's example modes,
+  `feed-briefing` and `fake-source`. A project keeps its own modes in its own `components/modes/`.
+- **Interfaces** (`components/base/interfaces/`). Action signatures with no code, named `name@major`, such as
+  `items-source@1`. A mode implements an interface or requires one, and the project's `bindings:` say which mode
+  serves each.
+- **Adapter** (`adapters/claude-code/`). `bay build` writes one Claude Code agent for each skill step, the hook
+  and its policy, the kernel's tool server in `.mcp.json`, and the coordinator's block in `CLAUDE.md`. Its
+  [README](adapters/claude-code/README.md) says what the hook does and does not stop.
+- **Schemas** (`schemas/`). The forms of `mode.yaml`, a workflow, a skill, an interface and
+  `agentbay.config.yaml`. `npm run generate` writes their TypeScript types into `bay/generated/`.
+- **Framework files** (`framework/`). The kernel's feature map (`features.yaml`), the size budgets (`limits.yaml`, which `bay check`
+  reports as warnings), and the practices builders and reviewers hold (`practices.md`).
 
 ```
-Chief of Staff (your main Claude Code session)
-  └─ bay call feed-briefing.digest ──> Mode feed-briefing (extends store), feature digest
-        refresh   run: items.store/v2.sync   ─ code ─> Env local-feeds ─> corpus-store ─> x-api (api.x.com)
-        gather    run: items.store/v2.query  ─ code
-        themes    role: analyst    ─ subagent analyst--feed-briefing (balanced: sonnet) in Env local-feeds
-        review    role: reviewer   ─ subagent reviewer--feed-briefing (deep: opus), from the feature's review block
+owner ── Claude Code session (the coordinator)
+           └─ bay call feed-briefing.digest
+                kernel ── step 1  script scripts/select.ts      in a child process, through the toolbox
+                       ── step 2  skill skills/digest           a task for the agent agentbay-feed-briefing-digest,
+                                                                which hands its draft in with the tool submit;
+                                                                scripts/check-citations.ts holds the draft to the
+                                                                posts the step was given
+                       ── step 3  script scripts/format.ts
 ```
-
-Design: [docs/DESIGN.md](docs/DESIGN.md). Contracts: [docs/INTERFACES.md](docs/INTERFACES.md).
 
 ## Install
 
-`python3` and a Claude Code version that sends `agent_type`. To run the standards checks (ruff and mypy at the pinned
-versions), also install `requirements-dev.txt`; a step that needs a missing tool stops and names that command. From a
-clone:
+Node 22.18 or later. From a clone of the kit:
 
 ```bash
-pip install -r requirements.txt        # pyyaml, jsonschema
-pip install -r requirements-dev.txt    # ruff, mypy and two type stub packages, for the standards step
-./bay.sh check                         # lint + resolve everything
-python3 tests/run.py                   # the test suite
+npm ci            # ajv and yaml, and the tools the checks use
+./bay.sh --help   # the commands
+npm run check     # what a merge needs: generated types, type check, lint, format, dead code, every test
 ```
 
-## Quickstart (offline, 5 minutes)
+## Quick start: a briefing from made-up posts, in a folder of your own
 
-```bash
-./bay.sh build --project ~/code/my-repo   # writes a minimal agentbay.config.yaml when the project has none
-# add `offline: true` to ~/code/my-repo/agentbay.config.yaml (fake sources, no network, no secrets), then:
-./bay.sh build --project ~/code/my-repo
-cd ~/code/my-repo && claude            # restart Claude Code after every build; accept the workspace trust prompt
+The kit's `fake-source` mode serves thirty made-up posts and touches no network, so this needs no account and
+no secret. Make a folder with this `agentbay.config.yaml`:
+
+```yaml
+modes: [feed-briefing]
+bindings: { items-source: fake-source, items-store: store }
+adapter: claude-code
+settings:
+  fake-source: { baseDate: "2026-11-15T12:00:00Z" }
 ```
 
-Ask for a digest, for example *"brief me on the last 3 days"*. The Chief of Staff calls the digest feature of the
-mode:
+Then, in that folder, with `<kit>` the path of the kit:
 
-```bash
-.agentbay/bay call feed-briefing.digest '{"since": "3d"}'
+```console
+$ <kit>/bay.sh check
+Skill steps run with the hook: the kernel takes a skill step's output only when the agentbay hook saw the step's agent hand it in.
+bay check: 0 errors, 0 warnings.
+
+$ <kit>/bay.sh actions
+fake-source    Serves thirty made-up posts as an items-source, for tests and the demo; it touches no network.
+feed-briefing  Syncs posts from a source into the store, writes a digest of themes that cites them, and answers questions.
+store          Keeps the items of each composing mode in a database of its own, with search and bounded SQL.
+bay actions <mode> lists the actions of one mode.
+
+$ <kit>/bay.sh call feed-briefing.sync '{"since":"2026-11-08T12:00:00Z"}'
+run <run> (action feed-briefing.sync): done
+output:
+{
+  "source": "fake",
+  "pages": 2,
+  "fetched": 18,
+  "added": 18,
+  ...
+}
+
+$ <kit>/bay.sh call feed-briefing.digest '{"until":"2026-11-15T12:00:00Z"}'
+run <run> (action feed-briefing.digest): waiting for skill at 1#1
+task for the agent agentbay-feed-briefing-digest. A task token was issued with this task; it is shown only now.
+{
+  "agent": "agentbay-feed-briefing-digest",
+  ...
+  "token": "<token>"
+}
 ```
 
-Code steps run in the dispatcher, and agentic steps run as subagents. The `reviewer` gives a verdict for each
-Definition of Done item. A change to the framework also passes checks for new unused code and for growth past the
-size ceilings in `framework/limits.yaml`, and a large proposal gets a written plan before you approve it. The
-[safety model](docs/DESIGN.md#safety-model) describes each of these. `./bay.sh check --limits` runs the size check
-by hand.
+The sync stored the posts in `.agentbay/data/store--feed-briefing.db`. The digest ran its first script, then
+stopped at its skill step and printed the task. `<kit>/bay.sh runs` lists both runs.
 
-**Standards.** A feature whose builder can write code also runs a `standards` step, and the call is blocked on any
-finding that is new against the commit the call started from; findings already in the tree block nothing. A change to
-the framework passes these checks:
+A digest needs an agent to write it. `<kit>/bay.sh build` writes the agent files listed under The parts. Start
+Claude Code in the folder and ask for a digest: the block in `CLAUDE.md` tells the coordinator to run the action,
+give the task to the agent `agentbay-feed-briefing-digest`, and read the run again when the agent returns. By
+default (`skillSteps.run: with-the-hook`) the kernel takes an output only when it finds the hook's record, a
+sighting, of an agent of that step's mode and skill handing it in with the task's token, and it uses the sighting
+up. A sighting is a row in `.agentbay/hook-sightings.db`, and the hook is not the only thing that can write one:
+the adapter's [README](adapters/claude-code/README.md) says who else can, such as the coordinator's shell and a
+step whose mode lists a command that runs code. A `bay submit` from a plain terminal, with no such record, is
+refused, and the run still waits:
 
-- `ruff` (rules E, F, W and B, line length 120) and `mypy --strict`, with the kit's `ruff.toml` and `mypy.ini`.
-  In another project the step reads the project's own `ruff.toml` (else `pyproject.toml` with a `[tool.ruff]` table)
-  and `mypy.ini` from the starting commit, so a change cannot supply its own config. mypy does not read
-  `.mypy.ini`, `setup.cfg` or `[tool.mypy]`. A tool without a project file uses the kit's.
-- No `#` comment and no docstring longer than one line, in every language that declares its comment syntax in a
-  `language` block of a component. A reason goes in a name, an error message or the README. A project can turn this
-  rule off with `connectors: { comments-check: { rule: off } }` in its `agentbay.config.yaml`, read from the starting
-  commit. In the kit, `bay check --limits` also holds the count at zero as `comment_lines`.
-- The size ceilings and the unused-code check.
-
-Lint requires the step in every feature whose builder can write a checked file, so a mode you write with such a role
-needs a `standards` step, `needs: standards.check/v1` and an env that binds the checkers. Agents may run the two commands
-before the step does, each with the kit's config and a fixed list of flags:
-
-```bash
-python3 -I -m ruff check --config components/base/python/ruff.toml <path>
-python3 -I -m mypy --config-file components/base/python/mypy.ini <path>
+```console
+$ <kit>/bay.sh submit @draft.json --token <token>
+The kernel did not take this output. This project runs skill steps with the hook, and the agentbay hook did not see the agent of skill digest of mode feed-briefing hand it in with this task's token. Run <run> still waits for step 1#1. Two ways on: hand the task to that agent in a Claude Code session where the agentbay hook is active, or the owner sets skillSteps.run to without-the-hook in agentbay.config.yaml.
 ```
 
-**Going live:** sign in as the source connector's `README.md` says, remove `offline: true` from
-agentbay.config.yaml and rebuild. Budget caps stop a sync before it exceeds one.
+The hook has not yet run inside a live Claude Code session; the adapter's README says what that leaves unverified.
+`<kit>/bay.sh build --clean` removes what the build wrote. The workflow `daily` runs sync, digest and an approval
+of the digest: `<kit>/bay.sh call --workflow feed-briefing:workflows/daily.yaml`. No real source is built yet.
 
 ## Settings
 
-`bay config` prints every setting, with its type, default and description, from the schemas. `bay build`
-writes a minimal `agentbay.config.yaml` when the project has none. Settings can only lower a cap: a value above
-the env's `limits:` is refused by lint and at run time. Capabilities stay bound only in an env manifest
-(`components/modes/<name>/envs/<env>.yaml`, or under `components/base/` for a shipped mode). An env's `offline:`
-block names the stand-in sources that `offline: true`
-binds in their place.
-A mode endpoint with a `schedule:` (daily, weekly) runs from cron: `bay check` prints the command to schedule.
-For example, a weekly report on Mondays at 07:00:
+`bay config` prints every setting the project config may hold, with its type, its description and its current
+value. The config has `modes` (the kit's modes the project uses; its own modes, and the modes they bind, are used
+anyway), `bindings`, `adapter`, `settings` (per mode, checked against the mode's settings schema), `budget` (the
+default limits of a run), `tiers` (the model and effort of each tier), `skillSteps` and `approvals`. No mode may
+name the config. Where the hook runs, it closes the config to step agents' file tools only. For a command, the
+hook checks that it is a listed command's words followed by plain arguments, not which paths those arguments name,
+so any listed command can still be pointed at the config, and one that runs code can do anything. The coordinator
+can edit the config: the block in `CLAUDE.md` tells it to change
+`approvals` or `skillSteps` only when the owner asks for exactly that, and nothing enforces it.
 
-```
-0 7 * * 1  cd ~/code/my-repo && .agentbay/bay call improve.backlog '{}'
-```
+A workflow's `trigger` may name a schedule or an event, but no part of the kernel starts a workflow by either yet:
+`bay call --workflow` starts it, and `bay resume --due` wakes the runs whose wait is over.
 
 ## Folder map
 
-Each component is a folder with its own `README.md` and, if it takes settings, its own `config.example.yaml`.
-An env is one file inside the folder of the component it belongs to.
-
 ```
-components/      base/ is the framework's shipped modes and shared sets; modes/ is yours, one folder per mode
-                 with its connectors/ and content-types/ inside
-adapters/        agent runtimes that bay build compiles for, each with its agent profile and slash commands
-framework/       shipped with the kit, never edited by users:
-  roles/           the five roles
-  rules/           conformance rules
-  kernel.yaml      the paths the kernel owns, and a `protected:` block naming what only forge.extend may change
-  limits.yaml      the size ceilings
-schemas/         the contracts (apiVersion agentbay/v4; a file with another version is refused with the fix) and data schemas
-bay/             resolver, lint, dispatcher, guard hook, run log, CLI and the templates `bay new` writes from
-docs/            DESIGN.md, INTERFACES.md and the proposals
-tests/           python3 tests/run.py (the tests of a component live in its own tests/ folder)
+bay/          the kernel, its command line (bay/cli.ts, run by bay.sh), the tool server (bay/mcp.ts) and the
+              templates bay new writes from
+components/   base/: the modes and interfaces that ship with the kit; modes/: the kit's example modes
+adapters/     claude-code/: what bay build writes for Claude Code, and the hook
+schemas/      the forms of the manifests and the config, and the script that generates their types
+framework/    the feature map, the size budgets and the practices
+tests/        the kernel's tests and the test toolbox (tests/test-toolbox.ts); a mode's tests live in its tests/
+docs/         adr/ (decisions), designs/ (designs before a build), plans/, briefs/, research/, requirements/,
+              proposals/ (agentbay 4's proposals, which CHANGELOG.md points to)
 ```
 
-`bay build` writes subagents, skills, commands, settings, hooks and `.agentbay/` into the project, tracked in
-`.agentbay/manifest.json`. `bay clean` removes exactly that.
+A mode's folder holds `mode.yaml`, `README.md`, and `skills/`, `scripts/`, `workflows/`, `schemas/`,
+`migrations/` and `tests/` as it needs them; `bay check` refuses anything else unless the manifest lists it under
+`extraFiles`. `bay build` records what it wrote in `.agentbay/build.json`, and `bay build --clean` removes exactly
+that.
 
 ## Commands
 
@@ -159,36 +174,32 @@ tests/           python3 tests/run.py (the tests of a component live in its own 
 Run as `./bay.sh <command>` in the kit, and as `<kit>/bay.sh <command> --project <folder>` for a project
 elsewhere.
 
-## Adding things
+## Adding a mode
 
-A source is one connector plus one binding line in the mode's env. A feature is `bay new feature`. A framework
-change starts from a proposal that lists every core path it touches. For example, a new source starts with
-`bay new connector <name> --implements items.source/v1 --mode <mode>`, which creates the folder
-`components/modes/<mode>/connectors/<name>/`. Recipes:
-[docs/INTERFACES.md#extension-recipes](docs/INTERFACES.md#extension-recipes).
+In a project, `bay new` writes from the kit's templates:
 
-**Chain modes.** A project workflow in `agentbay.config.yaml` runs one mode's endpoint, then an approval gate, then
-another mode's endpoint:
+- `bay new mode <name>`: `components/modes/<name>/mode.yaml` and its `README.md`.
+- `bay new action <name> --mode <mode>`: the action in the mode's `mode.yaml`, its input and output schemas, a
+  script, and an example in `tests/`.
+- `bay new skill <name> --mode <mode>`: `skills/<name>/SKILL.md` only. No step names it yet; an action's `run`
+  list must add one.
+- `bay new workflow <name> --mode <mode>`: `workflows/<name>.yaml`, listed under `workflows:` in `mode.yaml`.
+- `bay new interface <name>`: `components/interfaces/<name>.yaml` at version 1, with no actions. The name is
+  plain kebab-case: `bay new interface thing@1` is refused.
 
-```yaml
-workflows:
-  morning:
-    description: Digest my mail, then draft replies I approve
-    steps:
-      - { id: digest, call: mail-briefing.digest, with: { since: "1d" } }
-      - { id: ok, gate: "Draft replies for the threads that need one?" }
-      - { id: drafts, call: delivery.build, with: { goal: "Draft replies to the threads in the digest that need one", deliverable: "drafts/<date>.md with one draft per thread; nothing is sent" } }
-```
-
-You start it by asking the Chief of Staff, and the drafting step never sends mail; it only drafts. A `with` value is
-substituted only when the whole value is one reference such as `$steps.digest.notes`, and `delivery.build` takes
-text for its `goal` and `deliverable`, so the example states them in words.
+`bay check` then checks the whole project, and `bay actions <mode>` lists a new action, which
+`bay call <mode>.<name>` runs. A mode outside the kit's `components/base/` gets its list, the commands it lists
+and its throwaway folders, only while a trust record (`.agentbay/trust.json`) names that exact list; `bay approve
+--trust <mode>` shows the owner the trust card and records his answer. Trust does not stop an agent that has the
+owner's shell, runs `bay approve` in a pseudo-terminal, or quotes words the owner did not write: the adapter's
+README, under What the hook does not stop, and the Trust row of [CONTEXT.md](CONTEXT.md) say so. Forge builds a mode in slices, with tests, proof and the owner's cards:
+[components/base/forge/README.md](components/base/forge/README.md).
 
 ## Safety, in one paragraph
 
 Where it runs, the guard hook narrows what step agents can do: a step's tools, the folders it reads and writes and
-the words of the commands it may run all come from its mode's manifest, and the main thread may write anything but
-`.agentbay/`, `.claude/`, `.mcp.json`, the kit's `bay/`, `schemas/`, `adapters/` and `framework/`, and, outside the kit, its `components/base/`. It is defence
+the words of the commands it may run all come from its mode's manifest, and the coordinator's file tools may write
+anything but `.agentbay/`, `.claude/`, `.mcp.json`, the kit's `bay/`, `schemas/`, `adapters/` and `framework/`, and, outside the kit, its `components/base/`; the coordinator's shell is not checked. It is defence
 in depth, not isolation, and cannot contain code once a listed command runs it. A project whose config sets
 `skillSteps.run: without-the-hook` runs skill steps with no hook: the kernel takes their outputs, and each run
 records that no hook saw them. A mode's script runs in a child process under Node's permission model and reaches

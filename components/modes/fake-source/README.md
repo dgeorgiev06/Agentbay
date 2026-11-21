@@ -2,7 +2,8 @@
 
 A source of thirty made-up posts. It implements `items-source@1`
 (`components/base/interfaces/items-source.yaml`), so a briefing can be built, tested and shown without an
-account or a network. The X source of stage 5 binds in its place: `bindings: { items-source: x }`.
+account or a network. A real source would implement the same interface and be bound in its place; none is
+built yet.
 
 The posts live in `scripts/lib/posts.ts`. They come from eight authors, carry labels such as `staking`, `eth`,
 `solana`, `custody` and `regulation`, and are spread over the two weeks before `baseDate`. Some have a URL and

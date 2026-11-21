@@ -43,7 +43,7 @@
       }
     },
     "skillSteps": {
-      "description": "How skill steps run. Only the owner sets it: the config is closed to every agent and every mode.",
+      "description": "How skill steps run. Only the owner should set it. No mode may name the config, and the agentbay hook closes it to step agents' file tools only: a listed command can still be pointed at it, and the coordinator can edit it.",
       "type": "object",
       "additionalProperties": false,
       "properties": {

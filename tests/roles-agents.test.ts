@@ -1,34 +1,22 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parse, stringify } from "yaml";
-import type { SkillAgent } from "../bay/adapter.ts";
-import { planAgents } from "../bay/build.ts";
 import { isRecord } from "../bay/json.ts";
-import { layoutOf, type Layout } from "../bay/layout.ts";
-import { loadSystem } from "../bay/manifests/manifests.ts";
-import { nodeFileSystem } from "../bay/node-ports.ts";
+import { layoutOf } from "../bay/layout.ts";
 import type { FileSystem } from "../bay/ports.ts";
 import { roles, tierOfRole, type Role } from "../bay/roles.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import { kit } from "./project-fixture.ts";
+import { built, kitFiles } from "./roles-fixture.ts";
 import { layout as fakeLayout, notesMode, paths, rooted, validFiles, yamlText } from "./system-fixture.ts";
-import { agentFileText, toolsFor } from "../adapters/claude-code/agent-file.ts";
-import { stepsFileText } from "../adapters/claude-code/steps-file.ts";
-import { tierSettings } from "../adapters/claude-code/tiers.ts";
-
-const everyKitMode = ["forge", "feed-briefing", "typescript", "git-worktrees"];
-
-type Built = {
-  readonly agents: readonly SkillAgent[];
-  readonly files: Readonly<Record<string, string>>;
-};
+import { toolsFor } from "../adapters/claude-code/agent-file.ts";
 
 function roleOfTier(tier: string): Role | undefined {
   return roles.find((role) => tierOfRole(role) === tier);
 }
 
-function stepWithRole(step: unknown): unknown {
-  if (!isRecord(step) || typeof step.tier !== "string") {
+function stepWithRole(step: Readonly<Record<string, unknown>>): unknown {
+  if (typeof step.tier !== "string") {
     return step;
   }
   const { tier, ...rest } = step;
@@ -37,53 +25,10 @@ function stepWithRole(step: unknown): unknown {
   return { ...rest, role };
 }
 
-function manifestWithRoles(text: string): string {
-  const manifest: unknown = parse(text);
-  if (!isRecord(manifest) || !isRecord(manifest.actions)) {
-    return text;
-  }
-  const actions = Object.fromEntries(
-    Object.entries(manifest.actions).map(([name, action]) => [
-      name,
-      isRecord(action) && Array.isArray(action.run) ? { ...action, run: action.run.map(stepWithRole) } : action,
-    ]),
-  );
-  return stringify({ ...manifest, actions });
-}
-
-function kitFiles(layout: Layout, withRoles: boolean): FileSystem {
-  return {
-    ...nodeFileSystem,
-    readText: async (path) => {
-      const text = await nodeFileSystem.readText(path);
-      if (text !== undefined && path === layout.configFile) {
-        const config: unknown = parse(text);
-        return stringify({ ...(isRecord(config) ? config : {}), modes: everyKitMode });
-      }
-      return text !== undefined && withRoles && path.endsWith("/mode.yaml") ? manifestWithRoles(text) : text;
-    },
-  };
-}
-
-async function built(files: FileSystem, layout: Layout): Promise<Built> {
-  const system = await loadSystem(files, layout);
-  assert.ok(system.ok, system.ok ? "" : JSON.stringify(system.problems, null, 2));
-  const planned = await planAgents(system.value);
-  assert.ok(planned.ok, planned.ok ? "" : JSON.stringify(planned.problems, null, 2));
-  const tiers = tierSettings(system.value.config, layout.configFile);
-  assert.ok(tiers.ok);
-  const agentFiles = planned.value.map((agent): [string, string] => [
-    `.claude/agents/${agent.agent}.md`,
-    agentFileText(agent, layout.project, tiers.settings[agent.tier]),
-  ]);
-  const steps: [string, string] = [".agentbay/steps.json", stepsFileText(layout, planned.value)];
-  return { agents: planned.value, files: Object.fromEntries([...agentFiles, steps]) };
-}
-
-test("every kit step that named its tier names a role of that tier, and the kit's agent files keep every byte", async () => {
+test("every kit step that names its tier could name a role of that tier, and the kit's agent files keep every byte", async () => {
   const layout = layoutOf({ kit, project: kit });
-  const byTier = await built(kitFiles(layout, false), layout);
-  const byRole = await built(kitFiles(layout, true), layout);
+  const byTier = await built(kitFiles(layout), layout);
+  const byRole = await built(kitFiles(layout, stepWithRole), layout);
   assert.equal(byTier.agents.length, 12);
   assert.ok(["balanced", "deep"].every((tier) => byTier.agents.some((agent) => agent.tier === tier)));
   assert.deepEqual(byRole.agents, byTier.agents);

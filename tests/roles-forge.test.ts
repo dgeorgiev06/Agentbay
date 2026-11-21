@@ -50,7 +50,7 @@ function stepBefore(step: Readonly<Record<string, unknown>>): unknown {
   if (known === undefined) {
     return step;
   }
-  const { role: _role, ...rest } = step;
+  const rest = Object.fromEntries(Object.entries(step).filter(([field]) => field !== "role"));
   return { ...rest, tier: known.tierBefore };
 }
 
@@ -67,7 +67,9 @@ function differingLines(now: string, before: string): readonly string[] {
   const nowLines = now.split("\n");
   const beforeLines = before.split("\n");
   assert.equal(nowLines.length, beforeLines.length);
-  return nowLines.flatMap((line, index) => (line === beforeLines[index] ? [] : [`${beforeLines[index] ?? ""} -> ${line}`]));
+  return nowLines.flatMap((line, index) =>
+    line === beforeLines[index] ? [] : [`${beforeLines[index] ?? ""} -> ${line}`],
+  );
 }
 
 test("each of forge's ten skill steps names its role and no tier", async () => {
@@ -98,20 +100,19 @@ test("bay build writes the twelve agent files and steps.json as before, but the 
   const { now, before } = await builtNowAndBefore();
   assert.equal(now.agents.length, 12);
   assert.deepEqual(Object.keys(now.files), Object.keys(before.files));
+  const changedFile = `.claude/agents/${changedAgent}.md`;
   const changed = Object.keys(now.files).filter((path) => now.files[path] !== before.files[path]);
-  assert.deepEqual(changed, [`.claude/agents/${changedAgent}.md`]);
+  assert.deepEqual(changed, [changedFile]);
+  assert.deepEqual(differingLines(now.files[changedFile] ?? "", before.files[changedFile] ?? ""), [
+    "model: opus -> model: sonnet",
+  ]);
   assert.deepEqual(
-    differingLines(now.files[changed[0] ?? ""] ?? "", before.files[changed[0] ?? ""] ?? ""),
-    ["model: opus -> model: sonnet"],
-  );
-  const tierChanged = now.agents.filter((agent, index) => agent.tier !== before.agents[index]?.tier);
-  assert.deepEqual(
-    tierChanged.map((agent) => agent.agent),
-    [changedAgent],
+    now.agents.map((agent) => [agent.agent, agent.tier]).filter(([agent]) => agent === changedAgent),
+    [[changedAgent, "balanced"]],
   );
   assert.deepEqual(
-    now.agents.map(({ tier: _tier, ...rest }) => rest),
-    before.agents.map(({ tier: _tier, ...rest }) => rest),
+    now.agents.map((agent) => (agent.agent === changedAgent ? { ...agent, tier: "deep" } : agent)),
+    before.agents,
   );
 });
 

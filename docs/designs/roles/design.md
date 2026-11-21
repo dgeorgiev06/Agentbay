@@ -2,7 +2,7 @@
 
 Status: design, 2026-11-20. The owner answered questions 1, 2 and 3 by 21 November (section 6): option D,
 built as A first, roles reaching a model through their tier, the builder at balanced. Questions 4, 5 and 6 are open.
-RL1 is built on `rl1/slice`; RL2 to RL5 are not. Words are used as `CONTEXT.md` defines them; of the three this
+RL1 is built on `rl1/slice` and RL2 on `rl2/slice`; RL3 to RL5 are not. The decision is ADR 29. Words are used as `CONTEXT.md` defines them; of the three this
 note adds, role is in use since RL1, and ceiling and standing rules are still marked there as proposed. Sections
 1 to 6 were written from `rl1/slice` at `a3507fc`, and their file and line references are to that commit. RL1 was
 built on `rl1/slice` after merging `feat/0022-agentbay5` at `e69815a`; its "As built" list is true of that branch.
@@ -416,7 +416,7 @@ stop there. D then makes each role mean something the hook enforces, closes the 
 shell, the planter's reads), and says each standing rule once. B is not recommended: it saves two files and costs
 the exactness that one agent per skill step exists for. The instance stays fresh per step in every option.
 
-After the owner's answers, the decision is written as ADR 29.
+After the owner's answers, the decision is written as ADR 29 (`docs/adr/0029-roles.md`, with RL2).
 
 ---
 
@@ -522,13 +522,33 @@ answered (a), so it is not planned. RL3 waits for question 6. Size is reported b
     the files `bay check` and `bay runs` load. With no enum in the schema, the test that the schema's names are
     the kernel's is gone; a test holds the README's list of roles to the kernel's.
 
-### RL2. Forge's skill steps name their roles
+### RL2. Forge's skill steps name their roles (built)
 
 - **Scope.** `components/base/forge/mode.yaml`, `components/base/forge/tests/**`.
 - **Its tests show:**
   - Each of forge's ten steps names the role of section 1's table, and none names a tier.
   - `bay build` on the kit writes the same twelve agent files as before, byte for byte, except
     `agentbay-forge-build.md`, whose `model` follows question 3.
+- **Scope, as built.** `components/base/forge/mode.yaml`, `components/base/forge/README.md`,
+  `components/base/forge/tests/one-slice.test.ts`, `components/base/forge/tests/design-card.test.ts`,
+  `tests/roles-forge.test.ts` (new), `tests/roles-fixture.ts` (new, the build helpers `tests/roles-agents.test.ts`
+  had), `tests/roles-agents.test.ts`, `CONTEXT.md`, `docs/adr/0029-roles.md` (new). The tests that need the kernel's
+  build are in `tests/`, since mode code imports only `bay/sdk.ts`.
+- **As built.**
+  - Every skill step of forge names `role:` and none names `tier:`; the feed briefing's `digest` and `ask` keep
+    `tier: balanced` and name no role (question 4, its recommendation).
+  - One step changed tier: the `one-slice` workflow's `build`, from deep to balanced. Its agent file's only changed
+    line is `model: opus`, now `model: sonnet`; its effort stays `medium`. The other eleven agent files and
+    `.agentbay/steps.json` are the same bytes. The test builds the kit as it is and with forge's steps given back the
+    tiers they named before, and compares the two.
+  - Each forge agent's tools are pinned: `submit`, `Read`, `Glob` and `Grep`, and `Write` and `Edit` for the two
+    builds.
+  - A card that cites the `one-slice` build now records "tier balanced"; no card's "by" line names a role (RL3
+    waits for question 6).
+  - The design's first card still counts its calls "at tier deep": the designer and the challenger are deep. Its
+    script keeps the word, since mode code cannot read `bay/roles.ts`; forge's test holds that the two steps name
+    the designer and the challenger, and the kit's test that both roles are deep.
+  - The forge README names each skill with its role and tier.
 
 ### RL3. A judged line names the role
 

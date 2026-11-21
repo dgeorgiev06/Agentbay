@@ -84,13 +84,14 @@ test("the task bay call and bay runs print for a reviewer's step names its agent
   await project.remove();
 });
 
-test("a role is kept in the second round, in a workflow's step and in an action another mode's step calls", async () => {
-  const changes: Changes = {
-    ...withFlow([{ id: "review", action: "review-draft" }]),
-    notesActions: { "review-draft": reviewDraft },
-    storeActions: { put: reviewedPut },
-    files: storeSkillFiles,
-  };
+const changes: Changes = {
+  ...withFlow([{ id: "review", action: "review-draft" }]),
+  notesActions: { "review-draft": reviewDraft },
+  storeActions: { put: reviewedPut },
+  files: storeSkillFiles,
+};
+
+test("a role is kept in the second round of a skill step", async () => {
   const { runs, close } = await openedRuns({ changes });
   const first = runOf(await runs.start({ action: "notes.review-draft" }, {}));
   const second = runOf(await runs.submit(tokenOf(first), answer({ text: "short" })));
@@ -98,8 +99,18 @@ test("a role is kept in the second round, in a workflow's step and in an action 
     skillDetails(second).map((detail) => [fieldOf(detail, "round"), textField(detail, "role")]),
     [[2, "reviewer"]],
   );
+  close();
+});
+
+test("a role is kept in a skill step a workflow's step runs", async () => {
+  const { runs, close } = await openedRuns({ changes });
   const flowed = runOf(await runs.start({ workflow: notesFlow }, {}));
   assert.deepEqual(rolesAndTiers(flowed), [["reviewer", "deep"]]);
+  close();
+});
+
+test("a role is kept in a skill step of an action that another mode's call step calls", async () => {
+  const { runs, close } = await openedRuns({ changes });
   const called = runOf(await runs.start({ action: "notes.store-one" }, { id: "x" }));
   assert.deepEqual(rolesAndTiers(called), [["reviewer", "deep"]]);
   close();

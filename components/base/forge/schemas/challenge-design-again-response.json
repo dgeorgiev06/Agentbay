@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ChallengeDesignAgainResponse",
+  "description": "Whether the challenger judged the designer's answer, and the challenge that decides the card.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["challenged", "challenge"],
+  "properties": {
+    "challenged": {
+      "type": "boolean",
+      "description": "True when the designer answered and the challenger judged the answered design once more."
+    },
+    "challenge": {
+      "type": "object",
+      "description": "The challenge that decides the card: the second, as schemas/challenge.json gives it, or the first when the designer was not asked."
+    }
+  }
+}

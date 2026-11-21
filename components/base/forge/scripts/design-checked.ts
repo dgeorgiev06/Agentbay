@@ -1,9 +1,10 @@
 import { defineScript, fieldsOf } from "../../../../bay/sdk.ts";
 import { checkAnswer } from "./lib/check-answer.ts";
 import { checkedExamples } from "./lib/design-examples.ts";
-import { designOf } from "./lib/design-form.ts";
+import { designerAnswersOf, designOf } from "./lib/design-form.ts";
 import { designProblems } from "./lib/design-rules.ts";
 import { textOf } from "./lib/json-values.ts";
+import { askedPractices, designerPracticeProblems } from "./lib/practice-answers.ts";
 import { conditionsOf, requirementsOf } from "./lib/requirements-form.ts";
 
 export const run = defineScript(async (input, context) => {
@@ -17,5 +18,7 @@ export const run = defineScript(async (input, context) => {
     design,
   });
   const examples = await checkedExamples(context, design);
-  return checkAnswer([...problems, ...examples.problems]);
+  const said = designerAnswersOf(input).map((answer) => answer.id);
+  const practices = designerPracticeProblems(askedPractices(context.skillInput ?? null), said);
+  return checkAnswer([...problems, ...examples.problems, ...practices]);
 });

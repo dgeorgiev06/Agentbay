@@ -4,18 +4,12 @@
   "description": "The design card and whether approve is offered, with the reason on the card when it is not.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "card",
-    "offered"
-  ],
+  "required": ["card", "offered"],
   "properties": {
     "card": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "title",
-        "lines"
-      ],
+      "required": ["title", "lines"],
       "properties": {
         "title": {
           "type": "string",
@@ -40,13 +34,11 @@
     "offered": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "approve"
-      ],
+      "required": ["approve"],
       "properties": {
         "approve": {
           "type": "boolean",
-          "description": "Offered when the design check found no problem and no practice held by design was answered not held."
+          "description": "Offered when the design check found no problem and the challenge that decides answered no practice held by design not held."
         }
       }
     }

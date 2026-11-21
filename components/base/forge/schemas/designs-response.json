@@ -1,19 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "DesignsResponse",
-  "description": "The path taken and the designs written; a stop is never an answer, since it ends the run.",
+  "description": "The path taken, the designs written and the practices held by design each designer was given; a stop is never an answer, since it ends the run.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "path",
-    "designs"
-  ],
+  "required": ["path", "designs", "practices"],
   "properties": {
     "path": {
-      "enum": [
-        "light",
-        "full"
-      ],
+      "enum": ["light", "full"],
       "description": "light: one designer. full: two designers who wrote apart."
     },
     "designs": {
@@ -25,6 +19,49 @@
         "description": "A design, as schemas/design.json gives it."
       },
       "description": "The design, or the first and the second written apart, in that order."
+    },
+    "practices": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "says"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Z]{1,4}-\\d{1,3}$"
+          },
+          "says": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        }
+      },
+      "description": "The practices held by design, from the practices files on the integration branch, each its id and its words."
+    },
+    "stayed": {
+      "type": "array",
+      "maxItems": 100,
+      "description": "A branch forge asked to drop and worktrees kept, with the reason it gave; left out when every drop went through.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["branch", "reason"],
+        "properties": {
+          "branch": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "The branch that stayed."
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "worktrees.drop-branch's sentence: why the branch was kept and what would let it go."
+          }
+        }
+      }
     }
   }
 }

@@ -1,10 +1,12 @@
-import { fieldsOf, readYaml, type Json, type ScriptContext } from "../../../../../bay/sdk.ts";
+import { fieldsOf, readYaml, type Json, type JsonFields, type ScriptContext } from "../../../../../bay/sdk.ts";
 import { counted } from "./card-lines.ts";
 import { designSummaryOf, type DesignSummary } from "./design-summary.ts";
-import { listOf, textOf } from "./json-values.ts";
+import { listOf, textOf, textsOf } from "./json-values.ts";
 import type { Plan } from "./plan.ts";
 import type { Conditions } from "./plan-conditions.ts";
+import { practiceAnswersOf } from "./practice-answers.ts";
 import { conditionsOf, requirementsOf } from "./requirements-form.ts";
+import { askedWhenNeeded, type Found, type Round } from "./second-round.ts";
 
 export type Sources = {
   readonly conditions?: Conditions;
@@ -40,9 +42,17 @@ export function givenOf(value: Json): Given {
   };
 }
 
-export function plannerInput(start: Json): Json {
+export type SecondRound = {
+  readonly needed: boolean;
+  readonly action: "plan" | "challenge-plan";
+  readonly start: Json;
+  readonly adds: JsonFields;
+  readonly kept: Json;
+};
+
+function plannerAsked(start: Json, adds: JsonFields): JsonFields {
   const { file = null, requirements = null, design = null, document = null, practices = null } = fieldsOf(start);
-  return { file, requirements, design, document, practices };
+  return { file, requirements, design, document, practices, ...adds };
 }
 
 const nothingNamed: SourcesRead = { sources: {}, problems: [] };
@@ -114,4 +124,14 @@ export async function readSources(context: ScriptContext, plan: Plan): Promise<S
     sources: { ...requirements.sources, ...design.sources },
     problems: [...requirements.problems, ...design.problems],
   };
+}
+
+export function planChallengeFound(challenge: Json): Found<string> {
+  const fields = fieldsOf(challenge);
+  return { practices: practiceAnswersOf(fields.practices), findings: textsOf(fields.findings) };
+}
+
+export function onlyWhenNeeded(context: ScriptContext, round: SecondRound): Promise<Round> {
+  const { needed, action, kept } = round;
+  return askedWhenNeeded(context, { needed, action, kept, asked: plannerAsked(round.start, round.adds) });
 }

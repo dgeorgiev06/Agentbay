@@ -1,9 +1,24 @@
-import type { Chosen } from "./challenge-answer.ts";
-import { computed, counted, joined, judged, type Card, type CardLine } from "./card-lines.ts";
-import { actionsOf, type Action, type Design, type Interface, type Module } from "./design-form.ts";
+import type { Chosen, Finding } from "./challenge-answer.ts";
+import { computed, counted, joined, judged, safeText, type Card, type CardLine } from "./card-lines.ts";
+import {
+  actionsOf,
+  type Action,
+  type Design,
+  type DesignerAnswer,
+  type Interface,
+  type Module,
+} from "./design-form.ts";
 import { heldByRules, ruleCount } from "./design-rules.ts";
 import type { DesignPath } from "./path-card.ts";
-import { notHeldReason, practiceLines, type PracticeAnswer } from "./practice-answers.ts";
+import {
+  decidingWords,
+  firstFoundWords,
+  notHeldIds,
+  practiceLines,
+  withheldAfterAnswer,
+  type FirstFound,
+  type PracticeAnswer,
+} from "./practice-answers.ts";
 import { conditionsOf, type Requirements } from "./requirements-form.ts";
 
 export type DesignCardInput = {
@@ -16,7 +31,14 @@ export type DesignCardInput = {
   readonly problems: readonly string[];
   readonly refusedSchemas: number;
   readonly practices: readonly PracticeAnswer[];
+  readonly findings: readonly Finding[];
+  readonly said: readonly DesignerAnswer[];
   readonly differences: readonly string[];
+  readonly second?: SecondPass;
+};
+
+export type SecondPass = FirstFound & {
+  readonly changes: readonly string[];
 };
 
 export type DesignCard = {
@@ -28,6 +50,10 @@ const designers = "designs";
 
 const challenger = "challenge";
 
+const answeringDesigner = "design-again";
+
+const secondChallenger = "challenge-again";
+
 const differencesShown = 8;
 
 const answers: Readonly<Record<Chosen, string>> = {
@@ -37,15 +63,27 @@ const answers: Readonly<Record<Chosen, string>> = {
 };
 
 function answerWords(input: DesignCardInput): string {
-  return input.path === "light" ? "the one design, on the light path" : answers[input.chosen];
+  const which = input.path === "light" ? "the one design, on the light path" : answers[input.chosen];
+  return input.second === undefined ? which : `${which}, answered once after the first challenge`;
 }
 
 function withheldReason(input: DesignCardInput): string | undefined {
   const reasons = [
     ...(input.problems.length === 0 ? [] : [`The design check found ${counted(input.problems.length, "problem")}.`]),
-    ...notHeldReason(input.practices, "design"),
+    ...withheldAfterAnswer(input.practices, "design", input.second !== undefined),
   ];
   return reasons.length === 0 ? undefined : reasons.join(" ");
+}
+
+function designerStep(input: DesignCardInput): string {
+  if (input.second !== undefined) {
+    return answeringDesigner;
+  }
+  return input.chosen === "merged" ? challenger : designers;
+}
+
+function challengerStep(input: DesignCardInput): string {
+  return input.second === undefined ? challenger : secondChallenger;
 }
 
 function ownsWords(module: Module): string {
@@ -62,22 +100,23 @@ function moduleLines(module: Module, by: string): readonly CardLine[] {
   ];
 }
 
-function servesWords(action: Action): string {
-  if (action.serves.length === 0) {
-    return `serves no condition: ${action.because ?? ""}`;
+function actionLines(action: Action, by: string): readonly CardLine[] {
+  const examples = counted(action.examples.length, "example");
+  if (action.serves.length > 0) {
+    return [computed("draw", `${action.name}: serves ${action.serves.join(", ")}; ${examples}`)];
   }
-  return `serves ${action.serves.join(", ")}`;
+  return [
+    computed("draw", `${action.name}: serves no condition; ${examples}`),
+    judged(by, `${action.name}, why it serves none: ${safeText(action.because ?? "")}`),
+  ];
 }
 
-function interfaceLines(each: Interface): readonly CardLine[] {
+function interfaceLines(each: Interface, by: string): readonly CardLine[] {
   const heading = `interface ${each.name}: ${counted(each.actions.length, "action")}, ${counted(
     each.actions.length * 2,
     "schema file",
   )}`;
-  const actions = each.actions.map((action) =>
-    computed("draw", `${action.name}: ${servesWords(action)}; ${counted(action.examples.length, "example")}`),
-  );
-  return [computed("draw", heading), ...actions];
+  return [computed("draw", heading), ...each.actions.flatMap((action) => actionLines(action, by))];
 }
 
 function coverageWords(input: DesignCardInput): string {
@@ -114,24 +153,66 @@ function checkLines(input: DesignCardInput): readonly CardLine[] {
   ];
 }
 
+function listedLines(heading: string, listed: readonly string[]): readonly CardLine[] {
+  const shown = listed.slice(0, differencesShown);
+  const more = listed.length - shown.length;
+  return [
+    computed("draw", `${heading}: ${String(listed.length)}`),
+    ...shown.map((difference) => computed("draw", difference)),
+    ...(more > 0 ? [computed("draw", `and ${String(more)} more`)] : []),
+  ];
+}
+
 function differenceLines(input: DesignCardInput): readonly CardLine[] {
   if (input.path === "light") {
     return [computed("draw", "one design was written, so none was compared")];
   }
-  const shown = input.differences.slice(0, differencesShown);
-  const more = input.differences.length - shown.length;
   return [
-    computed("draw", `where the two designs differed: ${String(input.differences.length)}`),
-    ...shown.map((difference) => computed("draw", difference)),
-    ...(more > 0 ? [computed("draw", `and ${String(more)} more`)] : []),
+    ...listedLines("where the two designs differed", input.differences),
     judged(challenger, `chosen because: ${input.because}`),
+  ];
+}
+
+function passLines(input: DesignCardInput): readonly CardLine[] {
+  const { second } = input;
+  if (second === undefined) {
+    return [
+      computed(
+        "draw",
+        "the designer was asked once; a second answer is asked only when the challenger answers a practice not " +
+          "held or gives a finding",
+      ),
+    ];
+  }
+  return [
+    computed("draw", firstFoundWords(second, "design")),
+    ...listedLines("what the answer changed, by script", second.changes),
+    computed("draw", decidingWords),
+  ];
+}
+
+function saidLines(input: DesignCardInput): readonly CardLine[] {
+  const notHeld = notHeldIds(input.practices);
+  return input.said
+    .filter((said) => notHeld.includes(said.id))
+    .map((said) => judged(designerStep(input), `${said.id}, as the designer answered: ${said.sentence}`));
+}
+
+function findingLines(input: DesignCardInput): readonly CardLine[] {
+  const heading = input.second === undefined ? "findings of the challenger" : "findings left after the answer";
+  const count = input.findings.length === 0 ? "none" : String(input.findings.length);
+  return [
+    computed("draw", `${heading}: ${count}`),
+    ...input.findings.map((finding) =>
+      judged(challengerStep(input), `finding, in ${finding.where}: ${finding.wrong} Fix: ${finding.fix}`),
+    ),
   ];
 }
 
 export function designCard(input: DesignCardInput): DesignCard {
   const reason = withheldReason(input);
   const offered = reason === undefined ? "approve is offered" : "approve is not offered";
-  const by = input.chosen === "merged" ? challenger : designers;
+  const by = designerStep(input);
   const conditions = counted(conditionsOf(input.requirements).length, "condition");
   const lines = [
     computed("draw", `${answerWords(input)}; ${offered}`),
@@ -140,9 +221,12 @@ export function designCard(input: DesignCardInput): DesignCard {
       `requirements: ${input.file}: ${counted(input.requirements.outcomes.length, "outcome")}, ${conditions}`,
     ),
     ...input.design.modules.flatMap((module) => moduleLines(module, by)),
-    ...input.design.interfaces.flatMap(interfaceLines),
+    ...input.design.interfaces.flatMap((each) => interfaceLines(each, by)),
     ...checkLines(input),
-    ...practiceLines({ answers: input.practices, heldByRules, challenger }),
+    ...passLines(input),
+    ...practiceLines({ answers: input.practices, heldByRules, challenger: challengerStep(input) }),
+    ...saidLines(input),
+    ...findingLines(input),
     ...differenceLines(input),
   ];
   const title = `Commit the design of ${input.requirements.job}?`;

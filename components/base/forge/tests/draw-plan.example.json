@@ -525,6 +525,26 @@
         }
       ]
     },
+    "challenge": {
+      "practices": [
+        {
+          "id": "P-33",
+          "answer": "held",
+          "sentence": "The plan holds P-33."
+        },
+        {
+          "id": "P-34",
+          "answer": "held",
+          "sentence": "The plan holds P-34."
+        },
+        {
+          "id": "P-35",
+          "answer": "held",
+          "sentence": "The plan holds P-35."
+        }
+      ],
+      "findings": []
+    },
     "again": {
       "answered": false,
       "plan": {

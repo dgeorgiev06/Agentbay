@@ -1,5 +1,15 @@
-import { canonicalJson } from "../../../../../bay/sdk.ts";
-import { actionName, actionsOf, type Action, type Design } from "./design-form.ts";
+import { canonicalJson, type Json } from "../../../../../bay/sdk.ts";
+import { counted } from "./card-lines.ts";
+import {
+  actionName,
+  actionsOf,
+  designerAnswersOf,
+  designOf,
+  type Action,
+  type Design,
+  type DesignerAnswer,
+  type Example,
+} from "./design-form.ts";
 
 type Named = { readonly name: string };
 
@@ -8,28 +18,105 @@ type Sides = {
   readonly second: Design;
 };
 
+export type Labels = {
+  readonly first: string;
+  readonly second: string;
+};
+
+const apartLabels: Labels = { first: "the first", second: "the second" };
+
 function onlyIn(first: readonly Named[], second: readonly Named[]): readonly string[] {
   const names = second.map((each) => each.name);
   return first.map((each) => each.name).filter((name) => !names.includes(name));
 }
 
-function apart(kind: string, sides: { readonly first: readonly Named[]; readonly second: readonly Named[] }): string[] {
+type Lists = {
+  readonly first: readonly Named[];
+  readonly second: readonly Named[];
+};
+
+function apart(kind: string, sides: Lists, labels: Labels): string[] {
   return [
-    ...onlyIn(sides.first, sides.second).map((name) => `${kind} ${name}: only in the first design`),
-    ...onlyIn(sides.second, sides.first).map((name) => `${kind} ${name}: only in the second design`),
+    ...onlyIn(sides.first, sides.second).map((name) => `${kind} ${name}: only in ${labels.first} design`),
+    ...onlyIn(sides.second, sides.first).map((name) => `${kind} ${name}: only in ${labels.second} design`),
   ];
 }
 
-function moduleShape(design: Design, name: string): string {
-  const module = design.modules.find((each) => each.name === name);
-  return module === undefined ? "" : canonicalJson([module.implements, module.tables, module.files]);
+const answerLabels: Labels = { first: "the first", second: "the answered" };
+
+function paired<Each extends Named>(first: readonly Each[], second: readonly Each[]): readonly [Each, Each][] {
+  return first.flatMap((each) => {
+    const other = second.find((candidate) => candidate.name === each.name);
+    const pair: readonly [Each, Each][] = other === undefined ? [] : [[each, other]];
+    return pair;
+  });
 }
 
 function modulesDiffer({ first, second }: Sides): readonly string[] {
-  const both = first.modules.filter((module) => second.modules.some((other) => other.name === module.name));
-  return both
-    .filter((module) => moduleShape(first, module.name) !== moduleShape(second, module.name))
-    .map((module) => `module ${module.name}: implements or owns differ`);
+  const shape = (module: Design["modules"][number]): string =>
+    canonicalJson([module.implements, module.tables, module.files]);
+  return paired(first.modules, second.modules).flatMap(([mine, theirs]) => [
+    ...(shape(mine) === shape(theirs) ? [] : [`module ${mine.name}: implements or owns differ`]),
+    ...(mine.hides === theirs.hides ? [] : [`module ${mine.name}: what it hides is worded differently`]),
+  ]);
+}
+
+function exampleKey(example: Example): string {
+  return canonicalJson({
+    earlier: example.earlier.map((call) => ({ ...call })),
+    input: example.input,
+    ...example.told,
+  });
+}
+
+function unmatched(keys: readonly string[], others: readonly string[]): number {
+  const left = [...others];
+  return keys.filter((key) => {
+    const at = left.indexOf(key);
+    if (at < 0) {
+      return true;
+    }
+    left.splice(at, 1);
+    return false;
+  }).length;
+}
+
+function examplesDiffer(name: string, first: readonly Example[], second: readonly Example[]): readonly string[] {
+  const mine = first.map(exampleKey);
+  const theirs = second.map(exampleKey);
+  const removed = unmatched(mine, theirs);
+  const added = unmatched(theirs, mine);
+  const changed = Math.min(removed, added);
+  const counts = [
+    { count: changed, how: "changed" },
+    { count: added - changed, how: "added" },
+    { count: removed - changed, how: "removed" },
+  ];
+  return counts
+    .filter((each) => each.count > 0)
+    .map((each) => `${name}: ${counted(each.count, "example")} ${each.how}`);
+}
+
+function actionsDiffer({ first, second }: Sides): readonly string[] {
+  return paired(placed(first), placed(second)).flatMap(([mine, theirs]) => [
+    ...(mine.because === theirs.because ? [] : [`${mine.name}: why it serves no condition is worded differently`]),
+    ...examplesDiffer(mine.name, mine.examples, theirs.examples),
+  ]);
+}
+
+function saidDiffer(first: readonly DesignerAnswer[], second: readonly DesignerAnswer[]): readonly string[] {
+  const named = (said: readonly DesignerAnswer[]): readonly (DesignerAnswer & Named)[] =>
+    said.map((each) => ({ ...each, name: each.id }));
+  const [mine, theirs] = [named(first), named(second)];
+  return [
+    ...onlyIn(mine, theirs).map((id) => `practice ${id}: the designer said how it holds only in the first`),
+    ...onlyIn(theirs, mine).map((id) => `practice ${id}: the designer said how it holds only in the answered`),
+    ...paired(mine, theirs).flatMap(([before, after]) =>
+      before.sentence === after.sentence
+        ? []
+        : [`practice ${before.id}: the designer's sentence is worded differently`],
+    ),
+  ];
 }
 
 type Placed = Action & { readonly interface: string };
@@ -39,17 +126,12 @@ function placed(design: Design): readonly (Placed & Named)[] {
 }
 
 function schemasDiffer({ first, second }: Sides): readonly string[] {
-  const theirs = placed(second);
-  return placed(first).flatMap((action) => {
-    const other = theirs.find((each) => each.name === action.name);
-    if (other === undefined) {
-      return [];
-    }
+  return paired(placed(first), placed(second)).flatMap(([mine, theirs]) => {
     const sides = [
-      { side: "request", differ: canonicalJson(action.request) !== canonicalJson(other.request) },
-      { side: "response", differ: canonicalJson(action.response) !== canonicalJson(other.response) },
+      { side: "request", differ: canonicalJson(mine.request) !== canonicalJson(theirs.request) },
+      { side: "response", differ: canonicalJson(mine.response) !== canonicalJson(theirs.response) },
     ];
-    return sides.filter((each) => each.differ).map((each) => `${action.name}: the ${each.side} schemas differ`);
+    return sides.filter((each) => each.differ).map((each) => `${mine.name}: the ${each.side} schemas differ`);
   });
 }
 
@@ -61,22 +143,37 @@ function servers(design: Design, condition: string): string {
   return names.length === 0 ? "no action" : names.join(", ");
 }
 
-function coverageDiffers(sides: Sides, conditions: readonly string[]): readonly string[] {
+function coverageDiffers(sides: Sides, conditions: readonly string[], labels: Labels): readonly string[] {
   return conditions.flatMap((condition) => {
     const first = servers(sides.first, condition);
     const second = servers(sides.second, condition);
-    return first === second ? [] : [`${condition}: served by ${first} in the first, by ${second} in the second`];
+    return first === second
+      ? []
+      : [`${condition}: served by ${first} in ${labels.first}, by ${second} in ${labels.second}`];
   });
 }
 
-export function differences(sides: Sides, conditions: readonly string[]): readonly string[] {
+export function differences(
+  sides: Sides,
+  conditions: readonly string[],
+  labels: Labels = apartLabels,
+): readonly string[] {
   const { first, second } = sides;
   return [
-    ...apart("module", { first: first.modules, second: second.modules }),
+    ...apart("module", { first: first.modules, second: second.modules }, labels),
     ...modulesDiffer(sides),
-    ...apart("interface", { first: first.interfaces, second: second.interfaces }),
-    ...apart("action", { first: placed(first), second: placed(second) }),
+    ...apart("interface", { first: first.interfaces, second: second.interfaces }, labels),
+    ...apart("action", { first: placed(first), second: placed(second) }, labels),
     ...schemasDiffer(sides),
-    ...coverageDiffers(sides, conditions),
+    ...actionsDiffer(sides),
+    ...coverageDiffers(sides, conditions, labels),
+  ];
+}
+
+export function answerChanges(first: Json, answered: Json, conditions: readonly string[]): readonly string[] {
+  const sides = { first: designOf(first), second: designOf(answered) };
+  return [
+    ...differences(sides, conditions, answerLabels),
+    ...saidDiffer(designerAnswersOf(first), designerAnswersOf(answered)),
   ];
 }

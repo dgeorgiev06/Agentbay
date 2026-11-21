@@ -5,9 +5,9 @@ import { planCard, type PlannerAnswer } from "./lib/plan-card.ts";
 import { planChanges } from "./lib/plan-changes.ts";
 import { planDocument } from "./lib/plan-file.ts";
 import { planOf } from "./lib/plan-form.ts";
-import { givenOf, sourcesGiven } from "./lib/plan-sources.ts";
+import { givenOf, planChallengeFound, sourcesGiven } from "./lib/plan-sources.ts";
 import { workOut } from "./lib/plan-waves.ts";
-import { practiceAnswersOf } from "./lib/practice-answers.ts";
+import { notHeldIds, practiceAnswersOf } from "./lib/practice-answers.ts";
 import { readFeatures } from "./lib/reading.ts";
 
 export const run = defineScript(async (input, context) => {
@@ -21,8 +21,12 @@ export const run = defineScript(async (input, context) => {
   const sources = sourcesGiven(given);
   const challenged = fieldsOf(fields.challenged ?? null);
   const challenge = fieldsOf(challenged.challenge ?? null);
+  const found = planChallengeFound(fields.challenge ?? null);
+  const answered = { notHeld: notHeldIds(found.practices), findings: found.findings.length };
   const answer: PlannerAnswer =
-    again.answered === true ? { kind: "answered", changes: planChanges(first, final) } : { kind: "not asked" };
+    again.answered === true
+      ? { kind: "answered", changes: planChanges(first, final), ...answered }
+      : { kind: "not asked" };
   const drawn = planCard({
     job: textOf(fieldsOf(start).job),
     into: textOf(fields.into),

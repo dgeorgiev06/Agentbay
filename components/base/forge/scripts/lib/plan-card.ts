@@ -4,11 +4,18 @@ import { modulesReached, type DesignSummary } from "./design-summary.ts";
 import type { Plan, PlannedSlice } from "./plan.ts";
 import type { Conditions } from "./plan-conditions.ts";
 import type { WorkedOut } from "./plan-waves.ts";
-import { notHeldReason, practiceLines, type PracticeAnswer } from "./practice-answers.ts";
+import {
+  decidingWords,
+  firstFoundWords,
+  practiceLines,
+  withheldAfterAnswer,
+  type FirstFound,
+  type PracticeAnswer,
+} from "./practice-answers.ts";
 import type { Problem } from "./problems.ts";
 
 export type PlannerAnswer =
-  { readonly kind: "not asked" } | { readonly kind: "answered"; readonly changes: readonly string[] };
+  { readonly kind: "not asked" } | (FirstFound & { readonly kind: "answered"; readonly changes: readonly string[] });
 
 export type PlanCardInput = {
   readonly job: string;
@@ -38,17 +45,28 @@ function withheldReason(input: PlanCardInput): string | undefined {
   const errors = errorsOf(input).length;
   const reasons = [
     ...(errors === 0 ? [] : [`The plan check found ${counted(errors, "problem")}.`]),
-    ...notHeldReason(input.practices, "a plan"),
+    ...withheldAfterAnswer(input.practices, "a plan", input.answer.kind === "answered"),
   ];
   return reasons.length === 0 ? undefined : reasons.join(" ");
 }
 
-export function sliceWords(slice: PlannedSlice, design: DesignSummary): string {
+function plannerStep(answer: PlannerAnswer): string {
+  return answer.kind === "answered" ? "plan-2" : "plan-1";
+}
+
+function sliceWords(slice: PlannedSlice, design: DesignSummary): string {
   const modules = modulesReached(slice, design);
   const module = modules.length === 0 ? "no module of the design" : `module ${joined(modules)}`;
   const meets = slice.meets ?? [];
   const met = meets.length === 0 ? "meets no condition" : `meets ${meets.join(", ")}`;
-  return `${slice.name}, ${module}: ${shortened(slice.title, titleShown)}; ${met}`;
+  return `${slice.name}, ${module}; ${met}`;
+}
+
+function sliceLines(input: PlanCardInput, wave: number, slice: PlannedSlice): readonly CardLine[] {
+  return [
+    computed("draw", `wave ${String(wave)}: ${sliceWords(slice, input.design)}`),
+    judged(plannerStep(input.answer), `${slice.name}: ${shortened(slice.title, titleShown)}`),
+  ];
 }
 
 function waveLines(input: PlanCardInput): readonly CardLine[] {
@@ -56,9 +74,7 @@ function waveLines(input: PlanCardInput): readonly CardLine[] {
   const waves = input.workedOut.waves.flatMap((wave) =>
     wave.slices.flatMap((name) => {
       const slice = named.get(name);
-      return slice === undefined
-        ? []
-        : [computed("draw", `wave ${String(wave.wave)}: ${sliceWords(slice, input.design)}`)];
+      return slice === undefined ? [] : sliceLines(input, wave.wave, slice);
     }),
   );
   const { notPlaced } = input.workedOut;
@@ -122,14 +138,16 @@ function findingLines(input: PlanCardInput): readonly CardLine[] {
   ];
 }
 
-function answerWords(answer: PlannerAnswer): string {
+function answerLines(answer: PlannerAnswer): readonly CardLine[] {
   if (answer.kind === "not asked") {
-    return "the planner was not asked again, since the challenge found nothing";
+    return [computed("draw", "the planner was not asked again, since the challenge found nothing")];
   }
-  if (answer.changes.length === 0) {
-    return "the planner answered the findings and changed nothing";
-  }
-  return `the planner answered the findings and changed ${joined(answer.changes)}`;
+  const changed = answer.changes.length === 0 ? "nothing" : joined(answer.changes);
+  return [
+    computed("draw", firstFoundWords(answer, "a plan")),
+    computed("draw", `the planner changed ${changed}`),
+    computed("draw", decidingWords),
+  ];
 }
 
 export function planCard(input: PlanCardInput): PlanCard {
@@ -151,9 +169,9 @@ export function planCard(input: PlanCardInput): PlanCard {
     coverageLine(input),
     fixedLine(input),
     ...problemLines(input),
+    ...answerLines(input.answer),
     ...practiceLines({ answers: input.practices, heldByRules: heldByPlanRules, challenger: input.challenger }),
     ...findingLines(input),
-    computed("draw", answerWords(input.answer)),
     computed(
       "draw",
       `approve commits it into ${input.into} as docs/plans/NNNN-${input.job}.yaml, NNNN the next free number`,

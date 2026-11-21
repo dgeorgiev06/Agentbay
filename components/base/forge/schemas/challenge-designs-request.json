@@ -1,16 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ChallengeDesignsRequest",
-  "description": "The designs as written, the requirements, the practices files and the branch the design goes into.",
+  "description": "The designs as written, with the practices held by design the designs step read, and the requirements.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "file",
-    "requirements",
-    "designs",
-    "practices",
-    "into"
-  ],
+  "required": ["file", "requirements", "designs"],
   "properties": {
     "file": {
       "type": "string",
@@ -25,22 +19,6 @@
     "designs": {
       "type": "object",
       "description": "The designs step's answer, as designs-response.json gives it."
-    },
-    "practices": {
-      "type": "array",
-      "maxItems": 20,
-      "items": {
-        "type": "string",
-        "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
-        "maxLength": 1000
-      },
-      "description": "The practices files, the setting practices."
-    },
-    "into": {
-      "type": "string",
-      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
-      "maxLength": 255,
-      "description": "The branch the design is committed into: the setting into."
     }
   }
 }

@@ -1,12 +1,16 @@
-import { fieldsOf, type Json, type JsonFields, type ScriptContext } from "../../../../../bay/sdk.ts";
+import type { Json, JsonFields, ScriptContext } from "../../../../../bay/sdk.ts";
 import { answerOf } from "./called.ts";
-import { plannerInput } from "./plan-sources.ts";
+import { notHeldIds, type PracticeAnswer } from "./practice-answers.ts";
 
-export type SecondRound = {
+export type Found<Finding extends Json> = {
+  readonly practices: readonly PracticeAnswer[];
+  readonly findings: readonly Finding[];
+};
+
+export type AskedRound = {
   readonly needed: boolean;
-  readonly action: "plan" | "challenge-plan";
-  readonly start: Json;
-  readonly adds: JsonFields;
+  readonly action: "plan" | "challenge-plan" | "design" | "challenge";
+  readonly asked: JsonFields;
   readonly kept: Json;
 };
 
@@ -15,10 +19,20 @@ export type Round = {
   readonly answer: Json;
 };
 
-export async function onlyWhenNeeded(context: ScriptContext, round: SecondRound): Promise<Round> {
+export async function askedWhenNeeded(context: ScriptContext, round: AskedRound): Promise<Round> {
   if (!round.needed) {
     return { ran: false, answer: round.kept };
   }
-  const asked = { ...fieldsOf(plannerInput(round.start)), ...round.adds };
-  return { ran: true, answer: await answerOf(context, round.action, asked) };
+  return { ran: true, answer: await answerOf(context, round.action, round.asked) };
+}
+
+export function secondPassNeeded<Finding extends Json>(found: Found<Finding>): boolean {
+  return notHeldIds(found.practices).length > 0 || found.findings.length > 0;
+}
+
+export function foundOf<Finding extends Json>(found: Found<Finding>): JsonFields {
+  return {
+    practices: found.practices.filter((practice) => practice.answer === "not-held").map((each) => ({ ...each })),
+    findings: [...found.findings],
+  };
 }

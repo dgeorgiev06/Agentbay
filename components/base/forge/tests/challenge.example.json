@@ -536,6 +536,13 @@
         "answer": "held",
         "sentence": "The one module names its interface before anything else."
       }
+    ],
+    "findings": [
+      {
+        "wrong": "No example shows the open list after a refusal, though add claims O1-C5 to O1-C7.",
+        "where": "todo.add",
+        "fix": "Add an example that lists the open todos after the refused add."
+      }
     ]
   }
 }

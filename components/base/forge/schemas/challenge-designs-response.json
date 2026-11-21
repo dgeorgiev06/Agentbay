@@ -4,7 +4,7 @@
   "description": "The design chosen, the challenger's answers, and where two designs differed.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["path", "chosen", "because", "design", "practices", "differences"],
+  "required": ["path", "chosen", "because", "design", "practices", "findings", "differences"],
   "properties": {
     "path": {
       "enum": ["light", "full"],
@@ -49,6 +49,36 @@
         }
       },
       "description": "One answer for each practice held by design, by id."
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["wrong", "where", "fix"],
+        "properties": {
+          "wrong": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "What is wrong, in one sentence."
+          },
+          "where": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "description": "Where in the design: a module, an interface, an action or an example, by name."
+          },
+          "fix": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "What would fix it, in one sentence."
+          }
+        }
+      },
+      "description": "What is wrong with the design that is not a practice's answer, at most 10, each what is wrong, where and what would fix it."
     },
     "differences": {
       "type": "array",

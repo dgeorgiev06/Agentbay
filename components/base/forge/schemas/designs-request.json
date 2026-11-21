@@ -1,21 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "DesignsRequest",
-  "description": "The owner's choice on the first card, and the requirements.",
+  "description": "The owner's choice on the first card, the requirements, the practices files and the branch they are read at.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "choice",
-    "file",
-    "requirements"
-  ],
+  "required": ["choice", "file", "requirements", "practices", "into"],
   "properties": {
     "choice": {
-      "enum": [
-        "light",
-        "full",
-        "stop"
-      ],
+      "enum": ["light", "full", "stop"],
       "description": "light: one designer. full: two who write apart. stop ends the run."
     },
     "file": {
@@ -27,6 +19,22 @@
     "requirements": {
       "$ref": "requirements@1/check-response.json#/$defs/requirements",
       "description": "The requirements file whole, as requirements.check accepted it."
+    },
+    "practices": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "string",
+        "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+        "maxLength": 1000
+      },
+      "description": "The practices files, the setting practices."
+    },
+    "into": {
+      "type": "string",
+      "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\.lock$)[A-Za-z0-9_][A-Za-z0-9_./-]*(?<![./])$",
+      "maxLength": 255,
+      "description": "The branch the design is committed into: the setting into."
     }
   }
 }

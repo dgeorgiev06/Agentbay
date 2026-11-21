@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ChallengeAgainRequest",
-  "description": "The plan's start, what the planner's second round gave, and the first challenge.",
+  "description": "The plan's start, the first plan, what the planner's second round gave, and the first challenge.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["start", "again", "first"],
+  "required": ["start", "plan", "again", "first"],
   "properties": {
     "start": {
       "type": "object",
@@ -81,6 +81,10 @@
           }
         }
       }
+    },
+    "plan": {
+      "type": "object",
+      "description": "The first plan, as schemas/plan.json gives it."
     },
     "again": {
       "type": "object",

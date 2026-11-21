@@ -34,6 +34,8 @@ import { printed } from "./printed-card.ts";
 import { designFile, requirementsFile, tdOne, tdTwo, todoDesignFiles, todoPlan, writtenIn } from "./todo-plan.ts";
 
 const skills = {
+  "plan-1": "forge skills/plan, tier balanced",
+  "plan-2": "forge skills/plan, tier balanced",
   "challenge-1": "forge skills/challenge-plan, tier deep",
   "challenge-2": "forge skills/challenge-plan, tier deep",
 };
@@ -41,6 +43,23 @@ const skills = {
 const finding = "TD2's item 2 names no refusal; add the refused id 99 to its sentence.";
 
 const left = "TD2's title is longer than the card shows.";
+
+const alsoLeft = "TD1's item 1 names no test of the refused add.";
+
+const p34Sentence = "TD2 writes the folder TD1 makes, and nothing orders them.";
+
+const answeredPlan = {
+  ...fieldsOf(todoPlan),
+  slices: [tdOne, { ...fieldsOf(tdTwo), title: "The todo mode marks a todo done, removes one, and refuses id 99" }],
+};
+
+function withP34NotHeld(task: Json): Json {
+  const answer = fieldsOf(answers(task, []));
+  const practices = listOf(answer.practices).map((practice) =>
+    textAt(practice, "id") === "P-34" ? { id: "P-34", answer: "not-held", sentence: p34Sentence } : practice,
+  );
+  return { ...answer, practices };
+}
 
 let template: string;
 
@@ -106,11 +125,10 @@ async function expectedCard(root: string, expected: Expected): Promise<string> {
     challenger: expected.challenger,
     answer: expected.answer,
   });
-  const choices = [
-    { name: "approve", does: "Commit the plan" },
-    { name: "stop", does: "Stop; nothing is committed" },
-  ];
-  return printed(drawn.card, choices, { skills });
+  const reason = drawn.card.withheld.approve;
+  const approve = { name: "approve", does: "Commit the plan" };
+  const choices = [reason === undefined ? approve : { ...approve, withheld: reason }];
+  return printed(drawn.card, [...choices, { name: "stop", does: "Stop; nothing is committed" }], { skills });
 }
 
 function actions(asked: readonly Asked[]): readonly string[] {
@@ -191,17 +209,14 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
     const root = await designed(await project(template));
     const run = await startedPlan(root);
     const tasks: Json[] = [];
-    const answered = {
-      ...fieldsOf(todoPlan),
-      slices: [tdOne, { ...fieldsOf(tdTwo), title: "The todo mode marks a todo done, removes one, and refuses id 99" }],
-    };
+    const answered = answeredPlan;
     const asked = await playedTo(root, textAt(run, "id"), {
       planner: (task) =>
         Promise.resolve(fieldsOf(fieldsOf(task).input ?? null).answering === undefined ? todoPlan : answered),
       planChallenger: (task) => {
         tasks.push(task);
         const step = textAt(task, "stepKey");
-        const answer = answers(task, step.startsWith("challenge-1") ? [finding] : [left]);
+        const answer = answers(task, step.startsWith("challenge-1") ? [finding] : [left, alsoLeft]);
         const short = { ...fieldsOf(answer), practices: listOf(fieldsOf(answer).practices).slice(1) };
         return Promise.resolve(step === "challenge-1/0#1" ? short : answer);
       },
@@ -218,14 +233,22 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
         "does-not-apply, with its sentence.",
     ]);
     const second = asked[3]?.task ?? null;
-    assert.deepEqual(fieldsOf(fieldsOf(second).input ?? null).answering, { plan: todoPlan, findings: [finding] });
-    assert.deepEqual(fieldsOf(fieldsOf(tasks[2] ?? null).input ?? null).answered, { findings: [finding] });
+    assert.deepEqual(fieldsOf(fieldsOf(second).input ?? null).answering, {
+      plan: todoPlan,
+      practices: [],
+      findings: [finding],
+    });
+    assert.deepEqual(fieldsOf(fieldsOf(tasks[2] ?? null).input ?? null).answered, {
+      practices: [],
+      findings: [finding],
+      changes: ["TD2's title"],
+    });
     const card = waitingOf(await shown(root, textAt(run, "id")), "card");
     const expected = {
       plan: answered,
-      challenge: answers(tasks[2] ?? null, [left]),
+      challenge: answers(tasks[2] ?? null, [left, alsoLeft]),
       challenger: "challenge-2",
-      answer: { kind: "answered", changes: ["TD2's title"] },
+      answer: { kind: "answered", changes: ["TD2's title"], notHeld: [], findings: 1 },
     } as const;
     assert.deepEqual(
       await printedCard(root, card.id, "Commit the plan"),
@@ -234,13 +257,59 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
     const judged = listOf(fieldsOf(card.card).lines).filter((line) => textAt(line, "mark") === "judged");
     assert.deepEqual(
       judged.map((line) => textAt(fieldsOf(line).source ?? null, "step")),
-      ["challenge-2"],
+      ["plan-2", "plan-2", "challenge-2", "challenge-2"],
     );
     const stopped = runOf(await decided(root, card, { step: "card", choice: "stop" }));
     assert.equal(textAt(stopped, "reason"), "The owner chose stop on the plan card, so nothing is committed.");
     assert.equal(git(root, ["ls-tree", "--name-only", into, "docs/plans/0025-todo.yaml"]), "");
     assert.deepEqual(branches(root), []);
     assertTheMainCheckoutIsUntouched(root);
+  });
+
+  test("a practice not held with no finding runs the planner's second round and a second challenge; still not held, the card offers only stop and says the planner answered once", async () => {
+    const root = await designed(await project(template));
+    const run = await startedPlan(root);
+    const tasks: Json[] = [];
+    const asked = await playedTo(root, textAt(run, "id"), {
+      planner: (task) =>
+        Promise.resolve(fieldsOf(fieldsOf(task).input ?? null).answering === undefined ? todoPlan : answeredPlan),
+      planChallenger: (task) => {
+        tasks.push(task);
+        return Promise.resolve(withP34NotHeld(task));
+      },
+    });
+    assert.deepEqual(actions(asked), [
+      "plan-1/0#1 plan",
+      "challenge-1/0#1 challenge-plan",
+      "plan-2/0.call0/0#1 plan",
+      "challenge-2/0.call0/0#1 challenge-plan",
+    ]);
+    const notHeld = [{ id: "P-34", answer: "not-held", sentence: p34Sentence }];
+    assert.deepEqual(fieldsOf(fieldsOf(asked[2]?.task ?? null).input ?? null).answering, {
+      plan: todoPlan,
+      practices: notHeld,
+      findings: [],
+    });
+    assert.deepEqual(fieldsOf(fieldsOf(tasks[1] ?? null).input ?? null).answered, {
+      practices: notHeld,
+      findings: [],
+      changes: ["TD2's title"],
+    });
+    const card = waitingOf(await shown(root, textAt(run, "id")), "card");
+    const expected = {
+      plan: answeredPlan,
+      challenge: withP34NotHeld(tasks[1] ?? null),
+      challenger: "challenge-2",
+      answer: { kind: "answered", changes: ["TD2's title"], notHeld: ["P-34"], findings: 0 },
+    } as const;
+    const rows = await printedCard(root, card.id, "Commit the plan");
+    assert.deepEqual(rows, (await expectedCard(root, expected)).split("\n"));
+    assert.ok(rows.includes("           why: The challenger answered P-34"), rows.join("\n"));
+    const words = listOf(fieldsOf(card.card).lines).map((line) => textAt(line, "words"));
+    assert.ok(words.includes("the first challenge answered P-34 not held; the planner answered once"));
+    const stopped = runOf(await decided(root, card, { step: "card", choice: "stop" }));
+    assert.equal(textAt(stopped, "reason"), "The owner chose stop on the plan card, so nothing is committed.");
+    assert.deepEqual(branches(root), []);
   });
 
   test("a plan with a condition no slice meets goes back to its planner with the problem, and the run stops with it", async () => {

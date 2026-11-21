@@ -142,22 +142,22 @@ tests/           python3 tests/run.py (the tests of a component live in its own 
 
 | command | does |
 |---|---|
-| `bay check [--base <ref> --proposal <file>] [--limits [--write]]` | lint and resolve everything; with `--base`, also check a change against core ownership; `--limits` checks the ceilings, `--write` records lower counts (release only) |
-| `bay build` / `bay clean` | compile into a project / remove what was generated |
-| `bay catalog [<name>] [--roles]`, `bay describe <name>` | what is installed, resolved; `--roles` lists the role units |
-| `bay show <mode> --resolved` | a mode's features after `extends`, with the file each comes from |
-| `bay call <mode>.<endpoint> '<json>'` | run a feature |
-| `bay submit '<json>' --token <token>`, `bay show <callId>`, `bay show reclaim <runId>`, `bay show close <callId> --reason <text>` | hand back a step's output; current state; mark a stuck run reclaimed; end an open call as abandoned |
-| `bay approve <run> <stepKey> --hash <hash> [--reject\|--choice <name>]`, `bay approve --trust <mode> [--reject]` | answer a run's approval, or give or withdraw trust in a mode: in your terminal, where you type yes, or with `--via chat --quote "<your exact words>"` (trust also with `--hash`) when `approvals.from` in agentbay.config.yaml lists chat |
-| `bay status [--agents\|--log]`, `bay note <ref> "text"` | calls, steps, cost, agent runs (grouped by role, mode, model, tier); the raw run log; a note |
-| `bay note task`, `bay note dispatch <taskId> --agent <name> --input <x> [--unguarded <reason>]`, `bay note done <taskId>`, `bay note review <taskId> '<json>'`, `bay plan <taskId> [--done <n>]` | agent run records: a fresh taskId; the Chief of Staff logs each dispatch, its finish and outside review; a subagent first records its outcome and to-do (`bay plan` is its only `bay` command) |
-| `bay new mode <name>`, `bay new feature <name> --mode <mode>`, `bay new connector <name> --implements <interface> --mode <mode>`, `bay new content-type <name> --mode <mode>`, `bay new env <name> --mode <mode>` | create a mode, or a feature, a source connector, a content type or an env inside a mode in `components/modes/`, from a template |
-| `bay secret set <NAME>` | store a secret (read from your terminal, never echoed) |
-| `bay auth <connector>` | a connector's browser login (Claude Code asks first; needs the browser on this machine) |
-| `bay config` | print every agentbay.config.yaml setting, from the schemas |
+| `bay check` | Check manifests, skills, workflows, imports and limits, and report every problem at once. |
+| `bay new <mode\|action\|skill\|workflow\|interface> <name> [--mode <mode>] [--tier base\|modes]` | Write a new mode, action, skill, workflow or interface from its template. |
+| `bay actions [<mode>] [--find <words>]` | List the active modes, or the actions of one mode with their descriptions, effects and input schemas; --find keeps those that hold every given word. |
+| `bay call <mode.action> ['<json>'] \| call --workflow <mode>:<path> ['<json>'] \| call --tool <name> '<json>'` | Start an action or a workflow and print the run; or call a kernel tool, which needs a task token unless it is actions. |
+| `bay submit <json \| @file \| -> --token <token> [--tokens <n>] [--usd <x>]` | Hand in the output of a waiting skill step, with the token of its task. |
+| `bay runs [<run> [--full] [--events] [--new-token [--step <step key>]]]` | List the runs, newest first; or show one run with its steps and task; --events adds events, --new-token replaces the token of every task, or with --step only of that step's task. |
+| `bay approve <run> <stepKey> --hash <hash> [--reject \| --choice <name>] [--via terminal \| --via chat --quote "<the owner's words>"]; approve --trust <mode> [--reject] [--via chat --hash <hash> --quote "<the owner's words>"]` | Approve or reject what a waiting approval shows, or take one of its choices, naming its hash; or, with --trust, give or withdraw trust in a mode's list. From a terminal, or from chat if allowed. |
+| `bay resume <run> [--rerun \| --extend <measure>=<amount>[,...] \| --stop] [--via terminal \| --via chat --quote "<the owner's words>"] \| resume --due` | Continue a run: --rerun runs an unfinished step, or a side-by-side foreach's failed items, again, --extend raises a spent budget, --stop ends it, each from a terminal or from chat if allowed; --due wakes waits. |
+| `bay build [--clean] [--adapter <name>]` | Write the adapter's agent files for every skill step; --clean removes what a build wrote. |
+| `bay secret set <NAME> \| secret check <NAME>` | Store a secret in the macOS keychain from an interactive terminal, or check that one can be found. |
+| `bay auth <mode>` | Log in to a source that needs a browser login (not built yet). |
+| `bay config` | Print every setting the project config may hold, with its current value, and which mode serves whom. |
+| `bay import-v4 <folder>` | Copy your own to-dos and other local items from an agentbay 4 store once (not built yet). |
 
-Run as `./bay.sh <command>` in the kit, or `.agentbay/bay <command>` in a built project. A component's `README.md`
-lists any commands it adds.
+Run as `./bay.sh <command>` in the kit, and as `<kit>/bay.sh <command> --project <folder>` for a project
+elsewhere.
 
 ## Adding things
 
@@ -186,15 +186,22 @@ text for its `goal` and `deliverable`, so the example states them in words.
 
 ## Safety, in one paragraph
 
-Where it runs, the guard hook narrows what subagents can ask to do; it is defense in depth, not isolation, and
-cannot contain code once something runs it. A project whose config sets `skillSteps.run: without-the-hook` runs
-skill steps with no hook: the kernel takes their outputs, and each run records that no hook saw them. Nothing that runs code is auto-approved except a role's own read-only data shim;
-the main thread is pre-approved only for `bay show|status|note|catalog`. `bay secret set`
-needs your terminal. An approval and the owner's answers to `bay resume` are taken only from a channel that
-`approvals.from` in agentbay.config.yaml lists, `terminal` or `chat` (default `[terminal]`); trust is given at a
-terminal always, and from chat only when it lists chat. An answer is recorded as `owner at the terminal` or
-`owner via chat, quoted: "<the owner's words>"`. `bay auth` asks first in Claude Code.
-Details: [docs/DESIGN.md#safety-model](docs/DESIGN.md#safety-model).
+Where it runs, the guard hook narrows what step agents can do: a step's tools, the folders it reads and writes and
+the words of the commands it may run all come from its mode's manifest, and the main thread may write anything but
+`.agentbay/`, `.claude/`, `.mcp.json`, the kit's `bay/`, `schemas/`, `adapters/` and `framework/`, and, outside the kit, its `components/base/`. It is defence
+in depth, not isolation, and cannot contain code once a listed command runs it. A project whose config sets
+`skillSteps.run: without-the-hook` runs skill steps with no hook: the kernel takes their outputs, and each run
+records that no hook saw them. A mode's script runs in a child process under Node's permission model and reaches
+the kernel only through its toolbox, where each operation is checked against the mode's grants and its action's
+effects. A mode outside the kit's `components/base/` is granted the commands it lists only after the owner trusts
+that list. Secrets come from the environment (`AGENTBAY_SECRET_<NAME>`) or, on macOS, the keychain: `bay secret
+set` prints the command you run yourself, which never echoes the value. An approval and the owner's answers to
+`bay resume` are taken only from a channel that `approvals.from` in agentbay.config.yaml lists, `terminal` or
+`chat` (default `[terminal]`); trust is given at a terminal always, and from chat only when it lists chat. An
+answer is recorded as `owner at the terminal` or `owner via chat, quoted: "<the owner's words>"`. Details:
+[adapters/claude-code/README.md](adapters/claude-code/README.md) for the hook,
+[docs/designs/operations/0-frame.md](docs/designs/operations/0-frame.md) for the toolbox and
+[docs/designs/trust/0-frame.md](docs/designs/trust/0-frame.md) for trust.
 
 ## A skill's output kept packed
 

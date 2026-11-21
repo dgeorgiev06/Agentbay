@@ -53,7 +53,7 @@ neither; one that does needs a playbook. It is called as `<mode>.<feature>`. The
 
 - `run: <capability>/v<N>.<endpoint>` is deterministic code, which the dispatcher runs in the coordinator's env.
 - `role: <role>` is an agentic step. That role runs it in the env that the step, the feature or the mode `roles:` names.
-- `gate: <text>` is an approval gate that only you pass, with `bay approve` in a terminal (or from chat, if `approve.from` allows it). `approves: $in.<f>` ties the gate to the exact content of a file, so a later call on the unchanged file skips it.
+- `gate: <text>` is an approval gate that only you pass, with `bay approve` in a terminal (or from chat, if `approvals.from` lists chat). `approves: $in.<f>` ties the gate to the exact content of a file, so a later call on the unchanged file skips it.
 - `{review: here}` marks where review goes (default last).
 
 `with:` substitutes `$in.x`, `$steps.<id>.x` and `$config.x`, with `a|b` fallbacks; a `*` path part maps the rest over a list (`$steps.get.items.*.id`). `when:` skips a step
@@ -120,17 +120,18 @@ the guard, so a role that may run tests has no hard write limit. Around it stand
   shim (`python3 -E <kit>/bay/use_shim.py`; with the kit inside the project, even that prompts). Every other subagent
   command prompts. The main thread is pre-approved only for `bay show|status|note|catalog`. `show reclaim`,
   `show close`, `note dispatch`, `note review`, `call`, `submit`, `approve` and `auth` ask.
-- **Approval follows `approve.from`.** `approve: { from: [terminal, chat] }` in agentbay.config.yaml says where you
-  decide (default `[terminal]`). Gates and backlog items (`bay approve <F-id>`) share it. A terminal approval
-  needs an interactive stdin. From chat, `bay approve <id> --via chat --quote "<your message>" --sha <hex>` passes a
-  gate: the Chief of Staff relays your exact words, the sha is the sha256 prefix (8+ hex digits) of what you saw, and
-  a changed file is refused. A backlog item takes no sha. The ledger records `user@chat-via-cos` and the quote. Chat
-  is weaker than a terminal: it trusts the main thread.
+- **Approval follows `approvals.from`.** `approvals: { from: [terminal, chat] }` in agentbay.config.yaml says where
+  you decide (default `[terminal]`); the owner's answers to `bay resume` (`--rerun`, `--stop`, `--extend`) follow it
+  too. A terminal answer needs an interactive stdin and a typed yes. From chat, `bay approve <run> <stepKey> --hash
+  <hash> --via chat --quote "<the owner's exact words>"` answers an approval, and the hash binds it to what the
+  owner was shown. The run records `owner at the terminal` or `owner via chat, quoted: "<words>"`. Trust in a mode
+  (`bay approve --trust <mode>`) is given at a terminal whatever the setting lists, and from chat only when it lists
+  chat. Chat is weaker than a terminal: it trusts the main thread.
 - **A gate binds content.** A gate with `approves:` records the path and sha256 of its file (a workflow gate takes
   its `W-...` run id). If the file changes after the gate passed, the next submit returns the call to the gate. The
   result submitted with the unseen edit is kept; once re-approved the call resumes after it (reject discards). `bay
   show` says who approved.
-- **Secrets and logins.** `bay secret set` needs an interactive stdin whatever `from` says.
+- **Secrets.** `bay secret set` prints the keychain command the owner runs in a terminal; it never takes the value itself.
 - **Plan approval.** `approve.plans` lists role steps (`<mode>.<endpoint>` or `<mode>.<endpoint>.<step>`). Each
   runs a planner first (env `plan-writer`: it writes only under `docs/plans/` and runs only `bay plan`), then a gate on that file (`docs/plans/<callId>-<step>.md`), then the step as a fresh agent given the plan. A
   step with `when:` cannot be listed by name (the endpoint form skips it), and an unmatched entry fails

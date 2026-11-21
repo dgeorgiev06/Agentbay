@@ -535,7 +535,7 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
       mark: "judged",
       words: "the builder stopped, saying the kernel lacks worktrees.commit",
       source: { step: "build" },
-      skills: [{ mode: "forge", skill: "skills/build", tier: "deep" }],
+      skills: [{ mode: "forge", skill: "skills/build", tier: "balanced" }],
     });
     const choices = listOf(card.choices);
     assert.equal(textAt(choices[0] ?? null, "reason"), "The builder stopped.");

@@ -262,9 +262,11 @@ owner with one sentence that names every failed item, by the name its foreach de
 place, such as `the 3rd of 4 items`, then its key and its reason, each reason cut to 200 characters:
 `Step each failed for 1 of 4 items: the 3rd of 4 items at each[2]: <reason>`. `bay resume <run> --rerun` runs only the failed items again, under a new key such as `each[2]~2`;
 items that finished are not run again and keep their outputs. `bay resume <run> --stop` fails the foreach with that
-sentence, and the run ends as any failed run: `failed` when none of its finished actions wrote, deleted or has an
-undo, so there is nothing to undo; otherwise `undone`, once the kernel has run the undo of each finished action that
-has one, latest first, and listed what it undid, what failed to undo, and what it cannot undo.
+sentence, and the run ends as any failed run: `failed` only when every finished action only read, so there is
+nothing to undo; otherwise `undone`. The kernel then runs, latest first, the undo of each finished action that has
+one and does not delete, and lists what it undid and what failed to undo; an action that deletes is listed as a
+delete it did not undo, and one with any other effect than read (write, network or spend) and no undo as one it
+cannot undo.
 
 Running again, stopping and raising a budget (`--rerun`, `--stop`, `--extend`) are the owner's answers, so each takes
 where the answer comes from as `bay approve` does: a terminal, the default, which must be interactive and where the

@@ -36,8 +36,7 @@ export function byOf(channel: Channel): string {
     : `owner via chat, quoted: ${JSON.stringify(channel.quote)}`;
 }
 
-export function offRefusal(kernel: Kernel, channel: Channel, words: OwnerWords): CommandResult | undefined {
-  const allowed = allowedChannels(kernel);
+export function offRefusal(allowed: readonly string[], channel: Channel, words: OwnerWords): CommandResult | undefined {
   return allowed.includes(channel.via)
     ? undefined
     : refusedResult(

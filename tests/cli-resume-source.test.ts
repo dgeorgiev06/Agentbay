@@ -18,6 +18,8 @@ const unfinishedQuestion =
 
 const yes = { terminal: fakeTerminal({ interactive: true, answer: "yes" }) };
 
+const terminalQuote = "--quote goes with --via chat; at a terminal the owner types yes instead.";
+
 type Resumed = {
   readonly cause: string;
   readonly by: string | undefined;
@@ -242,5 +244,27 @@ test("runs shows a run that asks the owner with both ways to answer, each with w
         "  0  script  started",
       ].join("\n"),
     );
+  });
+});
+
+test("resume takes no quote at the terminal, and only a typed yes there confirms", async () => {
+  await withProject({}, async (project) => {
+    const runId = await askingRun(project);
+    for (const words of [
+      ["--rerun", "--via", "terminal", "--quote", "go"],
+      ["--stop", "--quote", "stop"],
+    ]) {
+      const ran = await resume(project, [runId, ...words], yes.terminal);
+      assert.equal(ran.exitCode, 2, words.join(" "));
+      assert.equal(usageOf(ran), terminalQuote);
+    }
+    for (const near of ["y", "yes please", "ye s"]) {
+      const ran = await resume(project, [runId, "--rerun"], fakeTerminal({ interactive: true, answer: near }));
+      assert.equal(ran.exitCode, 1, near);
+      assert.equal(problemOf(ran), "Not confirmed; nothing changed.\n");
+    }
+    const shown = await bay(["runs", runId, "--project", project.root, "--json"]);
+    assert.equal(waitingFor(shown), "owner");
+    assert.deepEqual(await answeredBy(project, runId), []);
   });
 });

@@ -11,7 +11,15 @@ import { measures } from "../contracts.ts";
 import type { Budget } from "../generated/mode.ts";
 import type { Kernel } from "../kernel.ts";
 import type { Outcome } from "../outcome.ts";
-import { byOf, channelOf, offRefusal, terminalRefusal, type Channel, type OwnerWords } from "../owner-source.ts";
+import {
+  allowedChannels,
+  byOf,
+  channelOf,
+  offRefusal,
+  terminalRefusal,
+  type Channel,
+  type OwnerWords,
+} from "../owner-source.ts";
 import { runResult } from "../run-report.ts";
 import { waitsOf, type Run } from "../runs/runs.ts";
 
@@ -133,9 +141,18 @@ function ownerQuestions(shown: Outcome<Run>): readonly string[] {
   return waits.flatMap((waiting) => (waiting.reason === "owner" ? [waiting.question] : []));
 }
 
-async function confirmQuestion(kernel: Kernel, form: Answering): Promise<string> {
-  const asked = ownerQuestions(await kernel.runs.show(form.runId));
+function terminalQuestion(form: Answering, asked: readonly string[]): string {
   return [...asked, `${answerWords(form)} Type yes to confirm: `].join("\n");
+}
+
+async function terminalAnswerRefusal(
+  invocation: Invocation,
+  kernel: Kernel,
+  form: Answering,
+): Promise<CommandResult | undefined> {
+  const asked = ownerQuestions(await kernel.runs.show(form.runId));
+  const refusal = await terminalRefusal(invocation, ownerWords(form.answer), terminalQuestion(form, asked));
+  return refusal === undefined ? undefined : refusedResult(refusal);
 }
 
 async function sourceRefusal(
@@ -143,13 +160,16 @@ async function sourceRefusal(
   kernel: Kernel,
   form: Answering,
 ): Promise<CommandResult | undefined> {
-  const words = ownerWords(form.answer);
-  const off = offRefusal(kernel, form.channel, words);
-  if (off !== undefined || form.channel.via === "chat") {
+  const off = offRefusal(allowedChannels(kernel), form.channel, ownerWords(form.answer));
+  if (off !== undefined) {
     return off;
   }
-  const refusal = await terminalRefusal(invocation, words, await confirmQuestion(kernel, form));
-  return refusal === undefined ? undefined : refusedResult(refusal);
+  switch (form.channel.via) {
+    case "chat":
+      return undefined;
+    case "terminal":
+      return terminalAnswerRefusal(invocation, kernel, form);
+  }
 }
 
 function answered(kernel: Kernel, form: Answering): Promise<Outcome<Run>> {

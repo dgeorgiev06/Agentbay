@@ -188,7 +188,7 @@ async function decide(request: ApprovalRequest): Promise<CommandResult> {
   const approval = approvalAt(shownRun, stepKey);
   const beside = (refused: CommandResult): CommandResult =>
     approval?.card === undefined ? refused : withCardShown(kernel.layout, shownRun, refused);
-  const off = offRefusal(kernel, channel, approvalWords);
+  const off = offRefusal(allowedChannels(kernel), channel, approvalWords);
   if (off !== undefined) {
     return beside(off);
   }

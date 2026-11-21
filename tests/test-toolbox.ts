@@ -195,6 +195,8 @@ const nothingSpent: Spend = { items: 0, usd: 0, tokens: 0, minutes: 0 };
 
 const trustedBy = "a test";
 
+const extendedBy = "the owner, in a test";
+
 function settableClock(startAt: string | undefined): SettableClock {
   let fixed = startAt === undefined ? undefined : Date.parse(startAt);
   return {
@@ -460,7 +462,7 @@ async function projectIn(root: string, opening: Opening): Promise<ModeProject> {
     newTokenRefusal: async (runId) => refusalOf(await runs.reissueTask(runId), "the new token"),
     show: async (runId) => accepted(await runs.show(runId)),
     resume: async (runId) => accepted(await runs.resume(runId)),
-    extend: async (runId, extra) => accepted(await runs.extend(runId, extra, trustedBy)),
+    extend: async (runId, extra) => accepted(await runs.extend(runId, extra, extendedBy)),
     runs: async () => (await runs.list()).map((listed) => ({ id: listed.id, status: listed.status })),
     partition: (mode, name) => partitionOf(kernel, mode, name),
     setTime: clock.set,

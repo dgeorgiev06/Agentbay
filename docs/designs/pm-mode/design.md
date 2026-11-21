@@ -1,46 +1,74 @@
-# The PM mode: from the owner's words to a checked requirements file
+# The PM mode: an interview that ends in a checked requirements file
 
-The design of the PM mode that ADR 25 gives the requirements to. It proposes; the owner decides. Words are used as `CONTEXT.md` defines them. It builds on forge's design as chosen in ADR 26 (design A's skeleton) and on ADR 27 (with the hook or without).
+The design of the PM mode that ADR 25 gives the requirements to. It proposes; the owner decides. Words are used as `CONTEXT.md` defines them; the words it adds are under "Words this design adds". It builds on forge's design as chosen in ADR 26 (design A's skeleton) and on ADR 27 (with the hook or without).
 
-## The design in eight lines
+**Revised on 21 November.** The owner asked that the PM mode be the grill: "Build the grill (PM mode) before adding more to forge", and "incorporate grill me with docs". The ideas come from the grilling method of mattpocock/skills, read as its documentation pages only (`docs/research/2026-11-21-grilling.md`); no file or wording of it is used. Section 3 says which ideas are taken, which are changed and which are left, with reasons. What changed from the version he answered on 19 and 20 November:
 
-1. The PM mode, `pm`, turns what the owner asks for into one requirements file per job. It plans no slice, writes no test and no code.
-2. The file's form belongs to a small base mode, `requirements`, behind the interface `requirements@1`. Both `pm` and forge require it, so neither needs the other.
-3. A condition is given, when, then, with a literal value in `then`. A refused condition also says what a person sees after. A script refuses vague words.
-4. The owner is asked one question a run, as an approval with two or three answers and a recommendation. Each answer is recorded with who gave it and when.
-5. Two skills: `draft` at tier balanced, and `critique` at tier deep, another model. Everything else is a script.
-6. The owner signs the file off on one card, answer first. Only then is the file written, as the next version.
-7. A change after building has started is a new version. The file lists what changed by condition id, and forge compares that with the version its plan was cut from.
-8. At the owner's job it runs without the hook. It reads exported documents and tickets from a folder, writes nothing back, and has no network effect.
+- The mode interviews him turn by turn over a tree of questions, in place of one question a run (sections 3 and 5).
+- He answers a turn in his own words; they are read back to him before anything is kept (section 3.4).
+- A fact is looked up with its source; a decision is only ever his (section 3.5).
+- A settled term is offered for the glossary, and a hard decision as an ADR (section 3.6).
+- The file carries his words for each decision and what the work is judged on, so forge's designer is told every rule it is judged by (section 2).
+- The slices and the questions are new (sections 8 and 9). His earlier answers stand.
+
+## The design in ten lines
+
+1. The PM mode, `pm`, interviews the owner about a piece of work until nothing important is left assumed, then writes one requirements file. It plans no slice, writes no test and no code.
+2. Only the owner starts an interview, with `pm.start`. The mode keeps a tree of questions; each names the questions it comes after.
+3. A turn is one run of `ask`: every question of the frontier on one card, numbered, with two or three choices and the interviewer's recommendation, as judged lines. He answers the whole turn in his own words.
+4. His words are read back on a second card, question by question, with the exact words of his that each answer rests on. Nothing is kept until he confirms that card. A script checks that every excerpt is his.
+5. A fact is looked up, by a script or by the interviewer, with the file and the words it rests on, and a script finds those words in the file. The interviewer never answers a decision.
+6. A settled term is offered as a glossary row, and a hard decision as an ADR. Each is shown whole on the next turn's card and written only on his yes.
+7. Each turn's output says what comes next: another turn, or `sign-off` once the frontier is empty. He signs the file off on one card; only then is it written, checked by `requirements.check`.
+8. Every `decided` entry carries his words and the run that recorded them. The file also carries what the work is judged on, so forge tells its designer every rule its design is judged by.
+9. Two skills interview, `interview` and `read`, for a proposed role, the interviewer, at tier deep. `draft` and `critique` stay as they were. Every other step is a script.
+10. Built now: slice GR1, the turn by script. The next slices wait for three of his answers: the role, a kernel change that hands his words to the next step, and how one turn leads to the next.
+
+## Words this design adds
+
+Proposed for `CONTEXT.md`. They are added with the first slice that uses them, when the owner agrees (question 12). "Round" is not used: in this glossary a round is a slice's pass through the test writer and the builder.
+
+| Term | Meaning | Do not say |
+|---|---|---|
+| **Interview** | What the PM mode does with the owner for one job, from `pm.start` to the sign-off card: turns over a question tree until nothing important is left assumed. Only the owner starts one. | grilling (fine in prose about its source), session, Q&A |
+| **Question tree** | An interview's questions, each a decision, which is the owner's; a fact, which the project's files answer; or one talking cannot settle. Each names the questions it comes after. | decision tree, graph, backlog |
+| **Frontier** | The open decisions of a question tree whose earlier questions are all settled. A turn asks the whole frontier, at most twelve. | queue, next questions |
+| **Turn** | One run of the PM mode's workflow `ask`: the frontier on one card, the owner's answer in his words, its reading shown back, and what he confirms kept. | round, batch, iteration |
+| **Reading** (of an answer) | What the owner's words say for each question of a turn: a choice, his own answer, that he does not know yet, or that the question is wrong; each with the exact words of his it rests on. | interpretation, parse, summary |
+| **Read-back card** | The card that shows a reading to the owner, question by question, before anything of it is kept. | confirmation, summary |
+| **Interviewer** (proposed role) | The agent at tier deep that maps the question tree, looks up facts with their sources, writes each turn's questions and reads the owner's answer. It never answers a decision. | PM agent, analyst, grill |
 
 ## 1. What the PM mode is for, and who uses it
 
-**Conclusion.** It is for writing down what a person should see working, in a form a script can check. It never plans, tests or builds (ADR 25). The owner uses it alone; a team can add its words, and the owner signs off.
+**Conclusion.** It interviews the owner to test an idea before anyone acts on it, and writes down what a person should see working, in a form a script can check. It never plans, tests or builds (ADR 25). The owner uses it alone; a team can add its words, and the owner answers and signs off.
 
 ### What it does
 
-- It takes the owner's words: a sentence in chat, or an exported document or ticket.
-- It drafts outcomes a person could see working, each with conditions.
-- It asks the owner what the words leave open, one question at a time.
-- It checks the result by script, has another model critique it, and shows the owner a card.
-- On the owner's approval it writes `docs/requirements/<job>.yaml`.
+- It takes the owner's words: a sentence in chat, or an exported document or ticket. Only he starts an interview.
+- It maps what the words leave open as a question tree.
+- It looks up what the project already says, and asks him only what he must decide, a turn at a time.
+- It reads his answers back to him before it keeps them.
+- It offers glossary rows and ADRs as terms and hard decisions settle.
+- When nothing is left to ask, it drafts outcomes and conditions, checks them by script, has another model critique them, and shows him the sign-off card.
+- On his approval it writes `docs/requirements/<job>.yaml`.
 
 ### What it never does
 
 - It cuts no slice, names no kind of proof, and fixes no interface. Those are forge's (ADR 25, items 2 and 6).
-- It writes no test and no code. It has no write path outside `docs/requirements/`.
-- It decides no answer for the owner. Every answer is an approval's choice.
+- It writes no test and no code. It writes nothing in the project but the requirements file, and the glossary rows and ADRs he said yes to.
+- It answers no decision for the owner. A decision is settled only by his words, read back and confirmed.
+- It starts no interview of its own.
 - It reads nothing of forge: no plan, no design, no run. Forge reads the file and nothing else of it.
 
 ### Who uses it
 
-- **The owner alone.** He says what he wants. The mode asks, he answers, he signs off.
-- **With a team.** Others' words come in through `pm.start` with `by` set to their role, such as `design lead`. Each becomes an entry under `asked`. The file is reviewed like any file in the repository. Answers and the sign-off stay the owner's, since an approval is his (`CLAUDE.md`, the agentbay block).
+- **The owner alone.** He says what he wants. The mode asks a turn at a time, he answers, he signs off.
+- **With a team.** Others' words come in through `pm.start` with `by` set to their role, such as `design lead`. Each becomes an entry under `asked`, and the interviewer asks about it like any other words. The file is reviewed like any file in the repository. Answers and the sign-off stay the owner's, since an approval is his (`CLAUDE.md`, the agentbay block).
 - **A team that builds another way.** The file is plain YAML. Nothing in it names forge.
 
 ## 2. The requirements file
 
-**Conclusion.** One YAML file per job, `docs/requirements/<job>.yaml`. Outcomes a person could see; conditions as given, when, then with literal values; what is left out on purpose; open questions; who asked, who answered, and when. Its schema is `requirements@1`'s, so `pm` and forge read one form.
+**Conclusion.** One YAML file per job, `docs/requirements/<job>.yaml`. Outcomes a person could see; conditions as given, when, then with literal values; what is left out on purpose; open questions; who asked, who answered, and when. Each decision carries the owner's words and the run that recorded them. The file also says what the work is judged on: the project's practices that hold for it, its constraints and what is left out. Its schema is `requirements@1`'s, so `pm` and forge read one form.
 
 ### Where the form lives
 
@@ -66,7 +94,8 @@ Forge requires `requirements@1` and reads the file through `requirements.check`.
 | `judged` | no | Up to 3 sentences only a person can judge |
 | `leftOut` | yes | Sentences; may be empty |
 | `open` | yes | Questions not yet answered; may be empty |
-| `decided` | yes | Each answer: `question`, `answer`, `by`, `on`, `run` |
+| `practices` | no | The project's practices this work is judged on, each `id` and `says`, as the owner confirmed them in the interview |
+| `decided` | yes | Each answer: `question`, `answer`, `by`, `on`, `run`, and `quote`: the owner's words, when a run recorded the answer |
 | `signed` | yes | `by`, `on`, `run` of the sign-off |
 | `changes` | yes | One entry per version: `version`, `on`, `added`, `changed`, `removed` |
 
@@ -95,6 +124,7 @@ A condition has:
     "for": { "$ref": "#/$defs/sentence" },
     "asked": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/asked" } },
     "constraints": { "type": "array", "items": { "$ref": "#/$defs/sentence" } },
+    "practices": { "type": "array", "items": { "$ref": "#/$defs/practice" } },
     "outcomes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/outcome" } },
     "judged": { "type": "array", "maxItems": 3, "items": { "$ref": "#/$defs/sentence" } },
     "leftOut": { "type": "array", "items": { "$ref": "#/$defs/sentence" } },
@@ -153,8 +183,13 @@ A condition has:
       "type": "object", "additionalProperties": false, "required": ["question", "answer", "by", "on", "run"],
       "properties": {
         "question": { "$ref": "#/$defs/sentence" }, "answer": { "type": "string" },
-        "by": { "type": "string" }, "on": { "$ref": "#/$defs/date" }, "run": { "type": "string" }
+        "by": { "type": "string" }, "on": { "$ref": "#/$defs/date" }, "run": { "type": "string" },
+        "quote": { "type": "string", "minLength": 1, "maxLength": 4000 }
       }
+    },
+    "practice": {
+      "type": "object", "additionalProperties": false, "required": ["id", "says"],
+      "properties": { "id": { "type": "string", "pattern": "^[A-Z]{1,4}-\\d{1,3}$" }, "says": { "type": "string", "maxLength": 2000 } }
     },
     "change": {
       "type": "object", "additionalProperties": false, "required": ["version", "on", "added", "changed", "removed"],
@@ -171,6 +206,8 @@ A condition has:
 ```
 
 The schema holds what a schema can. The rules it cannot hold are the check's (section 4).
+
+`quote` and `practices` are new in this revision. The interface as built in slice RQ1 has neither. Both are additive, so every file the check accepts today is still accepted; slice RD1 adds them (question 9). One rule comes with them: a `decided` entry whose `run` names a run has a `quote`. An entry whose `run` starts with "none, written by hand" needs none. That is the form of `docs/requirements/todo.yaml`, which no interview made.
 
 ### No kind of proof in the file
 
@@ -355,7 +392,7 @@ changes:
     removed: []
 ```
 
-19 conditions, 7 of them refused. Run ids are examples.
+19 conditions, 7 of them refused. Run ids are examples. Written by an interview, each `decided` entry would also carry his words, such as `quote: "2a"` or the sentence he wrote; the file in `docs/requirements/` was written by hand, so its runs say so and it has no quotes.
 
 Three choices in the file are worth a word:
 
@@ -363,23 +400,148 @@ Three choices in the file are worth a word:
 - **The date is given.** `O3-C3` says "the date is 2026-11-21". The test toolbox's clock makes it so. A condition never says "today".
 - **One condition, two calls.** `O2-C5` covers done and remove with one id. A test writer writes two cases. The critique may ask for two conditions; the owner decides.
 
-## 3. The mode's actions and workflows
 
-**Conclusion.** Seven actions and two workflows. The owner's words go in with `pm.start`. The workflow `ask` asks one question a run. The workflow `sign-off` checks, critiques, shows the card and writes the file. Two steps are a model's; every other step is a script (P-32).
+### What the file carries for forge's designer
 
-### The flow
+The stopped design run of 21 November (`docs/plans/0024-forge-whole.md`, "The first whole run") is the owner's "misalignment" failure: the challenger judged the design not to hold P-52, a practice the designer had never been given. Its second finding, that no example shows the list after a refusal, came from a table the designer had never seen. DA1 then gave the designers the practices held by design. What is still untold is what this job is judged on beyond the kit's practices, and what the owner has decided is out. Nobody asks for those before the design starts. The interview asks, at the source:
 
-1. `pm.start {job, words, by}`: records the words and drafts. Its output says how many questions are open.
-2. While questions are open, the coordinator starts `ask`. Each run asks one question and records the answer.
-3. Then the coordinator starts `sign-off`. The owner reads the card and approves, keeps the draft to change it, or discards it.
-4. On approval the file is written as the next version.
+- **A standing question.** Every interview has Q4, "What is this work judged on?". It comes after Q5, a fact: the project's practices, each with its id, its words and how it is held (by design, by a plan, by a check, by the reviewer), looked up by script from the practices files the mode may read. The owner decides which hold for this job. His answer becomes `practices` in the file, each id with its words as they stood.
+- **Constraints, things left out, things only a person judges.** Each comes from a settled decision with his words: `constraints` for what the work must keep to, `leftOut` for what is out on purpose, `judged` for what only a person can judge, such as a question talking cannot settle.
+- **Forge tells its designer all of it** (slice FT1). The design request already carries the file whole. The designers are given the practices held by design and the file's `practices`; the challenger judges only those, and the file's conditions and constraints. A finding of the challenger that names none of them is printed on the design card as "not told to the designer". It withholds nothing, and it is a question for the job's next interview, which the owner starts.
 
-### `components/modes/pm/mode.yaml`
+The rule in one line: a step is judged only on what it was given, and the interview is where the owner decides what it is given.
+
+## 3. The interview: turns, readings, and the mode's workflows
+
+**Conclusion.** An interview is a question tree and a run of `ask` for each turn. A turn asks the whole frontier on one card; the owner answers in his own words; a script or a skill reads them, a second card shows the reading back, and only what he confirms is kept, with his words. Facts are looked up with their sources; decisions are his. Terms and hard decisions are offered for the glossary and as ADRs, and written on his yes. When the frontier is empty, `sign-off` drafts, checks, critiques and shows the card, as before.
+
+### 3.1 Taken, changed and left from the grilling method
+
+| The method's idea | Here | Why |
+|---|---|---|
+| An interview the person starts | Taken. Only `pm.start` opens one; every workflow's trigger is manual. | The kernel never drives a model (ADR 2). |
+| A tree of decisions | Taken, as the question tree (3.2). | A script can then work out what may be asked. |
+| Rounds over the frontier | Taken, as turns; renamed, since a round is a slice's pass. | One word, one meaning (P-12). |
+| One question at a time on request | Taken: `pm.start` takes `oneAtATime`. | He sets the pace. |
+| Numbered questions, a recommendation on its own line | Taken, with lettered choices, so "1a 2b" is read by a script. | Most turns need no model to read. |
+| The recommendation that argues with its question | Changed: the recommendation must name one of the question's own choices, checked by script; its why stands beside it on the card. | A script holds the part it can see. |
+| Facts looked up, decisions asked | Taken (3.5). Every fact shows its file and the words it rests on, which a script finds there. | A fact he can open is one he can doubt. |
+| An interviewer that answers a decision is broken | Taken, and held by scripts and by the record (3.5). | Not by a model's good behaviour. |
+| The end: frontier empty, understanding confirmed | Taken, as the sign-off card (3.8). Changed: he may sign with questions open, as he answered on 20 November. | His answer stands. |
+| He pushes back, says "I do not know" | Taken: a reading may say either, and the question stays on the frontier (3.4). | He owns the scope. |
+| No cap on questions | Changed: no cap, but each turn is one run with its own budget, and past 60 questions the card says the scope may be too large. | Kernel budgets stay; nothing is spent by surprise. |
+| A throwaway prototype for how something looks or feels | Left (3.9). | The PM mode builds nothing. |
+| A term goes into the glossary at once | Changed: it is offered on the next turn's card, the first card after it settles, and written on his yes (3.6). | Every write to the project waits for him. |
+| A decision offered as an ADR by three tests | Taken (3.6). | The ADRs record the hard decisions. |
+| Words checked against the code | Changed: against the documents the mode may read (question 10). | A grant is declared, and a setting cannot widen it. |
+| The interview leans on the model's judgement | Taken: the interviewer runs at tier deep (3.10). | A missed question costs a wrong build, found late. |
+
+`framework/practices.md`, under "Considered and not adopted", lists "A long interview before every plan" (grill-me): the owner prefers a few selectable choices, and it was used only for a new mode's first brief. His instruction of 21 November asks for the grill. This design keeps that preference inside it: every question has two or three lettered choices and a recommendation, a whole turn can be answered "1a 2b", and an interview runs only when he starts one, never before every plan. The row would then say the PM mode adopts it in that form (question 13).
+
+### 3.2 The question tree and its frontier
+
+A question has an `id` (`Q` and a number), a `title` of a few words, `asks` (one sentence), `after` (the questions settled before it is asked), a `kind`, and `settled`. The kinds:
+
+- `decision`: the owner's to answer.
+- `fact`: the project's files answer it. It is settled when a fact is given for it and a script finds the fact's words in its file.
+- `prototype`: talking cannot settle it, such as how a screen should look. It is never asked (3.9).
+
+The frontier is every open decision whose `after` are all settled. A turn asks the frontier in the tree's order, at most twelve, or only the first when the owner asked for one at a time. A fact whose `after` are settled is to be looked up in this turn. The script also names what is wrong with the tree: an id used twice, a question after one the tree does not have, and questions that come after each other, which can never be asked. All of this is built in GR1 (`pm.frontier`).
+
+`pm.start` seeds every tree with five questions: Q1, who the work is for; Q2, what a person sees working; Q3, what is left out on purpose; Q4, what the work is judged on, after Q5, a fact: the project's practices and how each is held. The interviewer adds the rest from his words in the first turn. It may add questions and reword an open one, never remove one or settle one; `record` alone sets `settled`.
+
+### 3.3 A turn is one card
+
+A run of `ask` is one turn: `frontier`, `interview`, `draw`, then the approval `turn`. The card (section 5) leads with the counts, then each fact with its file, then each question: its number and title, its sentence, its choices `a`, `b` and `c`, and "Recommended:" with the letter and one sentence of why. The questions, their choices and the recommendation are judged lines citing the step `interview`; the counts, and whether a fact's file holds its words, are computed. Last come the questions talking cannot settle, and how to answer.
+
+The interviewer hands in the turn as data. Its check, `check-turn` (built in GR1), sends it back unless:
+
+- it asks exactly the questions the frontier gives this turn, each once; a question that waits is named with the questions it waits for;
+- it asks no fact, no question talking cannot settle, and no settled question;
+- each question has two or three choices, and its recommendation names one of them;
+- each fact answers a fact, never a decision, and its file holds its quoted words, spaces aside.
+
+The approval's choices are `answered`, "Read my words back to me before anything is kept", withheld with a reason when nothing can be asked, and `stop`. He answers the turn in his own words, in any form: "1a 2b", "agree with the recommendations", or sentences. In chat the coordinator passes his words as `--quote`; at a terminal he types them. Both need slice KQ1: an approval step that says `takesWords: true` hands his words to later steps as `$steps.<id>.output.words`, recorded with the approval as today and scrubbed of secrets like any stored value. Today an approval's output is the choice and the content shown; his quoted words reach only the record (question 7).
+
+### 3.4 Reading his answer back
+
+A script cannot read free text, so the step `read` does what a script can and asks a model for the rest:
+
+1. **The short form, by script.** When his words are only tokens such as `1a` or `2B`, apart by spaces, commas or semicolons, each question once and each letter one of its question's, a script reads them with no model. Each answer's words are its token. Built in GR1 (`pm.read-short`).
+2. **Anything else, by the interviewer.** The script calls `pm.read-words`, a skill step, whose output is the reading: for each question he answered, what his words take (`choice` with its letter, `own`, `unsure` or `pushback`) and the exact words of his it rests on. Its check, `check-reading` (built in GR1), sends it back when a question is read twice, a choice names no letter or one its question lacks, another taking names a letter, or the words given are not his, word for word, spaces aside. After the kernel's three check rounds the run fails and nothing is kept.
+3. **The read-back card.** For each question: its number and title; "You said:" and his words, a computed line, since the script found them in what he said; and what will be kept: the choice's letter and its own words from the turn card, or his own answer as his words, or "you do not know yet: it stays open", or "you said the question is wrong: it will be asked again in other words". A "kept as" line is judged, citing `read`, when a model read him, and computed when the script did. A question he did not answer says "Not answered: it stays open."
+4. **He confirms.** The choices are `keep`, "Keep these answers as read"; `again`, "Keep nothing; ask this turn again"; and `stop`. The approval binds his choice to the card's hash.
+5. **What `record` keeps on `keep`.** For each choice or own answer, a decision: the question, the answer, `by: owner`, the date, the run, and `quote`, his words for it. The answer of a choice is the turn card's words for that letter, never a model's; his own answer is his words, never a paraphrase. An `unsure` or `pushback` question stays open; his words for it go to the next turn's interviewer.
+
+So nothing he did not say is kept as his: every excerpt is checked to be his words; a choice's answer is the card's text; and he sees each reading whole before `record` runs. What no check holds is that the reader matched the right words to the right question. That is what the read-back card is for, and why it is never skipped, not even for the short form.
+
+### 3.5 Facts are looked up, decisions are asked
+
+The step `frontier` looks up by script what it can, before the interviewer works, and the card shows each as a computed line that names its file:
+
+| Looked up by script | From |
+|---|---|
+| A word he used that the glossary says not to say, with the word it says to use | `CONTEXT.md`, the Do not say column, against `asked` and his answers |
+| The glossary row of a word a question uses | `CONTEXT.md` |
+| ADRs whose title has a word of a question | the titles in `docs/adr/` |
+| The last signed version of this job's file and what it decided | `docs/requirements/<job>.yaml` |
+| The project's practices, each id, its words and how it is held (Q5) | the practices files the mode may read |
+
+The interviewer may look up more in the files it may read. Each fact it gives names its question, says what it found, and gives the file and the exact words it rests on. The card shows the fact as a judged line, and under it a computed line: whether the file holds those words, which `draw` reads for itself (built in GR1).
+
+A decision is never answered by the interviewer:
+
+- **The turn's form has no place to settle a question.** Its schema has `asked` and `facts`, nothing else, and `check-turn` sends back a fact given for a decision (built). In GR2 the check also compares the tree handed in with the stored one, and sends back a settled question changed, removed or added as settled.
+- **Only `record` sets `settled`**, for a decision only from a reading he confirmed, and for a fact only from a fact whose words its file holds.
+- **In the file.** `requirements.check` refuses a `decided` entry with no `quote` unless its `run` says it was written by hand (slice RD1). The PM mode's `write` refuses to write a `decided` entry its partition did not record with that run and those words. The sign-off card prints each decision with his words, from the partition, as computed lines.
+
+### 3.6 Glossary rows and ADR offers
+
+- **A row for the glossary.** When a turn settles a term (a decision that names one word for an idea, or that a word he used means one thing), the next turn's interviewer offers a row: the table it goes in, by a heading `CONTEXT.md` has; the term; its meaning; the words to avoid. The meaning holds the language, not how it is built; the glossary's existing rows name files, so the mode refuses nothing for that. The interviewer is told to keep a row to the meaning. A term the glossary already has is offered as a change, the old row and the new shown whole.
+- **An ADR.** When a decision passes three tests, it offers an ADR: it is hard to reverse; a later reader would be surprised by it without its context; and it was a real choice between named alternatives. The offer holds the title, the context, the decision, the alternatives not taken, and one sentence for each test. The check sends back an offer that lacks a test's sentence or names fewer than two alternatives.
+- **On the card.** Each offer is a numbered question of the next turn, with the row or the ADR whole in its lines and the choices `a` "Write it as shown" and `b` "Do not write it". He answers it with the turn, and the read-back card shows it again. `record` writes it only on `keep` with `a`.
+- **What is written.** A row is added to its table in `CONTEXT.md` exactly as shown, or replaces exactly the old row shown. An ADR is a new file `docs/adr/<next number>-<title's words>.md`, the number worked out by script from the folder, with the status "Accepted, <date>. Decided by the owner in the interview of <job>, run <run>", and his words. Nothing else of either file is changed. Built in slice GR3.
+
+### 3.7 How one turn leads to the next
+
+The kernel has no free loop. Three ways were weighed:
+
+| Way | What it needs | Verdict |
+|---|---|---|
+| Each run of `ask` is one turn, and its output names the next run: `next: ask`, or `next: sign-off` when nothing is left to ask | One line in the coordinator's block, which the kit's build writes: "When a run's output names the next run of an interview the owner started, start it." Without it he says "go on" each time. | **Chosen.** It can be built now. Each turn has its own run and budget, and `stop` on any card ends the interview with what is settled kept. |
+| A fixed number of turns written out in one workflow | Nothing new | Rejected. An approval always waits and no step is conditional, so a turn with nothing to ask would still wait for him; five copies of the same steps say one thing five times (ADR 11). |
+| A kernel "bounded repeat" | Not built. A step `repeat` with inner steps, a most count, and `until`, a reference to a true or false output of its last inner step; keys for each pass, as a foreach item's are (`turns[2]/interview`); card lines that cite a step in a pass, as `source.item` does now; the budget counted over all passes; a resume in the middle of a pass; `bay runs` naming the pass. | Not now. It is the right shape once a second mode needs it (the Codemod note named it too). One turn a run costs nothing meanwhile. |
+
+### 3.8 The end
+
+- **Nothing left to ask.** `record`'s output gives the counts and `next`. With an empty frontier and no fact to look up, `next` is `sign-off`, and the turn card would say "Nothing is left to ask" and withhold `answered` (built in GR1).
+- **The draft.** `sign-off`'s `draft` is given `asked`, every settled decision with his words, every fact with its file, and the questions talking cannot settle. It writes the outcomes and conditions, `constraints`, `leftOut`, `judged` and `practices` from what he decided, and puts any question still open in `open`.
+- **The card.** It leads with whether the frontier is empty, and how many questions are open. Then each outcome and condition, judged; each decision with his words, computed from the partition; the critique, judged. He approves, keeps the draft to change it, or discards it. Questions still open do not withhold `approve`: he answered on 20 November that forge may design from a file with open questions. The method would wait; his answer stands (question 11).
+- **The write.** `write.ts` checks the exact text it will write with `requirements.check`, and writes `docs/requirements/<job>.yaml` only when it passes, as the next version.
+- **Nothing downstream starts from an unsigned file.** A draft lives only in the mode's partition, never under `docs/requirements/`, so forge cannot read one. Forge's `design` reads the file through `requirements.check`, whose form requires `signed`. A file written by hand says so in its `run`, as `docs/requirements/todo.yaml` does, and the design card shows it.
+
+### 3.9 What is deliberately not taken
+
+- **A cap on questions.** The method has none, and here none is added; the earlier design's five a version is dropped. The kernel's budget limits each run, so each turn, and an interview of many turns spends nothing by surprise. Past 60 questions the card says a scope this large may be better split (built in GR1).
+- **Prototypes.** The PM mode builds nothing. A question talking cannot settle is of kind `prototype`. It is never asked as choices; each turn card names it with "It goes to the file as a thing a person judges". At sign-off it becomes a `judged` sentence, or stays in `open` with the words "settle it with a throwaway prototype". Forge or the owner may build that prototype; what he decides from it comes back as his words in `pm.start`.
+- **Reading everything.** The interviewer reads only what the mode's grants name (question 10).
+- **A free loop.** One turn a run (3.7).
+
+### 3.10 The interviewer, a proposed role
+
+None of the seven roles in `bay/roles.ts` fits. A designer writes a design from a requirements file, a challenger answers practices, a planner cuts a plan; none works before the requirements exist, and none is told it must never decide. Proposed: a role **interviewer**, at tier **deep**, for the skills `interview` and `read`.
+
+- **Why deep.** The interview leans on judgement more than building does. A question it fails to ask costs a wrong build, found late. Reading his free text decides what his words mean. A turn runs a few times a job, so the cost is small.
+- **Its standing rules,** when slice RL5 builds standing rules: never answer a decision; give every fact with its file and its exact words; ask the whole frontier and never two questions where one comes after the other; recommend one of the question's own choices; give his words, never a paraphrase.
+- **Its ceiling,** when slice RL4 builds ceilings: no write tool and no command. Its steps' effects are read only, which already gives that.
+- **What it needs.** ADR 29 says a change of roles is a new ADR: ADR 30, with the owner's yes (question 6). Until then GR2 is not built; or, if he prefers, its two skill steps name `tier: deep` and no role, as the feed briefing's skills keep their tier. `draft` and `critique` keep their tiers, balanced and deep.
+
+### 3.11 `components/modes/pm/mode.yaml`, whole
 
 ```yaml
 name: pm
 version: 1.0.0
-description: Turns what the owner asks for into a checked requirements file, asking him one question at a time.
+description: Interviews the owner turn by turn until nothing important is left assumed, and writes the checked requirements file he signs off.
 
 requires:
   interfaces: [requirements@1]
@@ -388,46 +550,73 @@ settings: schemas/settings.json
 
 resources:
   files:
-    read: [docs/requirements/]
-    write: [docs/requirements/]
+    read: [CONTEXT.md, docs/, framework/]
+    write: [docs/requirements/, docs/adr/, CONTEXT.md]
 
 actions:
   start:
-    description: When the owner, or someone he names, asks for a piece of work or a change to one, and the words should become requirements.
+    description: When the owner asks for a piece of work, or a change to one, to be interviewed into requirements; only the owner starts one.
     input: schemas/start-request.json
-    output: schemas/drafted.json
+    output: schemas/started.json
     effects: [read, write]
     run:
       - script: scripts/start.ts
-      - skill: skills/draft
-        tier: balanced
-        checks: [scripts/check-draft.ts]
-      - script: scripts/keep-draft.ts
-  draft:
-    description: When the draft must be written again from the words and every answer so far, before the next question.
-    input: schemas/draft-request.json
-    output: schemas/drafted.json
-    effects: [read, write]
-    run:
-      - script: scripts/gather.ts
-      - skill: skills/draft
-        tier: balanced
-        checks: [scripts/check-draft.ts]
-      - script: scripts/keep-draft.ts
-  question:
-    description: When the next open question of a draft is to be put to the owner on a card.
-    input: schemas/drafted.json
-    output: schemas/question-card.json
+  frontier:
+    description: When a turn is to begin, it works out the frontier from the stored tree and looks up by script what the project's files say.
+    input: schemas/turn-request.json
+    output: schemas/frontier.json
     effects: [read]
     run:
-      - script: scripts/question.ts
+      - script: scripts/frontier.ts
+  interview:
+    description: When the frontier's questions are to be written for the owner, with choices and a recommendation, and facts looked up with their sources.
+    input: schemas/interview-request.json
+    output: schemas/turn.json
+    effects: [read]
+    run:
+      - skill: skills/interview
+        role: interviewer
+        checks: [scripts/check-turn.ts]
+  draw-turn:
+    description: When a checked turn is to be shown to the owner as a card.
+    input: schemas/draw-request.json
+    output: schemas/turn-card.json
+    effects: [read]
+    run:
+      - script: scripts/draw-turn.ts
+  read:
+    description: When the owner has answered a turn in his words, it reads them by script or asks read-words, and draws the read-back card.
+    input: schemas/read-request.json
+    output: schemas/read.json
+    effects: [read]
+    run:
+      - script: scripts/read.ts
+  read-words:
+    description: When the owner's words for a turn are not numbers and letters only, and a model must say what each answer takes and the exact words it rests on.
+    input: schemas/said-request.json
+    output: schemas/reading.json
+    effects: [read]
+    run:
+      - skill: skills/read
+        role: interviewer
+        checks: [scripts/check-reading.ts]
   record:
-    description: When the owner has answered a question and the answer is to be kept with who gave it and when.
+    description: When the owner has chosen on the read-back card, it keeps what he confirmed with his words, writes the glossary rows and ADRs he said yes to, and names the next run.
     input: schemas/record-request.json
     output: schemas/recorded.json
     effects: [read, write]
     run:
       - script: scripts/record.ts
+  draft:
+    description: When the frontier is empty and the settled decisions, facts and words are to become outcomes and conditions.
+    input: schemas/draft-request.json
+    output: schemas/drafted.json
+    effects: [read]
+    run:
+      - script: scripts/gather.ts
+      - skill: skills/draft
+        tier: balanced
+        checks: [scripts/check-draft.ts]
   critique:
     description: When a checked draft needs another model to find conditions that test two things, miss a refusal, or could not be seen by a person.
     input: schemas/critique-request.json
@@ -437,8 +626,8 @@ actions:
       - skill: skills/critique
         tier: deep
   draw:
-    description: When the owner needs the card for a draft, answer first, from the check, the critique and the changes since the last version.
-    input: schemas/draw-request.json
+    description: When the owner needs the sign-off card, answer first, from the check, the critique, his decisions with his words, and the changes since the last version.
+    input: schemas/sign-off-request.json
     output: schemas/sign-off-card.json
     effects: [read]
     run:
@@ -456,44 +645,72 @@ workflows:
   - workflows/sign-off.yaml
 ```
 
-Seven actions. The owner starts one, `start`, and two workflows, `ask` and `sign-off`. The other six actions are their steps.
+The tree, the readings and the draft live in the mode's database partition. Nothing is on disk under `docs/requirements/` until he approves the sign-off card; nothing is added to `CONTEXT.md` or `docs/adr/` until he confirms a turn that says yes to it.
 
-The draft and the answers live in the mode's own database partition, as the todo mode keeps todos. Nothing is on disk under `docs/requirements/` until the owner approves.
-
-### `workflows/ask.yaml`
+### 3.12 `workflows/ask.yaml`: one turn
 
 ```yaml
 name: ask
 trigger: { manual: true }
 budget: { minutes: 15 }
 steps:
-  - id: draft
-    action: draft
-  - id: question
-    action: question
+  - id: frontier
+    action: frontier
+  - id: interview
+    action: interview
     input:
-      job: $steps.draft.output.job
-      draft: $steps.draft.output.draft
-      open: $steps.draft.output.open
-  - id: ask
-    approval: Which answer?
-    show: $steps.question.output.card
-    quotes: [draft]
+      job: $steps.frontier.output.job
+      tree: $steps.frontier.output.tree
+      asks: $steps.frontier.output.asks
+      found: $steps.frontier.output.found
+      carried: $steps.frontier.output.carried
+  - id: draw
+    action: draw-turn
+    input:
+      job: $steps.frontier.output.job
+      number: $steps.frontier.output.number
+      tree: $steps.interview.output.tree
+      turn: $steps.interview.output.turn
+      found: $steps.frontier.output.found
+  - id: turn
+    approval: Your answers to this turn?
+    show: $steps.draw.output.card
+    quotes: [interview]
+    takesWords: true
     choices:
-      a: { does: Take answer a on the card, when: $steps.question.output.offer.a }
-      b: { does: Take answer b on the card, when: $steps.question.output.offer.b }
-      c: { does: Take answer c on the card, when: $steps.question.output.offer.c }
-      later: { does: Leave it open in the file and go on, when: $steps.question.output.offer.later }
-      stop: { does: Stop asking; the draft and answers stay }
+      answered: { does: Read my words back to me before anything is kept, when: $steps.draw.output.offered.answered }
+      stop: { does: Stop the interview; what is settled stays }
+  - id: read
+    action: read
+    input:
+      choice: $steps.turn.output.choice
+      said: $steps.turn.output.words
+      job: $steps.frontier.output.job
+      turn: $steps.interview.output.turn
+  - id: readback
+    approval: Is this what you said?
+    show: $steps.read.output.card
+    quotes: [read]
+    choices:
+      keep: { does: Keep these answers as read }
+      again: { does: Keep nothing; ask this turn again }
+      stop: { does: Stop the interview; what is settled stays }
   - id: record
     action: record
     input:
-      job: $steps.draft.output.job
-      question: $steps.question.output.question
-      answer: $steps.ask.output
+      choice: $steps.readback.output.choice
+      job: $steps.frontier.output.job
+      tree: $steps.interview.output.tree
+      turn: $steps.interview.output.turn
+      reading: $steps.read.output.reading
+      said: $steps.turn.output.words
 ```
 
-### `workflows/sign-off.yaml`
+A first step with no `input` takes the trigger, `{ "job": "todo" }`. A workflow has no conditional step, so a choice that ends the turn ends the run instead: on `stop` at the turn card, `read` fails the run with the sentence "The owner stopped the interview of todo at turn 2; what was settled before stays." On `stop` at the read-back card, `record` does the same. On `again`, `record` keeps nothing and names `ask` as the next run. `takesWords` is slice KQ1's (3.3). The step `read` is a script that calls the skill action `read-words` only when his words are not in the short form; the read-back card's judged lines cite `read`, and the kernel finds the skill under that step's key, as it does for any call.
+
+### 3.13 `workflows/sign-off.yaml`
+
+As in the first version, with `draft` given the tree:
 
 ```yaml
 name: sign-off
@@ -535,50 +752,41 @@ steps:
       changes: $steps.check.output.changes
 ```
 
-Each input value is one reference, resolved whole (`bay/manifests/references.ts`). A first step with no `input` takes the trigger, `{ "job": "todo" }`.
+Each input value is one reference, resolved whole (`bay/manifests/references.ts`). The conditions are a model's words, so the card prints them as judged lines that cite `draft`; the check's verdict on them is computed.
 
-The sign-off drafts once more, so the critique and the card read the draft with every answer in it. It costs one balanced step. The conditions are a model's words, so the card prints them as judged lines that cite `draft`; the check's verdict on them is computed. That is why `quotes` names both `draft` and `critique`.
-
-### Script or model, step by step
+### 3.14 Script or model, step by step
 
 | Step | Who | Why |
 |---|---|---|
-| `start.ts` | script | Records words, `by`, the date; loads the last signed version as the base when the job exists |
-| `draft` | skill, tier balanced | Turning words into outcomes and conditions, and seeing what they leave open, is judgement |
-| `check-draft.ts` | script | Runs `requirements.check` on the draft and refuses a malformed question; sends feedback for the kernel's three check rounds |
-| `keep-draft.ts` | script | Stores the draft in the partition |
-| `question.ts` | script | Takes the first open question, in the draft's order, and draws its card |
-| `ask` | approval | The owner's answer |
-| `record.ts` | script | Stores the choice, the run and the date |
-| `requirements.check` | script | Every rule in section 4 |
+| `start.ts` | script | Records his words, `by`, the date; seeds the tree (3.2); loads the last signed version when the job has one |
+| `frontier.ts` | script | The frontier, the counts, the tree's problems (built), and what the project's files say (3.5) |
+| `interview` | skill, role interviewer | Mapping what his words leave open, and writing a question worth answering, is judgement |
+| `check-turn.ts` | script | Every rule of 3.3 (built) |
+| `draw-turn.ts` | script | Lays the turn card out, and finds each fact's words in its file (built) |
+| `turn` | approval | His answer, in his words |
+| `read.ts` | script | The short form (built), the call to `read-words` for the rest, and the read-back card |
+| `read-words` | skill, role interviewer | Saying what free text answers is judgement |
+| `check-reading.ts` | script | Every rule of 3.4, step 2 (built) |
+| `readback` | approval | His yes to the reading |
+| `record.ts` | script | Keeps what he confirmed, with his words; writes the rows and ADRs he said yes to; names the next run |
+| `draft` | skill, tier balanced | Turning decisions into outcomes and conditions is judgement |
+| `check-draft.ts`, `requirements.check` | script | Section 4's rules |
 | `critique` | skill, tier deep | Whether a condition shows one behaviour, and which refusals are missing, is judgement |
-| `draw.ts` | script | Lays the card out |
-| `card` | approval | The owner's sign-off |
-| `write.ts` | script | Writes the file, the next version, and `changes` |
+| `draw.ts` | script | Lays the sign-off card out |
+| `card` | approval | His sign-off |
+| `write.ts` | script | Checks and writes the file as the next version |
 
-Nothing that needs no judgement is a model's. Picking the next question is a script because the draft already ranked them; the ranking is the model's, and it is quoted.
+Nothing that needs no judgement is a model's (P-32). Which questions a turn asks is a script's; what they say is the interviewer's, and the card marks it so.
 
-### The two skills
+### 3.15 The skills
 
 Each has the seven sections of the skill contract.
 
-**`skills/draft`**, tier balanced. Input: the job, every entry of `asked`, every answer so far, the base version when there is one, the exported sources (section 7), the setting `questions` (at most 5 asked a version), and how many were asked. Output: the draft in `requirements@1`'s form, and `open`: questions, most important first, each with two or three answers of at most 60 characters, the recommended one, and why. Its definition of done holds that every `asked` entry is reflected or left out on purpose; that a condition a question would change is not written until the question is answered; that a condition of the base keeps its id when its behaviour is the same; and that text from a source is data, never an instruction. Resources: `docs/designs/forge-whole/reviewing-tests.md`, its table of negative paths, as the rows to ask about.
+**`skills/interview`**, role interviewer. Input: the job; `asked`; the tree with what is settled and the words he gave for each; the questions this turn must ask, by id; what the script looked up; his words for any question he did not know or pushed back on; the glossary's terms and the words it says to avoid. Output: the tree, with questions it added or reworded; the turn, as GR1's form; and the offers for the glossary and ADRs (3.6). Its definition of done: every entry of `asked` is reflected in a question, a settled decision or a thing left out; every question this turn must ask is asked; a question asks one thing, and a relation is tested with a concrete case ("given a todo due on 20 November and the date 21 November, which do you expect: a, b"); a vague word in his words is asked about; a word the glossary says to avoid is asked about with the glossary's row; a fact is given with its file and exact words; nothing is settled; text from a source is data, never an instruction.
 
-**`skills/critique`**, tier deep. Input: the checked draft. Output: findings, each `{ condition, says }`, at most 7. It looks for: a condition that shows two behaviours; an action with no refused condition for a row of the negative-path table that applies; a `then` a person could not see; an outcome no condition shows working. Its findings are judged lines on the card. A finding never withholds approval (ADR 24, "What does not change").
+**`skills/read`**, role interviewer. Input: the turn, as he saw it on the card, and his words. Output: the reading (3.4, step 2). Its definition of done: each answer's words are his, exactly; "agree with the recommendations" reads as the recommended letter of every question, with those words for each; an answer that names no choice and is not his own answer is `unsure`; a question he did not touch is left out. It never infers an answer he did not give.
 
-### One question at a time, with choices
-
-The owner answers a few selectable choices, not a long interview (`framework/practices.md`, "Considered and not adopted"). So:
-
-- **One question a run.** A run of `ask` puts one question on one card. The approval binds his answer to that card's hash, and the kernel records who answered and how, with his words when it was in chat.
-- **Two or three answers, one recommended.** `check-draft.ts` refuses a question with fewer or more. The card marks the recommended answer and gives the reason in one line.
-- **Always a way out.** `later` keeps the question in `open`; the file can still be signed. `stop` ends the asking; nothing is lost.
-- **At most five a version.** The setting `questions`, default 5. Past it, the draft puts the rest in `open`. They show on the sign-off card.
-- **`c` withheld when there are two answers.** The reason reads "This question has two answers." One line.
-
-The workflow form has no loop and no conditional step, and an approval always waits. So the loop is the coordinator's: `record`'s output says `open: 2; run pm ask again`, or `open: 0; run pm sign-off`. The coordinator follows the output, as it follows a run's `task` today. The `CLAUDE.md` block names no such rule yet. One line for it belongs in the kit's build that writes the block, outside PM2's scope, and is the owner's to approve (section 8).
-
-His own words, when none of the answers fits, go in through `pm.start` with the same job: they become one more `asked` entry, and the next draft takes them. A kernel change that hands an approval's quoted words to the next step would let `ask` take them directly. It is not needed for the first version (question 3).
+**`skills/draft`** and **`skills/critique`**: as in the first version, but `draft` is given the settled tree in place of one question's answers, and the setting `questions` is gone.
 
 ## 4. What makes a condition good
 
@@ -633,11 +841,101 @@ Good: `O3-C3`. given the date is 2026-11-21 and "buy milk" is open and due "2026
 
 A condition the check passes can still be weak: "1 todo is listed" passes rule 1 and checks almost nothing. That is the critique's to find, and the owner's to decide.
 
-## 5. The owner's card
 
-**Conclusion.** The answer first: ready to sign, or why not. Then every condition, short, since the owner signs what he reads. Then the critique, marked as judgement. At most 44 columns, in the clearer card of ADR 26 item 7, printed as slice KC1 prints it: one heading above each run of lines with one mark and one source.
+## 5. The owner's cards
 
-### Sign-off card, the todo mode, version 1
+**Conclusion.** Three cards. The turn card asks the frontier; the read-back card shows what will be kept from his words; the sign-off card leads with the answer, then every condition, then his decisions with his words, then the critique. Every card is at most 44 columns. The kernel prints each judged line with its mark and, after each run of lines from one step, the skill and its tier; lines with no mark were worked out by script.
+
+### Turn card, turn 2 of the todo interview
+
+Printed by the kernel's printer, `approvalLines` in `bay/approval-card.ts`, from the card that GR1's `pm.draw-turn` draws for the test fixture `components/modes/pm/tests/todo-turn.ts` (the test `turn-card.test.ts` pins its lines). The skill and tier on its judged lines are what the kernel adds for the step `interview` at tier deep; the choices are those of the workflow `ask` (3.12), not yet built; the hash is a placeholder.
+
+```
+Turn 2 of the todo interview: your answers?
+  2 of 7 questions are settled. 2 can be
+    asked now; 1 waits for them.
+judged   Looked up for Q3, Where a mode
+judged     lives: A mode is a folder with a
+judged     mode.yaml.
+judged    by pm skills/interview, tier deep
+  CONTEXT.md holds the words it rests on: "A
+    folder with a `mode.yaml`."
+judged   1 Due dates in the past
+judged   May a todo be added with a due date
+judged     that has already passed?
+judged   a Yes, and it is listed as overdue
+judged   b No, it is refused
+judged   Recommended: a. A person often
+judged     writes down a task after its date
+judged     has gone.
+judged   2 Done twice
+judged   What happens when a todo already
+judged     done is marked done again?
+judged   a It is refused, and says it is
+judged     already done
+judged   b Nothing changes, and nothing is
+judged     said
+judged   Recommended: a. A person who is
+judged     told nothing cannot tell it was
+judged     done before.
+judged    by pm skills/interview, tier deep
+  Not asked, since talking cannot settle it:
+    Q7, How the list reads. It goes to the
+    file as a thing a person judges.
+  Answer as 1a 2b, or in your own words.
+    Each answer is read back to you before
+    it is kept.
+Unmarked lines were worked out by script.
+You can:
+  answered  Read my words back to me before
+            anything is kept
+  stop      Stop the interview; what is
+            settled stays
+checked: 0 ran, 4 computed, 11 judged
+hash HASH
+```
+
+- Each question is four lines and a line per choice. A phone shows one question a screen.
+- The fact's line is the interviewer's; the line under it, that `CONTEXT.md` holds its words, is the script's.
+- With a word to avoid in his words, a computed line follows the counts, such as: `You wrote "job": CONTEXT.md says Run for that.`
+
+### Read-back card, the same turn
+
+As designed (slice GR2), laid out by the kernel's printer from the lines this design gives it. His answer was: "For the first, yes,\nlist it as overdue. The second I don't know yet."
+
+```
+Is this what you said?
+  Turn 2 of the todo interview. You answered
+    2 of its 2 questions.
+  1 Due dates in the past
+  You said: "For the first, yes, list it as
+    overdue."
+judged   Kept as: a, Yes, and it is listed
+judged     as overdue
+judged    by pm skills/read, tier deep
+  2 Done twice
+  You said: "The second I don't know yet."
+judged   Kept as: you do not know yet; it
+judged     stays open for the next turn.
+judged    by pm skills/read, tier deep
+  Nothing is kept until you choose keep.
+    Each answer is kept with your words as
+    shown.
+Unmarked lines were worked out by script.
+You can:
+  keep   Keep these answers as read
+  again  Keep nothing; ask this turn again
+  stop   Stop the interview; what is settled
+         stays
+checked: 0 ran, 6 computed, 2 judged
+hash HASH
+```
+
+- "You said:" lines are computed: the script found his words in what he wrote.
+- "Kept as:" lines are judged when the interviewer read him, as here, and computed when his answer was in the short form. With "1a 2b" every line of this card is computed.
+- A choice is kept with the turn card's own words for its letter.
+
+### Sign-off card, the todo mode, version 1 (as designed in the first version's layout)
 
 ```
 Sign off the todo requirements?
@@ -647,7 +945,17 @@ problem.
 docs/requirements/todo.yaml, version 1
 3 outcomes, 19 conditions, 7 refused
 Asked by owner on 2026-11-18.
-Answered: 4 questions. Open: 1.
+Interview: 4 turns, 9 of 10 questions
+settled. Open: 1.
+Decided, each with your words:
+  Done twice: refused, "already done"
+    You said: "2a"
+  Ids reused: no, never
+    You said: "1b"
+  Text length: 500 characters
+    You said: "500, as you recommend"
+  Order: by due date, none last
+    You said: "3a"
 -- judged: pm draft --
 O1 Add a todo and see it listed.
  C1 add "buy milk": listed, id 1, open
@@ -706,43 +1014,17 @@ hash 7c2e91a04f3b
 - A condition is one line where it fits. A literal is never cut; a long one wraps.
 - With problems, the answer reads "Not ready: the check found 2 problems", each problem follows in one or two lines with its condition's id, and `approve` shows "not offered: fix the 2 problems first."
 - Without the hook, the last heading reads "This run was made without the hook. A step's reads were not confined." (ADR 27).
-
-### Question card, one run of `ask`
-
-```
-Which answer?
--- judged: pm draft --
-May a todo be added with a due date
-that has already passed?
-  a  Yes, and it is listed as overdue
-     recommended: a person often
-     writes down a task after its date
-  b  No, it is refused
-  (pm draft: tier balanced)
--- computed: pm question --
-Question 5 of at most 5. After it:
-the sign-off card.
-Choose one:
-  a      Take answer a on the card
-  b      Take answer b on the card
-  c      Take answer c on the card
-         not offered: this question has
-         two answers.
-  later  Leave it open in the file and
-         go on
-  stop   Stop asking; the draft and
-         answers stay
-checked: 0 ran, 1 computed, 4 judged
-hash 2a90c4e1d7f3
-```
+- The decisions are computed lines: `draw.ts` prints them from the partition, each with the words he gave, never a model's.
+- Slice GR4 prints this card from a test in the kernel's present layout, as the turn card above is printed.
 
 ## 6. A change after building has started
 
-**Conclusion.** A change is a new version of the same file, made the same way: `pm.start` with the job, then `ask` and `sign-off`. The file's `changes` names, by id, what was added, changed and removed. Forge's plan names the version it was cut from, and `forge.waves` reports every condition that changed since, with the slices that meet it.
+**Conclusion.** A change is a new version of the same file, made the same way: `pm.start` with the job, then turns of `ask`, then `sign-off`. The file's `changes` names, by id, what was added, changed and removed. Forge's plan names the version it was cut from, and `forge.waves` reports every condition that changed since, with the slices that meet it.
 
 ### In the PM mode
 
 - `pm.start {job: "todo", words: "Overdue todos come first."}` loads version 1 as the base and adds an `asked` entry.
+- The interview starts from version 1: its decisions are settled questions, with his words, and the interviewer asks only what the new words change.
 - The draft keeps every id whose behaviour stays the same. A condition whose words change keeps its id and is listed as changed. A behaviour that is gone is removed, and its id is never used again (rule 6). A new behaviour gets a new id.
 - The check computes the difference itself, from the base on disk and the draft. The draft cannot claim a smaller change than it made.
 - The card leads with the change:
@@ -780,15 +1062,28 @@ Forge reads the file and nothing else (ADR 25, item 3). What it needs is in the 
 
 That is a forge slice, FV1 in section 8, not the PM mode's. The PM mode never reads a plan.
 
-## 7. At the owner's job
 
-**Conclusion.** It runs without the hook, since hooks are disabled there (ADR 27). That costs it little: it hides nothing, its skills cannot write, and every file is written by a script after the owner's approval. A PRD and tickets come in as exported files in a folder. Nothing is written back to the document or the tracker, and the mode has no network effect.
+## 7. What the mode writes, and at the owner's job
+
+**Conclusion.** The PM mode writes three things in the project, each by a script after the owner's yes: the requirements file, glossary rows and ADRs. Its skills only read. It lists no command, so it has no list and needs no trust. At the owner's job it runs without the hook, since hooks are disabled there (ADR 27); that costs it little, since every line it keeps or writes was on a card he answered. A PRD and tickets come in as exported files in a folder, nothing is written back, and the mode has no network effect.
+
+### What it writes, and what the frames say about it
+
+| Path | Written by | When | How |
+|---|---|---|---|
+| `docs/requirements/<job>.yaml` | `write.ts`, effects read, write, delete | He approves the sign-off card | The whole file, as the next version, after `requirements.check` passed on its exact text |
+| `CONTEXT.md` | `record.ts`, effects read, write | He keeps a turn's reading that says yes to a row | One row added to its table, or one row replaced by the row shown; nothing else |
+| `docs/adr/<number>-<title>.md` | `record.ts` | He keeps a reading that says yes to an ADR | A new file, the whole text shown on the card, with his words; an existing ADR is never changed |
+
+- **Grants and effects.** The manifest declares `read: [CONTEXT.md, docs/, framework/]` and `write: [docs/requirements/, docs/adr/, CONTEXT.md]` (3.11). Every write is a `files.write` operation, which passes the broker's one rule (S1), is allowed only on a declared path (S3), and is recorded as an event (S5). His words are parsed once, at the edge, by the step that reads them (S7), and scrubbed of secrets like any stored value (S6). None of the paths is one no mode may name: the config file and the `.agentbay/` folder stay out of reach, and so do the kernel's folders, which only forge may read.
+- **The hook.** `interview`, `read-words`, `draft` and `critique` have the effect read only, so their agents' files give them no write tool (`adapters/claude-code/agent-file.ts`). With the hook, their reads are confined to the read grants. A skill never writes a file of the project; a script does, after an approval.
+- **Trust.** Trust is about a mode's list: its commands and throwaway folders. The PM mode lists none, so it needs no trust and has no entry in `.agentbay/trust.json`. Nothing here gives, widens or renews trust, so T1 to T5 of `docs/designs/trust/0-frame.md` hold as they are. Nothing in `docs/designs/operations/0-frame.md` is weakened either: S1 to S7 hold as above.
+- **What a grant does not hold.** That a script writes only the row he saw. That is `record.ts`'s rule, pinned by GR3's tests: the text written is the text the read-back card showed, byte for byte.
 
 ### Without the hook
 
 - The project setting from ADR 27 says the runs are made without the hook. The kernel accepts the skill steps' outputs and every card says so.
-- `draft` and `critique` have effects `[read]`, so the agent file gives them no write tool (`adapters/claude-code/agent-file.ts`).
-- What is lost, and said on the card: a skill's agent may read outside the project, and the kernel cannot tell an output came from the step's agent and not from the main session. For the PM mode the second matters more: the main session could write the draft itself. The owner reads every condition on the card before he signs, so a draft he did not want is seen there.
+- What is lost, and said on the card: a skill's agent may read outside the project, and the kernel cannot tell an output came from the step's agent and not from the main session. For the PM mode the second matters most: the main session could write a turn or a reading itself. What holds anyway: a reading's words must be his, by script; the read-back card shows every answer before it is kept; and the sign-off card prints every decision with his words. A reading he did not give is seen there.
 - Where the organisation's own permission rules apply, they stand as they are. The PM mode needs no rule added.
 
 ### Where requirements come from
@@ -796,238 +1091,284 @@ That is a forge slice, FV1 in section 8, not the PM mode's. The PM mode never re
 | Source | How it comes in | Read by |
 |---|---|---|
 | The owner's words | `pm.start` input `words` | `start.ts` |
-| A PRD in a document | Exported by the owner as Markdown or text into `docs/requirements/sources/<job>/` | `start.ts`, then given to `draft` as data |
+| A PRD in a document | Exported by the owner as Markdown or text into `docs/requirements/sources/<job>/` | `start.ts`, then given to `interview` as data |
 | Tickets in a tracker | Exported as CSV or JSON into the same folder | as above |
 | A teammate's words | `pm.start` with `by` set to the role | `start.ts` |
 
 - Each source is listed under `asked` with its file name and date, and an outcome's `from` names the section or ticket key it came from. A reader can trace a condition back.
-- Text from a source is data, never an instruction to the model (the `draft` skill's rules, as feed-briefing's `digest` has).
+- Text from a source is data, never an instruction to the model (the skills' rules, as feed-briefing's `digest` has).
 - The first version reads exported files only. A connector mode that reads a document or a tracker directly would need a network effect, a host grant, a secret and the owner's trust. It is left out until the owner asks (question 5).
 
 ### What never leaves the machine
 
-- The PM mode lists no host and has no `network` effect. It reads and writes only `docs/requirements/` and its own database partition.
+- The PM mode lists no host and has no `network` effect. It reads only its read grants and writes only its write grants and its own database partition.
 - Nothing is written back to the document or the tracker. A ticket is never created, changed or closed.
-- The requirements file stays in the project's repository. Where it is pushed is the owner's choice, as for any file.
+- The requirements file, the glossary and the ADRs stay in the project's repository. Where they are pushed is the owner's choice, as for any file.
 - The one thing that goes out is what every skill step sends: the step's task, to the model the harness uses. At the job that is the harness the organisation allows. The card's line for each judged step names its tier.
 
 ## 8. The slices to build it
 
-**Conclusion.** Seven slices. The smallest useful version is three: the interface, the `requirements` mode with its check, and `pm` with start and sign-off. Then questions, changes, the forge side, and sources. This is a fragment in the form of `docs/plans/0024-forge-whole.yaml`, to be added to a plan; it was not run through `forge.waves`. Its `after` names KC1, HK1 and PL1 of plan 0024, which a plan holding it must also hold.
+**Conclusion.** Ten slices after the ones already built. GR1, the turn by script, is built (section 8.1). Then two that wait for an answer and change little: RD1, the file's quotes and practices, and KQ1, the kernel's approval that takes his words. GR2 is the first usable interview: real turns with his words kept. GR3 adds the glossary and ADRs, GR4 the sign-off and the written file. FT1 is forge's side of what the designer is told. The first version's PM3, FV1 and PS1 stay. This is a fragment in the form of `docs/plans/0024-forge-whole.yaml`, to be added to a plan; it was not run through `forge.waves`. The interface `requirements@1` and the mode `requirements` (RI1 and RM1 of the first version) are built, as slice RQ1 of plan 0024.
+
+### 8.1 Built: GR1
+
+`components/modes/pm/`, version 0.1.0: five script actions and no skill, workflow or write. `frontier` works out the frontier, the facts to look up, the questions talking cannot settle, the counts and the tree's problems. `check-turn` holds every rule of 3.3. `draw-turn` draws the turn card printed in section 5. `read-short` reads "1a 2b" by script. `check-reading` holds that a reading's words are his. The tests (`turn.test.ts`, `turn-card.test.ts`, `reading.test.ts`, 29 cases) use a made-up interviewer's turn in `tests/todo-turn.ts`. Ten bugs were put in by hand, one at a time, and a test failed for each. In GR2 `check-turn` and `check-reading` become the checks of the two skill steps, `read-short` a part of `read.ts`, and the actions' inputs change to read the tree from the partition.
+
+### 8.2 To build
 
 ```yaml
-title: 'The PM mode: requirements as a checked file, the owner asked one question at a time'
+title: 'The PM mode as an interview: turns over a question tree, the owner''s words read back and kept, glossary rows and ADRs on his yes'
 slices:
-- title: 'The interface requirements@1: the file''s schema and the action check, with a shared test any implementation must pass'
+- title: 'The requirements file carries the owner''s words for each decision and the practices the work is judged on'
   slice:
-    name: RI1
+    name: RD1
     kind: interface
     scope:
-    - components/base/interfaces/requirements.yaml
     - components/base/interfaces/requirements/**
+    - components/base/requirements/**
     after: []
     done:
-    - id: DOD-RI1-1
-      says: The shared test passes the todo file of the PM mode's design whole and refuses it with a condition with no then, with a refused condition with no after, and with two conditions with one id.
+    - id: DOD-RD1-1
+      says: requirements.check accepts docs/requirements/todo.yaml as it is, accepts it with practices and with a quote on each decided entry, and refuses a decided entry whose run names a run and that has no quote, at the entry's line.
       level: must
       proof:
         kind: fails-first
         tests:
         - components/base/interfaces/requirements/tests/shared.ts
-    - id: DOD-RI1-2
-      says: The kit's checks and its whole test run pass.
-      level: must
-      proof:
-        kind: checks
-- title: 'The requirements mode checks a requirements file by script, naming every problem with its line, and computes what changed from the version before'
-  slice:
-    name: RM1
-    kind: mode
-    scope:
-    - components/base/requirements/**
-    - docs/requirements/todo.yaml
-    after:
-    - slice: RI1
-      because: It implements the interface RI1 fixes.
-    done:
-    - id: DOD-RM1-1
-      says: requirements.check accepts docs/requirements/todo.yaml and refuses each of the five weak conditions of the design with its line and the rule it breaks.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
         - components/base/requirements/tests/check.test.ts
-    - id: DOD-RM1-2
-      says: Given version 1 and a draft of version 2, check lists the changed, added and removed ids, and refuses a draft that uses a removed id again.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/base/requirements/tests/changes.test.ts
-    - id: DOD-RM1-3
-      says: The mode's shared test of requirements@1 passes.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/base/requirements/tests/requirements.test.ts
-    - id: DOD-RM1-4
+    - id: DOD-RD1-2
       says: The kit's checks and its whole test run pass.
       level: must
       proof:
         kind: checks
-- title: 'The pm mode, smallest: the owner''s words become a draft, a check, a critique by another model and the sign-off card; approve writes the file'
+- title: 'An approval may take the owner''s words, and hands them to the steps after it'
   slice:
-    name: PM1
-    kind: mode
+    name: KQ1
+    kind: capability
     scope:
-    - components/modes/pm/**
-    after:
-    - slice: RM1
-      because: It requires requirements@1, which RM1 implements.
-    - slice: KC1
-      because: Its card prints in the clearer form KC1 makes.
+    - bay/runs/**
+    - bay/commands/approve.ts
+    - bay/waiting-report.ts
+    - schemas/workflow.schema.json
+    - tests/approve-words.test.ts
+    after: []
     done:
-    - id: DOD-PM1-1
-      says: With the test toolbox playing both skills, pm.start then the workflow sign-off show the todo card line by line as printed in the design, and approve writes docs/requirements/todo.yaml equal to the design's file.
+    - id: DOD-KQ1-1
+      says: An approval with takesWords true, answered with --via chat --quote, gives the next step its choice and words equal to the quote; at a terminal the owner types the words after his choice; an approval without takesWords gives no words, as today.
       level: must
       proof:
         kind: fails-first
         tests:
-        - components/modes/pm/tests/sign-off.test.ts
-    - id: DOD-PM1-2
-      says: A draft the check refuses shows each problem on the card, withholds approve with its reason, and nothing is written whatever the owner chooses.
+        - tests/approve-words.test.ts
+    - id: DOD-KQ1-2
+      says: The words are in the approval.recorded event and the run's record scrubbed of secrets, and a load refuses takesWords on a step that is not an approval.
       level: must
       proof:
         kind: fails-first
         tests:
-        - components/modes/pm/tests/sign-off-refused.test.ts
-    - id: DOD-PM1-3
-      says: The skills draft and critique have the seven sections, effects read only, and tiers balanced and deep.
+        - tests/approve-words.test.ts
+    - id: DOD-KQ1-3
+      says: The kit's checks and its whole test run pass.
       level: must
       proof:
         kind: checks
-    - id: DOD-PM1-4
-      says: The owner walks it once in Claude Code, from his words to the written file, and the card reads well on his phone.
-      level: should
-- title: 'The workflow ask: one question a run, two or three answers with one recommended, the answer recorded with who and when, at most five a version'
+- title: 'One turn of the interview, end to end: pm.start, the frontier with facts looked up, the interviewer''s turn, his words read back, and what he confirms kept with his words'
   slice:
-    name: PM2
+    name: GR2
     kind: mode
     scope:
     - components/modes/pm/**
     after:
-    - slice: PM1
-      because: Both change the pm mode, and ask records into the draft PM1 keeps.
+    - slice: KQ1
+      because: The turn's approval takes his words.
     done:
-    - id: DOD-PM2-1
-      says: A run of ask shows one question card as printed in the design, with c withheld for a question of two answers, and the answer chosen is in the next draft's decided with the run's id and date.
+    - id: DOD-GR2-1
+      says: With the test toolbox playing the interviewer, pm.start then two runs of ask on the todo words show the turn card and the read-back card line by line as section 5 prints them, and the partition keeps each confirmed decision with the run and his words.
       level: must
       proof:
         kind: fails-first
         tests:
         - components/modes/pm/tests/ask.test.ts
-    - id: DOD-PM2-2
-      says: After five answers in a version the draft asks no more and the rest are in open; later keeps a question in open; a question with one or four answers is sent back by check-draft.
+    - id: DOD-GR2-2
+      says: An answer "1a 2b" is read with no skill step; free words are read by read-words; a reading with words he did not say is sent back; again keeps nothing; stop at either card ends the run with what was settled kept; the output names ask while the frontier has questions and sign-off when it is empty.
       level: must
       proof:
         kind: fails-first
         tests:
-        - components/modes/pm/tests/ask-limits.test.ts
-    - id: DOD-PM2-3
-      says: The kit's checks and its whole test run pass.
+        - components/modes/pm/tests/ask-readings.test.ts
+    - id: DOD-GR2-3
+      says: A turn that settles a question, changes a settled one or answers a decision is sent back by check-turn; a word the glossary says to avoid in his words is a computed line of the next turn card.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/modes/pm/tests/ask-facts.test.ts
+    - id: DOD-GR2-4
+      says: The skills interview and read have the seven sections, effects read only, and the role interviewer, or tier deep if the owner chose no role.
       level: must
       proof:
         kind: checks
-- title: 'A change after building has started: version 2 from version 1, the card led by what changed, and ids never reused'
+    - id: DOD-GR2-5
+      says: The owner answers two turns of a real interview in Claude Code, and each card reads well on his phone.
+      level: should
+- title: 'Glossary rows and ADRs: offered on the turn card when a term or a hard decision settles, shown whole, written on his yes'
   slice:
-    name: PM3
+    name: GR3
     kind: mode
     scope:
     - components/modes/pm/**
     after:
-    - slice: PM2
-      because: Both change the pm mode.
+    - slice: GR2
+      because: Both change the pm mode, and offers are questions of a turn.
     done:
-    - id: DOD-PM3-1
-      says: pm.start on a job with a signed file drafts from it, the card prints the changed, added and removed ids first and one line for the rest, and approve writes version 2 with its changes entry.
+    - id: DOD-GR3-1
+      says: An offered row answered a and kept adds exactly the row shown to its table in CONTEXT.md; answered b, or the turn answered again, CONTEXT.md is byte for byte as before.
       level: must
       proof:
         kind: fails-first
         tests:
-        - components/modes/pm/tests/change.test.ts
-    - id: DOD-PM3-2
+        - components/modes/pm/tests/glossary.test.ts
+    - id: DOD-GR3-2
+      says: An ADR offer that lacks a test's sentence or names one alternative is sent back; one answered a and kept is written as the next number in docs/adr/ with his words, and no other file changes.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/modes/pm/tests/adr-offer.test.ts
+    - id: DOD-GR3-3
       says: The kit's checks and its whole test run pass.
       level: must
       proof:
         kind: checks
-- title: 'Forge is told: a plan names the requirements version it was cut from, and forge.waves names each condition changed since and the slices that meet it'
+- title: 'Sign-off from the tree: the draft from his decisions, the check, the critique, the card with his words, and the file written on approve'
   slice:
-    name: FV1
+    name: GR4
+    kind: mode
+    scope:
+    - components/modes/pm/**
+    after:
+    - slice: GR3
+      because: Both change the pm mode.
+    - slice: RD1
+      because: The file it writes carries quotes and practices.
+    done:
+    - id: DOD-GR4-1
+      says: With the test toolbox playing draft and critique, sign-off after the todo interview prints the card from a test in the kernel's layout, each decision with his words as computed lines, and approve writes docs/requirements/todo.yaml that requirements.check accepts, each decided entry with his quote.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/modes/pm/tests/sign-off.test.ts
+    - id: DOD-GR4-2
+      says: A draft the check refuses shows each problem, withholds approve with its reason, and nothing is written whatever he chooses; a decided entry the partition did not record is refused by write.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - components/modes/pm/tests/sign-off-refused.test.ts
+    - id: DOD-GR4-3
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof:
+        kind: checks
+- title: 'The coordinator starts the next run of an interview the owner started, when the run''s output names it'
+  slice:
+    name: CL1
+    kind: capability
+    scope:
+    - bay/build.ts
+    - bay/templates/**
+    - tests/build.test.ts
+    after: []
+    done:
+    - id: DOD-CL1-1
+      says: The block bay build writes into CLAUDE.md has the one line of section 3.7, and nothing else of the block changes.
+      level: must
+      proof:
+        kind: fails-first
+        tests:
+        - tests/build.test.ts
+- title: 'Forge''s designer is told what it is judged on: the file''s practices join the practices given, and a finding outside them is shown as not told'
+  slice:
+    name: FT1
     kind: mode
     scope:
     - components/base/forge/**
     after:
-    - slice: PL1
-      because: It adds to the meets that PL1 gives a plan.
-    - slice: RM1
-      because: It reads the changes that requirements.check computes.
+    - slice: RD1
+      because: It reads the file's practices.
     done:
-    - id: DOD-FV1-1
-      says: forge.waves on plan 0023 cut from todo version 1, with version 2 on disk, names O3-C2 as changed and met by its slice, and O3-C7 as met by no slice.
+    - id: DOD-FT1-1
+      says: For a file with practices P-12 and TS-25, each designer's task lists them beside the practices held by design, and the challenger's task lists the same ids.
       level: must
       proof:
         kind: fails-first
         tests:
-        - components/base/forge/tests/requirements-version.test.ts
-    - id: DOD-FV1-2
-      says: The kit's checks and its whole test run pass.
-      level: must
-      proof:
-        kind: checks
-- title: 'Sources at the job: exported documents and tickets read as data from a folder, each traced to the outcomes it gave, nothing written back'
-  slice:
-    name: PS1
-    kind: mode
-    scope:
-    - components/modes/pm/**
-    after:
-    - slice: PM3
-      because: Both change the pm mode.
-    - slice: HK1
-      because: It is proved in a run without the hook, as at the owner's job.
-    done:
-    - id: DOD-PS1-1
-      says: A Markdown PRD and a CSV of tickets in docs/requirements/sources/todo/ are listed in asked, each outcome's from names its section or ticket key, and a source that says to ignore the rules is drafted as data.
+        - components/base/forge/tests/told.test.ts
+    - id: DOD-FT1-2
+      says: A challenger's finding that names no practice given and no condition or constraint of the file is printed on the design card as "not told to the designer" and withholds nothing.
       level: must
       proof:
         kind: fails-first
         tests:
-        - components/modes/pm/tests/sources.test.ts
-    - id: DOD-PS1-2
-      says: The pm mode declares no network effect and no host, and writes only under docs/requirements/.
-      level: must
-      proof:
-        kind: fails-first
-        tests:
-        - components/modes/pm/tests/reach.test.ts
-    - id: DOD-PS1-3
+        - components/base/forge/tests/told.test.ts
+    - id: DOD-FT1-3
       says: The kit's checks and its whole test run pass.
       level: must
       proof:
         kind: checks
 ```
 
-The order: RI1, RM1, PM1 make the smallest useful version. RM1 alone already lets a person write the file by hand and check it, which is what forge's design phase (DS1) needs. PM1 to PM3 and PS1 change one folder, so they run one after another. FV1 can run beside PM2 once PL1 and RM1 are merged.
+PM3 (a change after building has started), FV1 (forge names each condition changed since its plan) and PS1 (sources at the job) are as in the first version, with `after` GR4 in place of PM2 for PM3. Their fragment is in this file's history, at the commit before this revision.
 
-What changes in plan 0024: RQ1 becomes "forge requires requirements@1 and reads the file through it", after RM1, and gives up `forge.requirements` (question 1). PM2 also needs one line in the coordinator's `CLAUDE.md` block, which the kit's build writes: "When a run's output names the next run, start it." That is a change to the build, not to `CLAUDE.md` by hand, and it is the owner's to approve.
+### 8.3 The order, and what is usable when
+
+1. **GR1**, built: a turn can be checked and drawn by hand or by a test.
+2. **RD1, KQ1 and CL1** can run side by side: their scopes share no path. KQ1 and CL1 wait for questions 7 and 8; RD1 waits for question 9.
+3. **GR2** after KQ1 and question 6. From here the owner can run a real interview turn by turn, and every decision is kept with his words, though no file is written yet.
+4. **GR3**, then **GR4**: the glossary and ADRs, then the written file. After GR4 the PM mode replaces writing `docs/requirements/<job>.yaml` by hand.
+5. **FT1** after RD1, beside GR2 to GR4: forge's side, so the next design run is told what it is judged on.
+6. **PM3**, then **FV1** and **PS1**, as in the first version.
+
+What changes in plan 0024: nothing more than the first version said. RQ1 is built. PM1 and PM2 of the first version are replaced by GR1 to GR4.
 
 ## 9. Questions only the owner can answer
 
-**Answered.** Question 1 on 19 November: the shared interface `requirements@1` (built as slice RQ1). Questions 2 to 5 on 20 November, in the owner's words "Agree with pm recommendations": a question is asked as an approval; his own words as an answer are not built now; forge may design and plan from a file with open questions; sources at the job are exported files in a folder first.
+**Answered.** Question 1 on 19 November: the shared interface `requirements@1` (built as slice RQ1). Questions 2 to 5 on 20 November, in the owner's words "Agree with pm recommendations": a question is asked as an approval; his own words as an answer are not built now; forge may design and plan from a file with open questions; sources at the job are exported files in a folder first. Question 7 below asks him to look at question 3 again, since a turn is answered in his words.
 
-1. **Where the file's form lives.** In an interface `requirements@1` with a small base mode both modes require, or in forge's folder as design A put it, with the PM mode keeping its own copy of the rules. Recommendation: the interface. One owner for the form (P-12, P-38), and either mode works alone. It changes RQ1 of plan 0024.
-2. **How a question is asked.** As an approval, one run a question, as designed; or by the coordinator in chat with the harness's own choice buttons, recorded with one action call an answer. Recommendation: the approval. The kernel binds the answer to what was shown and records who gave it. In chat the coordinator can still show its choices as buttons.
-3. **Your own words as an answer.** Now they go in through `pm.start` as one more request. A small kernel change would let an approval hand your quoted words to the next step, so `ask` takes them in place. Recommendation: not now. Add it if you find yourself reaching past the answers often.
-4. **Open questions and forge.** May forge design and plan from a file that still has open questions? Recommendation: yes. Nothing is written for an open question, so nothing is built for it, and forge's design card shows them.
-5. **Sources at the job.** Exported files in a folder, as designed, or a connector that reads the document and the tracker directly. Recommendation: exported files first. A connector needs network, a secret and your trust, and the organisation may not allow it.
+1. **Where the file's form lives.** Answered: in the interface `requirements@1`.
+2. **How a question is asked.** Answered: as an approval. Turns keep that: each turn and each reading is an approval.
+3. **Your own words as an answer.** Answered "not now" on 20 November. See question 7.
+4. **Open questions and forge.** Answered: yes, forge may design from a file with open questions. See question 11.
+5. **Sources at the job.** Answered: exported files in a folder first.
+
+**New, from this revision.** Each has options to choose from and a recommendation.
+
+6. **The interviewer's role.** The skills `interview` and `read` need a role, and none of the seven fits (3.10).
+   - a. A new role, `interviewer`, at tier deep, for both skills, recorded in ADR 30. **Recommended:** the interview leans on judgement, and a missed question costs a wrong build.
+   - b. No role: both steps name `tier: deep`, as the feed briefing's skills keep their tier. Nothing changes in `bay/roles.ts`.
+   - c. The role `designer` for both, at its tier deep. Its standing rules would then be a designer's, which say nothing about never deciding.
+7. **Your words reach the next step (slice KQ1).** A turn is answered in your words, and today an approval hands on only your choice; your quoted words reach only the record.
+   - a. Build KQ1: an approval may say `takesWords: true`, and your words, as quoted in chat or typed at a terminal, go to the steps after it and into the record. **Recommended:** the words are bound to the card you answered, and recorded where every approval is.
+   - b. No free text: a turn is answered by choices only, one approval for each question, as the first version had.
+   - c. Your words go in through a plain action input that the coordinator fills. Not bound to any card, and not recorded with an approval.
+8. **How one turn leads to the next (3.7).**
+   - a. One turn a run; the coordinator starts the next when the run's output names it, by one line in the block `bay build` writes (slice CL1). **Recommended:** it can be built now, and you can stop on any card.
+   - b. One turn a run; you say "go on" each time. Nothing is built.
+   - c. Wait for a kernel "bounded repeat". Not built, and no other mode needs it yet.
+9. **What the file carries for forge (section 2, slice RD1, slice FT1).**
+   - a. The file gains `practices` and a `quote` on each decision, and forge judges a design only on what its designer was given; a finding outside it is shown as not told. **Recommended:** it closes the gap of the stopped design run at its source.
+   - b. Quotes only; what the work is judged on stays in `constraints` as sentences, and forge does not change.
+   - c. Neither; DA1's practices are enough.
+10. **What the interviewer may read.**
+    - a. Documents only: `CONTEXT.md`, `docs/` and `framework/`. **Recommended:** a grant is fixed in the manifest, and a project's code folders differ.
+    - b. Also the code folders, named in the manifest, so that the interviewer checks your words against the code. This kit's `bay/` stays out of reach either way: only forge may read the kernel's folders.
+11. **Signing with questions open.**
+    - a. As you answered on 20 November: the sign-off card counts the open questions first, they go to `open`, and approve is offered. **Recommended:** your answer stands; forge's design card shows them.
+    - b. As the method has it: approve is withheld until the frontier is empty.
+12. **The new words.** Interview, question tree, frontier, turn, reading, read-back card, and interviewer if question 6 is a.
+    - a. Add them to `CONTEXT.md` with GR2, the first slice that uses them. **Recommended.**
+    - b. Other words: name them, and the design changes with them.
+13. **The row in `framework/practices.md` that says the grill was not adopted.**
+    - a. Change it to say the PM mode adopts it: an interview the owner starts, answered with lettered choices and a recommendation. **Recommended:** the file should say what the kit does.
+    - b. Leave it as it is until GR2 is merged.

@@ -15,3 +15,5 @@ An interview keeps a tree of questions. Each question names the questions it com
 | `check-reading` | read | `scripts/check-reading.ts`: each question is read once; a choice names one of its question's letters, and nothing else names a letter; and the words given for each answer are his, exactly, spaces aside. |
 
 The mode reads `CONTEXT.md` and `docs/`, the files a fact may quote. It writes nothing.
+
+Each action can be called by hand, for example `bay call pm.frontier '{"tree": {"questions": []}}' --json`, which answers an empty frontier.

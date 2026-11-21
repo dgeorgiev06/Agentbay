@@ -31,6 +31,7 @@ import {
   type Asked,
 } from "./kit-copy.ts";
 import { printed } from "./printed-card.ts";
+import { todoDesign } from "./todo-design.ts";
 import { designFile, requirementsFile, tdOne, tdTwo, todoDesignFiles, todoPlan, writtenIn } from "./todo-plan.ts";
 
 const skills = {
@@ -169,15 +170,20 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
     const kept = readYaml(git(root, ["show", `${into}:docs/plans/0025-todo.yaml`]));
     assert.ok(kept.ok);
     assert.deepEqual(kept.value, planDocument(todoPlan, { requirements: requirementsFile, design: designFile }));
+    const [todoModule = null] = listOf(fieldsOf(todoDesign).modules);
+    const [addTodo = null] = listOf(fieldsOf(todoModule).rules);
+    const appliedBy = [{ action: "todo.add", reads: ["todos"], writes: ["todos"] }];
     const request = {
       planned: { title: fieldsOf(tdOne).title, slice: fieldsOf(tdOne).slice },
       base: commit,
       bugs: [],
       interface: fieldsOf(tdOne).interface,
+      rules: [{ ...fieldsOf(addTodo), module: "todo", appliedBy }],
     };
     assert.deepEqual(output.wave, [request]);
     const sliced = runOf(await bay(root, ["call", "forge.slice", JSON.stringify({ request, planter: true })]));
     assert.equal(textAt(sliced, "status"), "done", JSON.stringify(sliced));
+    assert.deepEqual(fieldsOf(fieldsOf(sliced).output ?? null).rules, request.rules);
     assert.deepEqual(fieldsOf(fieldsOf(sliced).output ?? null).offered, {
       build: true,
       "build-without-interface": false,

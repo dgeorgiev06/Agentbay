@@ -69,13 +69,16 @@ const todoCard = `Commit the plan for todo?
     docs/requirements/todo.yaml: 13
     conditions
   wave 1: TD1, module todo; meets O1-C1,
-    O1-C2, O1-C3, O1-C4, O1-C5, O1-C6, O1-C7
+    O1-C2, O1-C3, O1-C4, O1-C5, O1-C6,
+    O1-C7; applies the rule add-todo
 judged   TD1: A todo mode that adds a todo
 judged     and lists the open ones
 judged    by forge skills/plan, tier
 judged      balanced
   wave 2: TD2, module todo; meets O2-C1,
-    O2-C2, O2-C3, O2-C4, O2-C5, O2-C6
+    O2-C2, O2-C3, O2-C4, O2-C5, O2-C6;
+    applies the rules mark-done and
+    remove-todo
 judged   TD2: The todo mode marks a todo
 judged     done and removes one
 judged    by forge skills/plan, tier
@@ -93,7 +96,7 @@ judged      balanced
     plan: no problem
   the planner was not asked again, since the
     challenge found nothing
-  practices held by the script's rules:
+  practices held by the script's checks:
     P-33, P-34 and P-35
   practices answered by the challenger: 3; 3
     held, 0 not held, 0 do not apply
@@ -115,13 +118,16 @@ const answeredNotHeld = `Commit the plan for todo?
     docs/requirements/todo.yaml: 13
     conditions
   wave 1: TD1, module todo; meets O1-C1,
-    O1-C2, O1-C3, O1-C4, O1-C5, O1-C6, O1-C7
+    O1-C2, O1-C3, O1-C4, O1-C5, O1-C6,
+    O1-C7; applies the rule add-todo
 judged   TD1: A todo mode that adds a todo
 judged     and lists the open ones
 judged    by forge skills/plan, tier
 judged      balanced
   wave 2: TD2, module todo; meets O2-C1,
-    O2-C2, O2-C3, O2-C4, O2-C5, O2-C6
+    O2-C2, O2-C3, O2-C4, O2-C5, O2-C6;
+    applies the rules mark-done and
+    remove-todo
 judged   TD2: The todo mode marks a todo
 judged     done and removes one
 judged    by forge skills/plan, tier
@@ -144,7 +150,7 @@ judged      balanced
     interface
   the second challenge's answers decide the
     card
-  practices held by the script's rules:
+  practices held by the script's checks:
     P-33, P-34 and P-35
   practices answered by the challenger: 3; 2
     held, 1 not held, 0 do not apply

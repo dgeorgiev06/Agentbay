@@ -1,6 +1,7 @@
 import { fieldsOf, type Json, type ScriptContext } from "../../../../../bay/sdk.ts";
 import type { Side } from "./design-files.ts";
 import type { Action, Design, Example, Interface } from "./design-form.ts";
+import { spelledOut } from "./long-texts.ts";
 
 type SchemaNamed = {
   readonly action: string;
@@ -188,8 +189,28 @@ function actionChecks(each: Interface, action: Action): readonly ExampleCheck[] 
   });
 }
 
+function spelledCheck(check: ExampleCheck): readonly ExampleCheck[] {
+  const spelled = spelledOut(check.value);
+  return spelled.refused.length > 0 ? [] : [{ ...check, value: spelled.value }];
+}
+
 export function exampleChecks(design: Design): readonly ExampleCheck[] {
-  return design.interfaces.flatMap((each) => each.actions.flatMap((action) => actionChecks(each, action)));
+  const checks = design.interfaces.flatMap((each) => each.actions.flatMap((action) => actionChecks(each, action)));
+  return checks.flatMap(spelledCheck);
+}
+
+export function examplesSpelled(design: Design): number {
+  const examples = design.interfaces.flatMap((each) => each.actions.flatMap((action) => action.examples));
+  return examples.filter((example) => exampleValues(example).some(({ value }) => spelledOut(value).spelled > 0)).length;
+}
+
+export function exampleValues(example: Example): readonly { readonly side: string; readonly value: Json }[] {
+  const told = "answer" in example.told ? [{ side: "the answer", value: example.told.answer }] : [];
+  const earlier = example.earlier.map((call, index) => ({
+    side: `the input of earlier call ${String(index + 1)}`,
+    value: call.input,
+  }));
+  return [{ side: "the input", value: example.input }, ...told, ...earlier];
 }
 
 function schemaWords(named: SchemaNamed): string {

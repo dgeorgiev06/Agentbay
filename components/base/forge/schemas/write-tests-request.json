@@ -4,12 +4,7 @@
   "description": "What the test writer reads to write the slice's tests: the slice's conditions, the interface files' paths, a worktree at the slice's base that holds no builder's work, and the practices; from round 2 on, its own earlier tests and the reviewer's findings for it.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "slice",
-    "interface",
-    "folder",
-    "practices"
-  ],
+  "required": ["slice", "interface", "folder", "practices"],
   "properties": {
     "slice": {
       "$ref": "proof@1/prove-request.json#/$defs/slice"
@@ -45,10 +40,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "path",
-          "text"
-        ],
+        "required": ["path", "text"],
         "properties": {
           "path": {
             "$ref": "proof@1/prove-request.json#/$defs/path"
@@ -68,25 +60,25 @@
         "$ref": "#/$defs/finding"
       },
       "description": "From round 2 on: the reviewer's findings for the test writer."
+    },
+    "rules": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object"
+      },
+      "description": "The rules of the committed design that the slice's actions apply, each a pure function: its name, what it decides, what it takes and gives, and the actions that apply it. They tell the test writer which states to set up and which answers to expect; the tests still go through each action's entry. Empty when there is none."
     }
   },
   "$defs": {
     "finding": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "to",
-        "case",
-        "question",
-        "fix"
-      ],
+      "required": ["to", "case", "question", "fix"],
       "description": "One finding of the reviewer, for the test writer or for the builder.",
       "properties": {
         "to": {
-          "enum": [
-            "test-writer",
-            "builder"
-          ],
+          "enum": ["test-writer", "builder"],
           "description": "Who the finding is for: the test writer corrects the tests, the builder the code."
         },
         "case": {

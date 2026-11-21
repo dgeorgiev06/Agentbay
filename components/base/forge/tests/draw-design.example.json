@@ -199,7 +199,129 @@
             "implements": ["todo"],
             "owns": {
               "tables": ["todos"]
-            }
+            },
+            "rules": [
+              {
+                "name": "add-todo",
+                "decides": "Whether a text may be added, and the id the new todo gets.",
+                "takes": [
+                  {
+                    "name": "request",
+                    "schema": {
+                      "$ref": "schemas/todo/add-request.json"
+                    }
+                  },
+                  {
+                    "name": "todos",
+                    "store": "todos",
+                    "schema": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "schemas/todo/add-response.json"
+                      }
+                    }
+                  }
+                ],
+                "gives": [
+                  {
+                    "name": "todos",
+                    "store": "todos",
+                    "schema": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "schemas/todo/add-response.json"
+                      }
+                    }
+                  },
+                  {
+                    "name": "answer",
+                    "schema": {
+                      "$ref": "schemas/todo/add-response.json"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "mark-done",
+                "decides": "Whether a todo may be marked done.",
+                "takes": [
+                  {
+                    "name": "request",
+                    "schema": {
+                      "$ref": "schemas/todo/done-request.json"
+                    }
+                  },
+                  {
+                    "name": "todos",
+                    "store": "todos",
+                    "schema": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "schemas/todo/add-response.json"
+                      }
+                    }
+                  }
+                ],
+                "gives": [
+                  {
+                    "name": "todos",
+                    "store": "todos",
+                    "schema": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "schemas/todo/add-response.json"
+                      }
+                    }
+                  },
+                  {
+                    "name": "answer",
+                    "schema": {
+                      "$ref": "schemas/todo/done-response.json"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "remove-todo",
+                "decides": "Whether a todo may be removed.",
+                "takes": [
+                  {
+                    "name": "request",
+                    "schema": {
+                      "$ref": "schemas/todo/remove-request.json"
+                    }
+                  },
+                  {
+                    "name": "todos",
+                    "store": "todos",
+                    "schema": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "schemas/todo/add-response.json"
+                      }
+                    }
+                  }
+                ],
+                "gives": [
+                  {
+                    "name": "todos",
+                    "store": "todos",
+                    "schema": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "schemas/todo/add-response.json"
+                      }
+                    }
+                  },
+                  {
+                    "name": "answer",
+                    "schema": {
+                      "$ref": "schemas/todo/remove-response.json"
+                    }
+                  }
+                ]
+              }
+            ]
           }
         ],
         "interfaces": [
@@ -239,6 +361,9 @@
                   }
                 },
                 "serves": ["O1-C1", "O1-C4", "O1-C5", "O1-C6", "O1-C7", "O2-C4"],
+                "rule": "add-todo",
+                "reads": ["todos"],
+                "writes": ["todos"],
                 "examples": [
                   {
                     "input": {
@@ -321,6 +446,7 @@
                   }
                 },
                 "serves": ["O1-C1", "O1-C2", "O1-C3", "O2-C1", "O2-C2", "O2-C3"],
+                "reads": ["todos"],
                 "examples": [
                   {
                     "input": {},
@@ -380,6 +506,9 @@
                   "$ref": "add-response.json"
                 },
                 "serves": ["O2-C1", "O2-C2", "O2-C5", "O2-C6"],
+                "rule": "mark-done",
+                "reads": ["todos"],
+                "writes": ["todos"],
                 "examples": [
                   {
                     "earlier": [
@@ -459,7 +588,10 @@
                     }
                   }
                 },
-                "serves": ["O2-C3", "O2-C5"],
+                "serves": ["O2-C3", "O2-C4", "O2-C5"],
+                "rule": "remove-todo",
+                "reads": ["todos"],
+                "writes": ["todos"],
                 "examples": [
                   {
                     "earlier": [
@@ -533,7 +665,129 @@
             "implements": ["todo"],
             "owns": {
               "tables": ["todos"]
-            }
+            },
+            "rules": [
+              {
+                "name": "add-todo",
+                "decides": "Whether a text may be added, and the id the new todo gets.",
+                "takes": [
+                  {
+                    "name": "request",
+                    "schema": {
+                      "$ref": "schemas/todo/add-request.json"
+                    }
+                  },
+                  {
+                    "name": "todos",
+                    "store": "todos",
+                    "schema": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "schemas/todo/add-response.json"
+                      }
+                    }
+                  }
+                ],
+                "gives": [
+                  {
+                    "name": "todos",
+                    "store": "todos",
+                    "schema": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "schemas/todo/add-response.json"
+                      }
+                    }
+                  },
+                  {
+                    "name": "answer",
+                    "schema": {
+                      "$ref": "schemas/todo/add-response.json"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "mark-done",
+                "decides": "Whether a todo may be marked done.",
+                "takes": [
+                  {
+                    "name": "request",
+                    "schema": {
+                      "$ref": "schemas/todo/done-request.json"
+                    }
+                  },
+                  {
+                    "name": "todos",
+                    "store": "todos",
+                    "schema": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "schemas/todo/add-response.json"
+                      }
+                    }
+                  }
+                ],
+                "gives": [
+                  {
+                    "name": "todos",
+                    "store": "todos",
+                    "schema": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "schemas/todo/add-response.json"
+                      }
+                    }
+                  },
+                  {
+                    "name": "answer",
+                    "schema": {
+                      "$ref": "schemas/todo/done-response.json"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "remove-todo",
+                "decides": "Whether a todo may be removed.",
+                "takes": [
+                  {
+                    "name": "request",
+                    "schema": {
+                      "$ref": "schemas/todo/remove-request.json"
+                    }
+                  },
+                  {
+                    "name": "todos",
+                    "store": "todos",
+                    "schema": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "schemas/todo/add-response.json"
+                      }
+                    }
+                  }
+                ],
+                "gives": [
+                  {
+                    "name": "todos",
+                    "store": "todos",
+                    "schema": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "schemas/todo/add-response.json"
+                      }
+                    }
+                  },
+                  {
+                    "name": "answer",
+                    "schema": {
+                      "$ref": "schemas/todo/remove-response.json"
+                    }
+                  }
+                ]
+              }
+            ]
           }
         ],
         "interfaces": [
@@ -573,6 +827,9 @@
                   }
                 },
                 "serves": ["O1-C1", "O1-C4", "O1-C5", "O1-C6", "O1-C7", "O2-C4"],
+                "rule": "add-todo",
+                "reads": ["todos"],
+                "writes": ["todos"],
                 "examples": [
                   {
                     "input": {
@@ -655,6 +912,7 @@
                   }
                 },
                 "serves": ["O1-C1", "O1-C2", "O1-C3", "O2-C1", "O2-C2", "O2-C3"],
+                "reads": ["todos"],
                 "examples": [
                   {
                     "input": {},
@@ -714,6 +972,9 @@
                   "$ref": "add-response.json"
                 },
                 "serves": ["O2-C1", "O2-C2", "O2-C5", "O2-C6"],
+                "rule": "mark-done",
+                "reads": ["todos"],
+                "writes": ["todos"],
                 "examples": [
                   {
                     "earlier": [
@@ -793,7 +1054,10 @@
                     }
                   }
                 },
-                "serves": ["O2-C3", "O2-C5"],
+                "serves": ["O2-C3", "O2-C4", "O2-C5"],
+                "rule": "remove-todo",
+                "reads": ["todos"],
+                "writes": ["todos"],
                 "examples": [
                   {
                     "earlier": [
@@ -852,7 +1116,129 @@
               "implements": ["todo"],
               "owns": {
                 "tables": ["todos"]
-              }
+              },
+              "rules": [
+                {
+                  "name": "add-todo",
+                  "decides": "Whether a text may be added, and the id the new todo gets.",
+                  "takes": [
+                    {
+                      "name": "request",
+                      "schema": {
+                        "$ref": "schemas/todo/add-request.json"
+                      }
+                    },
+                    {
+                      "name": "todos",
+                      "store": "todos",
+                      "schema": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "schemas/todo/add-response.json"
+                        }
+                      }
+                    }
+                  ],
+                  "gives": [
+                    {
+                      "name": "todos",
+                      "store": "todos",
+                      "schema": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "schemas/todo/add-response.json"
+                        }
+                      }
+                    },
+                    {
+                      "name": "answer",
+                      "schema": {
+                        "$ref": "schemas/todo/add-response.json"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "mark-done",
+                  "decides": "Whether a todo may be marked done.",
+                  "takes": [
+                    {
+                      "name": "request",
+                      "schema": {
+                        "$ref": "schemas/todo/done-request.json"
+                      }
+                    },
+                    {
+                      "name": "todos",
+                      "store": "todos",
+                      "schema": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "schemas/todo/add-response.json"
+                        }
+                      }
+                    }
+                  ],
+                  "gives": [
+                    {
+                      "name": "todos",
+                      "store": "todos",
+                      "schema": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "schemas/todo/add-response.json"
+                        }
+                      }
+                    },
+                    {
+                      "name": "answer",
+                      "schema": {
+                        "$ref": "schemas/todo/done-response.json"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "remove-todo",
+                  "decides": "Whether a todo may be removed.",
+                  "takes": [
+                    {
+                      "name": "request",
+                      "schema": {
+                        "$ref": "schemas/todo/remove-request.json"
+                      }
+                    },
+                    {
+                      "name": "todos",
+                      "store": "todos",
+                      "schema": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "schemas/todo/add-response.json"
+                        }
+                      }
+                    }
+                  ],
+                  "gives": [
+                    {
+                      "name": "todos",
+                      "store": "todos",
+                      "schema": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "schemas/todo/add-response.json"
+                        }
+                      }
+                    },
+                    {
+                      "name": "answer",
+                      "schema": {
+                        "$ref": "schemas/todo/remove-response.json"
+                      }
+                    }
+                  ]
+                }
+              ]
             }
           ],
           "interfaces": [
@@ -892,6 +1278,9 @@
                     }
                   },
                   "serves": ["O1-C1", "O1-C4", "O1-C5", "O1-C6", "O1-C7", "O2-C4"],
+                  "rule": "add-todo",
+                  "reads": ["todos"],
+                  "writes": ["todos"],
                   "examples": [
                     {
                       "input": {
@@ -974,6 +1363,7 @@
                     }
                   },
                   "serves": ["O1-C1", "O1-C2", "O1-C3", "O2-C1", "O2-C2", "O2-C3"],
+                  "reads": ["todos"],
                   "examples": [
                     {
                       "input": {},
@@ -1033,6 +1423,9 @@
                     "$ref": "add-response.json"
                   },
                   "serves": ["O2-C1", "O2-C2", "O2-C5", "O2-C6"],
+                  "rule": "mark-done",
+                  "reads": ["todos"],
+                  "writes": ["todos"],
                   "examples": [
                     {
                       "earlier": [
@@ -1112,7 +1505,10 @@
                       }
                     }
                   },
-                  "serves": ["O2-C3", "O2-C5"],
+                  "serves": ["O2-C3", "O2-C4", "O2-C5"],
+                  "rule": "remove-todo",
+                  "reads": ["todos"],
+                  "writes": ["todos"],
                   "examples": [
                     {
                       "earlier": [
@@ -1212,6 +1608,48 @@
         },
         {
           "mark": "computed",
+          "words": "rule add-todo, in todo: takes request, todos from todos; gives todos into todos, answer",
+          "source": {
+            "step": "draw"
+          }
+        },
+        {
+          "mark": "judged",
+          "words": "add-todo decides: Whether a text may be added, and the id the new todo gets.",
+          "source": {
+            "step": "designs"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "rule mark-done, in todo: takes request, todos from todos; gives todos into todos, answer",
+          "source": {
+            "step": "draw"
+          }
+        },
+        {
+          "mark": "judged",
+          "words": "mark-done decides: Whether a todo may be marked done.",
+          "source": {
+            "step": "designs"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "rule remove-todo, in todo: takes request, todos from todos; gives todos into todos, answer",
+          "source": {
+            "step": "draw"
+          }
+        },
+        {
+          "mark": "judged",
+          "words": "remove-todo decides: Whether a todo may be removed.",
+          "source": {
+            "step": "designs"
+          }
+        },
+        {
+          "mark": "computed",
           "words": "interface todo: 4 actions, 8 schema files",
           "source": {
             "step": "draw"
@@ -1219,28 +1657,28 @@
         },
         {
           "mark": "computed",
-          "words": "add: serves O1-C1, O1-C4, O1-C5, O1-C6, O1-C7, O2-C4; 3 examples",
+          "words": "add: serves O1-C1, O1-C4, O1-C5, O1-C6, O1-C7, O2-C4; applies the rule add-todo, reads todos, writes todos; 3 examples",
           "source": {
             "step": "draw"
           }
         },
         {
           "mark": "computed",
-          "words": "list: serves O1-C1, O1-C2, O1-C3, O2-C1, O2-C2, O2-C3; 2 examples",
+          "words": "list: serves O1-C1, O1-C2, O1-C3, O2-C1, O2-C2, O2-C3; applies no rule, reads todos, writes nothing; 2 examples",
           "source": {
             "step": "draw"
           }
         },
         {
           "mark": "computed",
-          "words": "done: serves O2-C1, O2-C2, O2-C5, O2-C6; 3 examples",
+          "words": "done: serves O2-C1, O2-C2, O2-C5, O2-C6; applies the rule mark-done, reads todos, writes todos; 3 examples",
           "source": {
             "step": "draw"
           }
         },
         {
           "mark": "computed",
-          "words": "remove: serves O2-C3, O2-C5; 2 examples",
+          "words": "remove: serves O2-C3, O2-C4, O2-C5; applies the rule remove-todo, reads todos, writes todos; 2 examples",
           "source": {
             "step": "draw"
           }
@@ -1254,21 +1692,28 @@
         },
         {
           "mark": "computed",
-          "words": "checked by script: 13 rules of the design, no problem",
+          "words": "checked by script: 34 checks of the design, no problem",
           "source": {
             "step": "draw"
           }
         },
         {
           "mark": "computed",
-          "words": "examples: 10, not checked against their schemas, since the toolbox checks a value only against a schema file",
+          "words": "examples: 10, checked against their actions' schemas, but not the input of the 4 refusals",
           "source": {
             "step": "draw"
           }
         },
         {
           "mark": "computed",
-          "words": "practices held by the script's rules: P-35, P-36, P-38 and P-42",
+          "words": "the designer was asked once; a second answer is asked only when the challenger answers a practice not held or gives a finding",
+          "source": {
+            "step": "draw"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "practices held by the script's checks: P-35, P-36, P-38 and P-42",
           "source": {
             "step": "draw"
           }
@@ -1276,6 +1721,13 @@
         {
           "mark": "computed",
           "words": "practices answered by the challenger: 3; 2 held, 0 not held, 1 do not apply",
+          "source": {
+            "step": "draw"
+          }
+        },
+        {
+          "mark": "computed",
+          "words": "findings of the challenger: none",
           "source": {
             "step": "draw"
           }

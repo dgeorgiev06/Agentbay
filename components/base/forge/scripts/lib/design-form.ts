@@ -19,7 +19,10 @@ export type Action = {
   readonly request: Json;
   readonly response: Json;
   readonly serves: readonly string[];
-  readonly because?: string;
+  readonly because?: string | undefined;
+  readonly rule?: string | undefined;
+  readonly reads: readonly string[];
+  readonly writes: readonly string[];
   readonly examples: readonly Example[];
 };
 
@@ -28,12 +31,26 @@ export type Interface = {
   readonly actions: readonly Action[];
 };
 
+export type Value = {
+  readonly name: string;
+  readonly store?: string | undefined;
+  readonly schema: Json;
+};
+
+export type Rule = {
+  readonly name: string;
+  readonly decides: string;
+  readonly takes: readonly Value[];
+  readonly gives: readonly Value[];
+};
+
 export type Module = {
   readonly name: string;
   readonly hides: string;
   readonly implements: readonly string[];
   readonly tables: readonly string[];
   readonly files: readonly string[];
+  readonly rules: readonly Rule[];
 };
 
 export type DesignerAnswer = {
@@ -61,21 +78,43 @@ function exampleOf(value: Json): Example {
   return { earlier: listOf(fields.earlier).map(callOf), input: fields.input ?? null, told: toldOf(value) };
 }
 
+function optionalText(value: Json | undefined): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
 function actionOf(value: Json): Action {
   const fields = fieldsOf(value);
-  const action = {
+  return {
     name: textOf(fields.name),
     request: fields.request ?? null,
     response: fields.response ?? null,
     serves: textsOf(fields.serves),
+    because: optionalText(fields.because),
+    rule: optionalText(fields.rule),
+    reads: textsOf(fields.reads),
+    writes: textsOf(fields.writes),
     examples: listOf(fields.examples).map(exampleOf),
   };
-  return typeof fields.because === "string" ? { ...action, because: fields.because } : action;
 }
 
 function interfaceOf(value: Json): Interface {
   const fields = fieldsOf(value);
   return { name: textOf(fields.name), actions: listOf(fields.actions).map(actionOf) };
+}
+
+function valueOf(value: Json): Value {
+  const fields = fieldsOf(value);
+  return { name: textOf(fields.name), store: optionalText(fields.store), schema: fields.schema ?? null };
+}
+
+function ruleOf(value: Json): Rule {
+  const fields = fieldsOf(value);
+  return {
+    name: textOf(fields.name),
+    decides: textOf(fields.decides),
+    takes: listOf(fields.takes).map(valueOf),
+    gives: listOf(fields.gives).map(valueOf),
+  };
 }
 
 function moduleOf(value: Json): Module {
@@ -87,6 +126,7 @@ function moduleOf(value: Json): Module {
     implements: textsOf(fields.implements),
     tables: textsOf(owns.tables),
     files: textsOf(owns.files),
+    rules: listOf(fields.rules).map(ruleOf),
   };
 }
 
@@ -101,6 +141,23 @@ export function actionsOf(design: Design): readonly (Action & { readonly interfa
 
 export function actionName(action: Action & { readonly interface: string }): string {
   return `${action.interface}.${action.name}`;
+}
+
+export function valuesDocument(values: readonly Value[]): Json {
+  return values.map((value) => ({
+    name: value.name,
+    ...(value.store === undefined ? {} : { store: value.store }),
+    schema: value.schema,
+  }));
+}
+
+export function ruleDocument(rule: Rule): Json {
+  const { name, decides, takes, gives } = rule;
+  return { name, decides, takes: valuesDocument(takes), gives: valuesDocument(gives) };
+}
+
+export function rulesOf(design: Design): readonly (Rule & { readonly module: string })[] {
+  return design.modules.flatMap((module) => module.rules.map((rule) => ({ ...rule, module: module.name })));
 }
 
 export function designerAnswersOf(value: Json): readonly DesignerAnswer[] {

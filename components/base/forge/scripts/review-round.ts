@@ -19,17 +19,19 @@ import {
   type ReviewPlan,
   type RoundsState,
 } from "./lib/rounds.ts";
-import { textsOf } from "./lib/json-values.ts";
+import { listOf, textsOf } from "./lib/json-values.ts";
 
 type Asked = AfterRound & {
   readonly practices: readonly string[];
   readonly interface: readonly string[];
+  readonly rules: Json;
 };
 
 function askedOf(input: Json): Asked {
   const fields = fieldsOf(input);
   const after = afterRoundOf(fields, "review-round");
-  return { ...after, practices: textsOf(fields.practices), interface: textsOf(fields.interface) };
+  const rules = [...listOf(fields.rules)];
+  return { ...after, practices: textsOf(fields.practices), interface: textsOf(fields.interface), rules };
 }
 
 type PracticesRead = {
@@ -58,6 +60,7 @@ async function reviewed(context: ScriptContext, asked: Asked, folder: string): P
     verdicts: [...state.verdicts],
     failing: state.failing,
     practices: [...practices.reviewers],
+    rules: asked.rules,
   });
   await answerOf(context, "worktrees.remove", { folder, branchAfter: "kept" });
   const review = reviewOf(answer);

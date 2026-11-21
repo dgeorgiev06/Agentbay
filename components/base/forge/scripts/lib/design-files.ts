@@ -1,6 +1,6 @@
 import type { Json } from "../../../../../bay/sdk.ts";
 import type { Written } from "./commit-files.ts";
-import type { Action, Design, Example, Interface, Module } from "./design-form.ts";
+import { ruleDocument, type Action, type Design, type Example, type Interface, type Module } from "./design-form.ts";
 
 export type Side = "request" | "response";
 
@@ -39,12 +39,16 @@ function exampleDocument(example: Example): Json {
 function actionDocument(job: string, at: Interface, action: Action): Json {
   const place = { interface: at.name, action: action.name };
   const because = action.because === undefined ? {} : { because: action.because };
+  const rule = action.rule === undefined ? {} : { rule: action.rule };
   return {
     name: action.name,
     request: schemaPath(job, place, "request"),
     response: schemaPath(job, place, "response"),
     serves: [...action.serves],
     ...because,
+    ...rule,
+    reads: [...action.reads],
+    writes: [...action.writes],
     examples: action.examples.map(exampleDocument),
   };
 }
@@ -55,6 +59,7 @@ function moduleDocument(module: Module): Json {
     hides: module.hides,
     implements: [...module.implements],
     owns: { tables: [...module.tables], files: [...module.files] },
+    rules: module.rules.map(ruleDocument),
   };
 }
 

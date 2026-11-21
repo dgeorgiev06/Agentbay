@@ -47,15 +47,25 @@ As `schemas/challenge.json`, sent with `submit`:
 
 1. Read the requirements, then each design, then the differences.
 2. For each practice, look for where the chosen design breaks it; read what the design says of it, but judge
-   the design, not the sentence.
+   the design, not the sentence. Judge P-52 from the rules: for each action, the rule it applies, what that rule
+   takes and gives, and what the action reads and writes. It is not held where a rule leaves out a value it
+   decides from, where the action's answer or a value it writes is not one the rule gives, or where an action
+   that decides something applies no rule. A rule's `decides` sentence and the designer's sentence are not the
+   design. The script holds that a rule takes the request and gives the answer, that no value has an empty
+   schema, and that an example after refused calls answers as the same calls without them, where the examples
+   show both. Look yourself for what it cannot see: a value whose schema says little more than `object`, a
+   stored field the schema leaves optional so the thin function can choose, a time or a random value read
+   inside a rule instead of taken, and an action such as `list` that filters or orders with no rule.
 3. With two designs, choose the one that serves the conditions with less and hides more; merge only when
    each holds something the other lacks.
 4. Put each other thing to correct in `findings`: an example a condition needs and no action shows, a
-   schema that admits what a condition refuses, a name that says nothing.
+   schema that admits what a condition refuses, a name that says nothing. A text written `{"$text": [...]}` is
+   a long text said by rule: each part a text or a repeat of one, in order; forge spelled it out and checked it.
 5. On a second reading, choose first, answer every practice again, and give the findings the answer leaves
    open and any new problem the answer brings; the designer answers once, so your answers decide the card. A
    practice whose answer changed only in its sentence, with no change in `changes` where it was not held, is
-   judged on the design, not on the sentence.
+   judged on the design, not on the sentence; for P-52, `changes` names each rule added or removed and each
+   rule whose takes or gives changed.
 6. Submit. If it comes back with feedback, correct each problem it names.
 
 ## Tools

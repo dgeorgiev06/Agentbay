@@ -40,13 +40,14 @@ export const run = defineScript(async (input, context) => {
   const done = await committedInto(context, { slice: `${job}-plan`, into, files, message });
   const { commit, merged, files: written } = done;
   const document = planDocument(plan, named);
-  const [first] = workOut(planOf(document), [], sourcesGiven(given)).waves;
+  const sources = sourcesGiven(given);
+  const [first] = workOut(planOf(document), [], sources).waves;
   return {
     commit,
     merged,
     into,
     plan: written[0]?.path ?? "",
-    wave: [...sliceRequests(document, first?.slices ?? [], commit)],
+    wave: [...sliceRequests(document, first?.slices ?? [], { base: commit, design: sources.design })],
     ...branchesSaid(done.dropped, done.stayed),
   };
 });

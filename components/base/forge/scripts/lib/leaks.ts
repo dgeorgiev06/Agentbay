@@ -1,6 +1,7 @@
 import { fieldsOf, readYaml, type Json } from "../../../../../bay/sdk.ts";
 import type { HandedTest } from "./handed-tests.ts";
 import { listOf, textOf } from "./json-values.ts";
+import { spelledOut } from "./long-texts.ts";
 import type { Slice } from "./slice-form.ts";
 
 export type Leak =
@@ -77,7 +78,7 @@ function stringsIn(value: Json): readonly string[] {
 
 function givenPhrases(files: readonly HandedTest[]): readonly string[] {
   const read = files.map((file) => readYaml(file.text));
-  const strings = read.flatMap((each) => (each.ok ? stringsIn(each.value) : []));
+  const strings = read.flatMap((each) => (each.ok ? stringsIn(spelledOut(each.value).value) : []));
   return strings.map((phrase) => normalized(phrase).toLowerCase()).filter((phrase) => phrase.length >= shortestPhrase);
 }
 

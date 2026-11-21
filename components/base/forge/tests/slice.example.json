@@ -52,6 +52,7 @@
     "base": "c7f0d13",
     "bugs": [],
     "interface": [],
+    "rules": [],
     "fixed": [],
     "card": {
       "title": "Build slice A1?",

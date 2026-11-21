@@ -290,6 +290,19 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["kind", "level", "slice", "conditions", "sentence"],
+          "description": "With a design named, a slice that meets conditions while its interface names the request file of no action that serves them, so it would not be given that action's rules.",
+          "properties": {
+            "kind": { "const": "no request file" },
+            "level": { "const": "error" },
+            "slice": { "type": "string" },
+            "conditions": { "$ref": "#/$defs/names" },
+            "sentence": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "required": ["kind", "level", "slice", "owner", "file", "sentence"],
           "description": "A slice changes a test or an interface file of another slice that it does not come after.",
           "properties": {

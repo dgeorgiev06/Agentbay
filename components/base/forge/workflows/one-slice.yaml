@@ -22,6 +22,7 @@ steps:
     action: build
     input:
       slice: $steps.slice.output.slice
+      rules: $steps.slice.output.rules
       folder: $steps.cut.output.folder
       practices: $settings.practices
       declared: $steps.declare.output

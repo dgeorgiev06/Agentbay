@@ -114,25 +114,30 @@ describe("forge.waves on a plan cut from a design", { concurrency: true }, () =>
   test("a slice that names no interface file, and one that names a file the design did not commit", async () => {
     const none = slice(tdOne, { interface: [] });
     const stray = slice(tdTwo, { interface: [`${schemas}/done-request.json`, `${schemas}/edit-request.json`] });
-    assert.deepEqual(await problemsOf("interface", cutFrom([none, stray])), [
-      {
-        kind: "no interface",
-        level: "error",
-        slice: "TD1",
-        sentence:
-          "TD1 names no interface file. Name in interface the files of docs/designs/todo/design.yaml it builds " +
-          "against, so that its tests and its code meet there.",
-      },
-      {
-        kind: "interface not in the design",
-        level: "error",
-        slice: "TD2",
-        file: `${schemas}/edit-request.json`,
-        sentence:
-          `TD2 names the interface file ${schemas}/edit-request.json, which the design ` +
-          "docs/designs/todo/design.yaml did not commit. Name only the design file and the schema files it committed.",
-      },
-    ]);
+    const problems = await problemsOf("interface", cutFrom([none, stray]));
+    assert.deepEqual(problems.filter((problem) => fieldsOf(problem).kind !== "no request file").length, 2);
+    assert.deepEqual(
+      problems.filter((problem) => fieldsOf(problem).kind !== "no request file"),
+      [
+        {
+          kind: "no interface",
+          level: "error",
+          slice: "TD1",
+          sentence:
+            "TD1 names no interface file. Name in interface the files of docs/designs/todo/design.yaml it builds " +
+            "against, so that its tests and its code meet there.",
+        },
+        {
+          kind: "interface not in the design",
+          level: "error",
+          slice: "TD2",
+          file: `${schemas}/edit-request.json`,
+          sentence:
+            `TD2 names the interface file ${schemas}/edit-request.json, which the design ` +
+            "docs/designs/todo/design.yaml did not commit. Name only the design file and the schema files it committed.",
+        },
+      ],
+    );
   });
 
   test("a slice that reaches two modules of the design without a reason, and one that gives it", async () => {

@@ -15,6 +15,8 @@ type State = Run["state"];
 
 type Waiting = Extract<State, { readonly status: "waiting" }>["waiting"];
 
+const sourceWords = '[--via terminal | --via chat --quote "<the owner\'s exact words>"]';
+
 const issuedNotice = "A task token was issued with this task; it is shown only now.";
 
 const replacedNotice = "A new task token was issued; the token shown earlier for this task no longer works.";
@@ -96,7 +98,11 @@ export function waitingText(run: Run, waiting: Waiting): string {
     case "budget":
       return `the budget is spent: ${pretty(toJson(waiting.overrun))}`;
     case "owner":
-      return `${waiting.question}\nresume with: bay resume ${run.id} --rerun`;
+      return [
+        waiting.question,
+        `run again with: bay resume ${run.id} --rerun ${sourceWords}`,
+        `or stop with: bay resume ${run.id} --stop ${sourceWords}`,
+      ].join("\n");
   }
 }
 

@@ -355,11 +355,12 @@ test("the coordinator block leaves a question for the owner to the owner, and sa
   for (const phrase of [
     "(step 4), a question (step 6), done",
     "take an approval or question there as in step 4 or 6.",
-    "6. When its `waiting`, or one in `alsoWaiting`, has the reason `owner`, the run asks the owner a question",
-    "Running again or stopping is the owner's decision, never\n   yours.",
-    "show the owner every line it prints for the question, unchanged and whole,\n   and wait.",
-    "Only after the owner answers in his own words, run `./bay.sh resume <runId> --rerun --json` to run\n" +
-      "   again or `./bay.sh resume <runId> --stop --json` to stop the run",
+    "6. When its `waiting`, or one in `alsoWaiting`, has the reason `owner`, the run asks the owner a question.",
+    "Running\n   again or stopping is the owner's decision, never yours.",
+    "show the owner every line it\n   prints for the question, unchanged and whole, and wait.",
+    "Only after the owner answers in his own words, run either\n" +
+      '   `./bay.sh resume <runId> --rerun --via chat --quote "<the owner\'s exact words>" --json` to run again, ' +
+      'or to stop the run\n   `./bay.sh resume <runId> --stop --via chat --quote "<the owner\'s exact words>" --json`',
   ]) {
     assert.ok(block.includes(phrase), phrase);
   }

@@ -158,7 +158,7 @@ export type ModeProject = {
   readonly newToken: (runId: string, stepKey?: string) => Promise<Run>;
   readonly newTokenRefusal: (runId: string) => Promise<string>;
   readonly show: (runId: string) => Promise<Run>;
-  readonly resume: (runId: string, options?: { readonly rerun: boolean }) => Promise<Run>;
+  readonly resume: (runId: string) => Promise<Run>;
   readonly extend: (runId: string, extra: Budget) => Promise<Run>;
   readonly runs: () => Promise<readonly ListedRun[]>;
   readonly partition: (mode: string, name: string) => DatabasePartition;
@@ -459,8 +459,8 @@ async function projectIn(root: string, opening: Opening): Promise<ModeProject> {
     newToken: async (runId, stepKey) => accepted(await runs.reissueTask(runId, stepKey)),
     newTokenRefusal: async (runId) => refusalOf(await runs.reissueTask(runId), "the new token"),
     show: async (runId) => accepted(await runs.show(runId)),
-    resume: async (runId, options) => accepted(await runs.resume(runId, options)),
-    extend: async (runId, extra) => accepted(await runs.extend(runId, extra)),
+    resume: async (runId) => accepted(await runs.resume(runId)),
+    extend: async (runId, extra) => accepted(await runs.extend(runId, extra, trustedBy)),
     runs: async () => (await runs.list()).map((listed) => ({ id: listed.id, status: listed.status })),
     partition: (mode, name) => partitionOf(kernel, mode, name),
     setTime: clock.set,

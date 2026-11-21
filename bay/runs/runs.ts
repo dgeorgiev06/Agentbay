@@ -112,9 +112,10 @@ export type Runs = {
   readonly show: (runId: string) => Promise<Outcome<Run>>;
   readonly list: () => Promise<readonly RunSummary[]>;
   readonly approve: (runId: string, decision: Decision) => Promise<Outcome<Run>>;
-  readonly resume: (runId: string, options?: { readonly rerun: boolean }) => Promise<Outcome<Run>>;
-  readonly extend: (runId: string, extra: Budget) => Promise<Outcome<Run>>;
-  readonly stop: (runId: string) => Promise<Outcome<Run>>;
+  readonly resume: (runId: string) => Promise<Outcome<Run>>;
+  readonly rerun: (runId: string, by: string) => Promise<Outcome<Run>>;
+  readonly extend: (runId: string, extra: Budget, by: string) => Promise<Outcome<Run>>;
+  readonly stop: (runId: string, by: string) => Promise<Outcome<Run>>;
   readonly wakeDue: () => Promise<readonly Outcome<Run>[]>;
   readonly reissueTask: (runId: string, stepKey?: string) => Promise<Outcome<Run>>;
   readonly task: (token: string, tool: string) => Promise<Outcome<Task>>;
@@ -504,10 +505,10 @@ function runsOf(opened: Opened): Runs {
             };
       return changed(opened, runId, () => engine.approve(runId, stepKey, { hash, by, ...answer }));
     },
-    resume: (runId, options) =>
-      changed(opened, runId, () => engine.resume(runId, { rerunUnfinished: options?.rerun ?? false })),
-    extend: (runId, extra) => changed(opened, runId, () => engine.extendBudget(runId, extra)),
-    stop: (runId) => changed(opened, runId, () => engine.stop(runId)),
+    resume: (runId) => changed(opened, runId, () => engine.resume(runId)),
+    rerun: (runId, by) => changed(opened, runId, () => engine.rerun(runId, by)),
+    extend: (runId, extra, by) => changed(opened, runId, () => engine.extendBudget(runId, extra, by)),
+    stop: (runId, by) => changed(opened, runId, () => engine.stop(runId, by)),
     wakeDue: async () => {
       const woken = await engine.tick(needs.clock.now());
       return Promise.all(woken.map((result) => resultOf(opened, result, shownOnly.issue)));

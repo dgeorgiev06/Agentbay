@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { stringify } from "yaml";
 import { fieldOf, textField, toJson } from "../bay/json.ts";
-import { bay, type Ran } from "./cli-fixture.ts";
+import { bay, listOf, type Ran } from "./cli-fixture.ts";
 import { makeProject, type Project } from "./project-fixture.ts";
 
 type Placeholders = Readonly<Record<string, string>>;
@@ -304,9 +304,21 @@ test("the coordinator's commands for an approval, filled with a stale hash, are 
 
 function resumeCommand(coordinator: string, flag: string): string {
   const quoted = [...coordinator.matchAll(/`([^`]+)`/g)].map((match) => match[1] ?? "");
-  const found = quoted.filter((command) => command.includes(` resume <runId> ${flag} --json`));
+  const found = quoted.filter((command) => command.includes(` resume <runId> ${flag} --via chat --quote `));
   assert.equal(found.length, 1, `one resume command with ${flag}, found: ${JSON.stringify(found)}`);
   return found[0] ?? "";
+}
+
+async function answersOf(project: Project, runId: string): Promise<readonly string[]> {
+  const shown = await bay(["runs", runId, "--events", "--project", project.root, "--json"]);
+  const events = listOf(fieldOf(fieldOf(toJson(shown.json), "run") ?? null, "events"));
+  return events.flatMap((event) => {
+    const detail = fieldOf(event, "detail") ?? null;
+    const by = textField(detail, "by");
+    return textField(event, "kind") === "run.resumed" && by !== undefined
+      ? [`${textField(detail, "cause")}: ${by}`]
+      : [];
+  });
 }
 
 async function failedItemRun(project: Project): Promise<{ readonly runId: string; readonly question: string }> {
@@ -331,8 +343,12 @@ test("the coordinator's command to run a foreach's failed items again, filled wi
     const shown = await ranAsWritten(shows[0] ?? "", { "<runId>": runId });
     assert.equal(shown.exitCode, 0, shown.output);
     assert.ok(shown.output.includes(`\n${question}\n`), shown.output);
-    const rerun = await ranAsWritten(resumeCommand(coordinator, "--rerun"), { "<runId>": runId });
+    const rerun = await ranAsWritten(resumeCommand(coordinator, "--rerun"), {
+      "<runId>": runId,
+      "<the owner's exact words>": "Run the broken one again",
+    });
     assert.equal(rerun.exitCode, 0, rerun.output);
+    assert.deepEqual(await answersOf(project, runId), ['rerun: owner via chat, quoted: "Run the broken one again"']);
     const run = fieldOf(toJson(rerun.json), "run") ?? null;
     const again = textField(fieldOf(run, "waiting") ?? null, "question") ?? "";
     assert.match(again, /^Step each failed for 1 of 2 items: the 2nd of 2 items at each\[1\]~2: /);
@@ -342,7 +358,10 @@ test("the coordinator's command to run a foreach's failed items again, filled wi
 test("the coordinator's command to stop a run whose foreach items failed, filled with the run, stops it", async () => {
   await withBuiltProject(async (project, coordinator) => {
     const { runId } = await failedItemRun(project);
-    const stopped = await ranAsWritten(resumeCommand(coordinator, "--stop"), { "<runId>": runId });
+    const stopped = await ranAsWritten(resumeCommand(coordinator, "--stop"), {
+      "<runId>": runId,
+      "<the owner's exact words>": "Stop it",
+    });
     assert.equal(stopped.exitCode, 1, stopped.output);
     const run = fieldOf(toJson(stopped.json), "run") ?? null;
     assert.equal(textField(run, "status"), "failed");
@@ -350,5 +369,6 @@ test("the coordinator's command to stop a run whose foreach items failed, filled
       textField(run, "reason") ?? "",
       /^Step each failed for 1 of 2 items: the 2nd of 2 items at each\[1\]: /,
     );
+    assert.deepEqual(await answersOf(project, runId), ['stop: owner via chat, quoted: "Stop it"']);
   });
 });

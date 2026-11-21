@@ -128,7 +128,7 @@ test("when items fail, the others run to their end, every failure is named, and 
   assert.equal(again.state.status, "waiting");
   assert.equal(tally.runsOf.get(0), 1);
   failing.clear();
-  const rerun = runOf(await runs.resume(started.id, { rerun: true }));
+  const rerun = runOf(await runs.rerun(started.id, "The owner"));
   assert.deepEqual(rerun.state, { status: "done", output: [{ n: 0 }, { n: 1 }, { n: 2 }, { n: 3 }] });
   assert.deepEqual([...tally.runsOf.entries()].sort(), [
     [0, 2],
@@ -154,7 +154,7 @@ test("stopping a run whose side-by-side items failed fails it with every failure
   const log: Script = (request) => (itemOf(request) === 1 ? failure("item 1 broke") : finished({ n: itemOf(request) }));
   const { runs, close } = await openedRuns({ scripts: { "notes:scripts/log.ts": log }, changes: withFlow(eachLog(3)) });
   const started = runOf(await runs.start(flow, [0, 1, 2]));
-  const stopped = runOf(await runs.stop(started.id));
+  const stopped = runOf(await runs.stop(started.id, "The owner"));
   assert.ok(stopped.state.status === "undone", JSON.stringify(stopped.state));
   assert.equal(stopped.state.reason, "Step each failed for 1 of 3 items: the 2nd of 3 items at each[1]: item 1 broke");
   close();
@@ -482,11 +482,11 @@ test("the spend of a failed attempt stays counted in the run after the rerun has
   const { runs, close } = await openedRuns({ scripts, changes: { ...withFlow(steps), notesActions } });
   const started = runOf(await runs.start(flow, [0, 1]));
   assert.equal(started.spent.usd, 3);
-  const failedAgain = runOf(await runs.resume(started.id, { rerun: true }));
+  const failedAgain = runOf(await runs.rerun(started.id, "The owner"));
   assert.equal(failedAgain.spent.usd, 4);
   assert.equal(runOf(await runs.resume(started.id)).spent.usd, 4);
   failing.clear();
-  const rerun = runOf(await runs.resume(started.id, { rerun: true }));
+  const rerun = runOf(await runs.rerun(started.id, "The owner"));
   assert.equal(rerun.spent.usd, 6);
   const [approval] = waitsOf(rerun);
   assert.ok(approval?.reason === "approval");

@@ -6,7 +6,6 @@ import {
   withKernel,
   type CommandResult,
   type Invocation,
-  type Terminal,
 } from "../command-context.ts";
 import type { Command } from "../command-line.ts";
 import type { ListTrust, ModeList, ScriptFiles, TrustGiven } from "../contracts.ts";
@@ -30,9 +29,18 @@ import {
   type ScriptFileChange,
 } from "../trust.ts";
 import { hashOf } from "../json.ts";
+import {
+  allowedChannels,
+  byOf,
+  channelOf,
+  notConfirmed,
+  offRefusal,
+  terminalRefusal,
+  typedYes,
+  type Channel,
+  type OwnerWords,
+} from "../owner-source.ts";
 import { differenceCard, listSize, scriptsCard, trustCard, trustedWhen, withdrawCard } from "../trust-card.ts";
-
-type Channel = { readonly via: "terminal" } | { readonly via: "chat"; readonly quote: string };
 
 type ApprovalRequest = {
   readonly invocation: Invocation;
@@ -117,7 +125,7 @@ const usage =
   '[--via terminal | --via chat --quote "<the owner\'s words>"]; ' +
   'approve --trust <mode> [--reject] [--via chat --hash <hash> --quote "<the owner\'s words>"]';
 
-const notConfirmed = "Not confirmed; nothing changed.";
+const approvalWords: OwnerWords = { command: "bay approve", answers: "Approvals", verb: "Approve" };
 
 const prompts = {
   first: "Type yes to trust it: ",
@@ -125,36 +133,6 @@ const prompts = {
   withdraw: "Type yes to withdraw: ",
   scripts: "Type yes to record that you read them: ",
 };
-
-function channelOf(invocation: Invocation): Channel | string {
-  const via = invocation.values.get("via") ?? "terminal";
-  const quote = invocation.values.get("quote")?.trim();
-  switch (via) {
-    case "terminal":
-      return quote === undefined ? { via } : "--quote goes with --via chat; a terminal approval needs no quote.";
-    case "chat":
-      return quote === undefined || quote === ""
-        ? '--via chat needs --quote "<the owner\'s exact words>".'
-        : { via, quote };
-    default:
-      return `--via is terminal or chat, not ${via}.`;
-  }
-}
-
-function allowedChannels(kernel: Kernel): readonly string[] {
-  return kernel.system.config.approvals?.from ?? ["terminal"];
-}
-
-function byOf(channel: Channel): string {
-  return channel.via === "terminal"
-    ? "owner at the terminal"
-    : `owner via chat, quoted: ${JSON.stringify(channel.quote)}`;
-}
-
-async function typedYes(terminal: Terminal, question: string): Promise<boolean> {
-  const answer = await terminal.ask(question);
-  return answer.trim().toLowerCase() === "yes";
-}
 
 function approvalAt(shown: Outcome<Run>, stepKey: string): Approval | undefined {
   const state = shown.ok ? shown.value.state : undefined;
@@ -199,18 +177,6 @@ function withCardShown(layout: Layout, shownRun: Outcome<Run>, refused: CommandR
   };
 }
 
-async function terminalRefusal(invocation: Invocation, question: string): Promise<string | undefined> {
-  const terminal = invocation.context.terminal;
-  if (!terminal.isInteractive()) {
-    return (
-      "bay approve needs an interactive terminal (stdin is not a TTY). Approvals are for the owner, not for agents: " +
-      "run it yourself in a terminal, or, if the project config lists chat under approvals.from, use --via chat --quote."
-    );
-  }
-  const confirmed = await typedYes(terminal, question);
-  return confirmed ? undefined : notConfirmed;
-}
-
 function answerOf(decision: Decision): { readonly verdict: "approve" | "reject" } | { readonly choice: string } {
   return "choice" in decision ? { choice: decision.choice } : { verdict: decision.verdict };
 }
@@ -222,17 +188,12 @@ async function decide(request: ApprovalRequest): Promise<CommandResult> {
   const approval = approvalAt(shownRun, stepKey);
   const beside = (refused: CommandResult): CommandResult =>
     approval?.card === undefined ? refused : withCardShown(kernel.layout, shownRun, refused);
-  const allowed = allowedChannels(kernel);
-  if (!allowed.includes(channel.via)) {
-    return beside(
-      refusedResult(
-        `Approvals from ${channel.via} are off: approvals.from in agentbay.config.yaml lists ${allowed.join(", ")}.`,
-        `Approve from ${allowed.join(" or ")}; only the owner changes approvals.from.`,
-      ),
-    );
+  const off = offRefusal(kernel, channel, approvalWords);
+  if (off !== undefined) {
+    return beside(off);
   }
-  const refusal =
-    channel.via === "terminal" ? await terminalRefusal(invocation, confirmQuestion(decision, approval)) : undefined;
+  const question = confirmQuestion(decision, approval);
+  const refusal = channel.via === "terminal" ? await terminalRefusal(invocation, approvalWords, question) : undefined;
   if (refusal === notConfirmed) {
     return refusedResult(refusal);
   }

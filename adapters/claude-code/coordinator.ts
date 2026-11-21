@@ -22,6 +22,7 @@ export function bayCommand(layout: Layout): string {
 }
 
 export function coordinatorBlock(bay: string): string {
+  const quoted = '--via chat --quote "<the owner\'s exact words>"';
   return [
     blockStart,
     "## agentbay: how the coordinator works",
@@ -56,11 +57,11 @@ export function coordinatorBlock(bay: string): string {
     "5. When its `waiting` has `choices`, only after the owner names a choice in his own words, run",
     `   \`${bay} approve <runId> <stepKey> --choice <name> --hash <hash> --via chat --quote "<the owner's exact words>" --json\`.`,
     "   Never choose for the owner, and never pass a choice the card shows under Not available.",
-    "6. When its `waiting`, or one in `alsoWaiting`, has the reason `owner`, the run asks the owner a question, such",
-    "   as whether to run a foreach's failed items again. Running again or stopping is the owner's decision, never",
-    `   yours. Run \`${bay} runs <runId>\`, show the owner every line it prints for the question, unchanged and whole,`,
-    `   and wait. Only after the owner answers in his own words, run \`${bay} resume <runId> --rerun --json\` to run`,
-    `   again or \`${bay} resume <runId> --stop --json\` to stop the run, then continue from what it prints as in step 3.`,
+    "6. When its `waiting`, or one in `alsoWaiting`, has the reason `owner`, the run asks the owner a question. Running",
+    `   again or stopping is the owner's decision, never yours. Run \`${bay} runs <runId>\`, show the owner every line it`,
+    "   prints for the question, unchanged and whole, and wait. Only after the owner answers in his own words, run either",
+    `   \`${bay} resume <runId> --rerun ${quoted} --json\` to run again, or to stop the run`,
+    `   \`${bay} resume <runId> --stop ${quoted} --json\`, then go on as in step 3.`,
     "",
     "Trust in a mode is the owner's decision, never yours. When the check warns that a mode waits for trust,",
     `tell the owner, then run \`${bay} approve --trust <mode> --json\`. It changes nothing`,

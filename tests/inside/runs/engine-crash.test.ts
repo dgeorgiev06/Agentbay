@@ -72,7 +72,7 @@ async function resumedAfterCrash(action: string, point: FaultPoint): Promise<voi
       executionsByStep(runner).every((count) => count <= 1),
       `${label}: nothing ran twice before the owner said`,
     );
-    result = await resumer.resume("crash", { rerunUnfinished: true });
+    result = await resumer.rerun("crash", "The owner");
   }
   assert.deepEqual(runOf(result).state, { status: "done", output: { count: 5 } }, label);
   for (const [index, count] of executionsByStep(runner).entries()) {
@@ -150,7 +150,7 @@ test("a lock left by a dead engine is taken over after ten minutes, and the take
     stepKey: "0",
     question:
       "Step 0 started and did not finish, and action save of mode notes has the effects read, write, so running it " +
-      "again could repeat them. Resume with rerunUnfinished to run it again, or stop the run.",
+      "again could repeat them. Resume with --rerun to run it again, or stop the run.",
   });
   const takeover = (await fresh.readEvents("dead")).find((event) => event.kind === "lock.taken-over");
   assert.deepEqual(takeover?.detail, {
@@ -158,7 +158,7 @@ test("a lock left by a dead engine is taken over after ten minutes, and the take
     heartbeatAt: "2026-11-14T09:00:00.000Z",
     owner: "engine-2",
   });
-  const stopped = runOf(await resumer.stop("dead"));
+  const stopped = runOf(await resumer.stop("dead", "The owner"));
   assert.deepEqual(stopped.state, { status: "failed", reason: "The owner stopped the run." });
   close();
 });
@@ -208,7 +208,7 @@ test("a database that stays busy is a refusal to try again, not an exception", a
   const blocker = new DatabaseSync(file);
   blocker.exec("begin immediate");
   const impatient = new SqliteRunStore(file, { busyMilliseconds: 50 });
-  assert.deepEqual(problemsOf(await freshEngine({ store: impatient }).extendBudget(id, { items: 5 })), [
+  assert.deepEqual(problemsOf(await freshEngine({ store: impatient }).extendBudget(id, { items: 5 }, "The owner")), [
     `Another engine is writing run ${id}; try again.`,
   ]);
   blocker.exec("rollback");

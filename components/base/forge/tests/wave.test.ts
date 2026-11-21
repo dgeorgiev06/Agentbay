@@ -12,6 +12,7 @@ import {
   kitTemplate,
   listOf,
   onlyWhenRecapturing,
+  ownerAnswered,
   printedCard,
   project,
   removeAll,
@@ -92,7 +93,7 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     assert.match(question, /1 of 3 items: TD10 \(The td10 mode counts what was added\) at slices\[1\]: /);
     assert.deepEqual(keptSlices(root), ["TD1", "TD10", "TD2"]);
     await provedAs(root, "TD10", ownPassed("TD10"));
-    await bay(root, ["resume", start.id, "--rerun"]);
+    await ownerAnswered(root, start.id, "--rerun");
     const second = await playedSideBySide(root, start.id, players);
     const builds = [...first.asked, ...second.asked].filter((each) => each.action === "build-without-tests");
     assert.deepEqual(builds.map((each) => sliceAsked(each.task)).sort(), ["TD1", "TD10", "TD10", "TD2"]);
@@ -190,7 +191,7 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     await decided(root, start, { step: "start", choice: "build" });
     await playedSideBySide(root, start.id, wavePlayers(root));
     assert.deepEqual(keptSlices(root), ["SA"]);
-    const stopped = runOf(await bay(root, ["resume", start.id, "--stop"]));
+    const stopped = runOf(await ownerAnswered(root, start.id, "--stop"));
     assert.ok(["undone", "failed"].includes(textAt(stopped, "status")), JSON.stringify(stopped));
     assert.deepEqual(keptRows(root), []);
     assert.deepEqual(branches(root), ["forge/SA", "forge/SA-tests-1"]);

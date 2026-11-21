@@ -127,6 +127,11 @@ export function rulesDocument(rules: readonly CommittedRule[]): Json {
   }));
 }
 
+export function rulesGiven(value: Json | undefined): JsonFields {
+  const rules = listOf(value);
+  return rules.length === 0 ? {} : { rules: [...rules] };
+}
+
 export function modulesReached(slice: PlannedSlice, design: DesignSummary): readonly string[] {
   const named = slice.interface ?? [];
   const reached = design.modules.filter(

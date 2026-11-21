@@ -2,6 +2,7 @@ import { defineScript, fieldsOf, type Json, type ScriptContext } from "../../../
 import { branchesAfter } from "./lib/branch-endings.ts";
 import { answerOf } from "./lib/called.ts";
 import { codeAt, readIn } from "./lib/code.ts";
+import { rulesGiven } from "./lib/design-summary.ts";
 import { keepFindings, keptTests } from "./lib/kept-tests.ts";
 import { pinnedFiles } from "./lib/pinned-files.ts";
 import { intoOf, settled } from "./lib/drops.ts";
@@ -24,12 +25,14 @@ import { textsOf } from "./lib/json-values.ts";
 type Asked = AfterRound & {
   readonly practices: readonly string[];
   readonly interface: readonly string[];
+  readonly rules: Json;
 };
 
 function askedOf(input: Json): Asked {
   const fields = fieldsOf(input);
   const after = afterRoundOf(fields, "review-round");
-  return { ...after, practices: textsOf(fields.practices), interface: textsOf(fields.interface) };
+  const rules = fields.rules ?? [];
+  return { ...after, practices: textsOf(fields.practices), interface: textsOf(fields.interface), rules };
 }
 
 type PracticesRead = {
@@ -58,6 +61,7 @@ async function reviewed(context: ScriptContext, asked: Asked, folder: string): P
     verdicts: [...state.verdicts],
     failing: state.failing,
     practices: [...practices.reviewers],
+    ...rulesGiven(asked.rules),
   });
   await answerOf(context, "worktrees.remove", { folder, branchAfter: "kept" });
   const review = reviewOf(answer);

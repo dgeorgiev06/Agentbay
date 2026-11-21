@@ -1,6 +1,7 @@
 import type { Json, ScriptContext } from "../../../../../bay/sdk.ts";
 import type { Stayed } from "./branch-endings.ts";
 import { answerOf } from "./called.ts";
+import { rulesGiven } from "./design-summary.ts";
 import { cutAfresh, removedThenDropped } from "./drops.ts";
 import { handedTestsOf, type HandedTest } from "./handed-tests.ts";
 import { keptFindings, keptTests } from "./kept-tests.ts";
@@ -10,6 +11,7 @@ export type Writing = {
   readonly name: string;
   readonly slice: Json;
   readonly interface: Json;
+  readonly rules: Json;
   readonly practices: Json;
   readonly base: string;
   readonly folder: string;
@@ -22,7 +24,8 @@ export type Written = {
 };
 
 async function testsAsked(context: ScriptContext, writing: Writing, folder: string): Promise<readonly HandedTest[]> {
-  const asked = { slice: writing.slice, interface: writing.interface, folder, practices: writing.practices };
+  const { slice, practices } = writing;
+  const asked = { slice, interface: writing.interface, ...rulesGiven(writing.rules), folder, practices };
   if (writing.number === 1) {
     return handedTestsOf(await answerOf(context, "write-tests", asked));
   }

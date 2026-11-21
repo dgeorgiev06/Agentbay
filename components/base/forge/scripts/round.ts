@@ -1,6 +1,7 @@
 import { defineScript, fail, fieldsOf, type Json, type JsonFields, type ScriptContext } from "../../../../bay/sdk.ts";
 import { answerOf } from "./lib/called.ts";
 import { builtOf, type Built } from "./lib/builder-answer.ts";
+import { rulesGiven } from "./lib/design-summary.ts";
 import type { Leak } from "./lib/leaks.ts";
 import { sliceOf } from "./lib/slice-form.ts";
 import type { Stayed } from "./lib/branch-endings.ts";
@@ -21,6 +22,7 @@ type Round = {
   readonly into: string;
   readonly slice: Json;
   readonly interface: Json;
+  readonly rules: Json;
   readonly fixed: Json;
   readonly cut: Work & { readonly folder: string };
   readonly declared: Json;
@@ -48,6 +50,7 @@ function roundOf(input: Json, into: string): Round {
     into,
     slice,
     interface: fields.interface ?? [],
+    rules: fields.rules ?? [],
     fixed: fields.fixed ?? [],
     cut: { folder: textOf(cut.folder), branch: textOf(cut.branch), commit: textOf(cut.commit) },
     declared: fields.declared ?? null,
@@ -86,7 +89,7 @@ async function builderFolder(context: ScriptContext, round: Round, before: Round
 
 function builderAsked(round: Round, folder: string): JsonFields {
   const { slice, fixed, declared, practices } = round;
-  const asked = { slice, interface: round.interface, fixed, folder, practices, declared };
+  const asked = { slice, interface: round.interface, ...rulesGiven(round.rules), fixed, folder, practices, declared };
   const { before } = round;
   return before === undefined ? asked : { ...asked, findings: [...before.toBuilder], failing: before.failing };
 }
@@ -188,7 +191,7 @@ async function written(context: ScriptContext, round: Round, plan: RoundPlan): P
     return [];
   }
   const { number, name, slice, practices } = round;
-  const writing = { number, name, slice, interface: round.interface, practices, into: round.into };
+  const writing = { number, name, slice, interface: round.interface, rules: round.rules, practices, into: round.into };
   const { tests, stayed } = await newTests(context, { ...writing, base: round.cut.commit, folder: round.cut.folder });
   await keepTests(context, { slice: round.name, tests, mark: await runMark(context, round) });
   return stayed;

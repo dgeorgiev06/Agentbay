@@ -140,7 +140,128 @@ const noComments = {
   },
 };
 
-const agentbayPlugin = { rules: { "no-comments": noComments } };
+const livingDocuments = /(^|\/)docs\/(requirements|designs|plans)(\/|$)/;
+
+const pathCalls = new Set(["join", "resolve", "URL"]);
+
+const livingDocumentReadByTheOneTest = {
+  file: "components/base/requirements/tests/check.test.ts",
+  reads: "docs/requirements/todo.yaml",
+};
+
+function calleeName(node) {
+  if (node.callee.type === "Identifier") {
+    return node.callee.name;
+  }
+  return node.callee.type === "MemberExpression" && node.callee.property.type === "Identifier"
+    ? node.callee.property.name
+    : undefined;
+}
+
+function isImportMeta(node) {
+  return node.type === "MemberExpression" && node.object.type === "MetaProperty";
+}
+
+function pieceOf(node, constants, seen) {
+  if (node.type === "Literal") {
+    return { text: typeof node.value === "string" ? node.value : "", anchored: false };
+  }
+  if (isImportMeta(node)) {
+    return { text: "", anchored: true };
+  }
+  if (node.type === "TemplateLiteral") {
+    return joinedPieces([...node.quasis, ...node.expressions], constants, seen, "");
+  }
+  if (node.type === "TemplateElement") {
+    return { text: node.value.cooked ?? "", anchored: false };
+  }
+  if (node.type === "BinaryExpression" && node.operator === "+") {
+    return joinedPieces([node.left, node.right], constants, seen, "");
+  }
+  if (node.type === "Identifier" && constants.has(node.name) && !seen.has(node.name)) {
+    return pieceOf(constants.get(node.name), constants, new Set([...seen, node.name]));
+  }
+  if ((node.type === "CallExpression" || node.type === "NewExpression") && pathCalls.has(calleeName(node))) {
+    return joinedPieces(node.arguments, constants, seen, "/");
+  }
+  return { text: "", anchored: false };
+}
+
+function joinedPieces(nodes, constants, seen, between) {
+  const ordered = [...nodes].sort((first, second) => first.range[0] - second.range[0]);
+  const pieces = ordered.map((node) => pieceOf(node, constants, seen));
+  return {
+    text: pieces.map((piece) => piece.text).join(between),
+    anchored: pieces.some((piece) => piece.anchored),
+  };
+}
+
+function livingDocumentNamed(text) {
+  const normalized = text.replace(/\/+/g, "/").replace(/(^|\/)(\.\.?\/)+/g, "$1");
+  const at = normalized.search(livingDocuments);
+  return at === -1 ? undefined : normalized.slice(at).replace(/^\/|\/$/g, "");
+}
+
+function isTheException(context, document, allowed) {
+  const file = context.filename.slice(repositoryRoot.length).replace(/^\/+/, "");
+  return allowed.some((entry) => entry.file === file && document === entry.reads);
+}
+
+const noLivingDocuments = {
+  meta: {
+    type: "problem",
+    schema: [
+      {
+        type: "object",
+        properties: {
+          allowed: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: { file: { type: "string" }, reads: { type: "string" } },
+              required: ["file", "reads"],
+              additionalProperties: false,
+            },
+          },
+        },
+        additionalProperties: false,
+      },
+    ],
+    messages: {
+      living:
+        "A test reads {{document}}, a living document of the owner's that changes as he signs new versions: " +
+        "copy what the test needs into the test's fixtures and read it from there.",
+    },
+  },
+  create(context) {
+    const allowed = context.options[0]?.allowed ?? [];
+    const constants = new Map();
+    const calls = [];
+    return {
+      VariableDeclarator(node) {
+        if (node.parent.kind === "const" && node.id.type === "Identifier" && node.init !== null) {
+          constants.set(node.id.name, node.init);
+        }
+      },
+      "CallExpression, NewExpression"(node) {
+        if (pathCalls.has(calleeName(node))) {
+          calls.push(node);
+        }
+      },
+      "Program:exit"() {
+        for (const node of calls) {
+          const { text, anchored } = pieceOf(node, constants, new Set());
+          const document = anchored ? livingDocumentNamed(text) : undefined;
+          if (document !== undefined && !isTheException(context, document, allowed)) {
+            context.report({ node, messageId: "living", data: { document } });
+          }
+        }
+      },
+    };
+  },
+};
+
+const agentbayPlugin = { rules: { "no-comments": noComments, "no-living-documents": noLivingDocuments } };
 
 export default defineConfig(
   globalIgnores(["node_modules/", "tests/fixtures/", ".forge/"]),
@@ -185,6 +306,11 @@ export default defineConfig(
     files: ["bay/**/*.ts", "adapters/**/*.ts", "components/**/*.ts", "schemas/**/*.ts"],
     plugins: { agentbay: agentbayPlugin },
     rules: { "agentbay/no-comments": "error" },
+  },
+  {
+    files: ["**/*.test.ts", "**/tests/**/*.ts"],
+    plugins: { agentbay: agentbayPlugin },
+    rules: { "agentbay/no-living-documents": ["error", { allowed: [livingDocumentReadByTheOneTest] }] },
   },
   {
     files: ["components/**/*.ts"],

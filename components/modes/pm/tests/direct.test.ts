@@ -79,9 +79,10 @@ test("record keeps nothing of a turn handed in with another turn's token", async
   await project.close();
 });
 
-test("the interview's check refuses a turn when no turn of the job is open", async () => {
+test("the interview's check refuses a turn of a started interview whose turn is not open", async () => {
   const project = await openPm();
   await started(project);
+  await started(project, "other");
   const input = taskOf(await askedTurn(project)).input;
   const alone = await project.run("pm.interview", { ...fieldsOf(input), job: "other" });
   const ended = await project.answer(taskOf(alone).token, firstTurn);

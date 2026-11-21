@@ -337,61 +337,55 @@ const ajvOptions = { allErrors: true, strict: false, verbose: true, logger: fals
 
 type SchemaValue = boolean | Readonly<Record<string, unknown>>;
 
-const defaultMetaSchema = "https://json-schema.org/draft/2020-12/schema";
-
-let metaSchemaChecker: Ajv2020 | undefined;
-
-function namesDefaultMetaSchema(schema: SchemaValue): boolean {
-  return typeof schema === "boolean" || schema.$schema === undefined || schema.$schema === defaultMetaSchema;
+export function madeOnFirstUse<T>(make: () => T): () => T {
+  let made: { readonly value: T } | undefined;
+  return () => {
+    made ??= { value: make() };
+    return made.value;
+  };
 }
 
+const metaSchemaChecker = madeOnFirstUse(() => new Ajv2020({ allErrors: true, strict: false, logger: false }));
+
 export function passesMetaSchema(schema: SchemaValue): boolean {
-  metaSchemaChecker ??= new Ajv2020({ allErrors: true, strict: false, logger: false });
-  return namesDefaultMetaSchema(schema) && metaSchemaChecker.validateSchema(schema) === true;
+  return metaSchemaChecker().validateSchema(schema) === true;
 }
 
 function schemaValueOf(value: Json): SchemaValue | undefined {
   return isRecord(value) || typeof value === "boolean" ? value : undefined;
 }
 
-function compiledAlone(main: SchemaValue, parts: SchemaParts): ValidateFunction | string {
+const unchecked = "a schema that does not pass the shared meta-schema check";
+
+function compiledWith(
+  ajv: Ajv2020,
+  schema: ValidSchema,
+  admitted: (part: SchemaValue) => boolean,
+): ValidateFunction | string {
+  const main = schemaValueOf(schema.schema);
+  if (main === undefined) {
+    return "a JSON Schema must be a mapping, true or false";
+  }
   try {
-    const ajv = new Ajv2020(ajvOptions);
-    for (const [name, value] of Object.entries(parts)) {
+    for (const [name, value] of Object.entries(schema.parts)) {
       const part = schemaValueOf(value);
       if (part === undefined) {
         return `the schema ${name} it refers to is not a mapping, true or false`;
       }
+      if (!admitted(part)) {
+        return unchecked;
+      }
       ajv.addSchema(part, name);
     }
-    return ajv.compile(main);
+    return admitted(main) ? ajv.compile(main) : unchecked;
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
   }
 }
 
-function compiledWithSharedMetaSchema(main: SchemaValue, parts: SchemaParts): ValidateFunction | undefined {
-  try {
-    const ajv = new Ajv2020({ ...ajvOptions, validateSchema: false });
-    for (const [name, value] of Object.entries(parts)) {
-      const part = schemaValueOf(value);
-      if (part === undefined || !passesMetaSchema(part)) {
-        return undefined;
-      }
-      ajv.addSchema(part, name);
-    }
-    return passesMetaSchema(main) ? ajv.compile(main) : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 function compileSchema(schema: ValidSchema): ValidateFunction | string {
-  const main = schemaValueOf(schema.schema);
-  if (main === undefined) {
-    return "a JSON Schema must be a mapping, true or false";
-  }
-  return compiledWithSharedMetaSchema(main, schema.parts) ?? compiledAlone(main, schema.parts);
+  const shared = compiledWith(new Ajv2020({ ...ajvOptions, validateSchema: false }), schema, passesMetaSchema);
+  return typeof shared === "function" ? shared : compiledWith(new Ajv2020(ajvOptions), schema, () => true);
 }
 
 const keptValidators = 256;

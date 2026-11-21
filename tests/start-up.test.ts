@@ -15,6 +15,7 @@ type Started = {
   readonly kernelFiles: readonly string[];
   readonly packages: readonly string[];
   readonly compiled: readonly string[];
+  readonly checked: readonly string[];
 };
 
 const recorder = fileURLToPath(new URL("start-up-recorder.ts", import.meta.url));
@@ -80,6 +81,101 @@ const forCheck = [
   "bay/import-scanner.ts",
 ];
 
+function inFolder(folder: string, names: readonly string[]): readonly string[] {
+  return names.map((name) => `${folder}/${name}.ts`);
+}
+
+const broker = inFolder("bay/broker", [
+  "agent-query",
+  "broker",
+  "command-operations",
+  "database-operations",
+  "database-process",
+  "file-access",
+  "file-operations",
+  "folder-links",
+  "http-access",
+  "http-operations",
+  "list-in-force",
+  "operations",
+  "other-operations",
+  "rule",
+  "schema-operations",
+  "script-protocol",
+  "script-runner",
+  "sql-statements",
+  "step-broker",
+]);
+
+const runsFolder = inFolder("bay/runs", [
+  "action-steps",
+  "budget",
+  "card",
+  "choices",
+  "cited-step",
+  "draw-turns",
+  "drawn-values",
+  "engine",
+  "foreach-steps",
+  "given-steps",
+  "hook-seen",
+  "issued-tasks",
+  "item-name",
+  "kernel-migrations",
+  "packed-output",
+  "run-answers",
+  "run-ending",
+  "run-state",
+  "run-store",
+  "runs",
+  "script-steps",
+  "scrubbed-store",
+  "side-by-side-steps",
+  "side-by-side",
+  "skill-steps",
+  "sqlite-rows",
+  "sqlite-run-store",
+  "sqlite-task-tokens",
+  "step-detail",
+  "step-key",
+  "task-tokens",
+  "undo",
+  "waiting",
+  "walk",
+  "workflow-part",
+  "workflow-scope",
+  "workflow-steps",
+]);
+
+const manifests = inFolder("bay/manifests", [
+  "action-problems",
+  "action-schemas",
+  "activation",
+  "binding-problems",
+  "bindings",
+  "file-references",
+  "folders",
+  "grants",
+  "implements-problems",
+  "inspection",
+  "interfaces",
+  "loaded",
+  "manifests",
+  "naming",
+  "placement",
+  "references",
+  "schemas",
+  "settings-problems",
+  "spec",
+  "workflow-problems",
+]);
+
+const kitSchemaFiles = ["config", "interface", "mode", "skill", "workflow"].map(
+  (name) => `schemas/${name}.schema.json`,
+);
+
+const packages = ["ajv", "fast-deep-equal", "fast-uri", "json-schema-traverse", "yaml"];
+
 const kitSchemas = ["Config", "Interface", "Mode", "Workflow"];
 
 let project: Project;
@@ -122,54 +218,44 @@ async function started(argv: readonly string[]): Promise<Started> {
   assert.ok(result.status === 0 || result.status === 1, `bay ${argv.join(" ")}: ${result.stdout}${result.stderr}`);
   const recorded = parseJson(await readFile(record, "utf8"));
   const loaded = textsOf(recorded, "loaded");
-  const compiled = textsOf(recorded, "compiled");
   const kernelFiles = loaded.flatMap((url) => kernelFileOf(url) ?? []).filter((file) => !file.startsWith("tests/"));
   const packages = new Set(loaded.flatMap((url) => packageOf(url) ?? []));
   return {
     kernelFiles: [...new Set(kernelFiles)].sort(),
     packages: [...packages].sort(),
-    compiled: [...compiled].sort(),
+    compiled: [...textsOf(recorded, "compiled")].sort(),
+    checked: [...textsOf(recorded, "checked")].sort(),
   };
-}
-
-function folderOf(file: string): string {
-  return file.slice(0, file.lastIndexOf("/"));
-}
-
-function filesIn(start: Started, folder: string): readonly string[] {
-  return start.kernelFiles.filter((file) => folderOf(file) === folder);
-}
-
-function foldersOf(start: Started): readonly string[] {
-  return [...new Set(start.kernelFiles.map(folderOf))].sort();
 }
 
 test("bay --help and a command's --help load only the command line: no command module, Ajv or YAML", async () => {
   for (const argv of [["--help"], ["runs", "--help"], ["approve", "--help"]]) {
     const start = await started(argv);
-    assert.deepEqual(filesIn(start, "bay"), [...commandLine].sort(), `bay ${argv.join(" ")}`);
-    assert.deepEqual(filesIn(start, "bay/commands"), ["bay/commands/not-built.ts"], `bay ${argv.join(" ")}`);
-    assert.deepEqual(foldersOf(start), ["bay", "bay/commands"], `bay ${argv.join(" ")}`);
+    assert.deepEqual(start.kernelFiles, [...commandLine, "bay/commands/not-built.ts"].sort(), `bay ${argv.join(" ")}`);
     assert.deepEqual(start.packages, [], `bay ${argv.join(" ")}`);
     assert.deepEqual(start.compiled, [], `bay ${argv.join(" ")}`);
   }
 });
 
+function projectSchemas(count: number): readonly string[] {
+  return Array.from({ length: count }, () => "a project schema");
+}
+
 test("bay runs <run> loads its command and the kernel, not the build, an adapter, check, new or the tools", async () => {
   const start = await started(["runs", runId, "--json"]);
-  assert.deepEqual(filesIn(start, "bay"), [...forRuns].sort());
-  assert.deepEqual(filesIn(start, "bay/commands"), ["bay/commands/not-built.ts", "bay/commands/runs.ts"]);
-  assert.deepEqual(foldersOf(start), ["bay", "bay/broker", "bay/commands", "bay/manifests", "bay/runs", "schemas"]);
-  assert.deepEqual(start.compiled, [...kitSchemas, metaSchema, "a project schema"].sort());
+  const expected = [...forRuns, "bay/commands/not-built.ts", "bay/commands/runs.ts", ...broker, ...runsFolder];
+  assert.deepEqual(start.kernelFiles, [...expected, ...manifests, ...kitSchemaFiles].sort());
+  assert.deepEqual(start.packages, packages);
+  assert.deepEqual(start.compiled, [...kitSchemas, metaSchema, ...projectSchemas(1)].sort());
+  assert.deepEqual(start.checked, [...kitSchemas, ...projectSchemas(1)].sort());
 });
 
-test("bay check loads the checks and no run, broker or kernel module, and compiles the meta-schema once", async () => {
+test("bay check loads the checks and no run, broker or kernel module, and compiles each schema content it uses once", async () => {
   const start = await started(["check", "--json"]);
-  assert.deepEqual(filesIn(start, "bay"), [...forCheck].sort());
-  assert.deepEqual(filesIn(start, "bay/commands"), ["bay/commands/check.ts", "bay/commands/not-built.ts"]);
-  assert.deepEqual(foldersOf(start), ["bay", "bay/commands", "bay/manifests", "schemas"]);
-  assert.deepEqual(
-    start.compiled.filter((name) => name !== "a project schema"),
-    [...kitSchemas, metaSchema, "SkillFrontMatter"].sort(),
-  );
+  const expected = [...forCheck, "bay/commands/check.ts", "bay/commands/not-built.ts", ...manifests];
+  assert.deepEqual(start.kernelFiles, [...expected, ...kitSchemaFiles].sort());
+  assert.deepEqual(start.packages, packages);
+  const kitAndSkill = [...kitSchemas, "SkillFrontMatter"];
+  assert.deepEqual(start.compiled, [...kitAndSkill, metaSchema, ...projectSchemas(4)].sort());
+  assert.deepEqual(start.checked, [...kitAndSkill, ...projectSchemas(4)].sort());
 });

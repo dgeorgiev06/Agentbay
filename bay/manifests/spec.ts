@@ -13,6 +13,7 @@ import { failedWith, type Outcome, type Problem } from "../outcome.ts";
 import {
   emptiedRequiredFields,
   errorProblems,
+  madeOnFirstUse,
   passesMetaSchema,
   type Loaded,
   type PathSegments,
@@ -61,28 +62,20 @@ type Source = {
   readonly firstLine: number;
 };
 
-function once<T>(make: () => T): () => T {
-  let made: { readonly value: T } | undefined;
-  return () => {
-    made ??= { value: make() };
-    return made.value;
-  };
-}
-
 const options = { allErrors: true, strict: true, verbose: true } as const;
 
-const ajv = once(() => new Ajv2020({ ...options, validateSchema: false }));
+const ajv = madeOnFirstUse(() => new Ajv2020({ ...options, validateSchema: false }));
 
 function compiled<T>(schema: SchemaObject): ValidateFunction<T> {
   return passesMetaSchema(schema) ? ajv().compile<T>(schema) : new Ajv2020(options).compile<T>(schema);
 }
 
 const validators: { readonly [Kind in keyof Kinds]: () => ValidateFunction<Kinds[Kind]> } = {
-  mode: once(() => compiled<Mode>(modeSchema)),
-  interface: once(() => compiled<Interface>(interfaceSchema)),
-  workflow: once(() => compiled<Workflow>(workflowSchema)),
-  config: once(() => compiled<Config>(configSchema)),
-  skill: once(() => compiled<SkillFrontMatter>(skillSchema)),
+  mode: madeOnFirstUse(() => compiled<Mode>(modeSchema)),
+  interface: madeOnFirstUse(() => compiled<Interface>(interfaceSchema)),
+  workflow: madeOnFirstUse(() => compiled<Workflow>(workflowSchema)),
+  config: madeOnFirstUse(() => compiled<Config>(configSchema)),
+  skill: madeOnFirstUse(() => compiled<SkillFrontMatter>(skillSchema)),
 };
 
 function parseSpec<Kind extends keyof Kinds>(source: Source, kind: Kind): Outcome<Loaded<Kinds[Kind]>> {

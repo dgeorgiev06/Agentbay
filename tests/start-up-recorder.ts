@@ -1,23 +1,34 @@
 import { writeFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 
+type Counted = "compiled" | "checked";
+
 const recordFile = process.env.AGENTBAY_START_UP_RECORD ?? "";
-const compiledKey = Symbol.for("agentbay.start-up.compiled");
 const loaded: string[] = [];
-const compiled: string[] = [];
+const counted: Record<Counted, string[]> = { compiled: [], checked: [] };
 
 function schemaName(schema: unknown): string {
   const named = typeof schema === "object" && schema !== null && "title" in schema ? schema.title : undefined;
   return typeof named === "string" ? named : "a project schema";
 }
 
-Reflect.set(globalThis, compiledKey, (schema: unknown) => {
-  compiled.push(schemaName(schema));
+Reflect.set(globalThis, Symbol.for("agentbay.start-up.counted"), (what: Counted, schema: unknown) => {
+  counted[what].push(schemaName(schema));
 });
 
-const ajvCompile = "_compileSchemaEnv(sch) {";
+const ajvLines: readonly (readonly [string, string])[] = [
+  ["_compileSchemaEnv(sch) {", '"compiled", sch.schema'],
+  ["validateSchema(schema, throwOrLogError) {", '"checked", schema'],
+];
 
-const countedCompile = `${ajvCompile} globalThis[Symbol.for("agentbay.start-up.compiled")](sch.schema);`;
+function counting(source: string): string {
+  return ajvLines.reduce((text, [line, call]) => {
+    if (!text.includes(line)) {
+      throw new Error(`ajv/dist/core.js no longer holds ${line}, so it cannot be counted`);
+    }
+    return text.replace(line, `${line} globalThis[Symbol.for("agentbay.start-up.counted")](${call});`);
+  }, source);
+}
 
 registerHooks({
   load(url, context, nextLoad) {
@@ -27,13 +38,10 @@ registerHooks({
       return result;
     }
     const source = typeof result.source === "string" ? result.source : new TextDecoder().decode(result.source);
-    if (!source.includes(ajvCompile)) {
-      throw new Error(`ajv/dist/core.js no longer holds ${ajvCompile}, so its compiles cannot be counted`);
-    }
-    return { ...result, source: source.replace(ajvCompile, countedCompile) };
+    return { ...result, source: counting(source) };
   },
 });
 
 process.on("exit", () => {
-  writeFileSync(recordFile, JSON.stringify({ loaded, compiled }));
+  writeFileSync(recordFile, JSON.stringify({ loaded, ...counted }));
 });

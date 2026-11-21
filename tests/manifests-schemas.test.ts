@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { inspectSystem, loadSystem, type InspectedFolder } from "../bay/manifests/manifests.ts";
+import { inspectOnce, loadSystem, type InspectedFolder } from "../bay/manifests/manifests.ts";
 import type { Problem } from "../bay/outcome.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import { config, itemsStore, layout, notesMode, paths, rooted, validFiles, yamlText } from "./system-fixture.ts";
@@ -39,7 +39,7 @@ async function readFolder(
   files: Readonly<Record<string, string>>,
   folder: string,
 ): Promise<Extract<InspectedFolder, { readonly manifest: object }>> {
-  const inspection = await inspectSystem(fakeFileSystem(rooted(files)), layout);
+  const inspection = (await inspectOnce(fakeFileSystem(rooted(files)), layout)).inspection;
   const found = inspection.folders.find((entry) => entry.folder === folder);
   assert.ok(found?.manifest !== undefined, `${folder} was not read`);
   return found;

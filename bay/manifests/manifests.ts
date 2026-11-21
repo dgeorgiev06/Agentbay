@@ -167,7 +167,7 @@ export type NewPart =
   | { readonly inMode: string; readonly kind: "action" | "skill" | "workflow"; readonly name: string }
   | { readonly interface: string };
 
-type Pass = {
+export type InspectionPass = {
   readonly inspection: Inspection;
   readonly build: (() => Promise<System>) | undefined;
 };
@@ -477,7 +477,7 @@ function interfaceSourceOf(loaded: Loaded<Interface> | undefined): InterfaceSour
   return loaded === undefined ? undefined : { file: loaded.file, definition: loaded.value };
 }
 
-async function inspect(files: FileSystem, layout: Layout): Promise<Pass> {
+async function inspect(files: FileSystem, layout: Layout): Promise<InspectionPass> {
   const modes = await loadModes(files, layout);
   const interfaces = await loadInterfaces(files, layout);
   const config = await loadConfig(files, layout);
@@ -534,8 +534,8 @@ async function inspect(files: FileSystem, layout: Layout): Promise<Pass> {
   return { inspection: { ...found, problems: [] }, build: () => buildSystem(context, parts) };
 }
 
-export async function inspectSystem(files: FileSystem, layout: Layout): Promise<Inspection> {
-  return (await inspect(files, layout)).inspection;
+export function inspectOnce(files: FileSystem, layout: Layout): Promise<InspectionPass> {
+  return inspect(files, layout);
 }
 
 export function interfaceSchemasOf(system: System): (mode: string) => NameableSchemas {

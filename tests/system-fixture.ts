@@ -7,7 +7,7 @@ import type { Mode } from "../bay/generated/mode.ts";
 import type { Workflow } from "../bay/generated/workflow.ts";
 import { basename } from "node:path/posix";
 import { layoutOf, type Layout } from "../bay/layout.ts";
-import { inspectSystem, loadSystem, type System } from "../bay/manifests/manifests.ts";
+import { inspectOnce, loadSystem, type System } from "../bay/manifests/manifests.ts";
 import type { Outcome, Problem } from "../bay/outcome.ts";
 import type { FileSystem } from "../bay/ports.ts";
 import { recordWithTrust } from "../bay/trust.ts";
@@ -186,7 +186,7 @@ export type SystemReport = {
 };
 
 export async function systemReport(files: FileSystem, reportLayout: Layout): Promise<SystemReport> {
-  const inspection = await inspectSystem(files, reportLayout);
+  const inspection = (await inspectOnce(files, reportLayout)).inspection;
   const active = inspection.folders
     .filter((folder) => folder.active)
     .map((folder) => folder.manifest?.name ?? basename(folder.folder));

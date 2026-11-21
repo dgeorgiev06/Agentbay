@@ -15,6 +15,7 @@ import {
   decided,
   git,
   into,
+  jsonOf,
   kitTemplate,
   playedTo,
   printedCard,
@@ -202,6 +203,30 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     assert.match(textAt(run, "reason"), /failed its checks in round 3, the last round: The condition O2-C4/);
     assert.deepEqual(worktrees(root), []);
     assert.deepEqual(branches(root), []);
+  });
+
+  test("the design card shows each problem of a worked example, beside the rules' problems, and withholds approve", async () => {
+    const root = await project(template);
+    const example = fieldsOf(jsonOf(await readFile(join(import.meta.dirname, "draw-design.example.json"), "utf8")));
+    const input = fieldsOf(example.input ?? null);
+    const challenged = fieldsOf(input.challenged ?? null);
+    const design = fieldsOf(challenged.design ?? null);
+    const [todo = null] = listOf(design.interfaces);
+    const [add = null, ...others] = listOf(fieldsOf(todo).actions);
+    const [first = null, ...rest] = listOf(fieldsOf(add).examples);
+    const wrong = { ...fieldsOf(first), answer: { id: 0, text: "buy milk", status: "open" } };
+    const actions = [{ ...fieldsOf(add), examples: [wrong, ...rest] }, ...others];
+    const broken = { ...design, interfaces: [{ ...fieldsOf(todo), actions }] };
+    const asked = { ...input, challenged: { ...challenged, design: broken } };
+    const output = fieldsOf(
+      fieldsOf(runOf(await bay(root, ["call", "forge.draw-design", JSON.stringify(asked)]))).output ?? null,
+    );
+    const words = listOf(fieldsOf(output.card ?? null).lines).map((line) => textAt(line, "words"));
+    const sentence =
+      'problem: The answer of example 1 of "todo.add" does not fit the response schema of "todo.add". At /id: id ' +
+      "must be at least 1, but it is 0.";
+    assert.ok(words.includes(sentence), words.join("\n"));
+    assert.deepEqual(fieldsOf(output.offered ?? null), { approve: false });
   });
 
   test("a design whose worked example breaks its action's schema goes back to its designer with the sentence", async () => {

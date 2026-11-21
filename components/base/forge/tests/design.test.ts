@@ -305,7 +305,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     await decided(root, start, { step: "path", choice: "light" });
     const asked = await playedTo(root, start.id, {
       designer: (task) => Promise.resolve(inputOf(task).answering === undefined ? todoDesign : answeredDesign()),
-      challenger: (task) => Promise.resolve(p52NotHeld(task, [])),
+      challenger: (task) => Promise.resolve(p52NotHeld(task, inputOf(task).answered === undefined ? [] : [finding])),
     });
     assert.deepEqual(actionsAsked(asked), [
       "designs design",
@@ -317,6 +317,14 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     const words = listOf(fieldsOf(card.card).lines).map((line) => textAt(line, "words"));
     assert.ok(words.includes(`P-52, not held: ${notHeldP52.sentence}`), words.join("\n"));
     assert.ok(words.includes("the first challenge answered P-52 not held; the designer answered once"));
+    assert.ok(words.includes("findings left after the answer: 1"));
+    const left = listOf(fieldsOf(card.card).lines).find((line) => textAt(line, "words").startsWith("finding, in"));
+    assert.deepEqual(left, {
+      mark: "judged",
+      words: `finding, in ${finding.where}: ${finding.wrong} Fix: ${finding.fix}`,
+      source: { step: "challenge-again" },
+      skills: [{ mode: "forge", skill: "skills/challenge", tier: "deep" }],
+    });
     const printedRows = await printedCard(root, start.id, "Commit the design");
     assert.deepEqual(printedRows.slice(-12), [
       "You can:",
@@ -330,7 +338,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
       "           has answered the challenge once,",
       "           which is the most a design run",
       "           asks.",
-      "checked: 0 ran, 21 computed, 3 judged",
+      "checked: 0 ran, 21 computed, 4 judged",
     ]);
     const stopped = runOf(await decided(root, card, { step: "card", choice: "stop" }));
     assert.equal(textAt(stopped, "reason"), "The owner chose stop on the design card, so nothing is committed.");

@@ -87,6 +87,10 @@ function decideLine(run: Run, waiting: Extract<Waiting, { readonly reason: "appr
     : `${decide} --choice <name> --hash ${waiting.hash}`;
 }
 
+function stopLine(run: Run): string {
+  return `or stop with: bay resume ${run.id} --stop ${sourceWords}`;
+}
+
 export function waitingText(run: Run, waiting: Waiting): string {
   switch (waiting.reason) {
     case "skill":
@@ -96,13 +100,15 @@ export function waitingText(run: Run, waiting: Waiting): string {
     case "time":
       return `wakes at ${waiting.until}; bay resume --due wakes it then`;
     case "budget":
-      return `the budget is spent: ${pretty(toJson(waiting.overrun))}`;
-    case "owner":
       return [
-        waiting.question,
-        `run again with: bay resume ${run.id} --rerun ${sourceWords}`,
-        `or stop with: bay resume ${run.id} --stop ${sourceWords}`,
+        `the budget is spent: ${pretty(toJson(waiting.overrun))}`,
+        `raise it with: bay resume ${run.id} --extend <measure>=<amount> ${sourceWords}`,
+        stopLine(run),
       ].join("\n");
+    case "owner":
+      return [waiting.question, `run again with: bay resume ${run.id} --rerun ${sourceWords}`, stopLine(run)].join(
+        "\n",
+      );
   }
 }
 

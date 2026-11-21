@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { stringify } from "yaml";
 import { fieldOf, textField, toJson } from "../bay/json.ts";
-import { bay, listOf, type Ran } from "./cli-fixture.ts";
+import { bay, fakeTerminal, listOf, type Ran } from "./cli-fixture.ts";
 import { makeProject, type Project } from "./project-fixture.ts";
 
 type Placeholders = Readonly<Record<string, string>>;
@@ -116,8 +116,11 @@ const eachWorkflow = {
   ],
 };
 
-async function withBuiltProject(body: (project: Project, coordinator: string) => Promise<void>): Promise<void> {
-  const project = await makeProject({ adapter: "claude-code", approvalsFrom: ["chat"] });
+async function withBuiltProject(
+  body: (project: Project, coordinator: string) => Promise<void>,
+  approvalsFrom: readonly string[] = ["chat"],
+): Promise<void> {
+  const project = await makeProject({ adapter: "claude-code", approvalsFrom });
   try {
     for (const [path, text] of Object.entries(goToolchainFiles)) {
       await project.write(`components/modes/${goToolchain}/${path}`, text);
@@ -370,4 +373,43 @@ test("the coordinator's command to stop a run whose foreach items failed, filled
     );
     assert.deepEqual(await answersOf(project, runId), ['stop: owner via chat, quoted: "Stop it"']);
   });
+});
+
+test("the coordinator's command to raise a spent budget, filled with the amount the owner named, raises it", async () => {
+  await withBuiltProject(async (project, coordinator) => {
+    const call = ["call", "greeter.tally", '{"name":"Ada"}', "--project", project.root, "--json"];
+    const started = fieldOf(toJson((await bay(call)).json), "run") ?? null;
+    assert.equal(textField(fieldOf(started, "waiting") ?? null, "reason"), "budget", JSON.stringify(started));
+    const runId = textField(started, "id") ?? "";
+    const raised = await ranAsWritten(resumeCommand(coordinator, "--extend <measure>=<amount>"), {
+      "<runId>": runId,
+      "<measure>": "tokens",
+      "<amount>": "5",
+      "<the owner's exact words>": "Give it five more tokens",
+    });
+    assert.equal(raised.exitCode, 0, raised.output);
+    assert.equal(textField(fieldOf(toJson(raised.json), "run") ?? null, "status"), "done");
+    assert.deepEqual(await answersOf(project, runId), ['extend: owner via chat, quoted: "Give it five more tokens"']);
+  });
+});
+
+test("when chat is refused, the coordinator's command without --via chat --quote is the one the owner runs himself", async () => {
+  await withBuiltProject(
+    async (project, coordinator) => {
+      const { runId } = await failedItemRun(project);
+      const written = resumeCommand(coordinator, "--stop");
+      const placeholders = { "<runId>": runId, "<the owner's exact words>": "Stop it" };
+      const refused = await ranAsWritten(written, placeholders);
+      assert.equal(refused.exitCode, 1, refused.output);
+      assert.match(refused.output, /from chat are off/);
+      assert.ok(coordinator.includes("give the owner the command without `--via chat --quote` to run himself"));
+      const own = written.replace(/ --via chat --quote "[^"]*"/, "");
+      const terminal = fakeTerminal({ interactive: true, answer: "yes" });
+      const stopped = await bay(filled(own, placeholders), { terminal });
+      assert.equal(stopped.exitCode, 1, stopped.output);
+      assert.equal(textField(fieldOf(toJson(stopped.json), "run") ?? null, "status"), "failed");
+      assert.deepEqual(await answersOf(project, runId), ["stop: owner at the terminal"]);
+    },
+    ["terminal"],
+  );
 });

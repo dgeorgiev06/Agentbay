@@ -268,3 +268,21 @@ test("resume takes no quote at the terminal, and only a typed yes there confirms
     assert.deepEqual(await answeredBy(project, runId), []);
   });
 });
+
+test("runs shows a spent budget with both ways to answer, each with where the answer comes from", async () => {
+  await withProject({}, async (project) => {
+    const root = ["--project", project.root];
+    const started = await bay(["call", "greeter.tally", '{"name":"Ada"}', ...root, "--json"]);
+    const runId = textField(runOf(started), "id") ?? "";
+    const shown = await bay(["runs", runId, ...root]);
+    const source = '[--via terminal | --via chat --quote "<the owner\'s exact words>"]';
+    const lines = shown.output.split("\n");
+    const spent = lines.indexOf("the budget is spent: {");
+    assert.ok(spent > 0, shown.output);
+    const closing = lines.indexOf("}", spent);
+    assert.deepEqual(lines.slice(closing + 1, closing + 3), [
+      `raise it with: bay resume ${runId} --extend <measure>=<amount> ${source}`,
+      `or stop with: bay resume ${runId} --stop ${source}`,
+    ]);
+  });
+});

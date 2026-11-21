@@ -24,6 +24,7 @@ features:
       - bay/answers.ts
       - bay/protocol-json.ts
       - bay/item-words.ts
+      - bay/screen-words.ts
       - bay/yaml-text.ts
       - bay/value-check.ts
       - bay/given-schema.ts

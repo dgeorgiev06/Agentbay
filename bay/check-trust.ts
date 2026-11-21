@@ -1,14 +1,7 @@
+import { counted } from "./item-words.ts";
 import type { GrantedCommand, ListTrust, ModeList, TrustGiven } from "./contracts.ts";
 import { listed } from "./answers.ts";
-import {
-  counted,
-  errors,
-  isLoaded,
-  warnings,
-  type CheckContext,
-  type Finding,
-  type LoadedModeFolder,
-} from "./check-context.ts";
+import { errors, isLoaded, warnings, type CheckContext, type Finding, type LoadedModeFolder } from "./check-context.ts";
 import type { Outcome, Problem } from "./outcome.ts";
 import { listedCommandsOf, listTrustOf } from "./policy.ts";
 import { listChanges, scriptFileChanges, scriptFilesOf, shown, type CommandChange, type TrustRecord } from "./trust.ts";

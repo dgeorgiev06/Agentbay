@@ -1,10 +1,12 @@
 import { itemWords, skillWords, wordsOf, type Approval, type CardLine, type Choice } from "./approval-words.ts";
+import { counted, joinedWith } from "./item-words.ts";
+import { headings, kernelWords, moreWords, sections, type Section } from "./screen-words.ts";
 import { shown } from "./trust.ts";
 import { hanging } from "./trust-card.ts";
 
-export type Section = NonNullable<CardLine["section"]>;
-
 type Fact = CardLine & { readonly section: Section };
+
+type Withheld = Extract<Choice, { readonly status: "withheld" }>;
 
 export type Screen = {
   readonly title: string;
@@ -23,16 +25,13 @@ type Rows = readonly string[];
 
 type InSection = { readonly section: Section; readonly facts: readonly Fact[] };
 
-const headings: Readonly<Record<Section, string>> = {
-  what: "What it is",
-  checks: "Checks",
-  open: "Not decided",
-  problems: "Problems",
-};
-
-const order: readonly Section[] = ["what", "checks", "open", "problems"];
+type Indent = { readonly lead: string; readonly fact: string };
 
 const shortRows = 4;
+
+const atTop: Indent = { lead: "  ", fact: "    " };
+
+const inBlock: Indent = { lead: "    ", fact: "      " };
 
 function isFact(line: CardLine): line is Fact {
   return line.section !== undefined;
@@ -48,36 +47,30 @@ export function screenOf(approval: Approval): Screen | undefined {
 }
 
 export function sectionNamed(name: string): Section | undefined {
-  return order.find((section) => section === name);
+  return sections.find((section) => section === name);
 }
 
 export function sectionNames(): string {
-  return order.join(", ");
+  return sections.join(", ");
 }
 
-function rowsOf(text: string, first: string, rest: string): Rows {
+function rowsOf(text: string, first: string, rest = `${first}  `): Rows {
   return hanging(wordsOf(text), { first, rest });
-}
-
-function counted(count: number, noun: string): string {
-  return `${String(count)} ${noun}${count === 1 ? "" : "s"}`;
-}
-
-function orWords(names: readonly string[]): string {
-  if (names.length < 2) {
-    return names.join("");
-  }
-  return `${names.slice(0, -1).join(", ")} or ${names.at(-1) ?? ""}`;
 }
 
 function spaced(parts: readonly Rows[]): Rows {
   return parts.filter((part) => part.length > 0).flatMap((part, index) => (index === 0 ? part : ["", ...part]));
 }
 
-function sectionsOf(facts: readonly Fact[]): readonly InSection[] {
-  return order.flatMap((section) => {
-    const inSection = facts.filter((fact) => fact.section === section);
-    return inSection.length === 0 ? [] : [{ section, facts: inSection }];
+function withheldOf(choices: readonly Choice[]): readonly Withheld[] {
+  return choices.flatMap((choice) => (choice.status === "withheld" ? [choice] : []));
+}
+
+function sectionsOf(screen: Screen): readonly InSection[] {
+  return sections.flatMap((section) => {
+    const facts = screen.facts.filter((fact) => fact.section === section);
+    const shownAnyway = section === "problems" && withheldOf(screen.choices).length > 0;
+    return facts.length === 0 && !shownAnyway ? [] : [{ section, facts }];
   });
 }
 
@@ -85,27 +78,38 @@ function titleRows(title: string): Rows {
   return rowsOf(title.toUpperCase(), "", "");
 }
 
+function withheldRows(choices: readonly Choice[]): Rows {
+  return withheldOf(choices).flatMap((choice) => [
+    ...rowsOf(`${kernelWords.cannotReply} ${choice.name} now: ${choice.does}`, "  "),
+    ...rowsOf(`${kernelWords.why} ${choice.reason}`, "    "),
+  ]);
+}
+
 function leadOf(fact: Fact): string | undefined {
   switch (fact.mark) {
     case "computed":
       return undefined;
     case "judged":
-      return "A model wrote:";
+      return `${kernelWords.modelWrote}:`;
     case "ran":
-      return `${fact.source.command} reported:`;
+      return `${fact.source.command} ${kernelWords.reported}`;
   }
 }
 
 function shortRowsOf(fact: Fact, previous: Fact | undefined): Rows {
   const lead = leadOf(fact);
   if (lead === undefined) {
-    return rowsOf(fact.words, "  ", "    ");
+    return rowsOf(fact.words, "  ");
   }
-  const led = previous !== undefined && leadOf(previous) === lead ? [] : rowsOf(lead, "  ", "    ");
-  return [...led, ...rowsOf(fact.words, "    ", "      ")];
+  const led = previous !== undefined && leadOf(previous) === lead ? [] : rowsOf(lead, "  ");
+  return [...led, ...rowsOf(fact.words, "    ")];
 }
 
-function shortFactRows(facts: readonly Fact[]): Rows {
+function allFactRows(facts: readonly Fact[]): Rows {
+  return facts.flatMap((fact, index) => shortRowsOf(fact, facts[index - 1]));
+}
+
+function cappedFactRows(facts: readonly Fact[]): Rows {
   const short = facts.filter((fact) => fact.short === true);
   const rows: string[] = [];
   let previous: Fact | undefined;
@@ -121,101 +125,128 @@ function shortFactRows(facts: readonly Fact[]): Rows {
     shownFacts += 1;
   }
   const more = facts.length - shownFacts;
-  return more === 0 ? rows : [...rows, `  and ${String(more)} more, see details`];
+  return more === 0 ? rows : [...rows, `  ${moreWords(more)}`];
 }
 
-function choiceRows(choice: Choice): Rows {
-  return rowsOf(`${choice.name}: ${choice.does}`, "  ", "    ");
+function shortSection(screen: Screen, { section, facts }: InSection): Rows {
+  if (section === "problems") {
+    return [headings.problems, ...withheldRows(screen.choices), ...allFactRows(facts)];
+  }
+  return [headings[section], ...cappedFactRows(facts)];
 }
 
-function replyRows(choices: readonly Choice[]): Rows {
+function offeredRows(choices: readonly Choice[]): Rows {
   const offered = choices.filter((choice) => choice.status === "offered");
-  const withheld = choices.flatMap((choice) => (choice.status === "withheld" ? [choice] : []));
-  const doing = offered.length === 0 ? [] : ["What each reply does", ...offered.flatMap(choiceRows)];
-  const notNow = withheld.flatMap((choice) => [
-    ...choiceRows(choice),
-    ...rowsOf(`Why: ${choice.reason}`, "    ", "      "),
-  ]);
-  return [...doing, ...(notNow.length === 0 ? [] : ["Not available now", ...notNow])];
+  const rows = offered.flatMap((choice) => rowsOf(`${choice.name}: ${choice.does}`, "  "));
+  return rows.length === 0 ? [] : [kernelWords.eachReply, ...rows];
 }
 
 function replyLine(choices: readonly Choice[]): Rows {
   const offered = choices.filter((choice) => choice.status === "offered").map((choice) => choice.name);
   const names = choices.length === 0 ? ["approve", "reject"] : offered;
-  return names.length === 0 ? ["Reply: no reply is available now"] : rowsOf(`Reply: ${orWords(names)}`, "", "  ");
+  const words = names.length === 0 ? "no reply is available now" : joinedWith(names, "or");
+  return rowsOf(`${kernelWords.reply} ${words}`, "");
 }
 
 export function screenLines(screen: Screen, runId: string): Rows {
   return spaced([
     titleRows(screen.title),
-    ...sectionsOf(screen.facts).map(({ section, facts }) => [headings[section], ...shortFactRows(facts)]),
-    replyRows(screen.choices),
-    [...replyLine(screen.choices), "Details:", `  bay runs ${shown(runId)} --details`],
+    ...sectionsOf(screen).map((each) => shortSection(screen, each)),
+    offeredRows(screen.choices),
+    [...replyLine(screen.choices), kernelWords.details, `  bay runs ${shown(runId)} --details`],
   ]);
 }
 
-function byWords(fact: Fact): string {
+function sourceWords(fact: Fact): string {
   const at = `in step ${fact.source.step}${itemWords(fact)}`;
   switch (fact.mark) {
     case "computed":
-      return `A script worked it out, ${at}:`;
+      return `${kernelWords.scriptWorked}, ${at}:`;
     case "judged": {
       const skills = fact.skills.length === 0 ? "" : ` (${fact.skills.map(skillWords).join("; ")})`;
-      return `A model wrote, ${at}${skills}:`;
+      return `${kernelWords.modelWrote} this, ${at}${skills}:`;
     }
     case "ran": {
-      const run = fact.source.run === undefined ? "" : ` in run ${fact.source.run}`;
-      return `The command ${fact.source.command} ran${run}, ${at}:`;
+      const run = fact.source.run === undefined ? "" : `, in run ${fact.source.run}`;
+      return `${kernelWords.toolRan} ${fact.source.command}${run}, ${at}:`;
     }
   }
 }
 
-function detailFactRows(facts: readonly Fact[]): Rows {
-  return facts.flatMap((fact, index) => {
-    const by = byWords(fact);
-    const before = facts[index - 1];
-    const group = before !== undefined && byWords(before) === by ? [] : rowsOf(by, "  ", "    ");
-    return [...group, ...rowsOf(fact.words, "    ", "      ")];
-  });
+type Run = { readonly first: Fact; readonly facts: readonly Fact[] };
+
+function runsOf(facts: readonly Fact[], keyOf: (fact: Fact) => string | undefined): readonly Run[] {
+  return facts.reduce<readonly Run[]>((runs, fact) => {
+    const last = runs.at(-1);
+    if (last !== undefined && keyOf(last.first) === keyOf(fact)) {
+      return [...runs.slice(0, -1), { first: last.first, facts: [...last.facts, fact] }];
+    }
+    return [...runs, { first: fact, facts: [fact] }];
+  }, []);
 }
 
-function sectionDetails({ section, facts }: InSection): Rows {
-  return [headings[section], ...detailFactRows(facts)];
+function sourcedRows(facts: readonly Fact[], indent: Indent): Rows {
+  return runsOf(facts, sourceWords).flatMap((run) => [
+    ...rowsOf(sourceWords(run.first), indent.lead),
+    ...run.facts.flatMap((fact) => rowsOf(fact.words, indent.fact)),
+  ]);
 }
 
-function contentsRows(sections: readonly InSection[], runId: string): Rows {
-  const listed = sections.map(({ section, facts }) => `  ${headings[section]}: ${counted(facts.length, "fact")}`);
-  const named = orWords(sections.map(({ section }) => section));
+function blockRows({ first, facts }: Run): Rows {
+  const { about } = first;
+  return about === undefined ? sourcedRows(facts, atTop) : [...rowsOf(about, "  "), ...sourcedRows(facts, inBlock)];
+}
+
+function sectionDetails(screen: Screen, { section, facts }: InSection): Rows {
+  const withheld = section === "problems" ? withheldRows(screen.choices) : [];
+  return [headings[section], ...withheld, ...runsOf(facts, (fact) => fact.about).flatMap(blockRows)];
+}
+
+function contentsRows(listed: readonly InSection[], runId: string): Rows {
+  const counts = listed.map(({ section, facts }) => `  ${headings[section]}: ${counted(facts.length, "fact")}`);
+  const named = joinedWith(
+    listed.map(({ section }) => section),
+    "or",
+  );
   return [
-    "In this view",
-    ...listed,
-    "  One section alone:",
+    kernelWords.contents,
+    ...counts,
+    `  ${kernelWords.oneSection}`,
     `    bay runs ${runId} --details --section <name>`,
-    ...rowsOf(`where <name> is ${named}.`, "  ", "    "),
+    ...rowsOf(`where <name> is ${named}.`, "  "),
   ];
+}
+
+function producedRows(facts: readonly Fact[]): Rows {
+  const count = (mark: Fact["mark"]): number => facts.filter((fact) => fact.mark === mark).length;
+  const words =
+    `${counted(count("computed"), "fact")} worked out by scripts, ${String(count("judged"))} written by a model, ` +
+    `${String(count("ran"))} from tools.`;
+  return [`  ${kernelWords.producedBy}`, ...rowsOf(words, "    ")];
 }
 
 function recordRows(screen: Screen, record: ScreenRecord): Rows {
   return [
-    "For the record",
-    ...rowsOf("These lines are for copying, so they are not wrapped.", "  ", "  "),
-    "  The steps of this run:",
+    kernelWords.record,
+    ...producedRows(screen.facts),
+    ...rowsOf(kernelWords.copying, "  ", "  "),
+    `  ${kernelWords.steps}`,
     ...record.steps.map((step) => `    ${shown(step)}`),
-    "  The full hash:",
+    `  ${kernelWords.fullHash}`,
     `    ${screen.hash}`,
-    "  Decide with:",
+    `  ${kernelWords.decide}`,
     `    ${shown(record.decide)}`,
   ];
 }
 
 function oneSection(screen: Screen, runId: string, section: Section): Rows {
-  const facts = screen.facts.filter((fact) => fact.section === section);
+  const chosen = sectionsOf(screen).find((each) => each.section === section);
   const shownFacts =
-    facts.length === 0 ? [headings[section], "  It has no facts."] : sectionDetails({ section, facts });
+    chosen === undefined ? [headings[section], `  ${kernelWords.noFacts}`] : sectionDetails(screen, chosen);
   return spaced([
-    [...titleRows(screen.title), "One section of the details."],
+    [...titleRows(screen.title), kernelWords.sectionOfDetails],
     shownFacts,
-    ["The whole view:", `  bay runs ${runId} --details`],
+    [kernelWords.wholeView, `  bay runs ${runId} --details`],
   ]);
 }
 
@@ -224,12 +255,12 @@ export function detailsLines(screen: Screen, record: ScreenRecord, section?: Sec
   if (section !== undefined) {
     return oneSection(screen, runId, section);
   }
-  const sections = sectionsOf(screen.facts);
+  const listed = sectionsOf(screen);
   return spaced([
-    [...titleRows(screen.title), "Every fact this approval rests on."],
-    contentsRows(sections, runId),
-    ...sections.map(sectionDetails),
-    replyRows(screen.choices),
+    [...titleRows(screen.title), kernelWords.everyFact],
+    contentsRows(listed, runId),
+    ...listed.map((each) => sectionDetails(screen, each)),
+    offeredRows(screen.choices),
     replyLine(screen.choices),
     recordRows(screen, record),
   ]);

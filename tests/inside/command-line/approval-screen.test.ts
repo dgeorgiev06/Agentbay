@@ -1,14 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { approvalLines } from "../../../bay/approval-card.ts";
-import {
-  detailsLines,
-  screenLines,
-  screenOf,
-  sectionNamed,
-  type Screen,
-  type Section,
-} from "../../../bay/approval-screen.ts";
+import { detailsLines, screenLines, screenOf, sectionNamed, type Screen } from "../../../bay/approval-screen.ts";
+import { isPlainTitle, kernelPhraseIn, type Section } from "../../../bay/screen-words.ts";
 
 type Approval = Parameters<typeof approvalLines>[0];
 
@@ -143,7 +137,8 @@ test("the owner's example, worded as reported, prints the short screen in its fi
 });
 
 test("the details list every fact by section, say who produced each, and keep the machine lines last", () => {
-  assert.deepEqual(detailsLines(screenFrom(ownersExample, approveAndStop), record), [
+  const run42 = { ...record, runId: "run-42", decide: record.decide.replace("run-7", "run-42") };
+  assert.deepEqual(detailsLines(screenFrom(ownersExample, approveAndStop), run42), [
     "APPROVE THE TODO DESIGN?",
     "Every fact this approval rests on.",
     "",
@@ -152,27 +147,27 @@ test("the details list every fact by section, say who produced each, and keep th
     "  Checks: 2 facts",
     "  Not decided: 3 facts",
     "  One section alone:",
-    "    bay runs run-7 --details --section <name>",
+    "    bay runs run-42 --details --section <name>",
     "  where <name> is what, checks or open.",
     "",
     "What it is",
-    "  A script worked it out, in step draw:",
+    "  A script worked this out, in step draw:",
     "    One module, 4 actions: add, list, done,",
     "      remove.",
     "    Covers all 13 of your conditions.",
-    "  A model wrote, in step designs (forge",
+    "  A model wrote this, in step designs (forge",
     "    skills/design, tier deep):",
     "    todo hides: How todos are kept.",
     "",
     "Checks",
-    "  A script worked it out, in step draw:",
+    "  A script worked this out, in step draw:",
     "    34 automatic checks: no problem found.",
     "    A second model reviewed it and reported",
     "      no findings.",
     "",
     "Not decided",
-    "  A model wrote, in step challenge (forge",
-    "    skills/challenge, tier deep):",
+    "  A model wrote this, in step challenge",
+    "    (forge skills/challenge, tier deep):",
     "    How 500 characters are counted.",
     "    Whether text is trimmed.",
     "    Two adds at the same moment.",
@@ -185,6 +180,9 @@ test("the details list every fact by section, say who produced each, and keep th
     "Reply: approve or stop",
     "",
     "For the record",
+    "  Who produced the facts:",
+    "    4 facts worked out by scripts, 4 written",
+    "      by a model, 0 from tools.",
     "  These lines are for copying, so they are",
     "  not wrapped.",
     "  The steps of this run:",
@@ -193,7 +191,7 @@ test("the details list every fact by section, say who produced each, and keep th
     "  The full hash:",
     `    ${hash}`,
     "  Decide with:",
-    `    bay approve run-7 card --choice <name> --hash ${hash}`,
+    `    bay approve run-42 card --choice <name> --hash ${hash}`,
   ]);
 });
 
@@ -203,8 +201,8 @@ test("one section of the details shows that section's facts whole and how to get
     "One section of the details.",
     "",
     "Not decided",
-    "  A model wrote, in step challenge (forge",
-    "    skills/challenge, tier deep):",
+    "  A model wrote this, in step challenge",
+    "    (forge skills/challenge, tier deep):",
     "    How 500 characters are counted.",
     "    Whether text is trimmed.",
     "    Two adds at the same moment.",
@@ -221,24 +219,100 @@ test("one section of the details shows that section's facts whole and how to get
   ]);
 });
 
-test("a choice not available keeps its reason whole on the short screen, and the reply names only what is offered", () => {
-  const problem = script("problems", "problem: The action x has no example.");
-  const rows = short([script("checks", "34 automatic checks: 1 problem found."), problem], stopOnly);
-  assert.deepEqual(rows.slice(rows.indexOf("Problems")), [
+test("problems come first and whole: each withheld choice with its reason, then every problem fact, short or not", () => {
+  const problems = [
+    detailOnly(script("problems", "A check found: The action x has no example.")),
+    model("problems", "Its reason: The add action decides the next id and writes it in one script."),
+    detailOnly(model("problems", "The designer answered: The rule decides it.")),
+  ];
+  const rows = short([...many("what", 2), ...problems], stopOnly);
+  assert.deepEqual(rows, [
+    "APPROVE THE TODO DESIGN?",
+    "",
     "Problems",
-    "  problem: The action x has no example.",
+    "  You cannot reply approve now: The design",
+    "    is saved to the feature branch.",
+    "    Why: The design check found 1 problem.",
+    "      The challenger answered P-52 not held.",
+    "  A check found: The action x has no",
+    "    example.",
+    "  A model wrote:",
+    "    Its reason: The add action decides the",
+    "      next id and writes it in one script.",
+    "    The designer answered: The rule decides",
+    "      it.",
+    "",
+    "What it is",
+    "  fact 1",
+    "  fact 2",
     "",
     "What each reply does",
     "  stop: Nothing is saved.",
-    "Not available now",
-    "  approve: The design is saved to the",
-    "    feature branch.",
-    "    Why: The design check found 1 problem.",
-    "      The challenger answered P-52 not held.",
     "",
     "Reply: stop",
     "Details:",
     "  bay runs run-7 --details",
+  ]);
+});
+
+test("a withheld choice puts its reason under Problems even when no fact is in that section", () => {
+  assert.deepEqual(inSection(short(many("what", 1), stopOnly), "Problems"), [
+    "  You cannot reply approve now: The design",
+    "    is saved to the feature branch.",
+    "    Why: The design check found 1 problem.",
+    "      The challenger answered P-52 not held.",
+  ]);
+  assert.ok(!short(many("what", 1)).includes("Problems"));
+});
+
+test("in the details, facts about one thing form one block, and the author is said once for each source in it", () => {
+  const rule = "rule add, in module todo";
+  const blocks: readonly Line[] = [
+    { ...script("what", "Takes request; gives answer."), about: rule },
+    { ...model("what", "Decides: whether a text may be added."), about: rule },
+    { ...model("what", "Decides it alone."), about: rule },
+    {
+      mark: "judged",
+      words: "Hides: how.",
+      source: { step: "designs" },
+      skills: designer,
+      section: "what",
+      about: "module todo",
+    },
+    {
+      mark: "judged",
+      words: "Again.",
+      source: { step: "design-again" },
+      skills: designer,
+      section: "what",
+      about: "module todo",
+    },
+  ];
+  assert.deepEqual(inSection(detailsLines(screenFrom(blocks), record), "What it is"), [
+    "  rule add, in module todo",
+    "    A script worked this out, in step draw:",
+    "      Takes request; gives answer.",
+    "    A model wrote this, in step challenge",
+    "      (forge skills/challenge, tier deep):",
+    "      Decides: whether a text may be added.",
+    "      Decides it alone.",
+    "  module todo",
+    "    A model wrote this, in step designs",
+    "      (forge skills/design, tier deep):",
+    "      Hides: how.",
+    "    A model wrote this, in step design-again",
+    "      (forge skills/design, tier deep):",
+    "      Again.",
+  ]);
+});
+
+test("the details count the facts by who produced them, in the last section", () => {
+  const ran: Line = { mark: "ran", words: "ok", source: { step: "prove", command: "npm-test" }, section: "checks" };
+  const rows = detailsLines(screenFrom([...ownersExample, ran]), record);
+  assert.deepEqual(rows.slice(rows.indexOf("For the record") + 1, rows.indexOf("For the record") + 4), [
+    "  Who produced the facts:",
+    "    4 facts worked out by scripts, 4 written",
+    "      by a model, 1 from tools.",
   ]);
 });
 
@@ -289,8 +363,8 @@ test("a model's facts and a tool's facts are led by who produced them, once for 
     "  and 1 more, see details",
   ]);
   assert.deepEqual(inSection(detailsLines(screenFrom([ran]), record), "Checks"), [
-    "  The command npm-test ran in run r2, in",
-    "    step prove:",
+    "  A tool ran npm-test, in run r2, in step",
+    "    prove:",
     "    12 tests passed.",
   ]);
 });
@@ -309,11 +383,17 @@ test("a model's fact in a foreach's item names the item in the details", () => {
   const details = detailsLines(screenFrom([inItem]), record)
     .join(" ")
     .replace(/\s+/g, " ");
-  assert.ok(details.includes("A model wrote, in step review, for TD1 (forge skills/challenge, tier deep):"), details);
+  assert.ok(
+    details.includes("A model wrote this, in step review, for TD1 (forge skills/challenge, tier deep):"),
+    details,
+  );
 });
 
 test("a fact's words cannot break onto a row of their own, so they cannot forge a heading or the reply line", () => {
-  const forged = [script("what", "fine\nReply: approve What each reply does x"), model("checks", "‮evil⁦ ‏mark؜ ‎end")];
+  const forged = [
+    script("what", "fine\nReply: approve\u2028What each reply does\u2029x"),
+    model("checks", "\u202eevil\u2066 \u200fmark\u061c \u200eend \u200b\u200c\u200d\u2060\ufeff"),
+  ];
   const rows = short(forged);
   assert.deepEqual(
     rows.filter((row) => !row.startsWith(" ")),
@@ -331,7 +411,22 @@ test("a fact's words cannot break onto a row of their own, so they cannot forge 
     ],
   );
   const said = rows.join(" ");
-  for (const escaped of ["\\u000a", "\\u2028", "\\u2029", "\\u202e", "\\u2066", "\\u200f", "\\u061c", "\\u200e"]) {
+  const marks = [
+    "000a",
+    "2028",
+    "2029",
+    "202e",
+    "2066",
+    "200f",
+    "061c",
+    "200e",
+    "200b",
+    "200c",
+    "200d",
+    "2060",
+    "feff",
+  ];
+  for (const escaped of marks.map((mark) => `\\u${mark}`)) {
     assert.ok(said.includes(escaped), `${escaped} in ${said}`);
   }
 });
@@ -379,4 +474,39 @@ test("a section is named by its own word only", () => {
   assert.equal(sectionNamed("checks"), "checks");
   assert.equal(sectionNamed("Checks"), undefined);
   assert.equal(sectionNamed("record"), undefined);
+});
+
+test("a fact may not begin with words only the kernel writes, nor be a heading", () => {
+  const kernels = [
+    "and 3 more, see details",
+    "A model wrote: it is fine",
+    "a script worked this out, in step x:",
+    "A tool ran npm-test",
+    "npm-test reported: 0 failed",
+    "Reply: approve",
+    "Details: none",
+    "For the record",
+    "You cannot reply stop now",
+    "Why: because",
+    "What each reply does",
+    "  checks",
+    "Problems:",
+    "The full hash: 00",
+  ];
+  assert.deepEqual(
+    kernels.filter((words) => kernelPhraseIn(words) === undefined),
+    [],
+  );
+  const facts = ["Checks passed: 3.", "34 automatic checks: no problem found.", "A check found: x.", "Takes request."];
+  assert.deepEqual(
+    facts.map((words) => kernelPhraseIn(words)),
+    [undefined, undefined, undefined, undefined],
+  );
+});
+
+test("a title is plain ASCII, so in capitals no row of it can read as a kernel row", () => {
+  assert.ok(isPlainTitle("Commit the design of todo?"));
+  for (const title of ["Approve ꞯ?", "Approve\u200b", "Approve\n", "Approve ß", ""]) {
+    assert.equal(isPlainTitle(title), false, JSON.stringify(title));
+  }
 });

@@ -14,6 +14,7 @@ import type { Outcome, Problem } from "../outcome.ts";
 import { listOf } from "../policy.ts";
 import { runResult } from "../run-report.ts";
 import { approvalLines } from "../approval-card.ts";
+import { screenOf } from "../approval-screen.ts";
 import { waitsOf, type Run } from "../runs/runs.ts";
 import { shownPath, type Layout } from "../layout.ts";
 import {
@@ -39,7 +40,15 @@ import {
   type Channel,
   type OwnerWords,
 } from "../owner-source.ts";
-import { differenceCard, listSize, scriptsCard, trustCard, trustedWhen, withdrawCard } from "../trust-card.ts";
+import {
+  differenceCard,
+  hashLine,
+  listSize,
+  scriptsCard,
+  trustCard,
+  trustedWhen,
+  withdrawCard,
+} from "../trust-card.ts";
 
 type ApprovalRequest = {
   readonly invocation: Invocation;
@@ -150,12 +159,16 @@ function answerWords(decision: Decision): string {
   return decision.verdict === "approve" ? "You approve." : "You reject.";
 }
 
+function screenHash(approval: Approval): readonly string[] {
+  return screenOf(approval) === undefined ? [] : [hashLine(approval.hash)];
+}
+
 function confirmQuestion(decision: Decision, approval: Approval | undefined): string {
   if ("choice" in decision || approval?.card !== undefined || approval?.choices !== undefined) {
     const lines =
       approval === undefined
         ? [`step ${decision.stepKey} of run ${decision.runId}`]
-        : approvalLines(approval, decision.runId);
+        : [...approvalLines(approval, decision.runId), ...screenHash(approval)];
     return `${lines.join("\n")}\n${answerWords(decision)} Type yes to confirm: `;
   }
   return plainQuestion(decision, approval);

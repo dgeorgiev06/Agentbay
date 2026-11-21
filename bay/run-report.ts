@@ -127,6 +127,17 @@ function onScreen(waiting: Waiting | undefined): boolean {
   return waiting?.reason === "approval" && screenOf(waiting) !== undefined;
 }
 
+function noDetailsText(run: Run, options: ReportOptions): string {
+  const waits = [waitingIn(run), ...alsoWaitingIn(run)];
+  if (options.details === undefined || waits.some(onScreen)) {
+    return "";
+  }
+  const card = waits.find((waiting) => waiting?.reason === "approval");
+  return card === undefined
+    ? `No approval screen waits in this run, so there are no details to show; bay runs ${run.id} prints all it holds.`
+    : `The approval at ${card.stepKey} is an older card, which has no details form; all it holds is printed above.`;
+}
+
 function eventsText(events: readonly RunEvent[]): string {
   const lines = events.map((event) => `  ${event.at}  ${event.kind}  ${JSON.stringify(event.detail)}`);
   return ["events:", ...lines].join("\n");
@@ -157,6 +168,9 @@ function alsoJson(run: Run, waiting: Waiting, options: ReportOptions): JsonObjec
 }
 
 function alsoText(run: Run, waiting: Waiting, options: ReportOptions): string {
+  if (onScreen(waiting)) {
+    return `\n${waitingShown(run, waiting, options)}`;
+  }
   if (waiting.reason !== "skill") {
     return `also ${waitingText(run, waiting)}`;
   }
@@ -208,6 +222,7 @@ function reportText(run: Run, options: ReportOptions): string {
     ...alsoWaitingIn(run).map((waiting) => alsoText(run, waiting, options)),
     options.steps === true && !onScreen(waiting) ? stepsText(run.steps) : "",
     options.events === true ? eventsText(run.events) : "",
+    noDetailsText(run, options),
   ];
   return lines.filter((line) => line !== "").join("\n");
 }

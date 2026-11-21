@@ -4,9 +4,12 @@ import type { Kernel } from "../kernel.ts";
 import { runListJson, runLine, runResult } from "../run-report.ts";
 import type { ReportOptions } from "../waiting-report.ts";
 
-async function listRuns(kernel: Kernel): Promise<CommandResult> {
+const detailsOfOneRun = "The list of runs has no details; bay runs <run> --details shows one run's approval screen.";
+
+async function listRuns(kernel: Kernel, details: boolean): Promise<CommandResult> {
   const runs = await kernel.runs.list();
-  const text = runs.length === 0 ? "No runs yet." : runs.map(runLine).join("\n");
+  const listed = runs.length === 0 ? ["No runs yet."] : runs.map(runLine);
+  const text = [...listed, ...(details ? [detailsOfOneRun] : [])].join("\n");
   return succeeded({ runs: runs.map(runListJson) }, text);
 }
 
@@ -35,6 +38,6 @@ async function showRun(kernel: Kernel, invocation: Invocation, runId: string): P
 export function runRuns(invocation: Invocation): Promise<CommandResult> {
   const [runId] = invocation.positionals;
   return withKernel(invocation, (kernel) =>
-    runId === undefined ? listRuns(kernel) : showRun(kernel, invocation, runId),
+    runId === undefined ? listRuns(kernel, detailsOf(invocation) !== undefined) : showRun(kernel, invocation, runId),
   );
 }

@@ -1,6 +1,6 @@
+import { counted } from "./item-words.ts";
 import {
   checkContextOf,
-  counted,
   errors,
   isLoaded,
   warnings,

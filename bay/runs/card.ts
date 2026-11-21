@@ -4,16 +4,21 @@ import { failedWith, succeededWith, unplacedProblem, type Outcome } from "../out
 import { citedStep, isUnder, type Cited, type Records, type SkillUsed, type StepSource } from "./cited-step.ts";
 import type { ItemName } from "../item-words.ts";
 import { isItemName, itemNameOf, type DeclaredName } from "./item-name.ts";
+import {
+  isPlainTitle,
+  kernelPhraseIn,
+  longestAbout,
+  longestTitle,
+  longestWords,
+  sections,
+  type Section,
+} from "../screen-words.ts";
 
 const marks = ["ran", "computed", "judged"] as const;
 
 type Mark = (typeof marks)[number];
 
-export const sections = ["what", "checks", "open", "problems"] as const;
-
-export type Section = (typeof sections)[number];
-
-type Placed = { readonly section?: Section; readonly short?: true };
+type Placed = { readonly section?: Section; readonly short?: true; readonly about?: string };
 
 type CommandSource = StepSource & {
   readonly command: string;
@@ -61,11 +66,7 @@ type Given = {
 
 const cardFields: readonly string[] = ["title", "lines", "withheld"];
 
-const lineFields: readonly string[] = ["mark", "words", "source", "section", "short"];
-
-const longestTitle = 200;
-
-const longestWords = 600;
+const lineFields: readonly string[] = ["mark", "words", "source", "section", "short", "about"];
 
 const kernelLineFields: readonly string[] = ["skills", "foreach", "itemCount", "itemName"];
 
@@ -160,11 +161,25 @@ function sourcedLine(mark: Mark, words: string, source: Json | undefined): Given
   }
 }
 
+function aboutOf(line: Json): { readonly about?: string } | string {
+  const about = fieldOf(line, "about");
+  if (about === undefined) {
+    return {};
+  }
+  if (typeof about !== "string") {
+    return `has the about ${JSON.stringify(about)}; about is a text.`;
+  }
+  return { about };
+}
+
 function placedOf(line: Json): Placed | string {
   const section = fieldOf(line, "section");
   const short = fieldOf(line, "short");
+  const about = aboutOf(line);
   if (section === undefined) {
-    return short === undefined ? {} : "has short but no section; only a fact in a section can be short.";
+    return short === undefined && fieldOf(line, "about") === undefined
+      ? {}
+      : "has short or about but no section; only a fact in a section has them.";
   }
   const known = sections.find((each) => each === section);
   if (known === undefined) {
@@ -174,7 +189,10 @@ function placedOf(line: Json): Placed | string {
   if (short !== undefined && short !== true) {
     return `has the short ${JSON.stringify(short)}; short is true or left out.`;
   }
-  return short === true ? { section: known, short } : { section: known };
+  if (typeof about === "string") {
+    return about;
+  }
+  return { section: known, ...(short === true ? { short } : {}), ...about };
 }
 
 function givenLine(line: Json): GivenLine | string {
@@ -296,6 +314,40 @@ function isPlaced(line: Json): boolean {
   return isRecord(line) && Object.hasOwn(line, "section");
 }
 
+function wordsProblem(words: string | undefined, longest: number, named: string): string | undefined {
+  if (words === undefined) {
+    return undefined;
+  }
+  if (words.trim() === "") {
+    return `has ${named} of nothing but spaces.`;
+  }
+  if (Array.from(words).length > longest) {
+    return `has ${named} longer than ${String(longest)} characters.`;
+  }
+  const phrase = kernelPhraseIn(words);
+  return phrase === undefined
+    ? undefined
+    : `has ${named} beginning with "${phrase}", which only the kernel writes on a screen.`;
+}
+
+function factProblems(line: Json, index: number): readonly string[] {
+  const about = fieldOf(line, "about");
+  const problems = [
+    wordsProblem(textField(line, "words"), longestWords, "words"),
+    typeof about === "string" ? wordsProblem(about, longestAbout, "an about") : undefined,
+  ];
+  return problems.flatMap((problem) => (problem === undefined ? [] : [`line ${String(index + 1)} ${problem}`]));
+}
+
+function titleProblems(title: string): readonly string[] {
+  if (Array.from(title).length > longestTitle) {
+    return [`its title is longer than ${String(longestTitle)} characters.`];
+  }
+  return isPlainTitle(title)
+    ? []
+    : ["its title has a character outside plain ASCII letters, digits, spaces and punctuation."];
+}
+
 function screenProblems(given: Given): readonly string[] {
   const placed = given.lines.filter(isPlaced).length;
   if (placed === 0) {
@@ -307,15 +359,7 @@ function screenProblems(given: Given): readonly string[] {
         "on a screen every fact has one, and on a card none does.",
     ];
   }
-  const long = (text: string, longest: number): boolean => Array.from(text).length > longest;
-  const title = long(given.title, longestTitle) ? [`its title is longer than ${String(longestTitle)} characters.`] : [];
-  const words = given.lines.flatMap((line, index) => {
-    const said = textField(line, "words");
-    return said !== undefined && long(said, longestWords)
-      ? [`line ${String(index + 1)} has words longer than ${String(longestWords)} characters.`]
-      : [];
-  });
-  return [...title, ...words];
+  return [...titleProblems(given.title), ...given.lines.flatMap(factProblems)];
 }
 
 export async function checkedCard(content: Json, context: CardContext): Promise<Outcome<Card | undefined>> {

@@ -1,5 +1,6 @@
 import { approvalLines } from "./approval-card.ts";
-import { screenOf, type Section } from "./approval-screen.ts";
+import { screenOf } from "./approval-screen.ts";
+import type { Section } from "./screen-words.ts";
 import type { Json } from "./contracts.ts";
 import { toJson } from "./json.ts";
 import { waitsOf, type Run, type RunSummary, type Task } from "./runs/runs.ts";

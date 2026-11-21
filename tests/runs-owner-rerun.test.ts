@@ -12,6 +12,7 @@ import {
   openedRuns,
   runOf,
   withFlow,
+  type Changes,
   type OpenedRuns,
   type Script,
 } from "./runs-fixture.ts";
@@ -121,3 +122,41 @@ for (const waiter of waiters) {
     opened.close();
   });
 }
+
+function pingAction(effects: readonly ("read" | "network" | "spend")[]): NonNullable<Changes["notesActions"]> {
+  return {
+    ping: {
+      description: "When a test reaches out once.",
+      input: "schemas/anything.json",
+      output: "schemas/anything.json",
+      effects: [...effects],
+      run: [{ script: "scripts/log.ts" }],
+    },
+  };
+}
+
+async function stoppedAfterPing(effects: readonly ("read" | "network" | "spend")[]): Promise<Run["state"]> {
+  const steps: Workflow["steps"] = [
+    { id: "ping", action: "ping", input: { n: 1 } },
+    { id: "keep", approval: "Keep it?" },
+  ];
+  const opened = await openedRuns({ changes: { ...withFlow(steps), notesActions: pingAction(effects) } });
+  const started = runOf(await opened.runs.start(flow, null));
+  const stopped = runOf(await opened.runs.stop(started.id, "the owner"));
+  opened.close();
+  return stopped.state;
+}
+
+for (const effect of ["network", "spend"] as const) {
+  test(`a stopped run whose finished action has only the effect ${effect} ends undone, the action not undone`, async () => {
+    assert.deepEqual(await stoppedAfterPing([effect]), {
+      status: "undone",
+      reason: "the owner stopped the run.",
+      undo: { undone: [], failed: [], noUndo: [{ stepKey: "ping", action: "notes.ping" }], deleteNotUndone: [] },
+    });
+  });
+}
+
+test("a stopped run whose finished actions only read ends failed, with nothing to undo", async () => {
+  assert.deepEqual(await stoppedAfterPing(["read"]), { status: "failed", reason: "the owner stopped the run." });
+});

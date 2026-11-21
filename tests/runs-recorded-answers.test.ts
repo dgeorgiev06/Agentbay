@@ -226,7 +226,7 @@ test("an answer recorded while a dead engine held the run is taken at the next a
 
 test("an answer recorded for a run that is stopped before it is taken is dropped, and the reason is an event", async () => {
   const { opened, id } = await strandedAnswer();
-  const stopped = runOf(await opened.runs.stop(id));
+  const stopped = runOf(await opened.runs.stop(id, "The owner"));
   assert.ok(stopped.state.status === "undone" || stopped.state.status === "failed", JSON.stringify(stopped.state));
   assert.equal(stopped.recordedAnswers, undefined);
   const dropped = stopped.events.find((event) => event.kind === "answer.dropped");

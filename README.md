@@ -262,7 +262,21 @@ owner with one sentence that names every failed item, by the name its foreach de
 place, such as `the 3rd of 4 items`, then its key and its reason, each reason cut to 200 characters:
 `Step each failed for 1 of 4 items: the 3rd of 4 items at each[2]: <reason>`. `bay resume <run> --rerun` runs only the failed items again, under a new key such as `each[2]~2`;
 items that finished are not run again and keep their outputs. `bay resume <run> --stop` fails the foreach with that
-sentence, and the run is undone as any failed run.
+sentence, and the run ends as any failed run: `failed` only when every finished action only read, so there is
+nothing to undo; otherwise `undone`. The kernel then runs, latest first, the undo of each finished action that has
+one and does not delete, and lists what it undid and what failed to undo; an action that deletes is listed as a
+delete it did not undo, and one with any other effect than read (write, network or spend) and no undo as one it
+cannot undo.
+
+Running again, stopping and raising a budget (`--rerun`, `--stop`, `--extend`) are the owner's answers, so each takes
+where the answer comes from as `bay approve` does: a terminal, the default, which must be interactive and where the
+owner types yes, or `--via chat --quote "<the owner's exact words>"`; each is refused unless `approvals.from` in
+agentbay.config.yaml lists it, and by default it lists terminal alone. The kernel records it with the answer, as
+`owner at the terminal` or `owner via chat, quoted: "<words>"`, in the answer's `run.resumed` event (`bay runs <run>
+--events`). A stop gives the run the reason `<that source> stopped the run.`, except at a foreach whose items failed,
+whose sentence is the reason.
+A plain `bay resume <run>` decides nothing for the owner and takes no source: a run that no engine advances goes on,
+and a run that asks the owner asks again.
 
 Every item draws from the run's one budget. While the budget limits items, dollars or tokens, a script whose
 action may spend runs only when no other item's such script runs, so a step never starts on a budget another

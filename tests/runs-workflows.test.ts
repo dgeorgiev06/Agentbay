@@ -435,7 +435,7 @@ test("a run of a mode that is no longer active is refused when it would advance,
   assert.equal(waiting.state.status, "waiting");
   const onlyStore = await fixtureSystem({ ...withFlow(reviewSteps), activeModes: ["store"] });
   const inactive = await reopen(onlyStore.system);
-  for (const result of [await inactive.resume(waiting.id), await inactive.stop(waiting.id)]) {
+  for (const result of [await inactive.resume(waiting.id), await inactive.stop(waiting.id, "The owner")]) {
     assert.deepEqual(problemsOf(result), ["Mode notes is not active in this project, so nothing of it runs here."]);
   }
   assert.equal(runOf(await runs.show(waiting.id)).state.status, "waiting");
@@ -452,7 +452,7 @@ test("one representative run emits every event kind, in order, with ids and size
   const started = runOf(await runs.start(flow, "staking"));
   const submitted = await runs.submit(tokenOf(started), answer({ id: "d1", text: "PRIVATE-DRAFT-BODY" }));
   assert.equal(waitingOf(submitted).reason, "budget");
-  const approval = waitingOf(await runs.extend(started.id, { items: 5 }));
+  const approval = waitingOf(await runs.extend(started.id, { items: 5 }, "The owner"));
   assert.ok(approval.reason === "approval");
   const decision = { stepKey: "keep", hash: approval.hash, verdict: "reject", by: "owner" } as const;
   const run = runOf(await runs.approve(started.id, decision));

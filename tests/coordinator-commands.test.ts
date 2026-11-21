@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { stringify } from "yaml";
 import { fieldOf, textField, toJson } from "../bay/json.ts";
-import { bay, type Ran } from "./cli-fixture.ts";
+import { bay, fakeTerminal, listOf, type Ran } from "./cli-fixture.ts";
 import { makeProject, type Project } from "./project-fixture.ts";
 
 type Placeholders = Readonly<Record<string, string>>;
@@ -36,6 +36,18 @@ const takeScript = [
   "",
 ].join("\n");
 
+const checkScript = [
+  'import { defineScript, fail } from "agentbay/sdk";',
+  "",
+  "export const run = defineScript(async (input) => {",
+  '  if (JSON.stringify(input).includes("broken")) {',
+  '    fail("it broke");',
+  "  }",
+  "  return input;",
+  "});",
+  "",
+].join("\n");
+
 const shipMode = {
   name: "shipper",
   version: "1.0.0",
@@ -48,8 +60,15 @@ const shipMode = {
       effects: ["read"],
       run: [{ script: "scripts/take.ts" }],
     },
+    check: {
+      description: "When a workflow checks one item.",
+      input: "schemas/anything.json",
+      output: "schemas/anything.json",
+      effects: ["read"],
+      run: [{ script: "scripts/check.ts" }],
+    },
   },
-  workflows: ["workflows/ship.yaml", "workflows/carded.yaml"],
+  workflows: ["workflows/ship.yaml", "workflows/carded.yaml", "workflows/each.yaml"],
 };
 
 const shipWorkflow = {
@@ -83,8 +102,25 @@ const cardedWorkflow = {
   ],
 };
 
-async function withBuiltProject(body: (project: Project, coordinator: string) => Promise<void>): Promise<void> {
-  const project = await makeProject({ adapter: "claude-code", approvalsFrom: ["chat"] });
+const eachWorkflow = {
+  name: "each",
+  trigger: { manual: true },
+  steps: [
+    { id: "offer", action: "take" },
+    {
+      id: "each",
+      foreach: "$steps.offer.output.items",
+      sideBySide: 2,
+      steps: [{ id: "do", action: "check", input: { item: "$item" } }],
+    },
+  ],
+};
+
+async function withBuiltProject(
+  body: (project: Project, coordinator: string) => Promise<void>,
+  approvalsFrom: readonly string[] = ["chat"],
+): Promise<void> {
+  const project = await makeProject({ adapter: "claude-code", approvalsFrom });
   try {
     for (const [path, text] of Object.entries(goToolchainFiles)) {
       await project.write(`components/modes/${goToolchain}/${path}`, text);
@@ -92,6 +128,8 @@ async function withBuiltProject(body: (project: Project, coordinator: string) =>
     await project.write("components/modes/shipper/mode.yaml", stringify(shipMode));
     await project.write("components/modes/shipper/schemas/anything.json", '{ "type": "object" }\n');
     await project.write("components/modes/shipper/scripts/take.ts", takeScript);
+    await project.write("components/modes/shipper/scripts/check.ts", checkScript);
+    await project.write("components/modes/shipper/workflows/each.yaml", stringify(eachWorkflow));
     await project.write("components/modes/shipper/workflows/ship.yaml", stringify(shipWorkflow));
     await project.write("components/modes/shipper/workflows/carded.yaml", stringify(cardedWorkflow));
     const built = await bay(["build", "--project", project.root]);
@@ -265,4 +303,113 @@ test("the coordinator's commands for an approval, filled with a stale hash, are 
       "Take one of the choices the waiting approval offers, naming the hash it shows.",
     ]);
   });
+});
+
+function resumeCommand(coordinator: string, flag: string): string {
+  const quoted = [...coordinator.matchAll(/`([^`]+)`/g)].map((match) => match[1] ?? "");
+  const found = quoted.filter((command) => command.includes(` resume <runId> ${flag} --via chat --quote `));
+  assert.equal(found.length, 1, `one resume command with ${flag}, found: ${JSON.stringify(found)}`);
+  return found[0] ?? "";
+}
+
+async function answersOf(project: Project, runId: string): Promise<readonly string[]> {
+  const shown = await bay(["runs", runId, "--events", "--project", project.root, "--json"]);
+  const events = listOf(fieldOf(fieldOf(toJson(shown.json), "run") ?? null, "events"));
+  return events.flatMap((event) => {
+    const detail = fieldOf(event, "detail") ?? null;
+    const by = textField(detail, "by");
+    const cause = textField(detail, "cause") ?? "";
+    return textField(event, "kind") === "run.resumed" && by !== undefined ? [`${cause}: ${by}`] : [];
+  });
+}
+
+async function failedItemRun(project: Project): Promise<{ readonly runId: string; readonly question: string }> {
+  const input = JSON.stringify({ items: ["fine", "broken"] });
+  const call = ["call", "--workflow", "shipper:workflows/each.yaml", input, "--project", project.root, "--json"];
+  const stopped = fieldOf(toJson((await bay(call)).json), "run") ?? null;
+  const waiting = fieldOf(stopped, "waiting") ?? null;
+  assert.equal(textField(waiting, "reason"), "owner", JSON.stringify(stopped));
+  return { runId: textField(stopped, "id") ?? "", question: textField(waiting, "question") ?? "" };
+}
+
+test("the coordinator's command to run a foreach's failed items again, filled with the run, runs only them again", async () => {
+  await withBuiltProject(async (project, coordinator) => {
+    const { runId, question } = await failedItemRun(project);
+    assert.match(question, /^Step each failed for 1 of 2 items: the 2nd of 2 items at each\[1\]: /);
+    const sixth = coordinator.slice(
+      coordinator.indexOf("\n6. "),
+      coordinator.indexOf("\n\n", coordinator.indexOf("\n6. ")),
+    );
+    const shows = [...sixth.matchAll(/`([^`]+ runs <runId>)`/g)].map((match) => match[1] ?? "");
+    assert.equal(shows.length, 1, sixth);
+    const shown = await ranAsWritten(shows[0] ?? "", { "<runId>": runId });
+    assert.equal(shown.exitCode, 0, shown.output);
+    assert.ok(shown.output.includes(`\n${question}\n`), shown.output);
+    const rerun = await ranAsWritten(resumeCommand(coordinator, "--rerun"), {
+      "<runId>": runId,
+      "<the owner's exact words>": "Run the broken one again",
+    });
+    assert.equal(rerun.exitCode, 0, rerun.output);
+    assert.deepEqual(await answersOf(project, runId), ['rerun: owner via chat, quoted: "Run the broken one again"']);
+    const run = fieldOf(toJson(rerun.json), "run") ?? null;
+    const again = textField(fieldOf(run, "waiting") ?? null, "question") ?? "";
+    assert.match(again, /^Step each failed for 1 of 2 items: the 2nd of 2 items at each\[1\]~2: /);
+  });
+});
+
+test("the coordinator's command to stop a run whose foreach items failed, filled with the run, stops it", async () => {
+  await withBuiltProject(async (project, coordinator) => {
+    const { runId } = await failedItemRun(project);
+    const stopped = await ranAsWritten(resumeCommand(coordinator, "--stop"), {
+      "<runId>": runId,
+      "<the owner's exact words>": "Stop it",
+    });
+    assert.equal(stopped.exitCode, 1, stopped.output);
+    const run = fieldOf(toJson(stopped.json), "run") ?? null;
+    assert.equal(textField(run, "status"), "failed");
+    assert.match(
+      textField(run, "reason") ?? "",
+      /^Step each failed for 1 of 2 items: the 2nd of 2 items at each\[1\]: /,
+    );
+    assert.deepEqual(await answersOf(project, runId), ['stop: owner via chat, quoted: "Stop it"']);
+  });
+});
+
+test("the coordinator's command to raise a spent budget, filled with the amount the owner named, raises it", async () => {
+  await withBuiltProject(async (project, coordinator) => {
+    const call = ["call", "greeter.tally", '{"name":"Ada"}', "--project", project.root, "--json"];
+    const started = fieldOf(toJson((await bay(call)).json), "run") ?? null;
+    assert.equal(textField(fieldOf(started, "waiting") ?? null, "reason"), "budget", JSON.stringify(started));
+    const runId = textField(started, "id") ?? "";
+    const raised = await ranAsWritten(resumeCommand(coordinator, "--extend <measure>=<amount>"), {
+      "<runId>": runId,
+      "<measure>": "tokens",
+      "<amount>": "5",
+      "<the owner's exact words>": "Give it five more tokens",
+    });
+    assert.equal(raised.exitCode, 0, raised.output);
+    assert.equal(textField(fieldOf(toJson(raised.json), "run") ?? null, "status"), "done");
+    assert.deepEqual(await answersOf(project, runId), ['extend: owner via chat, quoted: "Give it five more tokens"']);
+  });
+});
+
+test("when chat is refused, the coordinator's command without --via chat --quote is the one the owner runs himself", async () => {
+  await withBuiltProject(
+    async (project, coordinator) => {
+      const { runId } = await failedItemRun(project);
+      const written = resumeCommand(coordinator, "--stop");
+      const placeholders = { "<runId>": runId, "<the owner's exact words>": "Stop it" };
+      const refused = await ranAsWritten(written, placeholders);
+      assert.equal(refused.exitCode, 1, refused.output);
+      assert.match(refused.output, /from chat are off/);
+      assert.ok(coordinator.includes("give the owner the command without `--via chat --quote` to run himself"));
+      const own = written.replace(/ --via chat --quote "[^"]*"/, "");
+      const terminal = fakeTerminal({ interactive: true, answer: "yes" });
+      const stopped = await bay(filled(own, placeholders), { terminal });
+      assert.equal(stopped.exitCode, 1, stopped.output);
+      assert.equal(textField(fieldOf(toJson(stopped.json), "run") ?? null, "status"), "failed");
+      assert.deepEqual(await answersOf(project, runId), ["stop: owner at the terminal"]);
+    },
+    ["terminal"],
+  );
 });

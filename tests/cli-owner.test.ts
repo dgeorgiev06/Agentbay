@@ -123,7 +123,10 @@ test("approve always needs the hash of what was shown, and a quote only with cha
     const base = ["approve", approval.runId, "keep", "--project", project.root];
     const cases: readonly (readonly [readonly string[], RegExp])[] = [
       [base, /approve needs --hash/],
-      [[...base, "--hash", approval.hash, "--quote", "yes"], /--quote goes with --via chat/],
+      [
+        [...base, "--hash", approval.hash, "--quote", "yes"],
+        /^--quote goes with --via chat; at a terminal the owner types yes instead\.\n/,
+      ],
       [[...base, "--hash", approval.hash, "--via", "chat"], /--via chat needs --quote/],
       [[...base, "--hash", approval.hash, "--via", "chat", "--quote", "  "], /--via chat needs --quote/],
       [[...base, "--hash", approval.hash, "--via", "email"], /--via is terminal or chat, not email/],

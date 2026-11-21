@@ -255,6 +255,7 @@ features:
       - bay/run-report.ts
       - bay/waiting-report.ts
       - bay/approval-card.ts
+      - bay/owner-source.ts
       - bay/terminal.ts
       - bay/trust-card.ts
       - bay/last-resort.ts

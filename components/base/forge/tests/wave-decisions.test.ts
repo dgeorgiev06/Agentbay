@@ -8,7 +8,7 @@ import { planOf } from "../scripts/lib/plan-form.ts";
 import { workOut } from "../scripts/lib/plan-waves.ts";
 import { sideBySideOf } from "../scripts/lib/side-by-side.ts";
 import { proving, waveProofRequest, type ToJoin } from "../scripts/lib/wave-join.ts";
-import { nameClashes, testsToLookFor, waveOf, type PlanFound } from "../scripts/lib/wave-plan.ts";
+import { builtBefore, nameClashes, testsToLookFor, waveOf, type PlanFound } from "../scripts/lib/wave-plan.ts";
 import { modelCallsOfASlice } from "../scripts/lib/wave-start-card.ts";
 import { designFile, requirementsFile, todoDesignFiles, todoPlan } from "./todo-plan.ts";
 import { agreed, plannedSlice, testPath } from "./wave-run.ts";
@@ -61,6 +61,29 @@ describe("which slices a wave holds, and their requests", () => {
     const without = waveOf(asked, { plan, document, workedOut: workOut(plan, []) }, at);
     assert.ok(without.kind === "wave");
     assert.equal(fieldsOf(without.requests[0] ?? null).rules, undefined);
+  });
+
+  test("with the plan's design read, each request carries its actions' worked examples with the mode to call, and a later wave knows what the earlier waves built", () => {
+    const [designed] = todoDesignFiles();
+    const read = readYaml(designed?.text ?? "");
+    assert.ok(read.ok);
+    const design = designSummaryOf(designFile, read.value);
+    const document = planDocument(todoPlan, { requirements: requirementsFile, design: designFile });
+    const plan = planOf(document);
+    const planFound = { plan, document, workedOut: workOut(plan, []), design };
+    const withDesign = waveOf(asked, planFound, at);
+    assert.ok(withDesign.kind === "wave");
+    const examples = listOf(fieldsOf(withDesign.requests[0] ?? null).examples).map(fieldsOf);
+    assert.deepEqual(
+      examples.map((entry) => [entry.action, entry.mode]),
+      [
+        ["todo.add", "todo"],
+        ["todo.list", "todo"],
+      ],
+    );
+    assert.ok(listOf(examples[0]?.examples).length > 0);
+    assert.deepEqual(builtBefore(planFound, 2), ["todo.add", "todo.list"]);
+    assert.deepEqual(builtBefore(planFound, 1), []);
   });
 
   test("a later wave asks for the test files of the slices it comes after, and is refused while one is missing", () => {

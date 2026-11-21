@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, describe, test } from "node:test";
@@ -11,6 +11,7 @@ import { trialsIn } from "../scripts/lib/tried-block.ts";
 import {
   askedOf,
   git,
+  jsonOf,
   kitTemplate,
   listOf,
   printedCard,
@@ -217,39 +218,71 @@ async function standInAnswers(root: string, name: string, variant: TallyVariant)
   await writeFile(join(root, ".stand-in", `${name}.checks-fails-first-printed.json`), JSON.stringify(answer), "utf8");
 }
 
-describe("the rounds' merge card says what the built mode answered to the design's examples", () => {
-  test("one example answered otherwise: merge is withheld, the card shows both sides, and proof was asked one printed item per example", async () => {
-    const root = await project(template);
-    await standInAnswers(root, "TL1", "counts once");
-    const planned = { title: "The tally mode counts names", slice: sliceOf("TL1") };
-    const request = {
-      planned,
-      base: shortHead(root),
-      bugs: [],
-      interface: [testPath("schema.json")],
-      examples: [addToTry],
-    };
-    const start = await started(root, request);
-    const files = Object.keys(tallyFiles("counts once"));
-    const card = await roundToCard(root, start, {
-      name: "TL1",
-      files,
-      tests: [handedTest],
-      built: { outcome: "built" },
+type Rounded = {
+  readonly card: Awaited<ReturnType<typeof roundToCard>>;
+  readonly lines: readonly string[];
+  readonly printedItems: readonly Json[];
+};
+
+async function withSetting(root: string, setting: string | undefined): Promise<void> {
+  if (setting === undefined) {
+    return;
+  }
+  const file = join(root, "agentbay.config.yaml");
+  const config = fieldsOf(jsonOf(await readFile(file, "utf8")));
+  const settings = fieldsOf(config.settings ?? null);
+  const forge = { ...fieldsOf(settings.forge ?? null), tryExamples: setting };
+  await writeFile(file, JSON.stringify({ ...config, settings: { ...settings, forge } }), "utf8");
+}
+
+async function roundedTo(name: string, setting?: string): Promise<Rounded> {
+  const root = await project(template);
+  await withSetting(root, setting);
+  await standInAnswers(root, name, "counts once");
+  const planned = { title: "The tally mode counts names", slice: sliceOf(name) };
+  const interfaceFiles = [testPath("schema.json")];
+  const request = { planned, base: shortHead(root), bugs: [], interface: interfaceFiles, examples: [addToTry] };
+  const start = await started(root, request);
+  const files = Object.keys(tallyFiles("counts once"));
+  const card = await roundToCard(root, start, { name, files, tests: [handedTest], built: { outcome: "built" } });
+  const asked = await askedOf(root, name);
+  const final = listOf(fieldsOf(fieldsOf(asked.at(-1) ?? null).slice ?? null).done).map(fieldsOf);
+  const printedItems = final.filter((item) => fieldsOf(item.proof ?? null).kind === "printed");
+  return { card, lines: await printedCard(root, start.id), printedItems };
+}
+
+function mergeOf(rounded: Rounded): Json {
+  return listOf(rounded.card.choices)[0] ?? null;
+}
+
+describe(
+  "the rounds' merge card says what the built mode answered to the design's examples",
+  { concurrency: true },
+  () => {
+    test("must: one example answered otherwise withholds merge, the card shows both sides, and proof was asked one printed item per example", async () => {
+      const rounded = await roundedTo("TL1");
+      assert.equal(textAt(mergeOf(rounded), "status"), "withheld");
+      assert.equal(textAt(mergeOf(rounded), "reason"), "1 of the design's examples answered otherwise.");
+      assert.deepEqual(
+        rounded.printedItems.map((item) => listOf(fieldsOf(fieldsOf(item).proof ?? null).runs).length),
+        [1, 2, 1, 1],
+      );
+      const text = rounded.lines.join("\n");
+      assert.ok(rounded.lines.includes("  examples, must, failed: The design's"), text);
+      assert.ok(text.includes('"{\\"name\\":\\"ann\\",\\"count\\":1}"'), text);
     });
-    const merge = listOf(card.choices)[0];
-    assert.equal(textAt(merge ?? null, "status"), "withheld");
-    assert.equal(textAt(merge ?? null, "reason"), "1 of the design's examples answered otherwise.");
-    const asked = await askedOf(root, "TL1");
-    const final = listOf(fieldsOf(fieldsOf(asked.at(-1) ?? null).slice ?? null).done).map(fieldsOf);
-    const printedItems = final.filter((item) => fieldsOf(item.proof ?? null).kind === "printed");
-    assert.deepEqual(
-      printedItems.map((item) => listOf(fieldsOf(item.proof ?? null).runs).length),
-      [1, 2, 1, 1],
-    );
-    const lines = await printedCard(root, start.id);
-    const block = lines.findIndex((line) => line.startsWith("  examples, must, failed:"));
-    assert.ok(block > 0, lines.join("\n"));
-    assert.ok(lines.join("\n").includes('"{\\"name\\":\\"ann\\",\\"count\\":1}"'), lines.join("\n"));
-  });
-});
+
+    test("shown: the same block with the item a should, and merge is offered", async () => {
+      const rounded = await roundedTo("TL3", "shown");
+      assert.equal(textAt(mergeOf(rounded), "status"), "offered");
+      assert.ok(rounded.lines.includes("  examples, should, failed: The design's"), rounded.lines.join("\n"));
+    });
+
+    test("off: proof is asked no example, the card says so in one line, and merge is offered", async () => {
+      const rounded = await roundedTo("TL4", "off");
+      assert.deepEqual(rounded.printedItems, []);
+      assert.equal(textAt(mergeOf(rounded), "status"), "offered");
+      assert.ok(rounded.lines.includes("  the design's examples: not tried, since"), rounded.lines.join("\n"));
+    });
+  },
+);

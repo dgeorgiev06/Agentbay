@@ -1312,6 +1312,26 @@ describe("inspectSystem", () => {
       [["kit:components/modes/todo/mode.yaml", "Mode todo of the kit does not load"]],
     );
   });
+
+  test("a broken workflow of a kit mode stops nothing while the mode is not active, and is a problem once it is", async () => {
+    const briefing = { ...briefingMode, workflows: ["workflows/broken.yaml"] };
+    const files = {
+      ...projectFiles(),
+      "/kit/components/modes/briefing/mode.yaml": yamlText(briefing),
+      "/kit/components/modes/briefing/workflows/broken.yaml": "name: broken\nsteps: [\n",
+    };
+    const inactive = await inspectionOf({ files, layout: separateLayout });
+    assert.deepEqual([inactive.problems, inactive.notices], [[], []]);
+    const activeConfig = yamlText({ ...config, modes: ["notes", "briefing"] });
+    const active = await inspectionOf({
+      files: { ...files, "/project/agentbay.config.yaml": activeConfig },
+      layout: separateLayout,
+    });
+    assert.deepEqual(
+      active.problems.map((problem) => problem.file),
+      ["kit:components/modes/briefing/workflows/broken.yaml"],
+    );
+  });
 });
 
 describe("a load and an inspection agree", () => {

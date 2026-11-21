@@ -3,7 +3,7 @@ import { grouped } from "./card-lines.ts";
 
 export type Spelled = {
   readonly value: Json;
-  readonly forms: number;
+  readonly spelled: number;
   readonly refused: readonly string[];
 };
 
@@ -34,15 +34,19 @@ function isCount(value: Json | undefined): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 1;
 }
 
+function isWhole(text: Json | undefined): text is string {
+  return typeof text === "string" && text !== "" && text.isWellFormed();
+}
+
 function partOf(value: Json): Part | undefined {
   if (typeof value === "string") {
-    return { repeat: value, times: 1 };
+    return isWhole(value) ? { repeat: value, times: 1 } : undefined;
   }
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
   }
   const { repeat, times, ...more } = fieldsOf(value);
-  const fits = typeof repeat === "string" && repeat !== "" && isCount(times) && Object.keys(more).length === 0;
+  const fits = isWhole(repeat) && isCount(times) && Object.keys(more).length === 0;
   return fits ? { repeat, times } : undefined;
 }
 
@@ -53,7 +57,7 @@ function codePoints(part: Part): number {
 function refusedPart(index: number): Read {
   const reason =
     `part ${String(index + 1)} is neither a text nor ${partWords}, ` +
-    "with a text that is not empty and a whole count from 1";
+    "with a text of whole characters that is not empty and a whole count from 1";
   return { ok: false, reason };
 }
 
@@ -78,6 +82,9 @@ function formRead(listed: Json | undefined): Read {
     return { ok: false, reason: `its "${formKey}" is not a list; give a list of parts, each a text or ${partWords}` };
   }
   const parts: readonly Json[] = listed;
+  if (parts.length === 0) {
+    return { ok: false, reason: `it has no parts; give at least one, a text or ${partWords}` };
+  }
   if (parts.length > mostParts) {
     const reason =
       `it has ${String(parts.length)} parts, and a text said by rule has at most ${String(mostParts)}; ` +
@@ -89,12 +96,12 @@ function formRead(listed: Json | undefined): Read {
 
 function formSpelled(value: Json): Spelled {
   const read = formRead(fieldsOf(value)[formKey]);
-  return read.ok ? { value: read.text, forms: 1, refused: [] } : { value, forms: 1, refused: [read.reason] };
+  return read.ok ? { value: read.text, spelled: 1, refused: [] } : { value, spelled: 0, refused: [read.reason] };
 }
 
 function together(spelled: readonly Spelled[]): Omit<Spelled, "value"> {
   return {
-    forms: spelled.reduce((sum, each) => sum + each.forms, 0),
+    spelled: spelled.reduce((sum, each) => sum + each.spelled, 0),
     refused: spelled.flatMap((each) => each.refused),
   };
 }
@@ -112,7 +119,7 @@ export function spelledOut(value: Json): Spelled {
     return { value: spelled.map((each) => each.value), ...together(spelled) };
   }
   if (value === null || typeof value !== "object") {
-    return { value, forms: 0, refused: [] };
+    return { value, spelled: 0, refused: [] };
   }
   return isForm(value) ? formSpelled(value) : entriesSpelled(value);
 }

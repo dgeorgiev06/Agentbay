@@ -1,3 +1,4 @@
+import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
 import { quoted, twice } from "./card-lines.ts";
 import { designFolder, designPaths } from "./design-files.ts";
 import { exampleValues, referencesIn, siblingSchemas } from "./design-examples.ts";
@@ -222,6 +223,29 @@ const longTextsRefused: Check = ({ design }) =>
     ),
   );
 
+function fieldsNamedText(schema: Json): boolean {
+  if (Array.isArray(schema)) {
+    return schema.some(fieldsNamedText);
+  }
+  if (schema === null || typeof schema !== "object") {
+    return false;
+  }
+  const fields = fieldsOf(schema);
+  const named = Object.keys(fieldsOf(fields.properties ?? null)).includes("$text");
+  return named || Object.values(fields).some(fieldsNamedText);
+}
+
+const textFieldsNamed: Check = ({ design }) =>
+  actionsOf(design).flatMap((action) =>
+    (["request", "response"] as const)
+      .filter((side) => fieldsNamedText(action[side]))
+      .map(
+        (side) =>
+          `The ${side} schema of "${actionName(action)}" has a field named "$text", which forge reads in an ` +
+          "example as a long text said by rule, so the two cannot be told apart; name the field otherwise.",
+      ),
+  );
+
 const fromRules: readonly Check[] = ruleChecks.map(
   (check) =>
     ({ design }: Checked) =>
@@ -244,13 +268,16 @@ const checks: readonly Check[] = [
   filesOutsideTheFolder,
   vagueNames,
   longTextsRefused,
+  textFieldsNamed,
   ...fromRules,
 ];
 
-export const checkCount = checks.length;
-
 export const heldByRules = ["P-35", "P-36", "P-38", "P-42"];
 
+export function problemsByCheck(checked: Checked): readonly (readonly string[])[] {
+  return checks.map((check) => check(checked));
+}
+
 export function designProblems(checked: Checked): readonly string[] {
-  return checks.flatMap((check) => check(checked));
+  return problemsByCheck(checked).flat();
 }

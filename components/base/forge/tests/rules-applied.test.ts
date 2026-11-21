@@ -4,7 +4,7 @@ import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
 import { answerChanges } from "../scripts/lib/design-compare.ts";
 import { exampleChecks, examplesSpelled } from "../scripts/lib/design-examples.ts";
 import { designOf } from "../scripts/lib/design-form.ts";
-import { designProblems } from "../scripts/lib/design-rules.ts";
+import { designProblems, problemsByCheck } from "../scripts/lib/design-rules.ts";
 import { listOf, textOf } from "../scripts/lib/json-values.ts";
 import { answeredTodo, nextIdNotGiven } from "./todo-answered.ts";
 
@@ -110,7 +110,10 @@ describe("a design states its rules, and the check holds each action to the rule
   test("stores another module owns, or none owns, and a table nobody reads or writes", () => {
     const reads = actionChanged(answeredTodo, "list", { reads: ["todos", "archive"] });
     const stored = ruleChanged(reads, "list-todos", {
-      takes: [...valuesOf(answeredTodo, "list-todos", "takes"), { name: "old", store: "archive", schema: {} }],
+      takes: [
+        ...valuesOf(answeredTodo, "list-todos", "takes"),
+        { name: "old", store: "archive", schema: { type: "array" } },
+      ],
     });
     const owned = moduleChanged(stored, (module) => ({ ...module, owns: { tables: ["todos", "todo-ids", "log"] } }));
     assert.deepEqual(problemsOf(owned), [
@@ -178,6 +181,105 @@ describe("a design states its rules, and the check holds each action to the rule
   });
 });
 
+function withLedger(design: Json): Json {
+  const count = {
+    name: "count",
+    request: {},
+    response: {},
+    serves: [],
+    because: "An operator counts.",
+    reads: ["entries"],
+    examples: [{ input: {}, answer: {} }],
+  };
+  const ledger = {
+    name: "ledger",
+    hides: "How entries are kept.",
+    implements: ["ledger"],
+    owns: { tables: ["entries"] },
+  };
+  return {
+    ...fieldsOf(design),
+    modules: [...listAt(design, "modules"), ledger],
+    interfaces: [...listAt(design, "interfaces"), { name: "ledger", actions: [count] }],
+  };
+}
+
+describe("what is another module's stays its own", () => {
+  test("an action that reads a table of another module, which that module owns", () => {
+    const design = withLedger(actionChanged(answeredTodo, "list", { reads: ["todos", "entries"] }));
+    assert.deepEqual(problemsOf(design), [
+      'The action "todo.list" reads "entries", which the module "todo" does not own; name only the tables and files of the module that offers it.',
+      'The action "todo.list" reads "entries", which its rule "list-todos" does not take; hand it to the rule, so the thin function decides nothing, or take it out of reads.',
+    ]);
+  });
+
+  test("a rule's schema that refers to a schema file of another interface", () => {
+    const [request = null, todos = null] = valuesOf(answeredTodo, "list-todos", "takes");
+    const ledgerRequest = { name: "count", schema: { $ref: "schemas/ledger/count-request.json" } };
+    const design = withLedger(ruleChanged(answeredTodo, "list-todos", { takes: [request, todos, ledgerRequest] }));
+    assert.deepEqual(problemsOf(design), [
+      `The schema of the value "count" of the rule "list-todos" refers to "schemas/ledger/count-request.json"; a rule's schema refers only to a part of itself (#/...) or to a schema file of an interface its module implements, such as schemas/todo/add-request.json.`,
+    ]);
+  });
+});
+
+describe("a rule leaves its thin function nothing to decide", () => {
+  test("a rule that takes no unstored value though the request has fields, and one that gives no answer", () => {
+    const [todos = null] = valuesOf(answeredTodo, "mark-done", "takes").slice(1);
+    const design = ruleChanged(answeredTodo, "mark-done", { takes: [todos], gives: [todos] });
+    assert.deepEqual(problemsOf(design), [
+      'The rule "mark-done" takes no value that is not stored, though the request of "todo.done" has fields; take the request, so the thin function around the rule decides nothing with it (P-52).',
+      'The rule "mark-done" gives no value that is not stored, so "todo.done" would work out its answer around the rule; give the answer from the rule (P-52).',
+    ]);
+  });
+
+  test("a value with an empty schema, standing for a whole store", () => {
+    const [request = null] = valuesOf(answeredTodo, "list-todos", "takes");
+    const design = ruleChanged(answeredTodo, "list-todos", {
+      takes: [request, { name: "todos", store: "todos", schema: {} }],
+    });
+    assert.deepEqual(problemsOf(design), [
+      'The rule "list-todos" takes the value "todos" with an empty schema, so nothing says what it holds; give its schema, field by field.',
+    ]);
+  });
+
+  test("an example after refused calls that answers otherwise than the same calls without them", () => {
+    const [todo = null] = listAt(answeredTodo, "interfaces");
+    const list = listAt(todo, "actions").find((action) => fieldsOf(action).name === "list") ?? null;
+    const examples = listAt(list, "examples").map((example, at) =>
+      at === 4
+        ? {
+            ...fieldsOf(example),
+            answer: {
+              todos: [
+                { id: 1, text: "buy milk", status: "open" },
+                { id: 2, text: "", status: "open" },
+              ],
+            },
+          }
+        : example,
+    );
+    assert.deepEqual(problemsOf(actionChanged(answeredTodo, "list", { examples })), [
+      `Example 5 of "todo.list" comes after calls the design's examples refuse, yet it answers otherwise than example 2, which makes the same calls without them; a refused call writes nothing, so the two must answer the same.`,
+    ]);
+  });
+
+  test("a schema with a field named $text, which an example could not tell from a long text said by rule", () => {
+    const request = { type: "object", properties: { $text: { type: "string" } } };
+    const design = actionChanged(answeredTodo, "list", { request, examples: [] });
+    assert.ok(
+      problemsOf(design).includes(
+        'The request schema of "todo.list" has a field named "$text", which forge reads in an example as a long text said by rule, so the two cannot be told apart; name the field otherwise.',
+      ),
+    );
+  });
+
+  test("every check is run once and counted: the card's count is the number of checks", () => {
+    const checked = { job: "todo", file, conditions, design: designOf(answeredTodo) };
+    assert.equal(problemsByCheck(checked).length, 34);
+  });
+});
+
 describe("what the answer changed, by script, compares the rules as it compares the rest", () => {
   test("the live run's answer, the add rule now giving the next id, is a change to what the rule gives", () => {
     assert.deepEqual(answerChanges(nextIdNotGiven, answeredTodo, conditions), ["rule add: what it gives differs"]);
@@ -223,6 +325,7 @@ describe("long texts said by rule in the answered design's examples", () => {
     assert.deepEqual(problemsOf(design), [
       'In example 1 of "todo.list", the input of earlier call 1 says a text by rule that forge cannot spell out: it spells 10,001 characters, counted in Unicode code points, and a text said by rule spells at most 10,000.',
     ]);
+    assert.equal(examplesSpelled(designOf(design)), 3);
     const checked = exampleChecks(designOf(design)).map((check) => check.checked);
     assert.ok(!checked.includes('The input of earlier call 1 in example 1 of "todo.list"'));
   });

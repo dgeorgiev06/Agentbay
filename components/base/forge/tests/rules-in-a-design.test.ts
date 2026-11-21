@@ -83,7 +83,7 @@ describe("a design that states its rules, through the workflow design", { concur
       assert.ok(rowsAt(printed, rows) >= 0, printed.join("\n"));
     }
     assert.ok(printed.includes("judged   add decides: Whether a text may be"), printed.join("\n"));
-    assert.ok(printed.includes("  checked by script: 24 checks of the"), printed.join("\n"));
+    assert.ok(printed.includes("  checked by script: 34 checks of the"), printed.join("\n"));
     const card = waitingOf(await shown(root, runId), "card");
     assert.equal(textAt(runOf(await decided(root, card, { step: "card", choice: "approve" })), "status"), "done");
     const committed = readYaml(git(root, ["show", `${into}:docs/designs/todo/design.yaml`]));

@@ -6,6 +6,7 @@ import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
 import { challengeOf } from "../scripts/lib/challenge-answer.ts";
 import { designCard, type DesignCardInput } from "../scripts/lib/design-card.ts";
 import { designerAnswersOf, designOf } from "../scripts/lib/design-form.ts";
+import { problemsByCheck } from "../scripts/lib/design-rules.ts";
 import { listOf } from "../scripts/lib/json-values.ts";
 import { pathCard } from "../scripts/lib/path-card.ts";
 import { designPractices } from "../scripts/lib/practices.ts";
@@ -38,6 +39,8 @@ import { printed } from "./printed-card.ts";
 import { todoDesign, todoHides } from "./todo-design.ts";
 
 const file = "docs/requirements/todo.yaml";
+
+const checksRun = problemsByCheck({ job: "todo", file, conditions: [], design: designOf(todoDesign) }).length;
 
 const because = "It serves every condition with four actions on one table.";
 
@@ -206,6 +209,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
       because,
       design: designOf(todoDesign),
       problems: [],
+      checks: checksRun,
       refusedSchemas: 0,
       practices: challengeOf(firstAnswer).practices,
       findings: [],
@@ -275,6 +279,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
       because,
       design: designOf(answeredDesign()),
       problems: [],
+      checks: checksRun,
       refusedSchemas: 0,
       practices: challengeOf(allHeld(asked[3]?.task ?? null)).practices,
       findings: [],

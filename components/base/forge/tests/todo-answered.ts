@@ -157,6 +157,7 @@ const listAction: Json = {
   writes: [],
   examples: [
     { input: { status: "open" }, answer: { todos: [] } },
+    { earlier: [added("buy milk")], input: { status: "open" }, answer: { todos: [open(1, "buy milk")] } },
     {
       earlier: [added("buy milk"), added("call the bank")],
       input: { status: "open" },

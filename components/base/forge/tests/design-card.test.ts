@@ -7,6 +7,7 @@ import { answeringStance } from "../scripts/lib/design-again.ts";
 import { foundOf, secondPassNeeded } from "../scripts/lib/second-round.ts";
 import { designCard, type DesignCardInput, type SecondPass } from "../scripts/lib/design-card.ts";
 import { answerChanges, differences } from "../scripts/lib/design-compare.ts";
+import { problemsByCheck } from "../scripts/lib/design-rules.ts";
 import { designOf } from "../scripts/lib/design-form.ts";
 import { listOf } from "../scripts/lib/json-values.ts";
 import { pathCard } from "../scripts/lib/path-card.ts";
@@ -16,6 +17,8 @@ import { printed } from "./printed-card.ts";
 import { todoDesign, todoHides } from "./todo-design.ts";
 
 const file = "docs/requirements/todo.yaml";
+
+const checksRun = problemsByCheck({ job: "todo", file, conditions: [], design: designOf(todoDesign) }).length;
 
 const skills = {
   designs: "forge skills/design, tier deep",
@@ -65,6 +68,7 @@ async function lightInput(practices: readonly PracticeAnswer[]): Promise<DesignC
     because: "It is the one design.",
     design: designOf(todoDesign),
     problems: [],
+    checks: checksRun,
     refusedSchemas: 0,
     practices,
     findings: [],
@@ -165,7 +169,7 @@ judged    by forge skills/design, tier deep
     todos; 2 examples
   coverage: every condition is served by an
     action: yes
-  checked by script: 24 checks of the
+  checked by script: 34 checks of the
     design, no problem
   examples: 10, checked against their
     actions' schemas, but not the input of

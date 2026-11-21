@@ -10,10 +10,10 @@ const mostParts = 20;
 describe("a long text said by rule in a worked example, spelled out by one function", () => {
   test("500 times a is the text of 500 a's, and a value with no form is left as it is", () => {
     const spelled = spelledOut({ text: { $text: [{ repeat: "a", times: 500 }] } });
-    assert.deepEqual(spelled, { value: { text: "a".repeat(500) }, forms: 1, refused: [] });
+    assert.deepEqual(spelled, { value: { text: "a".repeat(500) }, spelled: 1, refused: [] });
     assert.deepEqual(spelledOut({ text: "buy milk", tags: [1, null] }), {
       value: { text: "buy milk", tags: [1, null] },
-      forms: 0,
+      spelled: 0,
       refused: [],
     });
   });
@@ -35,7 +35,7 @@ describe("a long text said by rule in a worked example, spelled out by one funct
     const past = { $text: [{ repeat: "ab", times: 5000 }, "c"] };
     assert.deepEqual(spelledOut([past]), {
       value: [past],
-      forms: 1,
+      spelled: 0,
       refused: [
         "it spells 10,001 characters, counted in Unicode code points, and a text said by rule spells at most 10,000",
       ],
@@ -44,19 +44,28 @@ describe("a long text said by rule in a worked example, spelled out by one funct
     assert.equal(huge.refused.length, 1);
   });
 
-  test("more parts than the bound, a part of no known form and a $text that is not a list are refused", () => {
+  test("more parts than the bound, no part, an empty part, a lone surrogate half, a part of no known form and a $text that is not a list are refused", () => {
     const many = { $text: Array.from({ length: mostParts + 1 }, () => "a") };
-    const badParts = [{ repeat: "", times: 3 }, { repeat: "a", times: 1.5 }, { repeat: "a", times: 2, more: 1 }, 7];
+    const badParts = [
+      { repeat: "", times: 3 },
+      { repeat: "a", times: 1.5 },
+      { repeat: "a", times: 2, more: 1 },
+      7,
+      "",
+      "\uD83E",
+      { repeat: "\uDD5B", times: 2 },
+    ];
     assert.deepEqual(
-      [many, ...badParts.map((part) => ({ $text: ["ok", part] })), { $text: "a" }].map(
+      [many, ...badParts.map((part) => ({ $text: ["ok", part] })), { $text: "a" }, { $text: [] }].map(
         (form) => spelledOut(form).refused,
       ),
       [
         ["it has 21 parts, and a text said by rule has at most 20; join parts that repeat the same text"],
         ...badParts.map(() => [
-          'part 2 is neither a text nor {"repeat": "<text>", "times": <count>}, with a text that is not empty and a whole count from 1',
+          'part 2 is neither a text nor {"repeat": "<text>", "times": <count>}, with a text of whole characters that is not empty and a whole count from 1',
         ]),
         ['its "$text" is not a list; give a list of parts, each a text or {"repeat": "<text>", "times": <count>}'],
+        ['it has no parts; give at least one, a text or {"repeat": "<text>", "times": <count>}'],
       ],
     );
   });
@@ -64,6 +73,6 @@ describe("a long text said by rule in a worked example, spelled out by one funct
   test("forms are found at any depth, and an object with $text beside other fields is plain data", () => {
     const plain = { $text: [{ repeat: "a", times: 2 }], other: 1 };
     const spelled = spelledOut({ todos: [{ text: { $text: ["b", { repeat: "c", times: 2 }] } }], plain });
-    assert.deepEqual(spelled, { value: { todos: [{ text: "bcc" }], plain }, forms: 1, refused: [] });
+    assert.deepEqual(spelled, { value: { todos: [{ text: "bcc" }], plain }, spelled: 1, refused: [] });
   });
 });

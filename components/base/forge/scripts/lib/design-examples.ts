@@ -201,7 +201,7 @@ export function exampleChecks(design: Design): readonly ExampleCheck[] {
 
 export function examplesSpelled(design: Design): number {
   const examples = design.interfaces.flatMap((each) => each.actions.flatMap((action) => action.examples));
-  return examples.filter((example) => exampleValues(example).some(({ value }) => spelledOut(value).forms > 0)).length;
+  return examples.filter((example) => exampleValues(example).some(({ value }) => spelledOut(value).spelled > 0)).length;
 }
 
 export function exampleValues(example: Example): readonly { readonly side: string; readonly value: Json }[] {

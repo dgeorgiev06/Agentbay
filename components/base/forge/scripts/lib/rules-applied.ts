@@ -1,3 +1,4 @@
+import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
 import { quoted, twice } from "./card-lines.ts";
 import { referencesIn } from "./design-examples.ts";
 import {
@@ -10,6 +11,7 @@ import {
   type Rule,
   type Value,
 } from "./design-form.ts";
+import { refusedCallsThatWrite } from "./refused-calls.ts";
 
 type Placed = Action & { readonly interface: string };
 
@@ -135,10 +137,10 @@ function ruleStoresNotOwned(design: Design, rule: Kept): readonly string[] {
   );
 }
 
-const storesNotOwned: Check = (design) => [
-  ...actionsOf(design).flatMap((action) => actionStoresNotOwned(design, action)),
-  ...rulesOf(design).flatMap((rule) => ruleStoresNotOwned(design, rule)),
-];
+const actionsStoreNotOwned: Check = (design) =>
+  actionsOf(design).flatMap((action) => actionStoresNotOwned(design, action));
+
+const rulesStoreNotOwned: Check = (design) => rulesOf(design).flatMap((rule) => ruleStoresNotOwned(design, rule));
 
 const directions: readonly Direction[] = [
   {
@@ -171,14 +173,14 @@ const directions: readonly Direction[] = [
   },
 ];
 
-const storesApart: Check = (design) =>
-  appliedIn(design).flatMap((applied) =>
-    directions.flatMap((direction) =>
+function apartIn(direction: Direction): Check {
+  return (design) =>
+    appliedIn(design).flatMap((applied) =>
       [...new Set(direction.from(applied))]
         .filter((store) => !direction.missingIn(applied).includes(store))
         .map((store) => direction.sentence(applied, store)),
-    ),
-  );
+    );
+}
 
 const rulesNobodyApplies: Check = (design) => {
   const applied = actionsOf(design).map((action) => action.rule);
@@ -199,12 +201,12 @@ function valuesTwice(rule: Rule): readonly string[] {
   );
 }
 
-const ruleNamesTwice: Check = (design) => [
-  ...twice(rulesOf(design).map((rule) => rule.name)).map(
+const rulesNamedTwice: Check = (design) =>
+  twice(rulesOf(design).map((rule) => rule.name)).map(
     (name) => `The design has two rules named "${name}"; give each rule a name of its own.`,
-  ),
-  ...rulesOf(design).flatMap(valuesTwice),
-];
+  );
+
+const valuesNamedTwice: Check = (design) => rulesOf(design).flatMap(valuesTwice);
 
 function untouched(design: Design, module: Module): readonly string[] {
   const used = actionsOf(design).flatMap((action) => [...action.reads, ...action.writes]);
@@ -259,14 +261,63 @@ function valueReferences(design: Design, rule: Kept): readonly string[] {
 
 const ruleSchemasReferOutside: Check = (design) => rulesOf(design).flatMap((rule) => valueReferences(design, rule));
 
+function hasFields(schema: Json): boolean {
+  return Object.keys(fieldsOf(fieldsOf(schema).properties ?? null)).length > 0;
+}
+
+function isEmpty(schema: Json): boolean {
+  return Object.keys(fieldsOf(schema)).length === 0;
+}
+
+function unstored(values: readonly Value[]): readonly Value[] {
+  return values.filter((value) => value.store === undefined);
+}
+
+const rulesTakingNoRequest: Check = (design) =>
+  appliedIn(design)
+    .filter(({ action, rule }) => hasFields(action.request) && unstored(rule.takes).length === 0)
+    .map(
+      ({ action, rule }) =>
+        `The rule "${rule.name}" takes no value that is not stored, though the request of "${actionName(action)}" ` +
+        "has fields; take the request, so the thin function around the rule decides nothing with it (P-52).",
+    );
+
+const rulesGivingNoAnswer: Check = (design) =>
+  appliedIn(design)
+    .filter(({ action, rule }) => !isEmpty(action.response) && unstored(rule.gives).length === 0)
+    .map(
+      ({ action, rule }) =>
+        `The rule "${rule.name}" gives no value that is not stored, so "${actionName(action)}" would work out ` +
+        "its answer around the rule; give the answer from the rule (P-52).",
+    );
+
+const opaqueValues: Check = (design) =>
+  rulesOf(design).flatMap((rule) =>
+    sidesOf(rule).flatMap(({ verb, values }) =>
+      values
+        .filter((value) => isEmpty(value.schema))
+        .map(
+          (value) =>
+            `The rule "${rule.name}" ${verb} the value "${value.name}" with an empty schema, so nothing says ` +
+            "what it holds; give its schema, field by field.",
+        ),
+    ),
+  );
+
 export const ruleChecks: readonly Check[] = [
   actionsWithoutRule,
   rulesUnknown,
   rulesOfAnotherModule,
-  storesNotOwned,
-  storesApart,
+  actionsStoreNotOwned,
+  rulesStoreNotOwned,
+  ...directions.map(apartIn),
   rulesNobodyApplies,
-  ruleNamesTwice,
+  rulesNamedTwice,
+  valuesNamedTwice,
   storesUntouched,
   ruleSchemasReferOutside,
+  rulesTakingNoRequest,
+  rulesGivingNoAnswer,
+  opaqueValues,
+  refusedCallsThatWrite,
 ];

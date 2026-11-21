@@ -11,7 +11,7 @@ import {
   type Value,
 } from "./design-form.ts";
 import { examplesSpelled } from "./design-examples.ts";
-import { checkCount, heldByRules } from "./design-rules.ts";
+import { heldByRules } from "./design-rules.ts";
 import type { DesignPath } from "./path-card.ts";
 import {
   decidingWords,
@@ -32,6 +32,7 @@ export type DesignCardInput = {
   readonly because: string;
   readonly design: Design;
   readonly problems: readonly string[];
+  readonly checks: number;
   readonly refusedSchemas: number;
   readonly practices: readonly PracticeAnswer[];
   readonly findings: readonly Finding[];
@@ -188,7 +189,7 @@ function checkLines(input: DesignCardInput): readonly CardLine[] {
   const found = input.problems.length === 0 ? "no problem" : counted(input.problems.length, "problem");
   return [
     computed("draw", coverageWords(input)),
-    computed("draw", `checked by script: ${String(checkCount)} checks of the design, ${found}`),
+    computed("draw", `checked by script: ${String(input.checks)} checks of the design, ${found}`),
     ...input.problems.map((problem) => computed("draw", `problem: ${problem}`)),
     computed("draw", examplesWords(input)),
     ...spelledLines(input),

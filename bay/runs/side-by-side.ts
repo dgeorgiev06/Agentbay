@@ -1,4 +1,5 @@
 import type { Json } from "../contracts.ts";
+import { itemNameWords, itemPlaceWords, type ItemName } from "./item-name.ts";
 import type { Waiting } from "./run-state.ts";
 
 export type ItemPhase = "resumed" | "queued" | "running" | "holding" | "ended";
@@ -14,10 +15,13 @@ export type ForeachEnd =
   | { readonly kind: "failed"; readonly reason: string }
   | { readonly kind: "asking"; readonly lead: Waiting; readonly others: readonly Waiting[]; readonly question: string };
 
+export type ItemNames = readonly (ItemName | undefined)[];
+
 export type ForeachPlace = {
   readonly stepId: string;
   readonly key: string;
   readonly stopped: boolean;
+  readonly names: ItemNames;
 };
 
 type Failure = {
@@ -54,11 +58,15 @@ function failuresOf(ends: readonly ItemEnd[]): readonly Failure[] {
   return ends.flatMap((end, index) => (end.kind === "failed" ? [{ index, key: end.key, reason: end.reason }] : []));
 }
 
-export function failureSentence(stepId: string, ends: readonly ItemEnd[]): string {
+function failedItemWords(failure: Failure, count: number, names: ItemNames): string {
+  const name = names[failure.index];
+  const item = name === undefined ? itemPlaceWords(failure.index, count) : itemNameWords(name);
+  return `${item} at ${failure.key}: ${cutReason(failure.reason)}`;
+}
+
+export function failureSentence(stepId: string, ends: readonly ItemEnd[], names: ItemNames): string {
   const failures = failuresOf(ends);
-  const named = failures.map(
-    (failure) => `item ${String(failure.index)} (${failure.key}): ${cutReason(failure.reason)}`,
-  );
+  const named = failures.map((failure) => failedItemWords(failure, ends.length, names));
   const counted = `${String(failures.length)} of ${String(ends.length)} items`;
   return `Step ${stepId} failed for ${counted}: ${named.join("; ")}`;
 }
@@ -76,7 +84,7 @@ export function foreachEnd(ends: readonly ItemEnd[], place: ForeachPlace): Forea
   if (failuresOf(ends).length === 0) {
     return lead === undefined ? { kind: "done", outputs: outputsOf(ends) } : { kind: "waiting", lead, others };
   }
-  const sentence = failureSentence(place.stepId, ends);
+  const sentence = failureSentence(place.stepId, ends, place.names);
   if (place.stopped) {
     return { kind: "failed", reason: sentence };
   }

@@ -238,7 +238,10 @@ function inItemOf(context: CardContext, foreach: string | undefined, item: numbe
     return {};
   }
   const key = context.keys.get(foreach);
-  const items = (key === undefined ? undefined : context.steps.get(key)?.items) ?? [];
+  const items = key === undefined ? undefined : context.steps.get(key)?.items;
+  if (items === undefined) {
+    return { foreach };
+  }
   const read = (reference: string): Outcome<Json> => context.resolveInItem(reference, items[item] ?? null);
   const name = itemNameOf(context.itemNames.get(foreach), read);
   return { foreach, itemCount: items.length, ...(name === undefined ? {} : { itemName: name }) };
@@ -304,16 +307,23 @@ function storedCount(count: Json | undefined, item: number): { readonly itemCoun
   return { itemCount: count };
 }
 
+function nameFrom(fields: Readonly<Record<string, unknown>>): ItemName | undefined {
+  const { id, title } = fields;
+  if (typeof id !== "string" || strayField(fields, itemNameFields) !== undefined) {
+    return undefined;
+  }
+  if (title === undefined) {
+    return { id };
+  }
+  return typeof title === "string" ? { id, title } : undefined;
+}
+
 function storedName(value: Json | undefined): { readonly itemName?: ItemName } {
   if (value === undefined) {
     return {};
   }
-  const id = textField(value, "id") ?? "";
-  const title = textField(value, "title");
-  const name = title === undefined ? { id } : { id, title };
-  const fields = isRecord(value) ? Object.keys(value) : [];
-  const exact = fields.length === Object.keys(name).length && fields.every((field) => itemNameFields.includes(field));
-  if (!exact || !isItemName(name)) {
+  const name = isRecord(value) ? nameFrom(value) : undefined;
+  if (name === undefined || !isItemName(name)) {
     throw malformedCard();
   }
   return { itemName: name };

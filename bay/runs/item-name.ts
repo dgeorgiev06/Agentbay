@@ -16,8 +16,20 @@ const cutMark = "…";
 
 const breaking = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
 
+function withoutBreaks(text: string): string {
+  return text.replace(breaking, " ");
+}
+
+function withBrackets(text: string): string {
+  return text.replaceAll("(", "[").replaceAll(")", "]");
+}
+
+function squeezed(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
 function oneLine(text: string): string {
-  return text.replace(breaking, " ").replaceAll("(", "[").replaceAll(")", "]").replace(/\s+/g, " ").trim();
+  return squeezed(withBrackets(withoutBreaks(text)));
 }
 
 function cut(text: string, longest: number): string {
@@ -44,8 +56,11 @@ function namePart(read: Read, reference: string, longest: number): string | unde
 }
 
 export function itemNameOf(declared: DeclaredName | undefined, read: Read): ItemName | undefined {
-  const id = declared === undefined ? undefined : namePart(read, declared.id, longestId);
-  if (declared === undefined || id === undefined) {
+  if (declared === undefined) {
+    return undefined;
+  }
+  const id = namePart(read, declared.id, longestId);
+  if (id === undefined) {
     return undefined;
   }
   const title = declared.title === undefined ? undefined : namePart(read, declared.title, longestTitle);
@@ -58,4 +73,20 @@ function isBounded(text: string | undefined, longest: number): boolean {
 
 export function isItemName(name: ItemName): boolean {
   return isBounded(name.id, longestId) && isBounded(name.title, longestTitle);
+}
+
+function ordinal(position: number): string {
+  const tens = position % 100;
+  const suffixes = ["th", "st", "nd", "rd"];
+  const suffix = tens >= 11 && tens <= 13 ? "th" : (suffixes[position % 10] ?? "th");
+  return `${String(position)}${suffix}`;
+}
+
+export function itemPlaceWords(item: number, count: number | undefined): string {
+  const of = count === undefined ? "item" : `of ${String(count)} ${count === 1 ? "item" : "items"}`;
+  return `the ${ordinal(item + 1)} ${of}`;
+}
+
+export function itemNameWords(name: ItemName): string {
+  return name.title === undefined ? name.id : `${name.id} (${name.title})`;
 }

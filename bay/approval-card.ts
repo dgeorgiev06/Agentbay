@@ -1,4 +1,4 @@
-import type { Run } from "./runs/runs.ts";
+import { itemNameWords, itemPlaceWords, type Run } from "./runs/runs.ts";
 import { shown } from "./trust.ts";
 import { hanging, hashLine, namedRows } from "./trust-card.ts";
 
@@ -17,10 +17,6 @@ type Choice = NonNullable<Approval["choices"]>[number];
 type Withheld = Extract<Choice, { readonly status: "withheld" }>;
 
 type Segment = { readonly label: string; readonly tokens: readonly string[] };
-
-type ItemName = NonNullable<CardLine["itemName"]>;
-
-type ItemPlace = { readonly item: number; readonly foreach: string; readonly count?: number };
 
 const markColumn = "computed".length + 1;
 
@@ -45,31 +41,15 @@ function skillWords(skill: SkillUsed): string {
   return `${skill.mode} ${skill.skill}, tier ${skill.tier}`;
 }
 
-function ordinal(position: number): string {
-  const tens = position % 100;
-  const suffixes = ["th", "st", "nd", "rd"];
-  const suffix = tens >= 11 && tens <= 13 ? "th" : (suffixes[position % 10] ?? "th");
-  return `${String(position)}${suffix}`;
-}
-
-function itemPlaceWords(place: ItemPlace): string {
-  const { count } = place;
-  const of = count === undefined ? "item" : `of ${String(count)} ${count === 1 ? "item" : "items"}`;
-  return `the ${ordinal(place.item + 1)} ${of} of step ${place.foreach}`;
-}
-
-function itemNameWords(name: ItemName): string {
-  return name.title === undefined ? name.id : `${name.id} (${name.title})`;
-}
-
 function itemWords(line: CardLine): string {
   const { item } = line.source;
   const { foreach, itemName, itemCount } = line;
   if (item === undefined || foreach === undefined) {
     return "";
   }
-  const place = itemCount === undefined ? { item, foreach } : { item, foreach, count: itemCount };
-  return `, for ${itemName === undefined ? itemPlaceWords(place) : itemNameWords(itemName)}`;
+  const named =
+    itemName === undefined ? `${itemPlaceWords(item, itemCount)} of step ${foreach}` : itemNameWords(itemName);
+  return `, for ${named}`;
 }
 
 function sourceWords(line: CardLine): string | undefined {

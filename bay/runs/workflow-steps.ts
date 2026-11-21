@@ -129,9 +129,9 @@ function evaluatedRules(scope: WorkflowScope, step: ApprovalStep): Outcome<reado
 function stepSeen(record: StepRecord): StepSeen {
   const seen = { kind: record.kind, status: record.status };
   if (record.kind === "foreach") {
-    const items = Array.isArray(record.input) ? record.input.map((item: unknown) => toJson(item)) : [];
+    const items = Array.isArray(record.input) ? { items: record.input.map((item: unknown) => toJson(item)) } : {};
     const attempts = record.detail === null ? {} : { attempts: record.detail.attempts };
-    return { ...seen, skill: undefined, items, ...attempts };
+    return { ...seen, skill: undefined, ...items, ...attempts };
   }
   return { ...seen, skill: record.kind === "skill" && record.detail !== null ? record.detail : undefined };
 }

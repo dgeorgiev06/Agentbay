@@ -14,7 +14,7 @@ import {
 import { isDueAt } from "../../../bay/runs/run-ending.ts";
 import { foreachItemKey, isInsideFrame, skillRoundOf } from "../../../bay/runs/step-key.ts";
 
-const place = { stepId: "builds", key: "builds", stopped: false };
+const place = { stepId: "builds", key: "builds", stopped: false, names: [] };
 
 const skill = (stepKey: string) => ({ reason: "time" as const, stepKey, until: "2026-11-20T10:00:00.000Z" });
 
@@ -58,17 +58,17 @@ test("a foreach waits on every waiting item, in item order, while none failed", 
   });
 });
 
-test("failed items are all named with their position, key and reason, and the owner is asked last", () => {
+test("failed items are all named by their place, key and reason, and the owner is asked last", () => {
   const ends: ItemEnd[] = [
     { kind: "failed", key: "builds[0]", reason: "The script a failed." },
     { kind: "waiting", waits: [skill("builds[1].a")] },
     { kind: "failed", key: "builds[2]~2", reason: "The script c failed." },
   ];
   const sentence =
-    "Step builds failed for 2 of 3 items: item 0 (builds[0]): The script a failed.; " +
-    "item 2 (builds[2]~2): The script c failed.";
+    "Step builds failed for 2 of 3 items: the 1st of 3 items at builds[0]: The script a failed.; " +
+    "the 3rd of 3 items at builds[2]~2: The script c failed.";
   const question = `${sentence} Resume with --rerun to run the failed items again, or stop the run.`;
-  assert.equal(failureSentence("builds", ends), sentence);
+  assert.equal(failureSentence("builds", ends, []), sentence);
   assert.deepEqual(foreachEnd(ends, place), {
     kind: "asking",
     lead: skill("builds[1].a"),
@@ -76,6 +76,20 @@ test("failed items are all named with their position, key and reason, and the ow
     question,
   });
   assert.deepEqual(foreachEnd(ends, { ...place, stopped: true }), { kind: "failed", reason: sentence });
+});
+
+test("a failed item the foreach names is named by its id and title, the others by their place", () => {
+  const ends: ItemEnd[] = [
+    { kind: "failed", key: "builds[0]", reason: "boom" },
+    { kind: "failed", key: "builds[1]~2", reason: "bang" },
+    { kind: "failed", key: "builds[2]", reason: "bust" },
+  ];
+  const names = [{ id: "TD1", title: "The td1 mode counts" }, { id: "TD2" }, undefined];
+  assert.equal(
+    failureSentence("builds", ends, names),
+    "Step builds failed for 3 of 3 items: TD1 (The td1 mode counts) at builds[0]: boom; " +
+      "TD2 at builds[1]~2: bang; the 3rd of 3 items at builds[2]: bust",
+  );
 });
 
 test("a failed item with nothing waiting asks the owner alone", () => {

@@ -1,6 +1,8 @@
 import { addSpend, charge, itemFrame, noSpend, sharedFrame, type BudgetFrame } from "./budget.ts";
 import type { Json, Spend } from "../contracts.ts";
+import { toJson } from "../json.ts";
 import type { Step as WorkflowStep } from "../generated/workflow.ts";
+import { itemNameOf } from "./item-name.ts";
 import type { StepRecord } from "./run-store.ts";
 import {
   attemptsAfterRerun,
@@ -10,6 +12,7 @@ import {
   notStarted,
   phaseAfter,
   type ItemEnd,
+  type ItemNames,
   type ItemPhase,
 } from "./side-by-side.ts";
 import type { ForeachDetail } from "./step-detail.ts";
@@ -161,14 +164,28 @@ async function rerunFailed(
   return runs.map((run, index) => again[indexes.indexOf(index)] ?? run);
 }
 
-async function concluded(
-  walk: Walk,
-  loop: SideBySideLoop,
-  at: { readonly ends: readonly ItemEnd[]; readonly shared: BudgetFrame; readonly detail: ForeachDetail },
-): Promise<Progress> {
+type Ended = {
+  readonly ends: readonly ItemEnd[];
+  readonly shared: BudgetFrame;
+  readonly detail: ForeachDetail;
+  readonly names: ItemNames;
+};
+
+function itemNamesOf(scope: WorkflowScope, loop: SideBySideLoop): ItemNames {
+  const recorded = loop.record?.input;
+  const items: readonly unknown[] = Array.isArray(recorded) ? recorded : [];
+  const declared = loop.at.step.itemName;
+  return items.map((item) =>
+    itemNameOf(declared, (reference) =>
+      scope.workflow.resolve(reference, { trigger: null, outputs: new Map(), item: toJson(item) }),
+    ),
+  );
+}
+
+async function concluded(walk: Walk, loop: SideBySideLoop, at: Ended): Promise<Progress> {
   const { key, step } = loop.at;
   const stopped = walk.phase === "main" && walk.stopReason !== undefined;
-  const end = foreachEnd(at.ends, { stepId: step.id, key, stopped });
+  const end = foreachEnd(at.ends, { stepId: step.id, key, stopped, names: at.names });
   switch (end.kind) {
     case "done":
       return endRecord(walk, { key, status: "done", output: [...end.outputs], spent: at.shared.spent });
@@ -194,5 +211,6 @@ export async function runSideBySide(walk: Walk, scope: WorkflowScope, loop: Side
   const rerun = walk.rerunUnfinished && walk.stopReason === undefined;
   const final = rerun ? await rerunFailed(walk, scope, { pass, runs, detail }) : runs;
   const latest = detailOf(walk.records.get(loop.at.key), loop.items.length);
-  return concluded(walk, loop, { ends: final.map((run) => run.end), shared, detail: latest });
+  const names = itemNamesOf(scope, loop);
+  return concluded(walk, loop, { ends: final.map((run) => run.end), shared, detail: latest, names });
 }

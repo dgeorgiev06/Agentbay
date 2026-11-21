@@ -6,7 +6,7 @@ import { describe, test } from "node:test";
 import { layoutOf } from "../bay/layout.ts";
 import { nodeFileSystem } from "../bay/node-ports.ts";
 import {
-  inspectSystem,
+  inspectOnce,
   loadSystem,
   placeToWrite,
   type ActionTarget,
@@ -1078,7 +1078,7 @@ const fixtures = {
 } satisfies Readonly<Record<string, Fixture>>;
 
 async function inspectionOf(fixture: Fixture): Promise<Inspection> {
-  return inspectSystem(fakeFileSystem(fixture.files), fixture.layout);
+  return (await inspectOnce(fakeFileSystem(fixture.files), fixture.layout)).inspection;
 }
 
 function foldersOf(inspection: Inspection): readonly unknown[] {
@@ -1099,7 +1099,7 @@ function readFolder(inspection: Inspection, folder: string): InspectedFolderRead
   return found;
 }
 
-describe("inspectSystem", () => {
+describe("inspectOnce", () => {
   test("in a sound kit every mode folder is found, read and active, with the interfaces and no problem", async () => {
     const inspection = await inspectionOf(fixtures.soundKit);
     assert.deepEqual([inspection.problems, inspection.notices], [[], []]);
@@ -1349,7 +1349,7 @@ describe("inspectSystem", () => {
       }
       await mkdir(join(root, "kit/components/modes/briefing/workflows/daily.yaml"), { recursive: true });
       const onDisk = layoutOf({ kit: join(root, "kit"), project: join(root, "project") });
-      const inspection = await inspectSystem(nodeFileSystem, onDisk);
+      const inspection = (await inspectOnce(nodeFileSystem, onDisk)).inspection;
       assert.deepEqual([inspection.problems, inspection.notices], [[], []]);
       assert.ok((await loadSystem(nodeFileSystem, onDisk)).ok);
     } finally {
@@ -1362,7 +1362,7 @@ describe("a load and an inspection agree", () => {
   test("for each fixture, a load gives a system exactly when the inspection reports no problem", async () => {
     for (const [name, fixture] of Object.entries(fixtures)) {
       const files = fakeFileSystem(fixture.files);
-      const inspection = await inspectSystem(files, fixture.layout);
+      const inspection = (await inspectOnce(files, fixture.layout)).inspection;
       const loaded = await loadSystem(files, fixture.layout);
       assert.equal(loaded.ok, inspection.problems.length === 0, name);
       assert.deepEqual(loaded.ok ? [] : loaded.problems, inspection.problems, name);

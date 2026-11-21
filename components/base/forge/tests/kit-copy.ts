@@ -8,6 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
 import { commandLineIn, type CommandLineIn } from "../../../../tests/test-toolbox.ts";
+import { requirementsFile, todoVersionOne } from "./todo-plan.ts";
 
 export type Waiting = {
   readonly id: string;
@@ -138,6 +139,7 @@ export async function kitTemplate(forge: Json = {}): Promise<string> {
     await mkdir(dirname(join(folder, path)), { recursive: true });
     await cp(join(kit, path), join(folder, path));
   }
+  await cp(todoVersionOne, join(folder, requirementsFile));
   await writeFile(join(folder, "agentbay.config.yaml"), await configForTheTest(forge), "utf8");
   await mkdir(join(folder, standIn, "scripts"), { recursive: true });
   await writeFile(join(folder, standIn, "mode.yaml"), standInManifest, "utf8");

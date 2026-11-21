@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Question",
+  "description": "One question of an interview's tree.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "title",
+    "asks",
+    "after",
+    "kind",
+    "settled"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^Q[1-9][0-9]{0,3}$",
+      "description": "Q and a number, used once in the tree."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40,
+      "description": "A few words a card shows.",
+      "pattern": "^[^\\n\\r]*$"
+    },
+    "asks": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "description": "The question, one sentence.",
+      "pattern": "^[^\\n\\r]*$"
+    },
+    "after": {
+      "type": "array",
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^Q[1-9][0-9]{0,3}$"
+      },
+      "description": "The questions settled before this one is asked."
+    },
+    "kind": {
+      "enum": [
+        "decision",
+        "fact",
+        "prototype"
+      ],
+      "description": "decision: the owner's to answer; fact: the project's files answer it, and the owner confirms it; prototype: talking cannot settle it."
+    },
+    "settled": {
+      "type": "boolean",
+      "description": "Whether the owner's answer on a card settled it."
+    },
+    "answer": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "description": "What the owner's answer settled it as: the words of the choice he took, or the fact he confirmed.",
+      "pattern": "^[^\\n\\r]*$"
+    }
+  }
+}

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { test } from "node:test";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ESLint, Linter } from "eslint";
 import { parser } from "typescript-eslint";
@@ -123,5 +124,124 @@ test("a mode's code may use its context's clock and random, a given time and a h
   }
   for (const file of testFiles) {
     assert.deepEqual(await syntaxMessages(file, "Date.now(); Math.random();"), [], file);
+  }
+});
+
+const livingRule = "agentbay/no-living-documents";
+
+const livingMessage = (document: string): string =>
+  `A test reads ${document}, a living document of the owner's that changes as he signs new versions: ` +
+  "copy what the test needs into the test's fixtures and read it from there.";
+
+function isPlugin(value: unknown): value is ESLint.Plugin {
+  return typeof value === "object" && value !== null && "rules" in value;
+}
+
+function agentbayPlugin(): ESLint.Plugin {
+  const found = entriesOf(loaded).flatMap((entry) => {
+    const plugins = typeof entry === "object" && entry !== null && "plugins" in entry ? entry.plugins : undefined;
+    const plugin =
+      typeof plugins === "object" && plugins !== null && "agentbay" in plugins ? plugins.agentbay : undefined;
+    return isPlugin(plugin) ? [plugin] : [];
+  });
+  const [plugin] = found;
+  assert.ok(plugin !== undefined);
+  return plugin;
+}
+
+async function livingRuleFor(file: string): Promise<Linter.RuleEntry> {
+  const config: unknown = await kitLint.calculateConfigForFile(file);
+  const rules = typeof config === "object" && config !== null && "rules" in config ? config.rules : undefined;
+  const rule = typeof rules === "object" && rules !== null && livingRule in rules ? rules[livingRule] : undefined;
+  return isRuleEntry(rule) ? rule : "off";
+}
+
+async function livingMessages(file: string, code: string): Promise<readonly string[]> {
+  const only = {
+    files: ["**/*.ts"],
+    languageOptions: { parser },
+    plugins: { agentbay: agentbayPlugin() },
+    rules: { [livingRule]: await livingRuleFor(file) },
+  };
+  return new Linter({ configType: "flat", cwd: kit })
+    .verify(code, [only], { filename: join(kit, file) })
+    .map((found) => found.message);
+}
+
+const theOneTest = "components/base/requirements/tests/check.test.ts";
+
+const judgedFiles = [
+  "components/modes/notes/tests/probe.test.ts",
+  "components/base/forge/tests/lib/probe.ts",
+  "tests/probe.test.ts",
+  "tests/probe-fixture.ts",
+  "bay/probe.test.ts",
+];
+
+const livingReads: readonly (readonly [string, string])[] = [
+  [
+    'const text = readFileSync(join(import.meta.dirname, "..", "..", "docs/requirements/todo.yaml"), "utf8");',
+    "docs/requirements/todo.yaml",
+  ],
+  [
+    'const file = join(import.meta.dirname, "../..", "docs", "designs", "todo/design.yaml");',
+    "docs/designs/todo/design.yaml",
+  ],
+  [
+    'const kit = join(import.meta.dirname, "../.."); const plan = join(kit, "docs", "plans", "0024-forge-whole.yaml");',
+    "docs/plans/0024-forge-whole.yaml",
+  ],
+  ['const url = new URL("../../../../docs/plans/README.md", import.meta.url);', "docs/plans/README.md"],
+  [
+    'const file = "docs/requirements/todo.yaml"; const url = new URL(`../../../../${file}`, import.meta.url);',
+    "docs/requirements/todo.yaml",
+  ],
+  ['const at = resolve(import.meta.dirname + "/../docs/requirements/lamp.yaml");', "docs/requirements/lamp.yaml"],
+  [
+    'const folder = "docs/requirements"; const at = join(import.meta.dirname, "..", folder, "todo.yaml");',
+    "docs/requirements/todo.yaml",
+  ],
+];
+
+test("a test file or a helper of a tests folder may not read the owner's requirements, designs or plans from the kit", async () => {
+  for (const file of judgedFiles) {
+    for (const [code, document] of livingReads) {
+      assert.deepEqual(await livingMessages(file, code), [livingMessage(document)], `${file}: ${code}`);
+    }
+  }
+});
+
+test("a test may read its fixtures, other documents of the kit, and name those paths inside a project it made", async () => {
+  const allowed = [
+    'const text = join(import.meta.dirname, "..", "..", "..", "..", "tests", "fixtures", "todo-v1.yaml");',
+    'const adr = join(import.meta.dirname, "..", "docs/adr/0029-roles.md");',
+    'const at = join(project.root, "docs/requirements/todo.yaml");',
+    'await mkdir(join(root, "docs", "plans"), { recursive: true });',
+    'const file = "docs/requirements/todo.yaml";',
+    'const text = git(root, ["show", "integration:docs/designs/todo/design.yaml"]);',
+  ];
+  for (const file of judgedFiles) {
+    for (const code of allowed) {
+      assert.deepEqual(await livingMessages(file, code), [], `${file}: ${code}`);
+    }
+  }
+});
+
+test("the one test the rule names may read the owner's todo requirements, and nothing else that lives", async () => {
+  const live =
+    'const kit = join(import.meta.dirname, "..", "..", "..", ".."); const at = join(kit, "docs/requirements/todo.yaml");';
+  assert.deepEqual(await livingMessages(theOneTest, live), []);
+  const other = 'const at = join(import.meta.dirname, "..", "..", "..", "..", "docs/requirements/lamp.yaml");';
+  assert.deepEqual(await livingMessages(theOneTest, other), [livingMessage("docs/requirements/lamp.yaml")]);
+  assert.deepEqual(await livingMessages("components/base/forge/tests/probe.test.ts", live), [
+    livingMessage("docs/requirements/todo.yaml"),
+  ]);
+});
+
+test("code outside the tests is not judged by the rule against living documents", async () => {
+  const read = 'const at = join(import.meta.dirname, "..", "docs/requirements/todo.yaml");';
+  for (const file of ["components/base/forge/scripts/probe.ts", "bay/probe.ts", "adapters/claude-code/probe.ts"]) {
+    assert.equal(await livingRuleFor(file), "off", file);
+    assert.deepEqual(await livingMessages(file, read), [], file);
   }
 });

@@ -1,0 +1,77 @@
+name: pm
+version: 0.2.0
+description: Interviews the owner about a piece of work, a turn of questions at a time, each answered on its own card with a lettered choice, when he starts an interview; no file is written yet.
+
+requires:
+  interfaces: [requirements@1]
+
+settings: schemas/settings.json
+
+resources:
+  db: { migrations: migrations }
+  files:
+    read: [CONTEXT.md, README.md, docs/, src/, lib/, app/, packages/]
+
+actions:
+  open:
+    description: When the owner asks for an interview about a piece of work, it draws the card on which he starts it or not.
+    input: schemas/open-request.json
+    output: schemas/opened.json
+    effects: [read]
+    run:
+      - script: scripts/open.ts
+  begin:
+    description: When the owner has chosen on the start card, it starts the interview, or keeps an earlier one and opens it again, or stops.
+    input: schemas/begin-request.json
+    output: schemas/next.json
+    effects: [read, write]
+    run:
+      - script: scripts/begin.ts
+  frontier:
+    description: When a turn of a started interview is to begin, it works out the questions the turn asks and the facts it may look up, and marks the turn open.
+    input: schemas/ask-request.json
+    output: schemas/frontier.json
+    effects: [read, write]
+    run:
+      - script: scripts/frontier.ts
+  interview:
+    description: When the questions of a turn are to be written for the owner, each with lettered choices and a recommendation, and facts looked up with their files.
+    input: schemas/frontier.json
+    output: schemas/turn.json
+    effects: [read]
+    run:
+      - skill: skills/interview
+        role: interviewer
+        checks: [scripts/check-turn.ts]
+  draw:
+    description: When a checked turn is to be shown to the owner, one card for each fact and question.
+    input: schemas/draw-request.json
+    output: schemas/cards.json
+    effects: [read]
+    run:
+      - script: scripts/draw.ts
+  show-card:
+    description: When one card of a turn is to be shown, it hands the card and its rules to the approval.
+    input: schemas/item.json
+    output: schemas/item.json
+    effects: [read]
+    run:
+      - script: scripts/show-card.ts
+  took:
+    description: When the owner has answered one card of a turn, it passes the answer on, or stops the interview when he chose stop.
+    input: schemas/took-request.json
+    output: schemas/took.json
+    effects: [read, write]
+    run:
+      - script: scripts/took.ts
+  record:
+    description: When every card of a turn is answered, it keeps what the owner settled and names the next turn, if any.
+    input: schemas/record-request.json
+    output: schemas/next.json
+    effects: [read, write]
+    run:
+      - script: scripts/record.ts
+
+workflows:
+  - workflows/start.yaml
+  - workflows/ask.yaml

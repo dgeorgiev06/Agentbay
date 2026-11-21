@@ -1,4 +1,4 @@
-import { agentName } from "./adapter.ts";
+import { agentName } from "./agent-name.ts";
 import type { RunEvent } from "./contracts.ts";
 import { byteSize, toJson } from "./json.ts";
 import type { Run, RunSummary, Task } from "./runs/runs.ts";

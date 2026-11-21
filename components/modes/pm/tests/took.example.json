@@ -1,0 +1,35 @@
+{
+  "input": {
+    "choice": "a",
+    "item": {
+      "id": "Q1",
+      "kind": "question",
+      "title": "Who it is for",
+      "job": "todo",
+      "turn": 1,
+      "card": {
+        "title": "Turn 1 of the todo interview, card 1 of 1",
+        "lines": [
+          {
+            "mark": "judged",
+            "words": "Q1 Who it is for",
+            "source": {
+              "step": "interview"
+            }
+          }
+        ],
+        "withheld": {
+          "c": "This card has two answers."
+        }
+      },
+      "offer": {
+        "c": false
+      }
+    },
+    "opened": "3f2a9c0d4b1e6a7c8d9e0f1a2b3c4d5e"
+  },
+  "output": {
+    "id": "Q1",
+    "choice": "a"
+  }
+}

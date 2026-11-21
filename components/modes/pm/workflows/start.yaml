@@ -1,0 +1,17 @@
+name: start
+trigger: { manual: true }
+budget: { minutes: 10 }
+steps:
+  - id: open
+    action: open
+  - id: card
+    approval: Start this interview?
+    show: $steps.open.output.card
+    choices:
+      start: { does: Start the interview; its first turn comes next, when: $steps.open.output.offered.start }
+      stop: { does: Stop; nothing is started }
+  - id: begin
+    action: begin
+    input:
+      choice: $steps.card.output.choice
+      opened: $steps.open.output

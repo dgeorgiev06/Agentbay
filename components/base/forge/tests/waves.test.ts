@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
+import { commandLineIn, type CommandLineIn } from "../../../../tests/test-toolbox.ts";
 
 type Planned = {
   readonly title: string;
@@ -15,6 +16,8 @@ type Planned = {
 const kit = fileURLToPath(new URL("../../../..", import.meta.url));
 
 let copy: string;
+
+let bay: CommandLineIn;
 
 async function copyKitInto(folder: string): Promise<void> {
   const listing = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: kit });
@@ -42,6 +45,7 @@ async function copyOfTheKit(): Promise<string> {
 
 before(async () => {
   copy = await copyOfTheKit();
+  bay = await commandLineIn(copy);
 });
 
 after(async () => {
@@ -62,11 +66,10 @@ function listOf(value: Json | undefined): readonly Json[] {
   return isList(value) ? value : [];
 }
 
-function called(plan: string): Json {
-  const words = ["bay/cli.ts", "call", "forge.waves", JSON.stringify({ plan }), "--json"];
-  const ran = spawnSync(process.execPath, words, { cwd: copy, encoding: "utf8" });
-  const run = fieldsOf(fieldsOf(jsonOf(ran.stdout)).run ?? null);
-  assert.equal(run.status, "done", ran.stdout + ran.stderr);
+async function called(plan: string): Promise<Json> {
+  const ran = await bay(["call", "forge.waves", JSON.stringify({ plan }), "--json"]);
+  const run = fieldsOf(fieldsOf(jsonOf(ran.output)).run ?? null);
+  assert.equal(run.status, "done", ran.output);
   return run.output ?? null;
 }
 
@@ -361,7 +364,7 @@ test("two slices with one name are refused, since an after names a slice by it",
 
 test("text that is not YAML is refused with the line the reader names", async () => {
   await writeFile(join(copy, "docs/plans/broken.yaml"), "title: [a\nslices: []\n", "utf8");
-  assert.deepEqual(fieldsOf(called("docs/plans/broken.yaml")).lines, [
+  assert.deepEqual(fieldsOf(await called("docs/plans/broken.yaml")).lines, [
     "docs/plans/broken.yaml is not a plan forge can read, for 1 reason:",
     "line 2: The YAML cannot be read: Flow sequence in block collection must be sufficiently indented and end with a ]. Correct the YAML syntax at this line.",
   ]);
@@ -391,6 +394,6 @@ test("the plan's slice is proof@1's slice by reference, so a slice proof@1 refus
   ]);
 });
 
-test("plan 0022 as a file is read, and worked out", () => {
-  assert.equal(fieldsOf(called("docs/plans/0022-forge-in-waves.yaml")).answer, "worked out");
+test("plan 0022 as a file is read, and worked out", async () => {
+  assert.equal(fieldsOf(await called("docs/plans/0022-forge-in-waves.yaml")).answer, "worked out");
 });

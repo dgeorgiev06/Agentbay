@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { errorLine } from "./answers.ts";
 import type { Handler } from "./command-context.ts";
 import type { Command } from "./command-line.ts";
@@ -5,7 +6,8 @@ import { authCommand, importCommand } from "./commands/not-built.ts";
 
 function loadFailure(file: string, kit: string, error: unknown): Error {
   const first = error instanceof Error ? (error.stack?.split("\n")[0] ?? "") : "";
-  const place = first.startsWith(`${kit}/`) ? `${first.slice(kit.length + 1)}: ` : "";
+  const path = first.startsWith("file://") ? fileURLToPath(first) : first;
+  const place = path.startsWith(`${kit}/`) ? `${path.slice(kit.length + 1)}: ` : "";
   return new Error(`${file} does not load: ${place}${errorLine(error)}`);
 }
 

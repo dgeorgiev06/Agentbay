@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
+import { layoutOf } from "../bay/layout.ts";
+import { nodeFileSystem } from "../bay/node-ports.ts";
 import {
   inspectSystem,
   loadSystem,
@@ -1331,6 +1336,25 @@ describe("inspectSystem", () => {
       active.problems.map((problem) => problem.file),
       ["kit:components/modes/briefing/workflows/broken.yaml"],
     );
+  });
+
+  test("a kit mode not active whose workflow path is a folder on disk stops nothing", async () => {
+    const root = await mkdtemp(join(tmpdir(), "agentbay-folder-workflow-"));
+    try {
+      const briefing = { ...briefingMode, workflows: ["workflows/daily.yaml"] };
+      const files = { ...projectFiles(), "/kit/components/modes/briefing/mode.yaml": yamlText(briefing) };
+      for (const [path, text] of Object.entries(files)) {
+        await mkdir(dirname(join(root, path)), { recursive: true });
+        await writeFile(join(root, path), text, "utf8");
+      }
+      await mkdir(join(root, "kit/components/modes/briefing/workflows/daily.yaml"), { recursive: true });
+      const onDisk = layoutOf({ kit: join(root, "kit"), project: join(root, "project") });
+      const inspection = await inspectSystem(nodeFileSystem, onDisk);
+      assert.deepEqual([inspection.problems, inspection.notices], [[], []]);
+      assert.ok((await loadSystem(nodeFileSystem, onDisk)).ok);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
 

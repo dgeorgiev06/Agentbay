@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Frontier",
+  "description": "Which questions a turn may ask now, by id, and the counts the card shows.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "frontier",
+    "asks",
+    "lookUp",
+    "untalkable",
+    "settled",
+    "waiting",
+    "total",
+    "problems"
+  ],
+  "properties": {
+    "frontier": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^Q[1-9][0-9]{0,3}$"
+      },
+      "description": "Open decisions whose earlier questions are all settled."
+    },
+    "asks": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^Q[1-9][0-9]{0,3}$"
+      },
+      "description": "The ones this turn asks: at most twelve, or one at a time."
+    },
+    "lookUp": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^Q[1-9][0-9]{0,3}$"
+      },
+      "description": "Open facts whose earlier questions are settled, to be looked up."
+    },
+    "untalkable": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^Q[1-9][0-9]{0,3}$"
+      },
+      "description": "Open questions talking cannot settle."
+    },
+    "settled": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "waiting": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Open decisions that wait for earlier questions."
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "problems": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "What is wrong with the tree, each with what to change."
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Checked",
+  "description": "A check's answer: passed, or not with feedback that says what to change.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "passed"
+  ],
+  "properties": {
+    "passed": {
+      "type": "boolean"
+    },
+    "feedback": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20000
+    }
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "input": {
+    "tree": {
+      "questions": [
+        {
+          "id": "Q1",
+          "title": "Ids",
+          "asks": "Is the id of a removed todo given to a new one?",
+          "after": [],
+          "kind": "decision",
+          "settled": true
+        },
+        {
+          "id": "Q2",
+          "title": "Done twice",
+          "asks": "What happens when a todo already done is marked done again?",
+          "after": [
+            "Q1"
+          ],
+          "kind": "decision",
+          "settled": false
+        },
+        {
+          "id": "Q3",
+          "title": "Order with due dates",
+          "asks": "In what order are open todos with due dates listed?",
+          "after": [
+            "Q2"
+          ],
+          "kind": "decision",
+          "settled": false
+        }
+      ]
+    }
+  },
+  "output": {
+    "frontier": [
+      "Q2"
+    ],
+    "asks": [
+      "Q2"
+    ],
+    "lookUp": [],
+    "untalkable": [],
+    "settled": 1,
+    "waiting": 1,
+    "total": 3,
+    "problems": []
+  }
+}

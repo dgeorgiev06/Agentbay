@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TreeRequest",
+  "description": "An interview's tree, and whether the owner asked for one question at a time.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "tree"
+  ],
+  "properties": {
+    "tree": {
+      "$ref": "#/$defs/tree"
+    },
+    "oneAtATime": {
+      "type": "boolean",
+      "description": "Whether the owner asked for one question at a time."
+    }
+  },
+  "$defs": {
+    "tree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "questions"
+      ],
+      "description": "The interview's questions, each naming the questions it comes after.",
+      "properties": {
+        "questions": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "$ref": "#/$defs/question"
+          }
+        }
+      }
+    },
+    "question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "asks",
+        "after",
+        "kind",
+        "settled"
+      ],
+      "description": "One question of the interview's tree.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^Q[1-9][0-9]{0,3}$",
+          "description": "Q and a number, used once in the tree."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40,
+          "description": "A few words the card shows."
+        },
+        "asks": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "The question, one sentence."
+        },
+        "after": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^Q[1-9][0-9]{0,3}$"
+          },
+          "description": "The questions that must be settled before this one is asked."
+        },
+        "kind": {
+          "enum": [
+            "decision",
+            "fact",
+            "prototype"
+          ],
+          "description": "decision: the owner's to answer; fact: the repository answers it; prototype: talking cannot settle it."
+        },
+        "settled": {
+          "type": "boolean",
+          "description": "Whether it is settled: a decision by the owner's confirmed answer, a fact by its source."
+        }
+      }
+    }
+  }
+}

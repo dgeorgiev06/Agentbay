@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ShortReading",
+  "description": "His words read by script when they are numbers and letters only, as 1a 2b; otherwise short is false and a model reads them.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "short"
+  ],
+  "properties": {
+    "short": {
+      "type": "boolean"
+    },
+    "reading": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/reading"
+      }
+    }
+  },
+  "$defs": {
+    "reading": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "question",
+        "takes",
+        "words"
+      ],
+      "description": "What the owner's words say for one question of the turn.",
+      "properties": {
+        "question": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 99,
+          "description": "The question's number on the turn card."
+        },
+        "takes": {
+          "enum": [
+            "choice",
+            "own",
+            "unsure",
+            "pushback"
+          ],
+          "description": "choice: one of the question's choices; own: his own answer, his words; unsure: he does not know; pushback: he says the question is wrong."
+        },
+        "letter": {
+          "enum": [
+            "a",
+            "b",
+            "c"
+          ],
+          "description": "The choice, only when takes is choice."
+        },
+        "words": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000,
+          "description": "His exact words for this question."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "input": {
+    "turn": {
+      "asked": [
+        {
+          "question": "Q2",
+          "choices": [
+            "It is refused, and says it is already done",
+            "Nothing changes, and nothing is said"
+          ],
+          "recommended": "a",
+          "why": "A person who is told nothing cannot tell it was done before."
+        }
+      ],
+      "facts": []
+    },
+    "said": "1a"
+  },
+  "output": {
+    "short": true,
+    "reading": [
+      {
+        "question": 1,
+        "takes": "choice",
+        "letter": "a",
+        "words": "1a"
+      }
+    ]
+  }
+}

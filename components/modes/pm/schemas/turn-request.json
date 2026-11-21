@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TurnRequest",
+  "description": "A turn to check against the tree it was asked from.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "tree",
+    "turn"
+  ],
+  "properties": {
+    "tree": {
+      "$ref": "#/$defs/tree"
+    },
+    "turn": {
+      "$ref": "#/$defs/turn"
+    },
+    "oneAtATime": {
+      "type": "boolean",
+      "description": "Whether the owner asked for one question at a time."
+    }
+  },
+  "$defs": {
+    "tree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "questions"
+      ],
+      "description": "The interview's questions, each naming the questions it comes after.",
+      "properties": {
+        "questions": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "$ref": "#/$defs/question"
+          }
+        }
+      }
+    },
+    "question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "asks",
+        "after",
+        "kind",
+        "settled"
+      ],
+      "description": "One question of the interview's tree.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^Q[1-9][0-9]{0,3}$",
+          "description": "Q and a number, used once in the tree."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40,
+          "description": "A few words the card shows."
+        },
+        "asks": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "The question, one sentence."
+        },
+        "after": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^Q[1-9][0-9]{0,3}$"
+          },
+          "description": "The questions that must be settled before this one is asked."
+        },
+        "kind": {
+          "enum": [
+            "decision",
+            "fact",
+            "prototype"
+          ],
+          "description": "decision: the owner's to answer; fact: the repository answers it; prototype: talking cannot settle it."
+        },
+        "settled": {
+          "type": "boolean",
+          "description": "Whether it is settled: a decision by the owner's confirmed answer, a fact by its source."
+        }
+      }
+    },
+    "turn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "asked",
+        "facts"
+      ],
+      "description": "What the interviewer hands in for one turn. It has no place to settle a question.",
+      "properties": {
+        "asked": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "$ref": "#/$defs/asked"
+          }
+        },
+        "facts": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/fact"
+          }
+        }
+      }
+    },
+    "asked": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "question",
+        "choices",
+        "recommended",
+        "why"
+      ],
+      "description": "One question put to the owner in this turn.",
+      "properties": {
+        "question": {
+          "type": "string",
+          "pattern": "^Q[1-9][0-9]{0,3}$"
+        },
+        "choices": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "description": "The answers offered, lettered a, b and c in this order."
+        },
+        "recommended": {
+          "enum": [
+            "a",
+            "b",
+            "c"
+          ],
+          "description": "The interviewer's recommended choice."
+        },
+        "why": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "One sentence on why it is recommended."
+        }
+      }
+    },
+    "fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "question",
+        "says",
+        "source",
+        "quote"
+      ],
+      "description": "A fact the interviewer looked up, with the file and the exact words it rests on.",
+      "properties": {
+        "question": {
+          "type": "string",
+          "pattern": "^Q[1-9][0-9]{0,3}$"
+        },
+        "says": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "source": {
+          "type": "string",
+          "maxLength": 300,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+          "description": "The file, relative to the project."
+        },
+        "quote": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "Words the file holds exactly."
+        }
+      }
+    }
+  }
+}

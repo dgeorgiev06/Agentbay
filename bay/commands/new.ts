@@ -1,5 +1,4 @@
 import { usageResult, problemsResult, succeeded, type CommandResult, type Invocation } from "../command-context.ts";
-import type { Command } from "../command-line.ts";
 import {
   newAction,
   newInterface,
@@ -12,8 +11,6 @@ import {
 } from "../new.ts";
 
 type Generator = (workspace: Workspace, invocation: Invocation, name: string) => Promise<Generated> | string;
-
-const usage = "new <mode|action|skill|workflow|interface> <name> [--mode <mode>] [--tier base|modes]";
 
 function tierOf(invocation: Invocation): ModeTier | undefined {
   const tier = invocation.values.get("tier") ?? "modes";
@@ -41,16 +38,19 @@ const generators: ReadonlyMap<string, Generator> = new Map<string, Generator>([
   ["interface", (workspace, _invocation, name) => newInterface(workspace, name)],
 ]);
 
-async function runNew(invocation: Invocation): Promise<CommandResult> {
+export async function runNew(invocation: Invocation): Promise<CommandResult> {
   const [kind = "", name = ""] = invocation.positionals;
   const generator = generators.get(kind);
   if (generator === undefined) {
-    return usageResult(`There is no kind ${kind}; the kinds are ${[...generators.keys()].join(", ")}.`, usage);
+    return usageResult(
+      `There is no kind ${kind}; the kinds are ${[...generators.keys()].join(", ")}.`,
+      invocation.usage,
+    );
   }
   const workspace = { files: invocation.context.ports.files, layout: invocation.layout };
   const generated = generator(workspace, invocation, name);
   if (typeof generated === "string") {
-    return usageResult(generated, usage);
+    return usageResult(generated, invocation.usage);
   }
   const outcome = await generated;
   if (!outcome.ok) {
@@ -58,15 +58,3 @@ async function runNew(invocation: Invocation): Promise<CommandResult> {
   }
   return succeeded({ written: [...outcome.value] }, outcome.value.map((path) => `+ ${path}`).join("\n"));
 }
-
-export const newCommand: Command = {
-  name: "new",
-  summary: "Write a new mode, action, skill, workflow or interface from its template.",
-  usage,
-  options: [
-    { name: "mode", takesValue: true },
-    { name: "tier", takesValue: true },
-  ],
-  positionals: { least: 2, most: 2 },
-  handler: runNew,
-};

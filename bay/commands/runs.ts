@@ -1,5 +1,4 @@
 import { succeeded, withKernel, type CommandResult, type Invocation } from "../command-context.ts";
-import type { Command } from "../command-line.ts";
 import type { Kernel } from "../kernel.ts";
 import { runListJson, runLine, runResult } from "../run-report.ts";
 
@@ -17,25 +16,9 @@ async function showRun(kernel: Kernel, invocation: Invocation, runId: string): P
   return runResult(kernel.layout, shown, newToken ? { ...options, after: "reissue" } : options);
 }
 
-function runRuns(invocation: Invocation): Promise<CommandResult> {
+export function runRuns(invocation: Invocation): Promise<CommandResult> {
   const [runId] = invocation.positionals;
   return withKernel(invocation, (kernel) =>
     runId === undefined ? listRuns(kernel) : showRun(kernel, invocation, runId),
   );
 }
-
-export const runsCommand: Command = {
-  name: "runs",
-  summary:
-    "List the runs, newest first; or show one run with its steps and task; --events adds events, " +
-    "--new-token replaces the token of every task, or with --step only of that step's task.",
-  usage: "runs [<run> [--full] [--events] [--new-token [--step <step key>]]]",
-  options: [
-    { name: "new-token", takesValue: false },
-    { name: "step", takesValue: true },
-    { name: "full", takesValue: false },
-    { name: "events", takesValue: false },
-  ],
-  positionals: { least: 0, most: 1 },
-  handler: runRuns,
-};

@@ -8,9 +8,6 @@ breaks:
   - from: bay/build.ts
     to: bay/skill-tools.ts
     rule: may-not-import
-  - from: bay/kernel.ts
-    to: bay/check-context.ts
-    rule: may-not-import
   - from: bay/mcp.ts
     to: bay/mcp-server.ts
     rule: private-file

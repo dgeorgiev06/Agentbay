@@ -1,5 +1,4 @@
 import { problemsResult, succeeded, type CommandResult, type Invocation } from "../command-context.ts";
-import type { Command } from "../command-line.ts";
 import {
   loadSystem,
   type ActionListed,
@@ -43,7 +42,7 @@ function questionOf(invocation: Invocation): ListingQuestion {
   return { ...(mode === undefined ? {} : { mode }), ...(find === undefined ? {} : { find }) };
 }
 
-async function runActions(invocation: Invocation): Promise<CommandResult> {
+export async function runActions(invocation: Invocation): Promise<CommandResult> {
   const loaded = await loadSystem(invocation.context.ports.files, invocation.layout);
   if (!loaded.ok) {
     return problemsResult(loaded.problems);
@@ -55,14 +54,3 @@ async function runActions(invocation: Invocation): Promise<CommandResult> {
   }
   return succeeded({ ...listing.value }, listingText(listing.value, question.find));
 }
-
-export const actionsCommand: Command = {
-  name: "actions",
-  summary:
-    "List the active modes, or the actions of one mode with their descriptions, effects and input schemas; " +
-    "--find keeps those that hold every given word.",
-  usage: "actions [<mode>] [--find <words>]",
-  options: [{ name: "find", takesValue: true }],
-  positionals: { least: 0, most: 1 },
-  handler: runActions,
-};

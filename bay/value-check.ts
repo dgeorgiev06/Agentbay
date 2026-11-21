@@ -1,6 +1,7 @@
 import { Ajv2020, type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
 import type { Json } from "./contracts.ts";
 import { isRecord } from "./json.ts";
+import { passesMetaSchema, type SchemaValue } from "./meta-schema.ts";
 import type { Problem } from "./outcome.ts";
 
 export type Wording = {
@@ -333,22 +334,50 @@ export function errorProblems(
   });
 }
 
-function compileSchema(schema: ValidSchema): ValidateFunction | string {
-  if (!isRecord(schema.schema) && typeof schema.schema !== "boolean") {
-    return "a JSON Schema must be a mapping, true or false";
-  }
+const ajvOptions = { allErrors: true, strict: false, verbose: true, logger: false } as const;
+
+function schemaValueOf(value: Json): SchemaValue | undefined {
+  return isRecord(value) || typeof value === "boolean" ? value : undefined;
+}
+
+function compiledAlone(main: SchemaValue, parts: SchemaParts): ValidateFunction | string {
   try {
-    const ajv = new Ajv2020({ allErrors: true, strict: false, verbose: true, logger: false });
-    for (const [name, part] of Object.entries(schema.parts)) {
-      if (!isRecord(part) && typeof part !== "boolean") {
+    const ajv = new Ajv2020(ajvOptions);
+    for (const [name, value] of Object.entries(parts)) {
+      const part = schemaValueOf(value);
+      if (part === undefined) {
         return `the schema ${name} it refers to is not a mapping, true or false`;
       }
       ajv.addSchema(part, name);
     }
-    return ajv.compile(schema.schema);
+    return ajv.compile(main);
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
   }
+}
+
+function compiledWithSharedMetaSchema(main: SchemaValue, parts: SchemaParts): ValidateFunction | undefined {
+  try {
+    const ajv = new Ajv2020({ ...ajvOptions, validateSchema: false });
+    for (const [name, value] of Object.entries(parts)) {
+      const part = schemaValueOf(value);
+      if (part === undefined || !passesMetaSchema(part)) {
+        return undefined;
+      }
+      ajv.addSchema(part, name);
+    }
+    return passesMetaSchema(main) ? ajv.compile(main) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function compileSchema(schema: ValidSchema): ValidateFunction | string {
+  const main = schemaValueOf(schema.schema);
+  if (main === undefined) {
+    return "a JSON Schema must be a mapping, true or false";
+  }
+  return compiledWithSharedMetaSchema(main, schema.parts) ?? compiledAlone(main, schema.parts);
 }
 
 const keptValidators = 256;

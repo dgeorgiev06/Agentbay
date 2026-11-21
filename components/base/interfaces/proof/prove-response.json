@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ProveResponse",
-  "description": "A verdict for each item that names a kind of proof and for the two items proof adds, the judgement items as they were given, and the size of each changed file. No field holds a builder's words.",
+  "description": "A verdict for each item that names a kind of proof and for the two items proof adds, the judgement items as they were given, and the size of each changed file. No detail or reason holds a builder's words; a verdict of the kind printed hands back what the head's own code printed, as data for the caller.",
   "type": "object",
   "additionalProperties": false,
   "required": ["verdicts", "judgement", "size"],
@@ -71,13 +71,36 @@
     }
   },
   "$defs": {
+    "printed": {
+      "type": "array",
+      "maxItems": 21,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["exitCode", "stdout"],
+        "properties": {
+          "exitCode": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255,
+            "description": "The exit code the run ended with."
+          },
+          "stdout": {
+            "type": "string",
+            "maxLength": 100000,
+            "description": "What the run printed to its standard output, whole."
+          }
+        }
+      },
+      "description": "Each run of an item of the kind printed, in the order they were made: its exit code and what it printed, copied as the run gave them. Only a passed verdict of that kind holds it. Proof filters and judges none of it; it is the caller's to judge, and it is the head's own code's output, never a sentence of proof's."
+    },
     "item": {
       "type": "string",
       "maxLength": 64,
       "description": "The item's id as the slice gives it, or scope or declared for the two items proof adds."
     },
     "kind": {
-      "enum": ["checks", "fails-first", "in-scope", "as-declared", "bugs-caught", "same-output", "count", "real-thing"],
+      "enum": ["checks", "fails-first", "in-scope", "as-declared", "bugs-caught", "same-output", "count", "real-thing", "printed"],
       "description": "The kind of proof the verdict comes from. The item scope is always in-scope, and the item declared always as-declared."
     },
     "detail": {
@@ -107,6 +130,19 @@
             },
             "detail": {
               "$ref": "#/$defs/detail"
+            },
+            "printed": {
+              "$ref": "#/$defs/printed"
+            }
+          },
+          "if": {
+            "required": ["printed"]
+          },
+          "then": {
+            "properties": {
+              "kind": {
+                "const": "printed"
+              }
             }
           }
         },

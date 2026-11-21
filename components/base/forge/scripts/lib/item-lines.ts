@@ -30,6 +30,7 @@ const failedSaid: Readonly<Record<ProofKind, string>> = {
   "same-output": "the output is not as the item says",
   count: "a count does not hold",
   "real-thing": "a run printed other than expected",
+  printed: "proof gives no failure for what a run printed",
 };
 
 const checkNamePattern = "([A-Za-z0-9:._-]+)";

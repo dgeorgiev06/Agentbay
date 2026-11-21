@@ -72,6 +72,45 @@
         }
       ]
     },
+    "printedRun": {
+      "description": "One run whose output is handed back: the kit's command line, named by bay, or one of the project's own commands through the toolchain, named by run.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["bay"],
+          "properties": {
+            "bay": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 50,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 50000,
+                "description": "One word given to the command, such as a request in JSON."
+              },
+              "description": "The words given to the copy's own ./bay.sh, run at the copy's root, such as call notes.add and a request."
+            }
+          },
+          "description": "One run of the copy's own ./bay.sh."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["run"],
+          "properties": {
+            "run": {
+              "$ref": "#/$defs/commandName"
+            },
+            "arguments": {
+              "$ref": "#/$defs/commandWords"
+            }
+          },
+          "description": "One run of one of the project's own commands, by its name, through the toolchain's action run."
+        }
+      ]
+    },
     "bayWords": {
       "type": "array",
       "minItems": 1,
@@ -414,6 +453,27 @@
               "maxItems": 20,
               "items": {
                 "$ref": "#/$defs/realRun"
+              },
+              "description": "The runs, in the order they are made."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "runs"],
+          "description": "What the runs print: the runs are made one after another in one fresh copy of the head, as real-thing makes them, and each run's exit code and what it printed are handed back for the caller to judge. Proof compares nothing. Passed when every run ended and what it printed was read whole; a run not known makes the item inconclusive.",
+          "properties": {
+            "kind": {
+              "const": "printed",
+              "description": "What the runs print."
+            },
+            "runs": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 21,
+              "items": {
+                "$ref": "#/$defs/printedRun"
               },
               "description": "The runs, in the order they are made."
             }

@@ -1,7 +1,15 @@
 import { fail, fieldsOf, type Json, type JsonFields } from "../../../../../bay/sdk.ts";
 
 export type KindName =
-  "checks" | "fails-first" | "in-scope" | "as-declared" | "bugs-caught" | "same-output" | "count" | "real-thing";
+  | "checks"
+  | "fails-first"
+  | "in-scope"
+  | "as-declared"
+  | "bugs-caught"
+  | "same-output"
+  | "count"
+  | "real-thing"
+  | "printed";
 
 export type Count =
   | { readonly of: "most"; readonly pattern: string; readonly paths: readonly string[]; readonly most: number }
@@ -22,7 +30,8 @@ export type Proof =
   | { readonly kind: "bugs-caught" }
   | { readonly kind: "same-output"; readonly differ: readonly string[] }
   | { readonly kind: "count"; readonly count: Count }
-  | { readonly kind: "real-thing"; readonly runs: readonly RealRun[] };
+  | { readonly kind: "real-thing"; readonly runs: readonly RealRun[] }
+  | { readonly kind: "printed"; readonly runs: readonly Command[] };
 
 type Proofs = { readonly [Each in Proof as Each["kind"]]: Each };
 
@@ -113,6 +122,8 @@ function proofOf(fields: JsonFields): Proof {
       return { kind, count: countOf(fields) };
     case "real-thing":
       return { kind, runs: records(fields, "runs").map(realRunOf) };
+    case "printed":
+      return { kind, runs: records(fields, "runs").map(commandOf) };
     default:
       return fail(`The request names the kind ${kind}, which no item of a slice may name.`);
   }

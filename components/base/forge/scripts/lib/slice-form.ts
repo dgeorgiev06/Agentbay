@@ -10,6 +10,7 @@ export const proofKinds = [
   "same-output",
   "count",
   "real-thing",
+  "printed",
 ] as const;
 
 export type ProofKind = (typeof proofKinds)[number];

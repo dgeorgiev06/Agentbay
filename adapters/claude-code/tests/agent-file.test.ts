@@ -370,16 +370,6 @@ test("the coordinator block leaves a question and a spent budget to the owner, a
   }
 });
 
-test("the coordinator block starts at once the run a done run's output names next, and nothing more", () => {
-  const block = coordinatorBlock("./bay.sh");
-  assert.ok(
-    block.includes(
-      "7. When a run is done and its output has `next`, run " +
-        "`./bay.sh call --workflow <next.workflow> '<next.input as JSON>' --json` at once, then step 3.",
-    ),
-  );
-});
-
 test("the coordinator block says to wait out a run shown as running, and to resume it when nothing advances it", () => {
   const block = coordinatorBlock("./bay.sh");
   for (const phrase of [

@@ -51,7 +51,11 @@ As `schemas/challenge.json`, sent with `submit`:
    takes and gives, and what the action reads and writes. It is not held where a rule leaves out a value it
    decides from, where the action's answer or a value it writes is not one the rule gives, or where an action
    that decides something applies no rule. A rule's `decides` sentence and the designer's sentence are not the
-   design.
+   design. The script holds that a rule takes the request and gives the answer, that no value has an empty
+   schema, and that an example after refused calls answers as the same calls without them, where the examples
+   show both. Look yourself for what it cannot see: a value whose schema says little more than `object`, a
+   stored field the schema leaves optional so the thin function can choose, a time or a random value read
+   inside a rule instead of taken, and an action such as `list` that filters or orders with no rule.
 3. With two designs, choose the one that serves the conditions with less and hides more; merge only when
    each holds something the other lacks.
 4. Put each other thing to correct in `findings`: an example a condition needs and no action shows, a

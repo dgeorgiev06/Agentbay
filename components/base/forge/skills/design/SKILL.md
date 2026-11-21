@@ -91,12 +91,14 @@ As `schemas/design.json`, sent with `submit`:
    that owns the data: each a pure function, with what it `takes` and what it `gives`, each value with its
    schema and, when it is read from or written to a table or file, its `store`. A rule's `$ref` names
    `schemas/<interface>/<action>-<side>.json`. Give each action that writes or refuses its `rule`, and in `reads`
-   and `writes` what its thin function reads before the rule and writes after; it decides nothing itself.
+   and `writes` what its thin function reads before the rule and writes after; it decides nothing itself. A
+   rule takes the request when it has fields and gives the answer, and every value has a schema field by field.
 5. When an example needs a long text, such as one at a length limit, say it by rule instead of typing it:
    `{"$text": [{"repeat": "a", "times": 500}]}`, or parts in order for mixed text, such as
    `{"$text": [{"repeat": "ü", "times": 250}, {"repeat": "🥛", "times": 250}]}`. A part is a text or a repeat;
-   at most 20 parts and 10,000 characters, counted in Unicode code points. Forge spells it out before it checks
-   the example and keeps it as you wrote it.
+   at most 20 parts and 10,000 characters. A character is a Unicode code point, as a schema's `maxLength`
+   counts it, so 500 emoji are 500 characters. Forge spells it out before it checks the example and keeps it as
+   you wrote it. Name no field of a schema `$text`: an example could not tell it from a long text.
 6. Design so each practice given holds. For each, say in one sentence where in the design it holds, naming the
    module or action, or why it does not apply.
 7. When `answering` is given, correct what each practice not held and each finding names, keep the rest, and

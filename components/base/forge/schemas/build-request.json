@@ -33,7 +33,7 @@
       "items": {
         "type": "object"
       },
-      "description": "The rules of the committed design that the slice's actions apply: write each as a pure function of that name, taking and giving those values, and the thin function around it that reads and writes what its action names. Empty when there is none."
+      "description": "The rules of the committed design that the slice's actions apply: write each as a pure function named in camelCase after the rule, taking and giving those values, and the thin function around it that reads and writes what its action names. Empty when there is none."
     }
   }
 }

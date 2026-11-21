@@ -7,6 +7,7 @@ One meaning per word. Briefs, plans, code names and reviews use these words and 
 | Term | Meaning | Do not say |
 |---|---|---|
 | **Kit** | The agentbay checkout: the kernel, the adapters and the modes that ship with it. | framework folder, repo root |
+| **Coordinator** | The owner's own harness session, outside every step, that runs agentbay through its command line and hands each skill step's task to the agent made for it. The block `bay build` writes into `CLAUDE.md` tells it what to do. The adapter's README calls it the main thread. | Chief of Staff, main thread, main agent |
 | **Project** | The owner's folder. It holds `agentbay.config.yaml`, the project's own modes and the `.agentbay/` data folder. | workspace, app |
 | **Mode** | A folder with a `mode.yaml`. The unit that is installed, composed and permitted. | plugin, component, connector |
 | **Action** | A named thing a mode can do, with typed input and output and declared effects. A mode's actions are its interface. | feature, command, endpoint |

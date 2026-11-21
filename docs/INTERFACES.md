@@ -1,10 +1,10 @@
-# agentbay interfaces: where each contract lives
+# agentbay interfaces: where each form is written
 
-This file used to list the contracts of agentbay 4: Python modules, envs, connectors, the dispatcher, task
+This file used to list what agentbay 4 called its contracts: Python modules, envs, connectors, the dispatcher, task
 envelopes and ledger events. None of them is in agentbay 5, and git history keeps the old text. This page says
-where each contract of what is built is written. The words are defined in [CONTEXT.md](../CONTEXT.md).
+where each form that the built kit checks is written: the interfaces, the manifests, the toolbox and the shared types. The words are defined in [CONTEXT.md](../CONTEXT.md).
 
-| Contract | Where it is written | Checked by |
+| Form | Where it is written | Checked by |
 |---|---|---|
 | A mode's manifest: actions, steps, effects, grants (`resources:`), settings, workflows | `schemas/mode.schema.json`; the types in `bay/generated/mode.ts` | `bay check`, and every load |
 | A workflow: action, approval, wait and foreach steps | `schemas/workflow.schema.json` | `bay check` |

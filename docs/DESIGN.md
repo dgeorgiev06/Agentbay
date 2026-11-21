@@ -17,10 +17,28 @@ where it is built. This page says where. The words are defined in [CONTEXT.md](.
 - A skill step becomes a task for an agent of the harness. The Claude Code adapter writes one agent per skill
   step and a hook that, where it runs, narrows what each agent may do. The hook is defence in depth, not
   isolation. The kernel checks what the agent hands in.
-- A mode outside the kit's `components/base/` gets the commands it lists only while the owner trusts that list
-  (ADR 20, ADR 21).
-- Forge builds work in slices: requirements, design, plan, then waves of slices built by a test writer, a builder
-  who never has the tests, proof by script and a reviewer, each ending in a card the owner answers (ADR 24 to 28).
+- A mode outside the kit's `components/base/` gets its list, the commands it lists and its throwaway folders,
+  only while a trust record names that exact list (ADR 20, ADR 21). Trust does not stop an agent that has the
+  owner's shell, runs `bay approve` in a pseudo-terminal, or quotes words the owner did not write: see What the
+  hook does not stop in `adapters/claude-code/README.md`, and the Trust row of CONTEXT.md.
+- The requirements mode checks a requirements file, and forge reads one only through `requirements.check`
+  (ADR 25). From it forge makes a design and a plan, then builds waves of slices by a test writer, a builder who
+  never has the tests, proof by script and a reviewer, each ending in a card the owner answers (ADR 24 to 28).
+
+## What it guards against, and what it does not
+
+agentbay is built to limit what an agent's mistakes and overreach can do, what instructions hidden in data an
+agent reads can make it do, and what a mode can reach beyond what it declares. It does not guard against the
+owner, nor against an agent that has the owner's shell or speaks for him in chat: such an agent can write any
+file the kernel reads, run `bay` in a pseudo-terminal, and run any command itself (`docs/designs/trust/0-frame.md`,
+"Who can write what today"). Nor does it guard against code once it runs: a listed command that runs code runs
+whatever an agent wrote, and the checks and tests proof runs in a throwaway copy run unconfined: the copy limits
+where they write by convention only. A script's confinement in its child process is a seat belt, not a wall (ADR 5), and
+the hook is defence in depth, not isolation.
+
+An answer from chat is weaker than one from a terminal. With `approvals.from` listing chat, the kernel takes the
+words the coordinator quotes, bound by the hash to what was shown, and cannot tell them from words the owner did
+not write. A terminal answer needs an interactive terminal and a typed yes, which a pseudo-terminal also passes.
 
 ## Where each part is decided and described
 

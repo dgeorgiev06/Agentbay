@@ -1,6 +1,6 @@
 # HANDOFF: 0008 slice 9 (version 1.0.0)
 
-This is the agentbay 4 handoff of 31 October 2026, kept as history; nothing below describes the kit today. agentbay 5 has no Python and no `offline:` setting, and the commands, checks and files named here are agentbay 4's. The newest notes of what is built and what is owed are at the end of `docs/plans/0024-forge-whole.md`.
+This is the handoff of version 1.0.0, from 31 October 2026, before agentbay 5, kept as history; nothing below describes the kit today. agentbay 5 has no Python and no `offline:` setting, and the commands, checks and files named here are from before it. The newest notes of what is built and what is owed are at the end of `docs/plans/0024-forge-whole.md`.
 
 Branch feat/0008-slice9 from origin/main e20e165 (0.10.0). Parts 1, 2a, 2b, 3a, 3b and 3c are committed; nothing is pushed. Plan: docs/plans/0008-simplify-without-losing-features.md. This file holds the current work only; the earlier parts are in git log and CHANGELOG 1.0.0.
 

@@ -26,7 +26,7 @@ The kit is TypeScript that Node runs directly, with no build step. The words are
   [README](adapters/claude-code/README.md) says what the hook does and does not stop.
 - **Schemas** (`schemas/`). The forms of `mode.yaml`, a workflow, a skill, an interface and
   `agentbay.config.yaml`. `npm run generate` writes their TypeScript types into `bay/generated/`.
-- **framework/**. The kernel's feature map (`features.yaml`), the size budgets (`limits.yaml`, which `bay check`
+- **Framework files** (`framework/`). The kernel's feature map (`features.yaml`), the size budgets (`limits.yaml`, which `bay check`
   reports as warnings), and the practices builders and reviewers hold (`practices.md`).
 
 ```
@@ -35,7 +35,8 @@ owner ── Claude Code session (the coordinator)
                 kernel ── step 1  script scripts/select.ts      in a child process, through the toolbox
                        ── step 2  skill skills/digest           a task for the agent agentbay-feed-briefing-digest,
                                                                 which hands its draft in with the tool submit;
-                                                                scripts/check-citations.ts holds it to its input
+                                                                scripts/check-citations.ts holds the draft to the
+                                                                posts the step was given
                        ── step 3  script scripts/format.ts
 ```
 
@@ -102,8 +103,12 @@ stopped at its skill step and printed the task. `<kit>/bay.sh runs` lists both r
 A digest needs an agent to write it. `<kit>/bay.sh build` writes the agent files listed under The parts. Start
 Claude Code in the folder and ask for a digest: the block in `CLAUDE.md` tells the coordinator to run the action,
 give the task to the agent `agentbay-feed-briefing-digest`, and read the run again when the agent returns. By
-default (`skillSteps.run: with-the-hook`) the kernel takes the agent's output only when the agentbay hook saw that
-agent hand it in. A `bay submit` from a plain terminal is refused, and the run still waits:
+default (`skillSteps.run: with-the-hook`) the kernel takes an output only when it finds the hook's record, a
+sighting, of an agent of that step's mode and skill handing it in with the task's token, and it uses the sighting
+up. A sighting is a row in `.agentbay/hook-sightings.db`, and the hook is not the only thing that can write one:
+the adapter's [README](adapters/claude-code/README.md) says who else can, such as the coordinator's shell and a
+step whose mode lists a command that runs code. A `bay submit` from a plain terminal, with no such record, is
+refused, and the run still waits:
 
 ```console
 $ <kit>/bay.sh submit @draft.json --token <token>
@@ -120,8 +125,10 @@ of the digest: `<kit>/bay.sh call --workflow feed-briefing:workflows/daily.yaml`
 value. The config has `modes` (the kit's modes the project uses; its own modes, and the modes they bind, are used
 anyway), `bindings`, `adapter`, `settings` (per mode, checked against the mode's settings schema), `budget` (the
 default limits of a run), `tiers` (the model and effort of each tier), `skillSteps` and `approvals`. No mode may
-name the config. Where the hook runs, it closes the config to every step agent's file tools; a listed command that
-runs code is not stopped. The coordinator can edit the config: the block in `CLAUDE.md` tells it to change
+name the config. Where the hook runs, it closes the config to step agents' file tools only. For a command, the
+hook checks that it is a listed command's words followed by plain arguments, not which paths those arguments name,
+so any listed command can still be pointed at the config, and one that runs code can do anything. The coordinator
+can edit the config: the block in `CLAUDE.md` tells it to change
 `approvals` or `skillSteps` only when the owner asks for exactly that, and nothing enforces it.
 
 A workflow's `trigger` may name a schedule or an event, but no part of the kernel starts a workflow by either yet:
@@ -137,7 +144,8 @@ adapters/     claude-code/: what bay build writes for Claude Code, and the hook
 schemas/      the forms of the manifests and the config, and the script that generates their types
 framework/    the feature map, the size budgets and the practices
 tests/        the kernel's tests and the test toolbox (tests/test-toolbox.ts); a mode's tests live in its tests/
-docs/         adr/ (decisions), designs/ (designs before a build), plans/, briefs/, research/, requirements/
+docs/         adr/ (decisions), designs/ (designs before a build), plans/, briefs/, research/, requirements/,
+              proposals/ (agentbay 4's proposals, which CHANGELOG.md points to)
 ```
 
 A mode's folder holds `mode.yaml`, `README.md`, and `skills/`, `scripts/`, `workflows/`, `schemas/`,
@@ -168,19 +176,30 @@ elsewhere.
 
 ## Adding a mode
 
-`bay new mode <name>` writes `components/modes/<name>/mode.yaml` and its `README.md` in the project.
-`bay new action <name> --mode <mode>` adds an action with its input and output schemas, a script and a test
-example; `bay new skill`, `bay new workflow` and `bay new interface` work the same way. `bay check` then checks
-the whole project, and `bay actions <mode>` lists the new action, which `bay call <mode>.<name>` runs. A mode
-outside the kit's `components/base/` that lists commands is granted them only after the owner trusts its list
-(`bay approve --trust <mode>`). Forge builds a mode in slices, with tests, proof and the owner's cards:
+In a project, `bay new` writes from the kit's templates:
+
+- `bay new mode <name>`: `components/modes/<name>/mode.yaml` and its `README.md`.
+- `bay new action <name> --mode <mode>`: the action in the mode's `mode.yaml`, its input and output schemas, a
+  script, and an example in `tests/`.
+- `bay new skill <name> --mode <mode>`: `skills/<name>/SKILL.md` only. No step names it yet; an action's `run`
+  list must add one.
+- `bay new workflow <name> --mode <mode>`: `workflows/<name>.yaml`, listed under `workflows:` in `mode.yaml`.
+- `bay new interface <name>`: `components/interfaces/<name>.yaml` at version 1, with no actions. The name is
+  plain kebab-case: `bay new interface thing@1` is refused.
+
+`bay check` then checks the whole project, and `bay actions <mode>` lists a new action, which
+`bay call <mode>.<name>` runs. A mode outside the kit's `components/base/` gets its list, the commands it lists
+and its throwaway folders, only while a trust record (`.agentbay/trust.json`) names that exact list; `bay approve
+--trust <mode>` shows the owner the trust card and records his answer. Trust does not stop an agent that has the
+owner's shell, runs `bay approve` in a pseudo-terminal, or quotes words the owner did not write: the adapter's
+README, under What the hook does not stop, and the Trust row of [CONTEXT.md](CONTEXT.md) say so. Forge builds a mode in slices, with tests, proof and the owner's cards:
 [components/base/forge/README.md](components/base/forge/README.md).
 
 ## Safety, in one paragraph
 
 Where it runs, the guard hook narrows what step agents can do: a step's tools, the folders it reads and writes and
-the words of the commands it may run all come from its mode's manifest, and the main thread may write anything but
-`.agentbay/`, `.claude/`, `.mcp.json`, the kit's `bay/`, `schemas/`, `adapters/` and `framework/`, and, outside the kit, its `components/base/`. It is defence
+the words of the commands it may run all come from its mode's manifest, and the coordinator's file tools may write
+anything but `.agentbay/`, `.claude/`, `.mcp.json`, the kit's `bay/`, `schemas/`, `adapters/` and `framework/`, and, outside the kit, its `components/base/`; the coordinator's shell is not checked. It is defence
 in depth, not isolation, and cannot contain code once a listed command runs it. A project whose config sets
 `skillSteps.run: without-the-hook` runs skill steps with no hook: the kernel takes their outputs, and each run
 records that no hook saw them. A mode's script runs in a child process under Node's permission model and reaches

@@ -338,6 +338,26 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     assert.deepEqual(branches(root), []);
   });
 
+  test("a design that does not say how it holds each practice it was given goes back to its designer with one sentence for each", async () => {
+    const root = await project(template);
+    const start = waitingOf(await startedDesign(root), "path");
+    await decided(root, start, { step: "path", choice: "light" });
+    const feedback: Json[] = [];
+    const silent = Object.fromEntries(Object.entries(fieldsOf(todoDesign)).filter(([key]) => key !== "practices"));
+    await playedTo(root, start.id, {
+      designer: (task) => {
+        feedback.push(fieldsOf(task).feedback ?? null);
+        return Promise.resolve(feedback.length === 1 ? silent : todoDesign);
+      },
+      challenger: (task) => Promise.resolve(allHeld(task)),
+    });
+    const left = (id: string): string =>
+      `The design does not say how it holds the practice ${id}; add it to practices with one sentence on how the ` +
+      "design holds it, or why it does not apply.";
+    assert.deepEqual(feedback, [[], [["P-52", "P-32", "P-35"].map(left).join(" ")]]);
+    assert.equal(textAt(await shown(root, start.id), "status"), "waiting");
+  });
+
   test("a refused requirements file stops the run with every problem and its line, and nothing is designed", async () => {
     const root = await project(template);
     const text = await readFile(join(root, file), "utf8");

@@ -1,6 +1,15 @@
 import { tiers, type Tier } from "./contracts.ts";
 
-export const roles = ["builder", "test writer", "reviewer", "planter", "designer", "challenger", "planner"] as const;
+export const roles = [
+  "builder",
+  "test writer",
+  "reviewer",
+  "planter",
+  "designer",
+  "challenger",
+  "planner",
+  "interviewer",
+] as const;
 
 export type Role = (typeof roles)[number];
 
@@ -26,6 +35,7 @@ const roleTiers: Readonly<Record<Role, Tier>> = {
   designer: "deep",
   challenger: "deep",
   planner: "balanced",
+  interviewer: "deep",
 };
 
 export function tierOfRole(role: Role): Tier {

@@ -30,6 +30,7 @@ export type Changes = {
   readonly storeActions?: Readonly<Record<string, Action>>;
   readonly config?: Partial<Config>;
   readonly activeModes?: readonly string[];
+  readonly files?: Readonly<Record<string, string>>;
 };
 
 export type FixtureSystem = {
@@ -259,7 +260,7 @@ const notesActions: Readonly<Record<string, Action>> = {
   },
 };
 
-const draftSkill = [
+export const draftSkill = [
   "---",
   "name: draft",
   "description: Writes a short draft.",
@@ -306,6 +307,7 @@ function fixtureFiles(changes: Changes): Record<string, string> {
     "components/modes/notes/mode.yaml": yamlText(notesMode),
     ...schemaFiles("components/modes/notes/schemas", Object.keys(schemas)),
     "components/modes/notes/skills/draft/SKILL.md": draftSkill,
+    ...changes.files,
   };
   for (const name of ["put", "get", "erase", "remove"]) {
     files[`components/base/store/scripts/${name}.ts`] = "";

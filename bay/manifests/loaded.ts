@@ -1,23 +1,23 @@
 import { basename, join } from "node:path/posix";
 import type { Config } from "../generated/config.ts";
 import type { Interface } from "../generated/interface.ts";
-import type { Action, Mode } from "../generated/mode.ts";
 import type { Workflow } from "../generated/workflow.ts";
 import { shownPath, type Layout } from "../layout.ts";
 import type { FileSystem } from "../ports.ts";
 import { loadSpec } from "./spec.ts";
 import type { Loaded, SchemaFile } from "../value-check.ts";
 import type { Outcome, Problem } from "../outcome.ts";
+import { loadedModeOf, type LoadedAction, type LoadedMode } from "./loaded-mode.ts";
 import { type ModeFolder, type TierFolder, manifestFileOf, findModeFolders, findInterfaceFiles } from "./folders.ts";
 
 export type SchemaReader = (file: string) => Promise<SchemaFile>;
 
 export type ModeRead = {
   readonly found: TierFolder;
-  readonly outcome: Outcome<Loaded<Mode>>;
+  readonly outcome: Outcome<Loaded<LoadedMode>>;
 };
 
-export type ModeSource = Loaded<Mode> & ModeFolder;
+export type ModeSource = Loaded<LoadedMode> & ModeFolder;
 
 export type UnloadedMode = ModeFolder & {
   readonly name: string;
@@ -49,7 +49,7 @@ export type Context = {
 export type ActionPlace = {
   readonly mode: ModeSource;
   readonly name: string;
-  readonly action: Action;
+  readonly action: LoadedAction;
 };
 
 export type ModeWorkflow = {
@@ -100,7 +100,8 @@ export async function loadModes(files: FileSystem, layout: Layout): Promise<Load
   const values: ModeSource[] = [];
   const unloaded: UnloadedMode[] = [];
   for (const found of await findModeFolders(files, layout)) {
-    const outcome = await loadSpec(files, manifestFileOf(found), "mode");
+    const written = await loadSpec(files, manifestFileOf(found), "mode");
+    const outcome = written.ok ? loadedModeOf(written.value) : written;
     read.push({ found, outcome });
     if (outcome.ok) {
       values.push({ ...outcome.value, home: found.home, folder: found.folder });

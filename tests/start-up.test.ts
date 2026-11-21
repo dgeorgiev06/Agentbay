@@ -161,6 +161,7 @@ const manifests = inFolder("bay/manifests", [
   "inspection",
   "interfaces",
   "loaded",
+  "loaded-mode",
   "manifests",
   "naming",
   "placement",

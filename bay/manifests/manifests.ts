@@ -2,7 +2,8 @@ import { basename, join, relative } from "node:path/posix";
 import type { Json, ModeGrants } from "../contracts.ts";
 import type { Config } from "../generated/config.ts";
 import type { Interface } from "../generated/interface.ts";
-import type { Action, Effect, Mode } from "../generated/mode.ts";
+import type { Effect, Mode } from "../generated/mode.ts";
+import type { LoadedAction, LoadedMode } from "./loaded-mode.ts";
 import type { SkillFrontMatter } from "../generated/skill.ts";
 import type { Workflow } from "../generated/workflow.ts";
 import { isProjectTheKit, shownProblems, type Home, type Layout } from "../layout.ts";
@@ -63,8 +64,8 @@ import {
 export type ActiveMode = {
   readonly home: Home;
   readonly folder: string;
-  readonly manifest: Mode;
-  readonly lineOf: Loaded<Mode>["lineOf"];
+  readonly manifest: LoadedMode;
+  readonly lineOf: Loaded<LoadedMode>["lineOf"];
   readonly workflows: ReadonlyMap<string, Workflow>;
   readonly settings: Readonly<Record<string, unknown>>;
   readonly actionSchemas: ReadonlyMap<string, ActionSchemas>;
@@ -96,7 +97,7 @@ type LoadedInterface = {
   readonly definition: Interface;
 };
 
-type ActionWithSchemas = Action & {
+type ActionWithSchemas = LoadedAction & {
   readonly input: string;
   readonly output: string;
 };

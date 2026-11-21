@@ -1,6 +1,6 @@
 import { addSpend, charge, childFrame, noSpend, subtractSpend, type BudgetFrame } from "./budget.ts";
 import type { Json, RunEvent, Settled, Spend, StepPlace, Submission, Tier } from "../contracts.ts";
-import type { Keeping, Step } from "../generated/mode.ts";
+import type { Keeping } from "../generated/mode.ts";
 import { fieldOf, textField } from "../json.ts";
 import { problemText, type Problem } from "../outcome.ts";
 import { callsKeepingOf, eitherKeeping, keepingOf, withheldReason } from "./packed-output.ts";
@@ -8,7 +8,7 @@ import type { StepRecord } from "./run-store.ts";
 import { actionPermissions, frameLabel, runScript, type CallStep } from "./script-steps.ts";
 import { skillSchemas, skillTaskOf, startedSkillOf, type SkillAt } from "./skill-steps.ts";
 import type { SkillDetail } from "./step-detail.ts";
-import { tierOfStep, type Role } from "../roles.ts";
+import { roleField, type Role } from "../roles.ts";
 import { actionEndKey, actionStepKey, checkStepKey } from "./step-key.ts";
 import type { ActionTarget, ActiveMode } from "../manifests/manifests.ts";
 import {
@@ -28,6 +28,8 @@ import {
 } from "./walk.ts";
 
 const maximumRounds = 3;
+
+type ManifestStep = ActionTarget["action"]["run"][number];
 
 type NestedAction = {
   readonly key: string;
@@ -95,13 +97,12 @@ function handedUp(frame: ActionFrame, what: string, progress: Progress): Progres
   return progress.status === "failed" && frame.within === "kept-packed" ? failed(withheldReason(what)) : progress;
 }
 
-function stepOf(step: Step): StepOf {
+function stepOf(step: ManifestStep): StepOf {
   if ("script" in step) {
     return { kind: "script", script: step.script };
   }
   if ("skill" in step) {
-    const role = step.role === undefined ? {} : { role: step.role };
-    return { kind: "skill", skill: step.skill, tier: tierOfStep(step), ...role, checks: step.checks ?? [] };
+    return { kind: "skill", skill: step.skill, tier: step.tier, ...roleField(step.role), checks: step.checks ?? [] };
   }
   return { kind: "call", call: step.call };
 }
@@ -128,7 +129,7 @@ async function startSkill(walk: Walk, frame: ActionFrame, skill: SkillStep): Pro
     action: frame.name,
     skill: skill.skill,
     tier: skill.tier,
-    ...(skill.role === undefined ? {} : { role: skill.role }),
+    ...roleField(skill.role),
     schemas,
     round: 1,
     feedback: [],
@@ -227,7 +228,7 @@ function nextRound(detail: SkillDetail, feedback: readonly string[], submission:
     action: detail.action,
     skill: detail.skill,
     tier: detail.tier,
-    ...(detail.role === undefined ? {} : { role: detail.role }),
+    ...roleField(detail.role),
     schemas: detail.schemas,
     round: detail.round + 1,
     feedback,
@@ -314,7 +315,7 @@ async function runCall(walk: Walk, frame: ActionFrame, call: CallStep): Promise<
 
 type ActionStepAt = {
   readonly index: number;
-  readonly step: Step;
+  readonly step: ManifestStep;
   readonly input: Json;
 };
 

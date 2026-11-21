@@ -49,7 +49,6 @@ export function skillTaskOf(at: SkillAt, context: TaskContext): SkillTask {
     feedback: detail.feedback,
     skill: detail.skill,
     tier: detail.tier,
-    ...(detail.role === undefined ? {} : { role: detail.role }),
     input: at.input,
     files: {
       skill: join(folder, detail.skill, "SKILL.md"),

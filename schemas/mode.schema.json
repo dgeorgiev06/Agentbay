@@ -262,9 +262,8 @@
               "enum": ["fast", "balanced", "deep"]
             },
             "role": {
-              "description": "The role whose agent does the skill. The step runs at the tier the kit's list of roles gives that role, in bay/roles.ts. A step names a tier or a role, not both.",
-              "type": "string",
-              "enum": ["builder", "test writer", "reviewer", "planter", "designer", "challenger", "planner"]
+              "description": "The role whose agent does the skill, one of the kit's roles in bay/roles.ts. The step runs at the tier that list gives the role. A step names a tier or a role, not both.",
+              "type": "string"
             },
             "checks": {
               "description": "Scripts that check the output; a failure sends the skill back, three rounds at most.",

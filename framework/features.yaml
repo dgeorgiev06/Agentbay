@@ -50,6 +50,7 @@ features:
       - bay/manifests/folders.ts
       - bay/manifests/schemas.ts
       - bay/manifests/loaded.ts
+      - bay/manifests/loaded-mode.ts
       - bay/manifests/interfaces.ts
       - bay/manifests/bindings.ts
       - bay/manifests/activation.ts

@@ -122,3 +122,16 @@ test("a builder in a base mode that lists a command keeps Bash, its roots and it
   assert.deepEqual(byRole.agents, byTier.agents);
   assert.deepEqual(byRole.files, byTier.files);
 });
+
+test("a reviewer's agent file names the model of the deep tier, the same file a step at tier deep gets", async () => {
+  const config: unknown = parse(validFiles()[paths.config] ?? "");
+  const tiers = { balanced: { model: "sonnet", effort: "medium" }, deep: { model: "opus", effort: "high" } };
+  const withTiers = { [paths.config]: stringify({ ...(isRecord(config) ? config : {}), tiers }) };
+  const filesOf = (step: unknown): FileSystem => fakeFileSystem(rooted({ ...baseNotesFiles(step), ...withTiers }));
+  const byRole = await built(filesOf({ skill: "skills/write-note", role: "reviewer" }), fakeLayout);
+  const byTier = await built(filesOf({ skill: "skills/write-note", tier: "deep" }), fakeLayout);
+  const agentFile = byRole.files[".claude/agents/agentbay-notes-write-note.md"] ?? "";
+  assert.match(agentFile, /^model: opus$/m);
+  assert.match(agentFile, /^effort: high$/m);
+  assert.deepEqual(byRole.files, byTier.files);
+});

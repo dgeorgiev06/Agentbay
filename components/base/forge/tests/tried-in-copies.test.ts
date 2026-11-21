@@ -269,7 +269,7 @@ describe(
       );
       const text = rounded.lines.join("\n");
       assert.ok(rounded.lines.includes("  examples, must, failed: The design's"), text);
-    assert.ok(!rounded.lines.some((line) => line.startsWith("  tried-")), text);
+      assert.ok(!rounded.lines.some((line) => line.startsWith("  tried-")), text);
       assert.ok(text.includes('"{\\"name\\":\\"ann\\",\\"count\\":1}"'), text);
     });
 

@@ -1,0 +1,31 @@
+{
+  "input": {
+    "job": "todo",
+    "turn": {
+      "added": [],
+      "asked": [
+        {
+          "question": "Q1",
+          "choices": [
+            "The owner, for short tasks",
+            "A team that shares one list"
+          ],
+          "recommended": "a",
+          "why": "His words name no one else."
+        }
+      ],
+      "facts": []
+    },
+    "answers": [
+      {
+        "id": "Q1",
+        "choice": "a"
+      }
+    ],
+    "opened": "3f2a9c0d4b1e6a7c8d9e0f1a2b3c4d5e"
+  },
+  "output": {
+    "job": "todo",
+    "summary": "Turn 1 of the interview of todo is kept: 1 question settled, 1 open. When the owner asks for turn 2, run: bay call --workflow pm:workflows/ask.yaml '{\"job\": \"todo\"}' --json"
+  }
+}

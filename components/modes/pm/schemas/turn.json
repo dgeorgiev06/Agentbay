@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Turn",
+  "description": "What the interviewer hands in for one turn. It has no place to settle a question.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "added",
+    "asked",
+    "facts"
+  ],
+  "properties": {
+    "added": {
+      "type": "array",
+      "maxItems": 40,
+      "items": {
+        "type": "object",
+        "description": "A new question, as schemas/question.json gives it; the turn's check holds it to that form."
+      },
+      "description": "Questions the interviewer adds to the tree, asked from the next turn on."
+    },
+    "asked": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "question",
+          "choices",
+          "recommended",
+          "why"
+        ],
+        "properties": {
+          "question": {
+            "type": "string",
+            "pattern": "^Q[1-9][0-9]{0,3}$"
+          },
+          "choices": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 3,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60,
+              "pattern": "^[^\\n\\r]*$"
+            },
+            "description": "The answers offered, lettered a, b and c in this order."
+          },
+          "recommended": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1,
+            "description": "The letter of the recommended choice."
+          },
+          "why": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[^\\n\\r]*$",
+            "description": "One line, for the owner only, on why it is recommended."
+          }
+        }
+      }
+    },
+    "facts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "question",
+          "says",
+          "source",
+          "quote"
+        ],
+        "properties": {
+          "question": {
+            "type": "string",
+            "pattern": "^Q[1-9][0-9]{0,3}$"
+          },
+          "says": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "pattern": "^[^\\n\\r]*$"
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 300,
+            "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$",
+            "description": "The file, relative to the project."
+          },
+          "quote": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "Words the file holds exactly."
+          }
+        }
+      }
+    }
+  }
+}

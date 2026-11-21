@@ -27,6 +27,8 @@ export type BuildRequest = {
   readonly removal: Removal;
 };
 
+export type GrantedFoldersRequest = Pick<BuildRequest, "layout" | "agents" | "files">;
+
 export type CleanRequest = {
   readonly layout: Layout;
   readonly files: FileSystem;
@@ -47,9 +49,7 @@ export type Adapter = {
   readonly hookSaw?: (handedIn: HandedIn) => Promise<boolean>;
 };
 
-export function agentName(mode: string, skill: string): string {
-  return `agentbay-${mode}-${skill}`;
-}
+export { agentName } from "./agent-name.ts";
 
 export function agentWritableFolders(agent: SkillAgent): readonly string[] {
   return reachOf({ grants: agent.grants, actionEffects: agent.effects }).writableFolders;

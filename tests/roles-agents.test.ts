@@ -29,7 +29,7 @@ test("every kit step that names its tier could name a role of that tier, and the
   const layout = layoutOf({ kit, project: kit });
   const byTier = await built(kitFiles(layout), layout);
   const byRole = await built(kitFiles(layout, stepWithRole), layout);
-  assert.equal(byTier.agents.length, 12);
+  assert.equal(byTier.agents.length, 13);
   assert.ok(["balanced", "deep"].every((tier) => byTier.agents.some((agent) => agent.tier === tier)));
   assert.deepEqual(byRole.agents, byTier.agents);
   assert.deepEqual(Object.keys(byRole.files), Object.keys(byTier.files));

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Took",
+  "description": "The owner's answer to one card.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "choice"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^Q[1-9][0-9]{0,3}$"
+    },
+    "choice": {
+      "type": "string",
+      "description": "a, b, c or later."
+    }
+  }
+}

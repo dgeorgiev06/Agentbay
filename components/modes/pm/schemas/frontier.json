@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Frontier",
+  "description": "What the interviewer is given for one turn, read from the PM mode's records.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "job",
+    "turn",
+    "perTurn",
+    "asked",
+    "questions",
+    "asks",
+    "lookUp",
+    "opened"
+  ],
+  "properties": {
+    "job": {
+      "type": "string"
+    },
+    "turn": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "perTurn": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "asked": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "namedBy",
+          "on",
+          "words"
+        ],
+        "properties": {
+          "namedBy": {
+            "type": "string",
+            "description": "Who the start request said gave the words; no script can tell whether that is so."
+          },
+          "on": {
+            "type": "string"
+          },
+          "words": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Each time words were given for the work, by whom and when."
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "description": "A question, as schemas/question.json gives it."
+      }
+    },
+    "asks": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^Q[1-9][0-9]{0,3}$"
+      },
+      "description": "The questions this turn asks, in order."
+    },
+    "lookUp": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^Q[1-9][0-9]{0,3}$"
+      },
+      "description": "The facts this turn may look up."
+    },
+    "opened": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The token frontier wrote in the records when it opened this turn; record keeps the turn only with it."
+    }
+  }
+}

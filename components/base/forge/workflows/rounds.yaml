@@ -55,6 +55,7 @@ steps:
       round: 1
       slice: $steps.slice.output.slice
       interface: $steps.slice.output.interface
+      rules: $steps.slice.output.rules
       fixed: $steps.slice.output.fixed
       cut: $steps.cut.output
       declared: $steps.declare.output
@@ -67,6 +68,7 @@ steps:
       fixed: $steps.slice.output.fixed
       practices: $settings.practices
       interface: $steps.slice.output.interface
+      rules: $steps.slice.output.rules
       state: $steps.round-1.output
   - id: round-2
     action: round
@@ -74,6 +76,7 @@ steps:
       round: 2
       slice: $steps.slice.output.slice
       interface: $steps.slice.output.interface
+      rules: $steps.slice.output.rules
       fixed: $steps.slice.output.fixed
       cut: $steps.cut.output
       declared: $steps.declare.output
@@ -86,6 +89,7 @@ steps:
       fixed: $steps.slice.output.fixed
       practices: $settings.practices
       interface: $steps.slice.output.interface
+      rules: $steps.slice.output.rules
       state: $steps.round-2.output
   - id: round-3
     action: round
@@ -93,6 +97,7 @@ steps:
       round: 3
       slice: $steps.slice.output.slice
       interface: $steps.slice.output.interface
+      rules: $steps.slice.output.rules
       fixed: $steps.slice.output.fixed
       cut: $steps.cut.output
       declared: $steps.declare.output
@@ -105,6 +110,7 @@ steps:
       fixed: $steps.slice.output.fixed
       practices: $settings.practices
       interface: $steps.slice.output.interface
+      rules: $steps.slice.output.rules
       state: $steps.round-3.output
   - id: bugs
     action: bugs

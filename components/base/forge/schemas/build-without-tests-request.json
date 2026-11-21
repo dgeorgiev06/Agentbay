@@ -4,14 +4,7 @@
   "description": "What a builder reads to build a slice whose tests another wrote: the slice's conditions, the interface files' paths, the test files' paths it may not change, its worktree, the practices and what it declared; from round 2 on, the reviewer's findings for it and what it may be told of the failing cases. It holds no line of the tests.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "slice",
-    "interface",
-    "fixed",
-    "folder",
-    "practices",
-    "declared"
-  ],
+  "required": ["slice", "interface", "fixed", "folder", "practices", "declared"],
   "properties": {
     "slice": {
       "$ref": "proof@1/prove-request.json#/$defs/slice"
@@ -62,25 +55,25 @@
     },
     "failing": {
       "$ref": "#/$defs/failing"
+    },
+    "rules": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object"
+      },
+      "description": "The rules of the committed design that the slice's actions apply: write each as a pure function named in camelCase after the rule, taking and giving those values, and the thin function around it that reads and writes what its action names. Empty when there is none."
     }
   },
   "$defs": {
     "finding": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "to",
-        "case",
-        "question",
-        "fix"
-      ],
+      "required": ["to", "case", "question", "fix"],
       "description": "One finding of the reviewer, for the test writer or for the builder.",
       "properties": {
         "to": {
-          "enum": [
-            "test-writer",
-            "builder"
-          ],
+          "enum": ["test-writer", "builder"],
           "description": "Who the finding is for: the test writer corrects the tests, the builder the code."
         },
         "case": {
@@ -107,13 +100,7 @@
     "failing": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "items",
-        "cases",
-        "withheld",
-        "notListed",
-        "notLoaded"
-      ],
+      "required": ["items", "cases", "withheld", "notListed", "notLoaded"],
       "description": "What of a failed test run the builder may be told: the failed must items, each failing case's name, its file when the slice names it, and its message only when it quotes no test; the count of messages withheld; the test files that did not load, by path only.",
       "properties": {
         "items": {
@@ -131,9 +118,7 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "name"
-            ],
+            "required": ["name"],
             "description": "A failing case as the builder may be told it.",
             "properties": {
               "name": {

@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
+import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
+import { designSummaryOf } from "../scripts/lib/design-summary.ts";
 import { listOf } from "../scripts/lib/json-values.ts";
+import { planDocument } from "../scripts/lib/plan-file.ts";
 import { planOf } from "../scripts/lib/plan-form.ts";
 import { workOut } from "../scripts/lib/plan-waves.ts";
 import { sideBySideOf } from "../scripts/lib/side-by-side.ts";
 import { proving, waveProofRequest, type ToJoin } from "../scripts/lib/wave-join.ts";
 import { nameClashes, testsToLookFor, waveOf, type PlanFound } from "../scripts/lib/wave-plan.ts";
 import { modelCallsOfASlice } from "../scripts/lib/wave-start-card.ts";
+import { designFile, requirementsFile, todoDesignFiles, todoPlan } from "./todo-plan.ts";
 import { agreed, plannedSlice, testPath } from "./wave-run.ts";
 
 const base = "875d936a1b2c3d4e5f60718293a4b5c6d7e8f901";
@@ -42,6 +45,22 @@ describe("which slices a wave holds, and their requests", () => {
       [base, base],
     );
     assert.deepEqual(fieldsOf(wave.requests[0] ?? null).interface, [agreed]);
+  });
+
+  test("with the plan's design read, each request carries the rules its slice's actions apply, and without it none", () => {
+    const [designed] = todoDesignFiles();
+    const read = readYaml(designed?.text ?? "");
+    assert.ok(read.ok);
+    const design = designSummaryOf(designFile, read.value);
+    const document = planDocument(todoPlan, { requirements: requirementsFile, design: designFile });
+    const plan = planOf(document);
+    const withDesign = waveOf(asked, { plan, document, workedOut: workOut(plan, []), design }, at);
+    assert.ok(withDesign.kind === "wave");
+    const rules = listOf(fieldsOf(withDesign.requests[0] ?? null).rules).map((rule) => fieldsOf(rule).name);
+    assert.deepEqual(rules, ["add-todo"]);
+    const without = waveOf(asked, { plan, document, workedOut: workOut(plan, []) }, at);
+    assert.ok(without.kind === "wave");
+    assert.equal(fieldsOf(without.requests[0] ?? null).rules, undefined);
   });
 
   test("a later wave asks for the test files of the slices it comes after, and is refused while one is missing", () => {

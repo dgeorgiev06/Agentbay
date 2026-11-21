@@ -5,10 +5,13 @@ import {
   actionsOf,
   designerAnswersOf,
   designOf,
+  rulesOf,
+  valuesDocument,
   type Action,
   type Design,
   type DesignerAnswer,
   type Example,
+  type Value,
 } from "./design-form.ts";
 
 type Named = { readonly name: string };
@@ -97,8 +100,29 @@ function examplesDiffer(name: string, first: readonly Example[], second: readonl
     .map((each) => `${name}: ${counted(each.count, "example")} ${each.how}`);
 }
 
+function sameValues(mine: readonly Value[], theirs: readonly Value[]): boolean {
+  return canonicalJson(valuesDocument(mine)) === canonicalJson(valuesDocument(theirs));
+}
+
+function rulesDiffer({ first, second }: Sides): readonly string[] {
+  return paired(rulesOf(first), rulesOf(second)).flatMap(([mine, theirs]) => [
+    ...(mine.module === theirs.module ? [] : [`rule ${mine.name}: kept in another module`]),
+    ...(sameValues(mine.takes, theirs.takes) ? [] : [`rule ${mine.name}: what it takes differs`]),
+    ...(sameValues(mine.gives, theirs.gives) ? [] : [`rule ${mine.name}: what it gives differs`]),
+    ...(mine.decides === theirs.decides ? [] : [`rule ${mine.name}: what it decides is worded differently`]),
+  ]);
+}
+
+function appliedDiffers(mine: Placed, theirs: Placed): readonly string[] {
+  const shape = (action: Placed): string => canonicalJson([action.rule ?? null, action.reads, action.writes]);
+  return shape(mine) === shape(theirs)
+    ? []
+    : [`${mine.name}: the rule it applies, or what it reads or writes, differs`];
+}
+
 function actionsDiffer({ first, second }: Sides): readonly string[] {
   return paired(placed(first), placed(second)).flatMap(([mine, theirs]) => [
+    ...appliedDiffers(mine, theirs),
     ...(mine.because === theirs.because ? [] : [`${mine.name}: why it serves no condition is worded differently`]),
     ...examplesDiffer(mine.name, mine.examples, theirs.examples),
   ]);
@@ -162,6 +186,8 @@ export function differences(
   return [
     ...apart("module", { first: first.modules, second: second.modules }, labels),
     ...modulesDiffer(sides),
+    ...apart("rule", { first: rulesOf(first), second: rulesOf(second) }, labels),
+    ...rulesDiffer(sides),
     ...apart("interface", { first: first.interfaces, second: second.interfaces }, labels),
     ...apart("action", { first: placed(first), second: placed(second) }, labels),
     ...schemasDiffer(sides),

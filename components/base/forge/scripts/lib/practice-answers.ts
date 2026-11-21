@@ -187,7 +187,7 @@ export function notHeldLine(step: string, practice: NotHeld): CardLine {
 export function practiceLines(block: PracticeBlock): readonly CardLine[] {
   const notHeld = block.answers.filter((practice) => practice.answer === "not-held");
   return [
-    computed("draw", `practices held by the script's rules: ${joined(block.heldByRules)}`),
+    computed("draw", `practices held by the script's checks: ${joined(block.heldByRules)}`),
     computed("draw", tallyWords("the challenger", tallyOf(block.answers))),
     ...notHeld.map((practice) => notHeldLine(block.challenger, { id: practice.id, sentence: practice.sentence })),
   ];

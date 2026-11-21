@@ -1,6 +1,10 @@
+import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
+import { quoted, twice } from "./card-lines.ts";
 import { designFolder, designPaths } from "./design-files.ts";
-import { referencesIn, siblingSchemas } from "./design-examples.ts";
+import { exampleValues, referencesIn, siblingSchemas } from "./design-examples.ts";
 import { actionName, actionsOf, type Action, type Design, type Interface } from "./design-form.ts";
+import { spelledOut } from "./long-texts.ts";
+import { ruleChecks } from "./rules-applied.ts";
 
 export type Checked = {
   readonly job: string;
@@ -9,7 +13,7 @@ export type Checked = {
   readonly design: Design;
 };
 
-type Rule = (checked: Checked) => readonly string[];
+type Check = (checked: Checked) => readonly string[];
 
 type Owned = {
   readonly kind: "table" | "file";
@@ -19,15 +23,7 @@ type Owned = {
 
 const vagueWords = ["util", "utils", "helper", "helpers", "common", "manager", "managers", "misc"];
 
-function twice(names: readonly string[]): readonly string[] {
-  return [...new Set(names.filter((name, at) => names.indexOf(name) !== at))];
-}
-
-function quoted(names: readonly string[]): string {
-  return names.map((name) => `"${name}"`).join(" and ");
-}
-
-const namesUsedTwice: Rule = ({ design }) => [
+const namesUsedTwice: Check = ({ design }) => [
   ...twice(design.modules.map((module) => module.name)).map(
     (name) => `The design has two modules named "${name}"; give each module a name of its own.`,
   ),
@@ -41,7 +37,7 @@ const namesUsedTwice: Rule = ({ design }) => [
   ),
 ];
 
-const modulesWithoutInterface: Rule = ({ design }) =>
+const modulesWithoutInterface: Check = ({ design }) =>
   design.modules
     .filter((module) => module.implements.length === 0)
     .map(
@@ -50,7 +46,7 @@ const modulesWithoutInterface: Rule = ({ design }) =>
         "or fold it into a module that has one.",
     );
 
-const interfacesNobodyDefined: Rule = ({ design }) => {
+const interfacesNobodyDefined: Check = ({ design }) => {
   const defined = design.interfaces.map((each) => each.name);
   return design.modules.flatMap((module) =>
     module.implements
@@ -63,7 +59,7 @@ const interfacesNobodyDefined: Rule = ({ design }) => {
   );
 };
 
-const interfacesNobodyImplements: Rule = ({ design }) => {
+const interfacesNobodyImplements: Check = ({ design }) => {
   const implemented = design.modules.flatMap((module) => module.implements);
   return design.interfaces
     .filter((each) => !implemented.includes(each.name))
@@ -82,7 +78,7 @@ function ownedOf(design: Design, kind: Owned["kind"]): readonly Owned[] {
   });
 }
 
-const ownedTwice: Rule = ({ design }) =>
+const ownedTwice: Check = ({ design }) =>
   [...ownedOf(design, "table"), ...ownedOf(design, "file")]
     .filter((owned) => owned.owners.length > 1)
     .map(
@@ -91,7 +87,7 @@ const ownedTwice: Rule = ({ design }) =>
         "let one module own it and the others ask that module.",
     );
 
-const conditionsNotServed: Rule = ({ design, conditions, file }) => {
+const conditionsNotServed: Check = ({ design, conditions, file }) => {
   const served = actionsOf(design).flatMap((action) => action.serves);
   return conditions
     .filter((condition) => !served.includes(condition))
@@ -102,7 +98,7 @@ const conditionsNotServed: Rule = ({ design, conditions, file }) => {
     );
 };
 
-const servesUnknown: Rule = ({ design, conditions, file }) =>
+const servesUnknown: Check = ({ design, conditions, file }) =>
   actionsOf(design).flatMap((action) =>
     action.serves
       .filter((condition) => !conditions.includes(condition))
@@ -113,7 +109,7 @@ const servesUnknown: Rule = ({ design, conditions, file }) =>
       ),
   );
 
-const servesNothing: Rule = ({ design }) =>
+const servesNothing: Check = ({ design }) =>
   actionsOf(design)
     .filter((action) => action.serves.length === 0 && action.because === undefined)
     .map(
@@ -122,7 +118,7 @@ const servesNothing: Rule = ({ design }) =>
         "name the conditions it serves, or say in because why it exists, such as an operator's need.",
     );
 
-const actionsWithoutExample: Rule = ({ design }) =>
+const actionsWithoutExample: Check = ({ design }) =>
   actionsOf(design)
     .filter((action) => action.examples.length === 0)
     .map(
@@ -131,7 +127,7 @@ const actionsWithoutExample: Rule = ({ design }) =>
         "and the exact answer or the exact refusal sentence.",
     );
 
-const refusalsBlank: Rule = ({ design }) =>
+const refusalsBlank: Check = ({ design }) =>
   actionsOf(design).flatMap((action) =>
     action.examples.flatMap((example, index) =>
       "refusal" in example.told && example.told.refusal.trim() === ""
@@ -155,7 +151,7 @@ function earlierUnknown(each: Interface, action: Action): readonly string[] {
     );
 }
 
-const earlierCallsUnknown: Rule = ({ design }) =>
+const earlierCallsUnknown: Check = ({ design }) =>
   design.interfaces.flatMap((each) => each.actions.flatMap((action) => earlierUnknown(each, action)));
 
 function isInside(reference: string, each: Interface): boolean {
@@ -179,10 +175,10 @@ function referencesOutside(each: Interface, action: Action): readonly string[] {
   );
 }
 
-const schemasReferOutside: Rule = ({ design }) =>
+const schemasReferOutside: Check = ({ design }) =>
   design.interfaces.flatMap((each) => each.actions.flatMap((action) => referencesOutside(each, action)));
 
-const filesOutsideTheFolder: Rule = ({ design, job }) => {
+const filesOutsideTheFolder: Check = ({ design, job }) => {
   const folder = `${designFolder(job)}/`;
   return designPaths(job, design)
     .filter((path) => !path.startsWith(folder) || path.split("/").includes(".."))
@@ -197,7 +193,7 @@ function isVague(name: string): boolean {
   return name.split("-").some((word) => vagueWords.includes(word));
 }
 
-const vagueNames: Rule = ({ design }) => [
+const vagueNames: Check = ({ design }) => [
   ...design.modules
     .filter((module) => isVague(module.name))
     .map(
@@ -214,7 +210,49 @@ const vagueNames: Rule = ({ design }) => [
     ),
 ];
 
-const rules: readonly Rule[] = [
+const longTextsRefused: Check = ({ design }) =>
+  actionsOf(design).flatMap((action) =>
+    action.examples.flatMap((example, index) =>
+      exampleValues(example).flatMap(({ side, value }) =>
+        spelledOut(value).refused.map(
+          (reason) =>
+            `In example ${String(index + 1)} of "${actionName(action)}", ${side} says a text by rule that forge ` +
+            `cannot spell out: ${reason}.`,
+        ),
+      ),
+    ),
+  );
+
+function fieldsNamedText(schema: Json): boolean {
+  if (Array.isArray(schema)) {
+    return schema.some(fieldsNamedText);
+  }
+  if (schema === null || typeof schema !== "object") {
+    return false;
+  }
+  const fields = fieldsOf(schema);
+  const named = Object.keys(fieldsOf(fields.properties ?? null)).includes("$text");
+  return named || Object.values(fields).some(fieldsNamedText);
+}
+
+const textFieldsNamed: Check = ({ design }) =>
+  actionsOf(design).flatMap((action) =>
+    (["request", "response"] as const)
+      .filter((side) => fieldsNamedText(action[side]))
+      .map(
+        (side) =>
+          `The ${side} schema of "${actionName(action)}" has a field named "$text", which forge reads in an ` +
+          "example as a long text said by rule, so the two cannot be told apart; name the field otherwise.",
+      ),
+  );
+
+const fromRules: readonly Check[] = ruleChecks.map(
+  (check) =>
+    ({ design }: Checked) =>
+      check(design),
+);
+
+const checks: readonly Check[] = [
   namesUsedTwice,
   modulesWithoutInterface,
   interfacesNobodyDefined,
@@ -229,12 +267,17 @@ const rules: readonly Rule[] = [
   schemasReferOutside,
   filesOutsideTheFolder,
   vagueNames,
+  longTextsRefused,
+  textFieldsNamed,
+  ...fromRules,
 ];
-
-export const ruleCount = rules.length;
 
 export const heldByRules = ["P-35", "P-36", "P-38", "P-42"];
 
+export function problemsByCheck(checked: Checked): readonly (readonly string[])[] {
+  return checks.map((check) => check(checked));
+}
+
 export function designProblems(checked: Checked): readonly string[] {
-  return rules.flatMap((rule) => rule(checked));
+  return problemsByCheck(checked).flat();
 }

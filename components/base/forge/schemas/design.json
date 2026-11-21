@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Design",
-  "description": "A system design handed in as data: the modules, each with what it hides and owns and the interfaces it implements, then each interface with its actions, each action's request and response schemas, the conditions it serves and its worked examples. Forge writes the schema files from it; the designer writes no file.",
+  "description": "A system design handed in as data: the modules, each with what it hides and owns, the interfaces it implements and its rules, each a pure function with what it takes and gives; then each interface with its actions, each action's request and response schemas, the rule it applies and what it reads and writes, the conditions it serves and its worked examples. Forge writes the schema files from it; the designer writes no file.",
   "type": "object",
   "additionalProperties": false,
   "required": ["modules", "interfaces"],
@@ -106,6 +106,14 @@
             }
           },
           "description": "What the module keeps; the others ask it."
+        },
+        "rules": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/rule"
+          },
+          "description": "The rules of the module's work, what is allowed, what comes next, what a thing costs, each a pure function its actions apply (P-52)."
         }
       }
     },
@@ -157,6 +165,32 @@
           "$ref": "#/$defs/sentence",
           "description": "Why the action exists when it serves no condition, such as an operator's action."
         },
+        "rule": {
+          "$ref": "#/$defs/name",
+          "description": "The rule the action applies, by name. An action that writes or refuses applies one, and its thin function only reads before and writes after."
+        },
+        "reads": {
+          "type": "array",
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.][A-Za-z0-9_./-]*$",
+            "maxLength": 200
+          },
+          "description": "The tables and files of its module the action reads before it applies its rule: exactly what the rule takes from them."
+        },
+        "writes": {
+          "type": "array",
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.][A-Za-z0-9_./-]*$",
+            "maxLength": 200
+          },
+          "description": "The tables and files of its module the action writes after: exactly what the rule gives to them."
+        },
         "examples": {
           "type": "array",
           "maxItems": 20,
@@ -189,10 +223,10 @@
           "description": "Calls made before, in order, that the example starts from."
         },
         "input": {
-          "description": "The request, which the request schema takes."
+          "description": "The request, which the request schema takes. A long text may be said by rule, as {\"$text\": [parts]}, each part a text or {\"repeat\": \"<text>\", \"times\": <count>}, at most 20 parts and 10,000 characters counted in Unicode code points; forge spells it out before it checks the example, and keeps it as written in the design."
         },
         "answer": {
-          "description": "The exact response, which the response schema takes."
+          "description": "The exact response, which the response schema takes; a long text may be said by rule, as in input."
         },
         "refusal": {
           "$ref": "#/$defs/sentence",
@@ -209,7 +243,60 @@
           "$ref": "#/$defs/name"
         },
         "input": {
-          "description": "The request of that earlier call."
+          "description": "The request of that earlier call; a long text may be said by rule, as in an example's input."
+        }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "decides", "takes", "gives"],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/name",
+          "description": "The rule's name, the name of its pure function; unique in the design."
+        },
+        "decides": {
+          "$ref": "#/$defs/sentence",
+          "description": "What the rule decides, in one sentence."
+        },
+        "takes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/value"
+          },
+          "description": "Every value the rule takes; it reads nothing else."
+        },
+        "gives": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/value"
+          },
+          "description": "Every value the rule gives back. When it refuses, it gives the refusal sentence in their place, and the action writes nothing."
+        }
+      }
+    },
+    "value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "schema"],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "store": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "A table or file of the rule's module: in takes, what the action reads from it before the rule; in gives, what the action writes to it after. Left out, the value comes from the request or is handed in by the thin function, such as the time, in takes, and is the answer, in gives.",
+          "pattern": "^[A-Za-z0-9_.][A-Za-z0-9_./-]*$"
+        },
+        "schema": {
+          "type": "object",
+          "description": "The value's JSON Schema, as data. A $ref names a part of itself or a schema file of an interface its module implements, as schemas/<interface>/<action>-<side>.json."
         }
       }
     }

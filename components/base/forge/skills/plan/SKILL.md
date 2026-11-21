@@ -56,7 +56,9 @@ As `schemas/plan.json`, sent with `submit`:
 1. Read the conditions, then the design's modules and actions, and which conditions each action serves.
 2. Cut the fewest slices that each make something a person can see working. Give a slice its module's
    folder as its scope, and order slices with `after` only where one needs what another makes.
-3. Name in `interface` the schema files of the actions the slice serves or calls.
+3. Name in `interface` the schema files of the actions the slice serves or calls, and the request file of
+   every action it builds: a slice is given the rules of the actions whose request file it names, and the
+   plan check names a slice that meets a condition while naming the request file of no action that serves it.
 4. When `answering` is given, correct what each practice not held and each finding names and keep the rest.
    Where a practice was not held, change the slices themselves. You answer once; the challenger judges the
    answer.

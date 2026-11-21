@@ -128,8 +128,9 @@ test("on the full path the second designer's task holds nothing of the first des
   const card = waitingOf(await shown(root, start.id), "card");
   const printed = (await printedCard(root, start.id, "Commit the design")).join(" ").replace(/ {2,}/g, " ");
   assert.match(printed, /the second design of two written apart, answered once after the first challenge;/);
-  assert.match(printed, /where the two designs differed: 4 module todo: only in the first design/);
-  assert.match(printed, /module todo-list: only in the second design todo.done: 2 examples changed todo.remove: 1/);
+  assert.match(printed, /where the two designs differed: 7 module todo: only in the first design/);
+  assert.match(printed, /module todo-list: only in the second design rule add-todo: kept in another module/);
+  assert.match(printed, /rule remove-todo: kept in another module todo.done: 2 examples changed todo.remove: 1/);
   assert.match(printed, /judged chosen because: It names the/);
   const done = runOf(await decided(root, card, { step: "card", choice: "approve" }));
   assert.equal(textAt(done, "status"), "done", JSON.stringify(done));

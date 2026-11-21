@@ -4,15 +4,7 @@
   "description": "What the reviewer reads: the slice, the tests' text and the builder's code as text, never as files, proof's verdicts of the round, what the builder may be told of the failing cases, and the practices no tool holds.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "round",
-    "slice",
-    "tests",
-    "code",
-    "verdicts",
-    "failing",
-    "practices"
-  ],
+  "required": ["round", "slice", "tests", "code", "verdicts", "failing", "practices"],
   "properties": {
     "round": {
       "type": "integer",
@@ -30,10 +22,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "path",
-          "text"
-        ],
+        "required": ["path", "text"],
         "properties": {
           "path": {
             "$ref": "proof@1/prove-request.json#/$defs/path"
@@ -53,10 +42,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "path",
-          "text"
-        ],
+        "required": ["path", "text"],
         "properties": {
           "path": {
             "$ref": "proof@1/prove-request.json#/$defs/path"
@@ -74,11 +60,7 @@
       "maxItems": 200,
       "items": {
         "type": "object",
-        "required": [
-          "item",
-          "kind",
-          "verdict"
-        ],
+        "required": ["item", "kind", "verdict"],
         "description": "A verdict of proof, without its failing cases.",
         "properties": {
           "item": {
@@ -88,11 +70,7 @@
             "type": "string"
           },
           "verdict": {
-            "enum": [
-              "passed",
-              "failed",
-              "inconclusive"
-            ]
+            "enum": ["passed", "failed", "inconclusive"]
           },
           "detail": {
             "type": "string"
@@ -114,10 +92,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "id",
-          "says"
-        ],
+        "required": ["id", "says"],
         "properties": {
           "id": {
             "type": "string",
@@ -129,19 +104,21 @@
           }
         }
       }
+    },
+    "rules": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object"
+      },
+      "description": "The rules of the committed design that the slice's actions apply; P-52 is answered by holding the code to them. Empty when there is none."
     }
   },
   "$defs": {
     "failing": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "items",
-        "cases",
-        "withheld",
-        "notListed",
-        "notLoaded"
-      ],
+      "required": ["items", "cases", "withheld", "notListed", "notLoaded"],
       "description": "What of a failed test run the builder may be told: the failed must items, each failing case's name, its file when the slice names it, and its message only when it quotes no test; the count of messages withheld; the test files that did not load, by path only.",
       "properties": {
         "items": {
@@ -159,9 +136,7 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "name"
-            ],
+            "required": ["name"],
             "description": "A failing case as the builder may be told it.",
             "properties": {
               "name": {

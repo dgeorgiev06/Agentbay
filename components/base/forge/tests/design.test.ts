@@ -6,6 +6,7 @@ import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
 import { challengeOf } from "../scripts/lib/challenge-answer.ts";
 import { designCard, type DesignCardInput } from "../scripts/lib/design-card.ts";
 import { designerAnswersOf, designOf } from "../scripts/lib/design-form.ts";
+import { problemsByCheck } from "../scripts/lib/design-rules.ts";
 import { listOf } from "../scripts/lib/json-values.ts";
 import { pathCard } from "../scripts/lib/path-card.ts";
 import { designPractices } from "../scripts/lib/practices.ts";
@@ -38,6 +39,8 @@ import { printed } from "./printed-card.ts";
 import { todoDesign, todoHides } from "./todo-design.ts";
 
 const file = "docs/requirements/todo.yaml";
+
+const checksRun = problemsByCheck({ job: "todo", file, conditions: [], design: designOf(todoDesign) }).length;
 
 const because = "It serves every condition with four actions on one table.";
 
@@ -206,6 +209,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
       because,
       design: designOf(todoDesign),
       problems: [],
+      checks: checksRun,
       refusedSchemas: 0,
       practices: challengeOf(firstAnswer).practices,
       findings: [],
@@ -275,6 +279,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
       because,
       design: designOf(answeredDesign()),
       problems: [],
+      checks: checksRun,
       refusedSchemas: 0,
       practices: challengeOf(allHeld(asked[3]?.task ?? null)).practices,
       findings: [],
@@ -337,7 +342,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
       "           has answered the challenge once,",
       "           which is the most a design run",
       "           asks.",
-      "checked: 0 ran, 22 computed, 4 judged",
+      "checked: 0 ran, 25 computed, 7 judged",
     ]);
     const stopped = runOf(await decided(root, card, { step: "card", choice: "stop" }));
     assert.equal(textAt(stopped, "reason"), "The owner chose stop on the design card, so nothing is committed.");
@@ -436,7 +441,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     await decided(root, start, { step: "path", choice: "light" });
     const [todo = null] = listOf(fieldsOf(todoDesign).interfaces);
     const [add = null, ...others] = listOf(fieldsOf(todo).actions);
-    const short = { ...fieldsOf(add), serves: ["O1-C1", "O1-C4", "O1-C5", "O1-C6", "O1-C7"] };
+    const short = { ...fieldsOf(add), serves: ["O1-C1", "O1-C4", "O1-C5", "O1-C6", "O2-C4"] };
     const broken = { ...fieldsOf(todoDesign), interfaces: [{ ...fieldsOf(todo), actions: [short, ...others] }] };
     const feedback: Json[] = [];
     await playedTo(root, start.id, {
@@ -445,11 +450,11 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
         return Promise.resolve(broken);
       },
     });
-    const sentence = `The condition O2-C4 of ${file} is served by no action; name it in serves of the action a person uses for it.`;
+    const sentence = `The condition O1-C7 of ${file} is served by no action; name it in serves of the action a person uses for it.`;
     assert.deepEqual(feedback.slice(1), [[sentence], [sentence]]);
     const run = await shown(root, start.id);
     assert.equal(textAt(run, "status"), "undone", JSON.stringify(run));
-    assert.match(textAt(run, "reason"), /failed its checks in round 3, the last round: The condition O2-C4/);
+    assert.match(textAt(run, "reason"), /failed its checks in round 3, the last round: The condition O1-C7/);
     assert.deepEqual(worktrees(root), []);
     assert.deepEqual(branches(root), []);
   });

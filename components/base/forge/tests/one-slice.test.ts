@@ -558,9 +558,31 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
     assert.equal(fieldsOf(task).round, 2);
     const inside = await submitted(root, start.id, { files: ["docs/a5/notes.md"], names: noNames });
     assert.equal(textAt(inside, "stepKey"), "build/0#1");
+    assert.deepEqual(fieldsOf(fieldsOf(fieldsOf(inside).task ?? null).input ?? null).rules, []);
     assert.deepEqual(branches(root), ["forge/A5"]);
     assert.deepEqual(worktrees(root), [".forge/worktrees/A5"]);
     assert.deepEqual(changedOn(root, into), []);
+  });
+
+  test("9. the rules a slice request carries reach the builder as they are", async () => {
+    const root = await project();
+    const rule = {
+      name: "count-note",
+      module: "notes",
+      decides: "Whether a note is counted.",
+      takes: [{ name: "count", store: "counts", schema: { type: "integer" } }],
+      gives: [{ name: "count", store: "counts", schema: { type: "integer" } }],
+      appliedBy: [{ action: "notes.count", reads: ["counts"], writes: ["counts"] }],
+    };
+    const slice = planned("A9", ["docs/a9/**"], [item("DOD-A9-1", "must", "checks")]);
+    const trigger = JSON.stringify({ planned: slice, base: shortHead(root), bugs: [], rules: [rule] });
+    const start = waitingOf(
+      runOf(await bay(root, ["call", "--workflow", "forge:workflows/one-slice.yaml", trigger])),
+      "start",
+    );
+    await decided(root, start, { step: "start", verdict: "approve" });
+    const building = await submitted(root, start.id, { files: ["docs/a9/notes.md"], names: noNames });
+    assert.deepEqual(fieldsOf(fieldsOf(fieldsOf(building).task ?? null).input ?? null).rules, [rule]);
   });
 
   test("6. the cards for TR2's verdicts, as the kernel prints them: every line computed, none citing build, the answer first", async () => {

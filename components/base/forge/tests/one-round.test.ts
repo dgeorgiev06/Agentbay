@@ -5,6 +5,7 @@ import { after, before, describe, test } from "node:test";
 import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
 import {
   allHeld,
+  playedTo,
   askedOf,
   assertTheMainCheckoutIsUntouched,
   begun,
@@ -12,6 +13,7 @@ import {
   branches,
   builderWrites,
   decided,
+  declared,
   git,
   into,
   jsonOf,
@@ -207,6 +209,45 @@ describe(
       assert.deepEqual(worktrees(root), []);
       assert.deepEqual(keptRows(root), []);
       assertTheMainCheckoutIsUntouched(root);
+    });
+
+    test("10. the rules a slice request carries reach the test writer, the builder and the reviewer as they are", async () => {
+      const root = await project(template);
+      const tests = [handed("R10", "quill.test.ts")];
+      const files = [codeOf("R10")];
+      await allPassedIn(root, "R10", [...files, tests[0]?.path ?? ""]);
+      const rule = {
+        name: "count-quill",
+        module: "quills",
+        decides: "Whether a quill is counted, and the count after it.",
+        takes: [{ name: "count", store: "counts", schema: { type: "integer" } }],
+        gives: [{ name: "count", store: "counts", schema: { type: "integer" } }],
+        appliedBy: [{ action: "quills.count", reads: ["counts"], writes: ["counts"] }],
+      };
+      const asked = { ...fieldsOf(trigger(root, "R10", [testPath("R10", "quill.test.ts")])), rules: [rule] };
+      const start = await started(root, asked);
+      await declared(root, start, files);
+      const given: Record<string, Json> = {};
+      await playedTo(root, start.id, {
+        tests: (task) => {
+          given.tests = fieldsOf(fieldsOf(task).input ?? null).rules ?? null;
+          return Promise.resolve({ tests: [...tests] });
+        },
+        builder: async (task) => {
+          given.builder = fieldsOf(fieldsOf(task).input ?? null).rules ?? null;
+          await builderWrites(root, textAt(fieldsOf(task).input ?? null, "folder"), files);
+          return { outcome: "built" };
+        },
+        reviewer: (task) => {
+          given.reviewer = fieldsOf(fieldsOf(task).input ?? null).rules ?? null;
+          return Promise.resolve(allHeld(task));
+        },
+      });
+      assert.deepEqual(given, { tests: [rule], builder: [rule], reviewer: [rule] });
+      assert.deepEqual(
+        wordsOf(waitingOf(await shown(root, start.id), "card"))[0],
+        "Merge is offered: every must item that proof judged passed.",
+      );
     });
 
     test("2. a test outside the scope, or not named, is sent back by its check with only what is wrong, and round 2 is taken", async () => {

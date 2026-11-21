@@ -75,13 +75,15 @@ describe("the design check, one rule at a time, each problem with its sentence",
   });
 
   test("a table and a file that two modules own", () => {
+    const [todo = null] = listAt(todoDesign, "modules");
     const owner = (name: string): Json => ({
+      ...fieldsOf(todo),
       name,
-      hides: "Something.",
-      implements: ["todo"],
       owns: { tables: ["todos"], files: [".todo/list.json"] },
+      rules: name === "todo" ? (fieldsOf(todo).rules ?? []) : [],
     });
-    assert.deepEqual(problemsOf(withModules(todoDesign, [owner("todo"), owner("report")])), [
+    const listed = actionChanged("list", (action) => ({ ...fieldsOf(action), reads: ["todos", ".todo/list.json"] }));
+    assert.deepEqual(problemsOf(listed(withModules(todoDesign, [owner("todo"), owner("report")]))), [
       'The table "todos" is owned by the modules "todo" and "report"; let one module own it and the others ask that module.',
       'The file ".todo/list.json" is owned by the modules "todo" and "report"; let one module own it and the others ask that module.',
     ]);
@@ -90,10 +92,10 @@ describe("the design check, one rule at a time, each problem with its sentence",
   test("a condition no action serves", () => {
     const design = actionChanged("add", (action) => ({
       ...fieldsOf(action),
-      serves: ["O1-C1", "O1-C4", "O1-C5", "O1-C6", "O1-C7"],
+      serves: ["O1-C1", "O1-C4", "O1-C5", "O1-C6", "O2-C4"],
     }));
     assert.deepEqual(problemsOf(design(todoDesign)), [
-      `The condition O2-C4 of ${file} is served by no action; name it in serves of the action a person uses for it.`,
+      `The condition O1-C7 of ${file} is served by no action; name it in serves of the action a person uses for it.`,
     ]);
   });
 
@@ -190,15 +192,18 @@ describe("the design check, one rule at a time, each problem with its sentence",
     const helpers = withModules(todoDesign, [{ ...fieldsOf(todo), name: "todo-helpers", implements: ["common"] }]);
     const [shape = null] = listAt(todoDesign, "interfaces");
     const design = { ...fieldsOf(helpers), interfaces: [{ ...fieldsOf(shape), name: "common" }] };
-    assert.deepEqual(problemsOf(design), [
-      'The module "todo-helpers" is not named for what it does; name it for its work (P-36), never utils, helpers, common or manager.',
-      'The interface "common" is not named for what it does; name it for its work (P-36), never utils, helpers, common or manager.',
-    ]);
+    assert.deepEqual(
+      problemsOf(design).filter((problem) => problem.includes("(P-36)")),
+      [
+        'The module "todo-helpers" is not named for what it does; name it for its work (P-36), never utils, helpers, common or manager.',
+        'The interface "common" is not named for what it does; name it for its work (P-36), never utils, helpers, common or manager.',
+      ],
+    );
   });
 
   test("names used twice, and every problem at once", () => {
     const [todo = null] = listAt(todoDesign, "modules");
-    const twice = withModules(todoDesign, [todo, { ...fieldsOf(todo), owns: {} }]);
+    const twice = withModules(todoDesign, [todo, { ...fieldsOf(todo), owns: {}, rules: [] }]);
     const design = withActions(twice, (actions) => [...actions, actions[0] ?? null]);
     const noExample = actionChanged("list", (action) => ({ ...fieldsOf(action), examples: [] }));
     assert.deepEqual(problemsOf(noExample(design)), [

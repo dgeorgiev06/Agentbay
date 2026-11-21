@@ -3,7 +3,17 @@ import { readFile } from "node:fs/promises";
 import { describe, test } from "node:test";
 import { fieldsOf, readYaml } from "../../../../bay/sdk.ts";
 import { cutFromDesignProblems } from "../scripts/lib/cut-from-design.ts";
-import { committedFiles, designSummaryOf, modulesReached, type DesignSummary } from "../scripts/lib/design-summary.ts";
+import { designFiles } from "../scripts/lib/design-files.ts";
+import { designOf } from "../scripts/lib/design-form.ts";
+import {
+  committedFiles,
+  designSummaryOf,
+  modulesReached,
+  rulesApplied,
+  rulesDocument,
+  type DesignSummary,
+} from "../scripts/lib/design-summary.ts";
+import { listOf } from "../scripts/lib/json-values.ts";
 import { fixedFileProblems, type ComesAfter } from "../scripts/lib/fixed-files.ts";
 import type { Plan, PlannedSlice } from "../scripts/lib/plan.ts";
 import { conditionsNotHeld, unmetConditions } from "../scripts/lib/plan-conditions.ts";
@@ -12,6 +22,7 @@ import { planOf, twiceNamed } from "../scripts/lib/plan-form.ts";
 import { practiceProblems } from "../scripts/lib/practice-answers.ts";
 import { planPractices, reviewersPractices } from "../scripts/lib/practices.ts";
 import { sliceRequests } from "../scripts/lib/slice-requests.ts";
+import { answeredTodo } from "./todo-answered.ts";
 import { designFile, requirementsFile, tdOne, todoDesignFiles, todoPlan } from "./todo-plan.ts";
 
 const schemas = "docs/designs/todo/schemas/todo";
@@ -111,7 +122,26 @@ describe("a slice cut from its design", () => {
       { ...slice("A", { meets: ["O1-C1"], interface: named }), name: "G", crossesModulesBecause: "One write." },
     ]);
     const kinds = cutFromDesignProblems(sliced, design).map((problem) => `${problem.slice} ${problem.kind}`);
-    assert.deepEqual(kinds, ["A crosses modules", "B no interface", "C interface not in the design", "D not vertical"]);
+    assert.deepEqual(kinds, [
+      "A crosses modules",
+      "B no interface",
+      "B no request file",
+      "C interface not in the design",
+      "C no request file",
+      "D not vertical",
+    ]);
+  });
+
+  test("a slice that meets a condition while naming the request file of no action that serves it is told which to name", () => {
+    const listOnly = slice("H", { meets: ["O1-C2", "O1-C4", "O1-C5"], interface: [`${schemas}/list-request.json`] });
+    assert.deepEqual(
+      cutFromDesignProblems(plan([listOnly]), todoSummary()).map((problem) => problem.sentence),
+      [
+        "H meets O1-C4 and O1-C5, but its interface names the request file of no action of " +
+          "docs/designs/todo/design.yaml that serves them. Name the request file of each action it builds, such as " +
+          "docs/designs/todo/schemas/todo/add-request.json, so the slice is given that action's rules.",
+      ],
+    );
   });
 });
 
@@ -170,7 +200,7 @@ describe("the plan file and what the rounds take from it", () => {
     const document = planDocument(todoPlan, named);
     assert.equal(planOf(document).design, designFile);
     assert.equal(planOf(document).requirements, requirementsFile);
-    assert.deepEqual(sliceRequests(document, ["TD1"], "abc1234"), [
+    assert.deepEqual(sliceRequests(document, ["TD1"], { base: "abc1234" }), [
       {
         planned: { title: fieldsOf(tdOne).title, slice: fieldsOf(tdOne).slice },
         base: "abc1234",
@@ -178,6 +208,39 @@ describe("the plan file and what the rounds take from it", () => {
         interface: fieldsOf(tdOne).interface,
       },
     ]);
+  });
+
+  test("each slice request carries the rules its actions apply: those of the actions whose request file it names", () => {
+    const design = todoSummary();
+    const document = planDocument(todoPlan, { requirements: requirementsFile, design: designFile });
+    const [one = null, two = null] = sliceRequests(document, ["TD1", "TD2"], { base: "abc1234", design });
+    const [add] = design.rules;
+    assert.deepEqual(fieldsOf(one).rules, [
+      {
+        name: "add-todo",
+        module: "todo",
+        decides: "Whether a text may be added, and the id the new todo gets.",
+        takes: add?.takes ?? null,
+        gives: add?.gives ?? null,
+        appliedBy: [{ action: "todo.add", reads: ["todos"], writes: ["todos"] }],
+      },
+    ]);
+    assert.deepEqual(
+      listOf(fieldsOf(two).rules).map((rule) => fieldsOf(rule).name),
+      ["mark-done", "remove-todo"],
+    );
+  });
+
+  test("a rule's actions are carried with what each reads and what each writes, apart", () => {
+    const [designed] = designFiles({ job: "todo", file: requirementsFile, version: 1, design: designOf(answeredTodo) });
+    const read = readYaml(designed?.text ?? "");
+    assert.ok(read.ok);
+    const design = designSummaryOf(designFile, read.value);
+    const carried = rulesDocument(rulesApplied([`${schemas}/list-request.json`], design));
+    assert.deepEqual(
+      listOf(carried).map((rule) => fieldsOf(rule).appliedBy),
+      [[{ action: "todo.list", reads: ["todos"], writes: [] }]],
+    );
   });
 
   test("two slices of one name are refused with the place of the second", () => {

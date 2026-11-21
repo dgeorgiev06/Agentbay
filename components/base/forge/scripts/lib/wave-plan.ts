@@ -1,5 +1,6 @@
 import type { Json } from "../../../../../bay/sdk.ts";
 import { counted, joined } from "./card-lines.ts";
+import type { DesignSummary } from "./design-summary.ts";
 import type { Plan, PlannedSlice } from "./plan.ts";
 import type { Wave, WorkedOut } from "./plan-waves.ts";
 import { sliceRequests } from "./slice-requests.ts";
@@ -14,6 +15,7 @@ export type PlanFound = {
   readonly plan: Plan;
   readonly document: Json;
   readonly workedOut: WorkedOut;
+  readonly design?: DesignSummary;
 };
 
 export type AtInto = {
@@ -147,6 +149,6 @@ export function waveOf(asked: WaveAsked, found: PlanFound, at: AtInto): WaveFoun
   if (sentences.length > 0) {
     return { kind: "refused", sentences };
   }
-  const requests = sliceRequests(found.document, wave.slices, at.base);
+  const requests = sliceRequests(found.document, wave.slices, { base: at.base, design: found.design });
   return { kind: "wave", waves: waves.length, slices, requests };
 }

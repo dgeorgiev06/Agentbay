@@ -10,6 +10,7 @@ export type Writing = {
   readonly name: string;
   readonly slice: Json;
   readonly interface: Json;
+  readonly rules: Json;
   readonly practices: Json;
   readonly base: string;
   readonly folder: string;
@@ -22,7 +23,8 @@ export type Written = {
 };
 
 async function testsAsked(context: ScriptContext, writing: Writing, folder: string): Promise<readonly HandedTest[]> {
-  const asked = { slice: writing.slice, interface: writing.interface, folder, practices: writing.practices };
+  const { slice, practices } = writing;
+  const asked = { slice, interface: writing.interface, rules: writing.rules, folder, practices };
   if (writing.number === 1) {
     return handedTestsOf(await answerOf(context, "write-tests", asked));
   }

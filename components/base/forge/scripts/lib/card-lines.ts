@@ -55,6 +55,14 @@ export function grouped(count: number): string {
   return String(count).replace(/\B(?=(\d{3})+$)/g, ",");
 }
 
+export function quoted(names: readonly string[]): string {
+  return names.map((name) => `"${name}"`).join(" and ");
+}
+
+export function twice(names: readonly string[]): readonly string[] {
+  return [...new Set(names.filter((name, at) => names.indexOf(name) !== at))];
+}
+
 export function joined(names: readonly string[]): string {
   if (names.length < 2) {
     return names.join("");

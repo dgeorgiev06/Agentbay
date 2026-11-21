@@ -4,7 +4,7 @@
   "description": "The owner's choice on one card.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["choice", "item"],
+  "required": ["choice", "item", "opened"],
   "properties": {
     "choice": {
       "type": "string"
@@ -12,6 +12,11 @@
     "item": {
       "type": "object",
       "description": "As schemas/item.json gives it."
+    },
+    "opened": {
+      "type": "string",
+      "minLength": 1,
+      "description": "As frontier gave it for this turn; a stop is taken only with it."
     }
   }
 }

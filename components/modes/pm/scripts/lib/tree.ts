@@ -28,7 +28,6 @@ export type Frontier = {
   readonly settled: number;
   readonly waiting: number;
   readonly total: number;
-  readonly problems: readonly string[];
 };
 
 function kindOf(text: string): Kind {
@@ -128,13 +127,17 @@ function unsettledBefore(question: Question, tree: Tree): readonly string[] {
   return question.after.filter((id) => !settled.has(id));
 }
 
-export function isReady(question: Question, tree: Tree): boolean {
+function isReady(question: Question, tree: Tree): boolean {
   return unsettledBefore(question, tree).length === 0;
 }
 
 export function notReadyWords(question: Question, tree: Tree): string {
   const before = unsettledBefore(question, tree);
   return `it comes after ${joined(before)}, ${each(before.length, "which is", "which are")} not settled`;
+}
+
+export function hasMoreToAsk(found: Frontier): boolean {
+  return found.frontier.length > 0 || found.lookUp.length > 0;
 }
 
 export function frontierOf(tree: Tree, perTurn: number): Frontier {
@@ -150,6 +153,5 @@ export function frontierOf(tree: Tree, perTurn: number): Frontier {
     settled: questions.length - open.length,
     waiting: openDecisions.length - frontier.length,
     total: questions.length,
-    problems: treeProblems(tree),
   };
 }

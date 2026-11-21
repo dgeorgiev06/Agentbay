@@ -29,7 +29,7 @@ test("the start card shows his words and what the interview does, and start begi
   const approval = approvalOf(opened);
   assert.deepEqual(
     (approval.card?.lines ?? []).map((line) => ({ mark: line.mark, words: line.words, source: line.source })),
-    [computed(`Your words: "${todoWords}"`), computed(whatItDoes)],
+    [computed(whatItDoes)],
   );
   assert.equal(approval.card?.title, "Start an interview of todo?");
   assert.deepEqual(outputOf(await choose(project, opened, "start")), {
@@ -74,7 +74,7 @@ test("with free-text answers on, the start card withholds start and says why", a
 test("the start card says how many questions a turn asks from the setting", async () => {
   const project = await openPm({ questionsPerTurn: 3 });
   const opened = await project.runWorkflow("pm", "workflows/start.yaml", { job: "todo", words: todoWords });
-  assert.match(approvalOf(opened).card?.lines[1]?.words ?? "", /at most 3 a turn/);
+  assert.match(approvalOf(opened).card?.lines[0]?.words ?? "", /at most 3 a turn/);
   await project.close();
 });
 
@@ -85,7 +85,7 @@ test("starting an interview again keeps what was settled, says so, and adds his 
   await answeredAll(project, turn, ["a", "a", "later"]);
   const again = await project.runWorkflow("pm", "workflows/start.yaml", { job: "todo", words: "Overdue first." });
   assert.equal(
-    approvalOf(again).card?.lines[1]?.words,
+    approvalOf(again).card?.lines[0]?.words,
     "The interview of todo has 2 of 5 questions settled. Starting again keeps what is settled and asks the open ones.",
   );
   await choose(project, again, "start");

@@ -15,19 +15,12 @@ The run's output is one sentence, `summary`: what was kept and, when more can be
 
 ## What a direct call can still do
 
-Any action can be called alone with `bay call`, and a script cannot see whether an approval of the owner came before it in the same run. So until the kernel can say that an action runs only as a step of its own workflow (slice WO1), a direct call can still:
+Any action can be called alone with `bay call`, and a script cannot see whether an approval of the owner came before it in the same run. `begin` draws the start card again and starts only when the card it is given is that card; it takes only `start` or `stop`, and records only who the request named (one to three lower-case words), never that the owner said yes. `frontier` writes a token for the turn it opens; `record` and a stop through `took` need it, and `record` holds the turn and every question it adds to the check's rules. Until the kernel can say that an action runs only as a step of its own workflow (slice WO1), a direct call can still:
 
-- start an interview, by calling `open` and then `begin` with the card `open` drew; `begin` draws the start card again and starts only when it is the same, and records only who the request named, never that the owner said yes;
-- open a turn, by calling `frontier`, and keep answers typed by the caller, by calling `record` with that turn's token.
+- start an interview, or open a stopped one again, by calling `open` and then `begin` with the card `open` drew;
+- open a turn by calling `frontier`, and with its token keep answers typed by the caller through `record`, or stop the interview through `took`.
 
 Each such run is recorded as an action run with no approval, and `bay runs` shows it.
-
-## Settings
-
-| setting            | what it does                                                                                                                            |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `questionsPerTurn` | How many questions a turn asks at most, from 1 to 12; 12 when not given.                                                                |
-| `freeTextAnswers`  | Whether the owner may answer in his own words; off when not given. On is not built yet, and an interview does not start while it is on. |
 
 The mode reads `CONTEXT.md`, `README.md`, `docs/`, `src/`, `lib/`, `app/` and `packages/`, the files a fact may quote; a fact's file may not be hidden or in a hidden folder. `bay check` and `bay build` refuse a granted folder that holds a closed file, such as `.env` or a config file. It writes only its own records.
 

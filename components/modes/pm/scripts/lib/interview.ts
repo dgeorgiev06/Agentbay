@@ -70,7 +70,7 @@ export function turnRefusal(interview: Interview | undefined, job: string): stri
   }
   if (isOpen(interview)) {
     return (
-      `Turn ${String(interview.turn)} of the interview of ${job} was put to the owner and not answered; ` +
+      `Turn ${String(interview.turn)} of the interview of ${job} is open and nothing of it was kept; ` +
       `${startAgain(job)}.`
     );
   }

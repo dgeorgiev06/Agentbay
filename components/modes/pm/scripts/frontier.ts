@@ -3,7 +3,7 @@ import { opened, turnRefusal } from "./lib/interview.ts";
 import { textAt } from "./lib/json.ts";
 import { settingsOf } from "./lib/settings.ts";
 import { readInterview, writeInterview } from "./lib/store.ts";
-import { frontierOf, type Question } from "./lib/tree.ts";
+import { frontierOf, hasMoreToAsk, type Question } from "./lib/tree.ts";
 
 function idsOf(questions: readonly Question[]): readonly string[] {
   return questions.map((question) => question.id);
@@ -18,7 +18,7 @@ export const run = defineScript(async (input, context) => {
   }
   const { perTurn } = settingsOf(context.settings);
   const found = frontierOf(interview, perTurn);
-  if (found.asks.length === 0 && found.lookUp.length === 0) {
+  if (!hasMoreToAsk(found)) {
     return fail(`Nothing is left to ask in the interview of ${job}; the sign-off is not built yet.`);
   }
   const token = await context.random(16);

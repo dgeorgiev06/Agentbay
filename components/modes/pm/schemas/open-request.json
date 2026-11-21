@@ -17,9 +17,9 @@
     },
     "by": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 200,
-      "description": "Who gave the words; owner when not given."
+      "maxLength": 40,
+      "pattern": "^[a-z]+( [a-z]+){0,2}$",
+      "description": "Who gives the words, one to three lower-case words, such as owner or design lead; owner when not given. No card prints it."
     }
   }
 }

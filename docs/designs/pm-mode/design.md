@@ -19,7 +19,7 @@ The design of the PM mode that ADR 25 gives the requirements to. It proposes; th
 4. He answers each card by naming a letter, or `later`, or `stop`. The kernel records his choice with his words, as for every approval. No kernel change is needed.
 5. A fact is looked up in the project's files and shown on its own card, with the words a script found in the file. It counts only when he answers "That is so".
 6. The interviewer never settles a question. Its check, the cards and the record read the tree from the mode's own records, never from what the interviewer hands in.
-7. Each turn's output is a sentence that says what was kept and the command for the next turn; the coordinator runs it when the owner asks. A turn put to him and not answered, or stopped, blocks the next until he starts the interview again. A safe way for a run to continue by itself is a kernel slice, KC1, for him to decide.
+7. Each turn's output is a sentence that says what was kept and the command for the next turn; the coordinator runs it when the owner asks. A turn left open, or a stop, blocks the next until he starts the interview again. A safe way for a run to continue by itself is a kernel slice, KC1, for him to decide.
 8. When nothing is left to ask, `sign-off` drafts, checks, critiques and shows him the card, open questions counted first, and writes the file on his approval (not built yet).
 9. A settled term is offered as a glossary row, and a hard decision as an ADR, each shown whole, with its number and status line, and written only on his yes (not built yet).
 10. Answers in his own words, read back to him before they are kept, are the setting `freeTextAnswers`, off by default; turning it on needs slice KQ1, a kernel change.
@@ -434,15 +434,18 @@ The workflow `start` (built):
 2. The approval `card`: `start`, "Start the interview; its first turn comes next", or `stop`, "Stop; nothing is started". He names the choice in his own words; the kernel records it with them.
 3. `begin` keeps the interview in the mode's records only on `start`, and says, in its output's sentence, the command for the first turn. On `stop` it fails the run: "Nothing was started: the owner chose stop on the card for the interview of todo."
 
-The workflow `ask` refuses, in its first step, a job with no interview: "No interview of todo was started; only the owner starts one, with the workflow pm:workflows/start.yaml." It refuses one he stopped, and one whose last turn was put to him and not answered, each with the sentence that he starts it again on the start card.
+The workflow `ask` refuses, in its first step, a job with no interview: "No interview of todo was started; only the owner starts one, with the workflow pm:workflows/start.yaml." It refuses one that was stopped, and one whose last turn is open and was not kept, each with the sentence that he starts it again on the start card.
 
 **What stops the coordinator from spending interview calls by itself.** Each turn costs one call of the interviewer at tier deep. The first step of `ask` marks the turn open, and only `record`, after every card of the turn is answered, closes it. So every call of the interviewer comes after either his `start` or his answers to every card of the turn before. A turn whose run fails, or that he stops, needs the start card again. Each run also has its budget, 30 minutes.
 
 **What does not stop it, said plainly.** Any action can be called alone with `bay call`, and a script cannot see whether an approval of the owner came before it in the same run. So:
 
-- `begin` draws the start card again from the records and the settings, and starts only when the card it is given is that card, so a card drawn before a stop, or one made up, starts nothing. It refuses while `freeTextAnswers` is on. It records who the start request named, as `namedBy`, never that the owner said yes.
-- `frontier` writes a token for the turn it opens, and `record` keeps a turn only with that token.
-- Still possible: a caller who calls `pm.open` and then `pm.begin` with the card `open` drew starts an interview with no card shown; one who calls `pm.frontier` and then `pm.record` with its token keeps answers he typed. Each such run is recorded as an action run with no approval, and `bay runs` shows it. Closing it needs a kernel change: an action that only a step of its own workflow may run, refused by `bay call` (slice WO1, question 14).
+- `begin` draws the start card again from the records and the settings, and starts only when the card it is given is that card, so a card drawn before a stop, or one made up, starts nothing. It refuses while `freeTextAnswers` is on. It takes only `start` or `stop` as its choice. It records who the start request named, as `namedBy`: one to three lower-case words, such as `owner` or `design lead`, never that the owner said yes, and no card prints it.
+- `frontier` writes a token for the turn it opens; `record` keeps a turn, and `took` takes a stop, only with that token. `record` holds every question a turn adds to `schemas/question.json`, by the same rule the check uses (`scripts/lib/added.ts`).
+- Still possible, until slice WO1:
+  - calling `pm.open` and then `pm.begin` with the card `open` drew starts an interview, or opens one again after a stop, with no card shown;
+  - calling `pm.frontier` opens a turn, and with its token `pm.record` keeps answers the caller typed, or `pm.took` stops the interview;
+  - the turn so kept must still pass every rule of the check, but nothing shows that the owner gave its answers. Each such run is recorded as an action run with no approval, and `bay runs` shows it. Closing it needs a kernel change: an action that only a step of its own workflow may run, refused by `bay call` (slice WO1, question 14).
 
 ### 3.3 The question tree and its frontier
 
@@ -482,7 +485,7 @@ The interviewer is given the turn: the job, the turn's number, the words given f
 - **`draw`** draws the cards from the records' tree and the files the facts name.
 - **`record`** checks the turn again against the records, and the answers against the turn: each card answered once, by one of its letters or `later`, and no card the turn did not ask. It refuses a turn that shows no card, and keeps nothing when any rule fails, naming every problem. It also keeps a turn only with the token `frontier` wrote for it.
 
-So a turn the check never saw, handed to `draw` or `record` by a direct call, is refused or held to the same rules. Pinned by `tests/check-turn.test.ts`.
+So a turn the check never saw, handed to `record` by a direct call, is held to the check's rules, its added questions included, and to the turn's token. `draw` only draws cards and keeps nothing. Pinned by `tests/check-turn.test.ts` and `tests/direct.test.ts`.
 
 ### 3.6 Facts, and the owner's yes
 
@@ -716,8 +719,6 @@ The first four are printed whole by the kernel's printer, `approvalLines` in `ba
 
 ```
 Start an interview of todo?
-  Your words: "A todo mode. Add and list,
-    done and remove. Then due dates."
   It asks you questions a turn at a time, at
     most 12 a turn, each on its own card
     with lettered answers and a
@@ -728,8 +729,8 @@ You can:
   start  Start the interview; its first turn
          comes next
   stop   Stop; nothing is started
-checked: 0 ran, 2 computed, 0 judged
-hash 45127214e42f
+checked: 0 ran, 1 computed, 0 judged
+hash 002cd5829bd5
 ```
 
 ### Turn 1, card 1: a question with two answers
@@ -991,7 +992,7 @@ That is a forge slice, FV1 in section 8, not the PM mode's. The PM mode never re
 
 ## 7. What the mode reads and writes, and at the owner's job
 
-**Conclusion.** As built, the PM mode reads the project's documents and code folders, and writes only its own records. The later slices add three writes, each by a script after the owner's yes: the requirements file, glossary rows and ADRs. Its skill only reads. It lists no command, so it has no list and needs no trust. At the owner's job it runs without the hook (ADR 27); every answer it keeps was a card he answered. A PRD and tickets come in as exported files, nothing is written back, and the mode has no network effect.
+**Conclusion.** As built, the PM mode reads the project's documents and code folders, and writes only its own records. The later slices add three writes, each by a script after the owner's yes: the requirements file, glossary rows and ADRs. Its skill only reads. It lists no command, so it has no list and needs no trust. At the owner's job it runs without the hook (ADR 27). Every answer kept by the workflow `ask` was a card he answered; a direct call of its actions can keep answers with no card (3.2). A PRD and tickets come in as exported files, nothing is written back, and the mode has no network effect.
 
 ### What it reads and writes, and what the frames say about it
 
@@ -1012,8 +1013,8 @@ That is a forge slice, FV1 in section 8, not the PM mode's. The PM mode never re
 
 ### Without the hook
 
-- The project setting from ADR 27 says the runs are made without the hook. The kernel accepts the skill step's output, and every card says so.
-- What is lost: the interviewer's agent may read outside the project, and the kernel cannot tell an output came from the step's agent and not from the main session. For the PM mode the second matters most: the main session could write a turn itself. What holds anyway: the check holds the turn to the records, every question and fact is on a card he answers, and nothing is kept that he did not answer.
+- The project setting from ADR 27 says the runs are made without the hook. The kernel accepts the skill step's output, and the run's events record that no hook saw it; no card says so.
+- What is lost: the interviewer's agent may read outside the project, and the kernel cannot tell an output came from the step's agent and not from the main session. For the PM mode the second matters most: the main session could write a turn itself. What holds anyway: the check holds the turn to the records, and in the workflow `ask` every question and fact is on a card he answers before anything is kept. A direct call of `pm.record` can still keep answers he did not give (3.2).
 - Where the organisation's own permission rules apply, they stand as they are.
 
 ### Where requirements come from

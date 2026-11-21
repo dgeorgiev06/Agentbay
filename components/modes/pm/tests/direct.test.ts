@@ -112,3 +112,36 @@ test("the setting questionsPerTurn takes 1 to 12 and nothing else", async () => 
   const project = await openPm({ questionsPerTurn: 12 });
   await project.close();
 });
+
+test("took keeps no stop without the open turn's token, and the start card then says nothing of a stop", async () => {
+  const project = await openPm();
+  await started(project);
+  const shown = await project.answer(taskOf(await askedTurn(project)).token, firstTurn);
+  const item = {
+    id: "Q1",
+    kind: "question",
+    title: "Who it is for",
+    job: "todo",
+    turn: 1,
+    card: {},
+    offer: { c: false },
+  };
+  assert.equal(
+    await project.failure("pm.took", { choice: "stop", opened: "made-up", item }),
+    "Nothing is stopped: the stop handed to took is not for the turn of the interview of todo that is open.",
+  );
+  const card = fieldOf(await project.output("pm.open", request), "card");
+  assert.doesNotMatch(JSON.stringify(card), /stopped/);
+  assert.match(JSON.stringify(card), /Its turn 1 is open\./);
+  assert.notEqual(openedOf(shown), "");
+  await project.close();
+});
+
+test("begin takes only start or stop, and a request may name only a few lower-case words as who gave the words", async () => {
+  const project = await openPm();
+  const opened = await project.output("pm.open", request);
+  assert.match(await project.refusal("pm.begin", { choice: "maybe", opened }), /choice/);
+  assert.match(await project.refusal("pm.open", { ...request, by: "the owner approved the release" }), /by/);
+  assert.match(await project.refusal("pm.open", { ...request, by: "Owner: yes" }), /by/);
+  await project.close();
+});

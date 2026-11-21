@@ -122,7 +122,10 @@ test("a fact is shown for the owner's yes, with what the script found in its fil
   ]);
   assert.deepEqual(choiceStates(fact), ["a offered", "b offered", "c withheld", "later offered", "stop offered"]);
   const done = await answeredAll(project, turn, ["a", "b"]);
-  assert.match(JSON.stringify(outputOf(done)), /Nothing more can be asked; the sign-off is not built yet\./);
+  assert.equal(
+    fieldOf(outputOf(done), "summary"),
+    "Turn 2 of the interview of todo is kept: 2 questions settled, 0 open. Nothing more can be asked; the sign-off is not built yet.",
+  );
   assert.equal(fieldOf(outputOf(done), "next"), null);
   assert.equal(
     failureOf(await askedTurn(project)),
@@ -162,7 +165,7 @@ test("a turn put to the owner and not answered stops the next one until he start
   await firstTurnShown(project);
   assert.match(
     failureOf(await askedTurn(project)),
-    /Turn 1 of the interview of todo was put to the owner and not answered; ask the owner to start it again/,
+    /Turn 1 of the interview of todo is open and nothing of it was kept; ask the owner to start it again/,
   );
   await project.close();
 });
@@ -234,6 +237,31 @@ test("a question talking cannot settle is named on the turn's first card and nev
   assert.deepEqual(
     lines[1],
     computed("Not asked, since talking cannot settle it: Q4. It goes to the file as a thing a person judges."),
+  );
+  await project.close();
+});
+
+test("a turn that leaves only a fact to look up still names the next turn's command", async () => {
+  const project = await openPm();
+  await started(project);
+  const fact = {
+    id: "Q4",
+    title: "Where a mode lives",
+    asks: "Where does a mode of the kit live?",
+    after: [],
+    kind: "fact",
+    settled: false,
+  };
+  const first = { added: [fact], asked: firstAsked(), facts: [] };
+  const done = await answeredAll(project, await project.answer(taskOf(await askedTurn(project)).token, first), [
+    "a",
+    "a",
+    "a",
+  ]);
+  assert.equal(
+    fieldOf(outputOf(done), "summary"),
+    "Turn 1 of the interview of todo is kept: 3 questions settled, 1 open. When the owner asks for turn 2, run: " +
+      `bay call --workflow pm:workflows/ask.yaml '{"job": "todo"}' --json`,
   );
   await project.close();
 });

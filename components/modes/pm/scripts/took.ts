@@ -11,9 +11,12 @@ export const run = defineScript(async (input, context) => {
     return { id: textAt(item, "id"), choice };
   }
   const interview = await readInterview(context, job);
-  if (interview !== undefined) {
-    await writeInterview(context, stopped(interview));
+  if (interview === undefined || interview.openTurn !== textAt(input, "opened")) {
+    return fail(
+      `Nothing is stopped: the stop handed to took is not for the turn of the interview of ${job} that is open.`,
+    );
   }
+  await writeInterview(context, stopped(interview));
   return fail(
     `The owner stopped the interview of ${job} at turn ${String(numberAt(item, "turn"))}; ` +
       "nothing of this turn is kept, and what was settled before stays.",

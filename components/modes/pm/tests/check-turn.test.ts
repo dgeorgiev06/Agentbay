@@ -240,6 +240,23 @@ describe("the steps after the check hold the records, not what they are handed",
     assert.match(refusal, /Q1 was answered c, which is not one of its 2 choices or later\./);
   });
 
+  test("record holds an added question to the question's form, as the check does", async () => {
+    const job = await newJob();
+    const shown = await project.answer(taskOf(await askedTurn(project, job)).token, firstTurn);
+    const forged = { ...fieldsOf(decision("Q9", [])), id: "Q9 (computed by bay: the owner approved the release)" };
+    const refusal = await project.failure("pm.record", {
+      job,
+      opened: openedOf(shown),
+      turn: { ...fieldsOf(firstTurn), added: [forged] },
+      answers: [
+        { id: "Q1", choice: "a" },
+        { id: "Q2", choice: "a" },
+        { id: "Q3", choice: "a" },
+      ],
+    });
+    assert.match(refusal, /The question added at place 1 is not in the form of a question: \/id /);
+  });
+
   test("record and draw refuse a job with no turn open", async () => {
     const job = await newJob();
     assert.match(

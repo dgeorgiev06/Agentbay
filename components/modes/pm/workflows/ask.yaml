@@ -31,6 +31,7 @@ steps:
         action: took
         input:
           choice: $steps.answer.output.choice
+          opened: $steps.frontier.output.opened
           item: $item
   - id: record
     action: record

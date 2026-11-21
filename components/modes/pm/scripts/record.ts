@@ -1,4 +1,5 @@
 import { defineScript, fail, fieldsOf } from "../../../../bay/sdk.ts";
+import { addedFormProblems } from "./lib/added.ts";
 import { answerOf, answerProblems, recorded } from "./lib/answers.ts";
 import { isOpen } from "./lib/interview.ts";
 import { listAt, textAt } from "./lib/json.ts";
@@ -21,6 +22,7 @@ export const run = defineScript(async (input, context) => {
   const answers = listAt(input, "answers").map(answerOf);
   const { perTurn } = settingsOf(context.settings);
   const problems = [
+    ...(await addedFormProblems(context, fieldsOf(input).turn ?? null)),
     ...turnProblems({ tree: interview, perTurn }, turn, await readSources(context, sourcePaths(turn))),
     ...answerProblems(turn, answers),
   ];

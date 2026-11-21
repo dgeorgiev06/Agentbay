@@ -8,7 +8,7 @@ import { startedSummary } from "./lib/summary.ts";
 export const run = defineScript(async (input, context) => {
   const opened = fieldsOf(input).opened ?? null;
   const job = textAt(opened, "job");
-  if (textAt(input, "choice") !== "start") {
+  if (textAt(input, "choice") === "stop") {
     return fail(`Nothing was started: the owner chose stop on the card for the interview of ${job}.`);
   }
   const words = textAt(opened, "words");

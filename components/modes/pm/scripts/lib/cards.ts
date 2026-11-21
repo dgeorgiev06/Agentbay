@@ -5,9 +5,9 @@ import { frontierOf, questionNamed, type Frontier, type Question, type Tree } fr
 import { factChoices, type Asked, type Fact, type Sources, type Turn } from "./turn.ts";
 import { counted, each, holds, joined, letterAt } from "./words.ts";
 
-export type Offer = { readonly c: boolean };
+type Offer = { readonly c: boolean };
 
-export type Item = {
+type Item = {
   readonly id: string;
   readonly kind: "question" | "fact";
   readonly title: string;
@@ -158,7 +158,7 @@ function leftHow(before: Interview): string {
   if (before.stopped) {
     return ` You stopped it at turn ${String(before.turn)}.`;
   }
-  return isOpen(before) ? ` Its turn ${String(before.turn)} was put to you and not answered.` : "";
+  return isOpen(before) ? ` Its turn ${String(before.turn)} is open.` : "";
 }
 
 function beforeLines(before: Interview | undefined): readonly CardLine[] {
@@ -175,7 +175,6 @@ export type StartCard = { readonly card: Card; readonly offered: { readonly star
 
 export function startCard(opening: Opening): StartCard {
   const lines = [
-    startComputed(`Your words: "${opening.words}"`),
     ...beforeLines(opening.before),
     startComputed(
       `It asks you questions a turn at a time, at most ${String(opening.perTurn)} a turn, each on its own card ` +

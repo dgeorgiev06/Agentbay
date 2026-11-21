@@ -4,22 +4,15 @@
   "description": "The owner's choice on the start card, and what the card showed.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "choice",
-    "opened"
-  ],
+  "required": ["choice", "opened"],
   "properties": {
     "choice": {
-      "type": "string"
+      "enum": ["start", "stop"],
+      "description": "The owner's choice on the start card."
     },
     "opened": {
       "type": "object",
-      "required": [
-        "job",
-        "words",
-        "namedBy",
-        "card"
-      ],
+      "required": ["job", "words", "namedBy", "card"],
       "properties": {
         "job": {
           "$ref": "requirements@1/check-response.json#/$defs/requirements/properties/job"
@@ -28,7 +21,10 @@
           "type": "string"
         },
         "namedBy": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 40,
+          "pattern": "^[a-z]+( [a-z]+){0,2}$",
+          "description": "Who the start request names as giving the words, one to three lower-case words, such as owner or design lead; no script can tell whether that is so, and no card prints it."
         },
         "card": {
           "type": "object"

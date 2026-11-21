@@ -47,7 +47,8 @@ missing and each decision as your judgement, never as a check. Nothing else you 
 2. Work only in the folder given. Search below its top, such as in `bay/` or `components/`, not at the top
    itself: a search there is refused.
 3. Write the code that makes each item hold, in the declared files only. The tests are written by another
-   agent from the same items, interface and rules; make the interface behave as each item says. Write each rule in `rules` as a pure function of that name: it takes those values and gives those values,
+   agent from the same items, interface and rules; make the interface behave as each item says. Write each
+   rule in `rules` as a pure function of that name: it takes those values and gives those values,
    and reads, writes and asks nothing on the way. Around it write the thin function of each action that applies
    it: read what the action `reads`, call the rule, write what the rule gives to what the action `writes`, and
    answer; it decides nothing itself (P-52).

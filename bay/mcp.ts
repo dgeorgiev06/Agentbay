@@ -3,7 +3,7 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import type { Json } from "./contracts.ts";
 import { loadKernel, type Kernel } from "./kernel.ts";
-import { nodeKernelPorts } from "./node-ports.ts";
+import { nodeKernelPorts } from "./kernel-ports.ts";
 import { layoutOf } from "./layout.ts";
 import { replyTo, type ToolServer } from "./mcp-server.ts";
 import { failedWith, unplacedProblem, type Outcome } from "./outcome.ts";

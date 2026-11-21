@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { stringify } from "yaml";
 import { layoutOf } from "../bay/layout.ts";
 import { loadKernel } from "../bay/kernel.ts";
-import { nodeKernelPorts } from "../bay/node-ports.ts";
+import { nodeKernelPorts } from "../bay/kernel-ports.ts";
 import { createProjectFileListing, nodeFileInspector } from "../bay/node-ports.ts";
 import { openProject, testEnvironment } from "./kernel-fixture.ts";
 import { kit, makeProject } from "./project-fixture.ts";

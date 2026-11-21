@@ -1,7 +1,7 @@
 import type { Terminal } from "./command-context.ts";
 import { runCommandLine, type CommandLineOutput } from "./command-line.ts";
 import { commands } from "./commands.ts";
-import { nodeKernelPorts, type Environment } from "./node-ports.ts";
+import { nodeKernelPorts, type Environment } from "./kernel-ports.ts";
 
 export type BayInvocation = {
   readonly kit: string;

@@ -16,7 +16,6 @@ import {
 } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { Readable } from "node:stream";
-import type { FileListing } from "./check-context.ts";
 import { createOwnerOnlyFile } from "./owner-only.ts";
 import type {
   Child,
@@ -27,6 +26,7 @@ import type {
   DirectoryEntry,
   EntryKind,
   FileInspector,
+  FileListing,
   FileSystem,
   Folders,
   Http,
@@ -429,41 +429,5 @@ export function createProjectFileListing(
       }
       return [...new Set(result.stdout.text.split("\0").filter((path) => path !== ""))].sort();
     },
-  };
-}
-
-export type Environment = Readonly<Record<string, string | undefined>>;
-
-export type KernelPorts = {
-  readonly files: FileSystem;
-  readonly throwawayFolders: ThrowawayFolders;
-  readonly folders: Folders;
-  readonly removal: Removal;
-  readonly inspector: FileInspector;
-  readonly http: Http;
-  readonly processes: Processes;
-  readonly childProcesses: ChildProcesses;
-  readonly clock: Clock;
-  readonly listing: FileListing;
-};
-
-const httpLimits = { maximumResponseBytes: 10 * 1024 * 1024, timeoutMilliseconds: 60_000 };
-
-export function searchPathOf(environment: Environment): string {
-  return environment.PATH ?? "/usr/bin:/bin";
-}
-
-export function nodeKernelPorts(environment: Environment): KernelPorts {
-  return {
-    files: nodeFileSystem,
-    throwawayFolders: nodeThrowawayFolders,
-    folders: nodeFolders,
-    removal: nodeRemoval,
-    inspector: nodeFileInspector,
-    http: createNodeHttp(httpLimits),
-    processes: nodeProcesses,
-    childProcesses: nodeChildProcesses,
-    clock: systemClock,
-    listing: createProjectFileListing({ PATH: searchPathOf(environment) }, nodeFileInspector),
   };
 }

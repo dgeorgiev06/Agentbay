@@ -7,7 +7,7 @@ import { test } from "node:test";
 import type { Effect, Json } from "../bay/contracts.ts";
 import { fieldOf, textField } from "../bay/json.ts";
 import { loadKernel } from "../bay/kernel.ts";
-import { nodeKernelPorts } from "../bay/node-ports.ts";
+import { nodeKernelPorts } from "../bay/kernel-ports.ts";
 import { layoutOf } from "../bay/layout.ts";
 import {
   eventsOfKind,

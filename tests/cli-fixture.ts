@@ -4,7 +4,7 @@ import type { Json } from "../bay/contracts.ts";
 import { toJson } from "../bay/json.ts";
 import { runCommandLine, type CommandLineOutput } from "../bay/command-line.ts";
 import { commands } from "../bay/commands.ts";
-import { nodeKernelPorts, type KernelPorts } from "../bay/node-ports.ts";
+import { nodeKernelPorts, type KernelPorts } from "../bay/kernel-ports.ts";
 import { testEnvironment } from "./kernel-fixture.ts";
 import { kit } from "./project-fixture.ts";
 

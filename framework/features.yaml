@@ -35,6 +35,7 @@ features:
     purpose: The real adapters for the ports - files, clock, processes, network, terminal.
     entry:
       - bay/node-ports.ts
+      - bay/kernel-ports.ts
     private:
       - bay/owner-only.ts
     may_import:

@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { stringify } from "yaml";
 import type { Json } from "../bay/contracts.ts";
 import { loadKernel } from "../bay/kernel.ts";
-import { nodeKernelPorts } from "../bay/node-ports.ts";
+import { nodeKernelPorts } from "../bay/kernel-ports.ts";
 import { layoutOf } from "../bay/layout.ts";
 import { testEnvironment } from "./kernel-fixture.ts";
 

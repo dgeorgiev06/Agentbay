@@ -7,7 +7,7 @@ import { stringify } from "yaml";
 import type { Effect, Json, RunEvent } from "../bay/contracts.ts";
 import { fieldOf } from "../bay/json.ts";
 import { loadKernel, type Kernel } from "../bay/kernel.ts";
-import { nodeKernelPorts } from "../bay/node-ports.ts";
+import { nodeKernelPorts } from "../bay/kernel-ports.ts";
 import { layoutOf } from "../bay/layout.ts";
 import type { Run } from "../bay/runs/runs.ts";
 import { listOf } from "./cli-fixture.ts";

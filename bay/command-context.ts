@@ -1,7 +1,7 @@
 import { errorLine } from "./answers.ts";
 import type { Json } from "./contracts.ts";
 import type { Kernel } from "./kernel.ts";
-import type { Environment, KernelPorts } from "./node-ports.ts";
+import type { Environment, KernelPorts } from "./kernel-ports.ts";
 import { parseJson } from "./json.ts";
 import type { Layout } from "./layout.ts";
 import { failedWith, unplacedProblem, type Outcome, type Problem } from "./outcome.ts";

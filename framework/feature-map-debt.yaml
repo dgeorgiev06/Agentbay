@@ -14,9 +14,6 @@ breaks:
   - from: bay/mcp.ts
     to: bay/tool-definitions.ts
     rule: private-file
-  - from: bay/node-ports.ts
-    to: bay/check-context.ts
-    rule: may-not-import
   - from: bay/run-report.ts
     to: bay/skill-tools.ts
     rule: private-file

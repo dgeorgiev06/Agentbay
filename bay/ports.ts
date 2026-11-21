@@ -5,6 +5,10 @@ export type FileSystem = {
   readonly writeAtomic: (path: string, text: string) => Promise<void>;
 };
 
+export type FileListing = {
+  readonly projectFiles: (folder: string) => Promise<readonly string[]>;
+};
+
 export type ThrowawayFolders = {
   readonly makeFolder: (path: string) => Promise<void>;
   readonly link: (path: string, target: string) => Promise<void>;

@@ -1,7 +1,7 @@
 import { createBroker, type StepBroker } from "./broker/broker.ts";
 import type { Layout } from "./layout.ts";
 import type { Permissions, StepPlace } from "./contracts.ts";
-import { searchPathOf, type Environment, type KernelPorts } from "./node-ports.ts";
+import { searchPathOf, type Environment, type KernelPorts } from "./kernel-ports.ts";
 import type { FileSystem } from "./ports.ts";
 import { interfaceSchemasOf, loadSystem, readConfig, type System } from "./manifests/manifests.ts";
 import { openRuns, type Runs } from "./runs/runs.ts";

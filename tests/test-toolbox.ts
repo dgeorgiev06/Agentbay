@@ -13,7 +13,7 @@ import type { Budget } from "../bay/generated/mode.ts";
 import { fieldOf, isRecord, numberField, toJson } from "../bay/json.ts";
 import { layoutOf } from "../bay/layout.ts";
 import { loadKernel, type Kernel } from "../bay/kernel.ts";
-import { nodeKernelPorts } from "../bay/node-ports.ts";
+import { nodeKernelPorts } from "../bay/kernel-ports.ts";
 import type { Outcome } from "../bay/outcome.ts";
 import { listOf } from "../bay/policy.ts";
 import type { Clock } from "../bay/ports.ts";

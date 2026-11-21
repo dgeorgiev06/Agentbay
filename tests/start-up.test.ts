@@ -32,6 +32,7 @@ const commandLineFiles = [
   "bay/commands.ts",
   "bay/commands/not-built.ts",
   "bay/json.ts",
+  "bay/kernel-ports.ts",
   "bay/last-resort.ts",
   "bay/layout.ts",
   "bay/node-ports.ts",

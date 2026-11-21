@@ -337,7 +337,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
       "           has answered the challenge once,",
       "           which is the most a design run",
       "           asks.",
-      "checked: 0 ran, 22 computed, 4 judged",
+      "checked: 0 ran, 25 computed, 7 judged",
     ]);
     const stopped = runOf(await decided(root, card, { step: "card", choice: "stop" }));
     assert.equal(textAt(stopped, "reason"), "The owner chose stop on the design card, so nothing is committed.");

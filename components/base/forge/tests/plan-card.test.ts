@@ -93,7 +93,7 @@ judged      balanced
     plan: no problem
   the planner was not asked again, since the
     challenge found nothing
-  practices held by the script's rules:
+  practices held by the script's checks:
     P-33, P-34 and P-35
   practices answered by the challenger: 3; 3
     held, 0 not held, 0 do not apply
@@ -144,7 +144,7 @@ judged      balanced
     interface
   the second challenge's answers decide the
     card
-  practices held by the script's rules:
+  practices held by the script's checks:
     P-33, P-34 and P-35
   practices answered by the challenger: 3; 2
     held, 1 not held, 0 do not apply

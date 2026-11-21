@@ -131,18 +131,42 @@ judged   todo hides: How todos are kept,
 judged     numbered and never given a
 judged     removed id again.
 judged    by forge skills/design, tier deep
+  rule add-todo, in todo: takes request,
+    todos from todos; gives todos into
+    todos, answer
+judged   add-todo decides: Whether a text
+judged     may be added, and the id the new
+judged     todo gets.
+judged    by forge skills/design, tier deep
+  rule mark-done, in todo: takes request,
+    todos from todos; gives todos into
+    todos, answer
+judged   mark-done decides: Whether a todo
+judged     may be marked done.
+judged    by forge skills/design, tier deep
+  rule remove-todo, in todo: takes request,
+    todos from todos; gives todos into
+    todos, answer
+judged   remove-todo decides: Whether a todo
+judged     may be removed.
+judged    by forge skills/design, tier deep
   interface todo: 4 actions, 8 schema files
   add: serves O1-C1, O1-C4, O1-C5, O1-C6,
-    O1-C7, O2-C4; 3 examples
+    O1-C7, O2-C4; applies the rule add-todo,
+    reads todos, writes todos; 3 examples
   list: serves O1-C1, O1-C2, O1-C3, O2-C1,
-    O2-C2, O2-C3; 2 examples
-  done: serves O2-C1, O2-C2, O2-C5, O2-C6; 3
-    examples
-  remove: serves O2-C3, O2-C5; 2 examples
+    O2-C2, O2-C3; applies no rule, reads
+    todos, writes nothing; 2 examples
+  done: serves O2-C1, O2-C2, O2-C5, O2-C6;
+    applies the rule mark-done, reads todos,
+    writes todos; 3 examples
+  remove: serves O2-C3, O2-C5; applies the
+    rule remove-todo, reads todos, writes
+    todos; 2 examples
   coverage: every condition is served by an
     action: yes
-  checked by script: 14 rules of the design,
-    no problem
+  checked by script: 24 checks of the
+    design, no problem
   examples: 10, checked against their
     actions' schemas, but not the input of
     the 4 refusals`;
@@ -151,7 +175,7 @@ const askedOnce = `  the designer was asked once; a second
     answer is asked only when the challenger
     answers a practice not held or gives a
     finding
-  practices held by the script's rules:
+  practices held by the script's checks:
     P-35, P-36, P-38 and P-42`;
 
 const answeredOnce = `  the first challenge answered P-52 not held
@@ -163,7 +187,7 @@ const answeredOnce = `  the first challenge answered P-52 not held
   module todo: implements or owns differ
   the second challenge's answers decide the
     card
-  practices held by the script's rules:
+  practices held by the script's checks:
     P-35, P-36, P-38 and P-42`;
 
 const answeredHead = designHead.replace(
@@ -183,7 +207,7 @@ You can:
   approve  Commit the design and its schema
            files
   stop     Stop; nothing is committed
-checked: 0 ran, 16 computed, 1 judged`;
+checked: 0 ran, 19 computed, 4 judged`;
 
 const answeredAndHeld = `${answeredHead}
 ${answeredOnce}
@@ -197,7 +221,7 @@ You can:
   approve  Commit the design and its schema
            files
   stop     Stop; nothing is committed
-checked: 0 ran, 20 computed, 1 judged`;
+checked: 0 ran, 23 computed, 4 judged`;
 
 const answeredNotHeld = `${answeredHead.replace("approve is offered", "approve is not offered")}
 ${answeredOnce}
@@ -235,7 +259,7 @@ Not available:
            has answered the challenge once,
            which is the most a design run
            asks.
-checked: 0 ran, 20 computed, 4 judged`;
+checked: 0 ran, 23 computed, 7 judged`;
 
 const lightNotHeld = `${designHead.replace("approve\n    is offered", "approve\n    is not offered")}
 ${askedOnce}
@@ -258,7 +282,7 @@ Not available:
            why: The challenger answered P-52
            not held, and a practice held by
            design must be held.
-checked: 0 ran, 16 computed, 2 judged`;
+checked: 0 ran, 19 computed, 5 judged`;
 
 function renamed(design: Json): Json {
   const fields = fieldsOf(design);
@@ -510,7 +534,11 @@ describe("the comparison and the challenger's answer", () => {
     const lines = designCard({ ...input, design }).card.lines;
     const shown = lines.filter((line) => line.words.startsWith("count"));
     assert.deepEqual(shown, [
-      { mark: "computed", words: "count: serves no condition; 3 examples", source: { step: "draw" } },
+      {
+        mark: "computed",
+        words: "count: serves no condition; applies the rule add-todo, reads todos, writes todos; 3 examples",
+        source: { step: "draw" },
+      },
       {
         mark: "judged",
         words: "count, why it serves none: The operator counts the todos.",

@@ -724,7 +724,7 @@
         },
         {
           "mark": "computed",
-          "words": "practices held by the script's rules: P-33, P-34 and P-35",
+          "words": "practices held by the script's checks: P-33, P-34 and P-35",
           "source": {
             "step": "draw"
           }

@@ -179,7 +179,7 @@ function spelledLines(input: DesignCardInput): readonly CardLine[] {
   return [
     computed(
       "draw",
-      `examples that say a long text by rule: ${String(spelled)}, each text spelled out by forge before its check`,
+      `examples that say a long text by rule: ${String(spelled)}, spelled out by forge before any check`,
     ),
   ];
 }

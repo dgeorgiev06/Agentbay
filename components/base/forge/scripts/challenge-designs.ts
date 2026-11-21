@@ -1,12 +1,10 @@
 import { defineScript, fieldsOf, type Json } from "../../../../bay/sdk.ts";
-import { branchesSaid } from "./lib/branch-endings.ts";
+import { branchesSaid, stayedOf } from "./lib/branch-endings.ts";
 import { answerOf } from "./lib/called.ts";
 import { challengeOf, type Challenge } from "./lib/challenge-answer.ts";
-import { whileOnBranch } from "./lib/branch-files.ts";
 import { differences } from "./lib/design-compare.ts";
 import { designOf } from "./lib/design-form.ts";
-import { listOf, textOf, textsOf } from "./lib/json-values.ts";
-import { designPractices } from "./lib/practices.ts";
+import { listOf, textOf } from "./lib/json-values.ts";
 import { conditionsOf, requirementsOf, type Requirements } from "./lib/requirements-form.ts";
 
 type Asked = {
@@ -14,8 +12,8 @@ type Asked = {
   readonly requirements: Json;
   readonly path: string;
   readonly designs: readonly Json[];
-  readonly practices: readonly string[];
-  readonly into: string;
+  readonly practices: readonly Json[];
+  readonly stayed: Json;
 };
 
 function askedOf(input: Json): Asked {
@@ -26,8 +24,8 @@ function askedOf(input: Json): Asked {
     requirements: fields.requirements ?? null,
     path: textOf(designs.path),
     designs: listOf(designs.designs),
-    practices: textsOf(fields.practices),
-    into: textOf(fields.into),
+    practices: listOf(designs.practices),
+    stayed: designs.stayed ?? null,
   };
 }
 
@@ -53,26 +51,23 @@ function chosenDesign(asked: Asked, challenge: Challenge): Json {
 
 export const run = defineScript(async (input, context) => {
   const asked = askedOf(input);
-  const requirements = requirementsOf(asked.requirements);
-  const compared = differencesOf(asked, requirements);
-  const onBranch = { slice: `${requirements.job}-practices`, branch: asked.into, paths: asked.practices };
-  const read = await whileOnBranch(context, onBranch, (files) =>
-    answerOf(context, "challenge", {
-      file: asked.file,
-      requirements: asked.requirements,
-      designs: [...asked.designs],
-      differences: [...compared],
-      practices: files.flatMap((file) => designPractices(file.text)).map((practice) => ({ ...practice })),
-    }),
-  );
-  const challenge = challengeOf(read.made);
+  const compared = differencesOf(asked, requirementsOf(asked.requirements));
+  const answer = await answerOf(context, "challenge", {
+    file: asked.file,
+    requirements: asked.requirements,
+    designs: [...asked.designs],
+    differences: [...compared],
+    practices: [...asked.practices],
+  });
+  const challenge = challengeOf(answer);
   return {
     path: asked.path,
     chosen: challenge.chosen,
     because: challenge.because,
     design: chosenDesign(asked, challenge),
     practices: challenge.practices.map((practice) => ({ ...practice })),
+    findings: challenge.findings.map((finding) => ({ ...finding })),
     differences: [...compared],
-    ...branchesSaid([], read.stayed),
+    ...branchesSaid([], stayedOf(asked.stayed)),
   };
 });

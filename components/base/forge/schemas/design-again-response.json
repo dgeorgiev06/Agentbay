@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DesignAgainResponse",
+  "description": "Whether the designer was asked to answer the first challenge, and the design as it then stands.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["answered", "design"],
+  "properties": {
+    "answered": {
+      "type": "boolean",
+      "description": "True when the first challenge answered a practice not held or gave a finding, and the designer of the chosen design answered it once."
+    },
+    "design": {
+      "type": "object",
+      "description": "The design as schemas/design.json gives it: the designer's answer, or the chosen design when it was not asked."
+    }
+  }
+}

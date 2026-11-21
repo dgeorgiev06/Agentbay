@@ -1,4 +1,5 @@
 import { defineScript, fieldsOf } from "../../../../bay/sdk.ts";
+import { plannerAsked } from "./lib/plan-sources.ts";
 import { onlyWhenNeeded } from "./lib/second-round.ts";
 
 export const run = defineScript(async (input, context) => {
@@ -8,8 +9,7 @@ export const run = defineScript(async (input, context) => {
   const round = await onlyWhenNeeded(context, {
     needed: answer.answered === true,
     action: "challenge-plan",
-    start,
-    adds,
+    asked: plannerAsked(start, adds),
     kept: first,
   });
   return { challenged: round.ran, challenge: round.answer };

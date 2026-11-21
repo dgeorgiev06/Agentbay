@@ -1,14 +1,21 @@
 import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
-import { oneOf, textOf } from "./json-values.ts";
+import { listOf, oneOf, textOf } from "./json-values.ts";
 import { practiceAnswersOf, practiceProblems, type PracticeAnswer } from "./practice-answers.ts";
 
 export type Chosen = "first" | "second" | "merged";
+
+export type Finding = {
+  readonly wrong: string;
+  readonly where: string;
+  readonly fix: string;
+};
 
 export type Challenge = {
   readonly chosen: Chosen;
   readonly design: Json | undefined;
   readonly because: string;
   readonly practices: readonly PracticeAnswer[];
+  readonly findings: readonly Finding[];
 };
 
 export type Asked = {
@@ -18,6 +25,11 @@ export type Asked = {
 
 const chosens: readonly Chosen[] = ["first", "second", "merged"];
 
+function findingOf(value: Json): Finding {
+  const fields = fieldsOf(value);
+  return { wrong: textOf(fields.wrong), where: textOf(fields.where), fix: textOf(fields.fix) };
+}
+
 export function challengeOf(value: Json): Challenge {
   const fields = fieldsOf(value);
   return {
@@ -25,6 +37,7 @@ export function challengeOf(value: Json): Challenge {
     design: fields.design,
     because: textOf(fields.because),
     practices: practiceAnswersOf(fields.practices),
+    findings: listOf(fields.findings).map(findingOf),
   };
 }
 

@@ -245,7 +245,7 @@ actions:
     run:
       - script: scripts/design-start.ts
   design:
-    description: When a design is to be written from checked requirements, as modules and interfaces handed in as data, each action with its schemas, the conditions it serves and worked examples.
+    description: When a design is to be written from checked requirements and the practices it is judged on, as modules and interfaces handed in as data, each action with its schemas, the conditions it serves and worked examples, and how it holds each practice; or when a challenger's answers and findings are to be answered once.
     input: schemas/design-request.json
     output: schemas/design.json
     effects: [read]
@@ -255,14 +255,14 @@ actions:
         tier: deep
         checks: [scripts/design-checked.ts]
   designs:
-    description: When the owner has chosen a path on the design's first card, one designer writes the design, or two write apart, the second given nothing of the first.
+    description: When the owner has chosen a path on the design's first card, it reads the practices held by design from the integration branch, and one designer writes the design, or two write apart, the second given nothing of the first, each given those practices.
     input: schemas/designs-request.json
     output: schemas/designs-response.json
-    effects: [read]
+    effects: [read, write, delete]
     run:
       - script: scripts/designs.ts
   challenge:
-    description: When a design, or two written apart, are to be judged practice by practice for the practices held by design, and one design chosen or a merged one given.
+    description: When a design, or two written apart, are to be judged practice by practice for the practices held by design, with findings that are not a practice's answer, and one design chosen or a merged one given; or when a designer's answer to a challenge is to be judged once more.
     input: schemas/challenge-request.json
     output: schemas/challenge.json
     effects: [read]
@@ -271,12 +271,26 @@ actions:
         tier: deep
         checks: [scripts/challenge-checked.ts]
   challenge-designs:
-    description: When the designs are written, it lists where two differ, reads the practices held by design from the integration branch and asks the challenger.
+    description: When the designs are written, it lists where two differ and asks the challenger, with the practices the designers were given.
     input: schemas/challenge-designs-request.json
     output: schemas/challenge-designs-response.json
-    effects: [read, write, delete]
+    effects: [read]
     run:
       - script: scripts/challenge-designs.ts
+  design-again:
+    description: When the first challenge of a design is in, it asks the designer of the chosen design to answer once each practice answered not held and each finding, only when there are any, and hands on the design as it then stands.
+    input: schemas/design-again-request.json
+    output: schemas/design-again-response.json
+    effects: [read]
+    run:
+      - script: scripts/design-again.ts
+  challenge-design-again:
+    description: When the designer has answered a design's first challenge, it asks the challenger to judge the answered design once more, only when the designer was asked, and hands on the challenge that decides the card.
+    input: schemas/challenge-design-again-request.json
+    output: schemas/challenge-design-again-response.json
+    effects: [read]
+    run:
+      - script: scripts/challenge-design-again.ts
   draw-design:
     description: When the challenger has answered and the owner needs the design card, with what was checked by script and judged by whom, and whether approve is offered.
     input: schemas/draw-design-request.json

@@ -412,14 +412,14 @@
         },
         {
           "mark": "computed",
-          "words": "light: one designer, then a challenger who answers the practices held by design: 2 calls at tier deep, up to 6 when checks send them back",
+          "words": "light: one designer, then a challenger who answers the practices held by design: 2 calls at tier deep, 4 when the designer answers the challenger once, up to 12 when checks send them back",
           "source": {
             "step": "start"
           }
         },
         {
           "mark": "computed",
-          "words": "full: two designers who write apart, then a challenger who compares the two and chooses: 3 calls at tier deep, up to 9 when checks send them back",
+          "words": "full: two designers who write apart, then a challenger who compares the two and chooses: 3 calls at tier deep, 5 when the designer answers the challenger once, up to 15 when checks send them back",
           "source": {
             "step": "start"
           }

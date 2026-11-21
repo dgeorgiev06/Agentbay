@@ -21,24 +21,41 @@ steps:
       choice: $steps.path.output.choice
       file: $trigger.file
       requirements: $steps.start.output.requirements
+      practices: $settings.practices
+      into: $settings.into
   - id: challenge
     action: challenge-designs
     input:
       file: $trigger.file
       requirements: $steps.start.output.requirements
       designs: $steps.designs.output
-      practices: $settings.practices
-      into: $settings.into
+  - id: design-again
+    action: design-again
+    input:
+      file: $trigger.file
+      requirements: $steps.start.output.requirements
+      designs: $steps.designs.output
+      challenge: $steps.challenge.output
+  - id: challenge-again
+    action: challenge-design-again
+    input:
+      file: $trigger.file
+      requirements: $steps.start.output.requirements
+      designs: $steps.designs.output
+      again: $steps.design-again.output
+      first: $steps.challenge.output
   - id: draw
     action: draw-design
     input:
       file: $trigger.file
       requirements: $steps.start.output.requirements
-      challenged: $steps.challenge.output
+      first: $steps.challenge.output
+      again: $steps.design-again.output
+      challenged: $steps.challenge-again.output
   - id: card
     approval: Commit this design?
     show: $steps.draw.output.card
-    quotes: [designs, challenge]
+    quotes: [designs, challenge, design-again, challenge-again]
     choices:
       approve: { does: Commit the design and its schema files, when: $steps.draw.output.offered.approve }
       stop: { does: Stop; nothing is committed }
@@ -48,5 +65,5 @@ steps:
       choice: $steps.card.output.choice
       file: $trigger.file
       requirements: $steps.start.output.requirements
-      design: $steps.challenge.output.design
+      design: $steps.design-again.output.design
       into: $settings.into

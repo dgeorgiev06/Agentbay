@@ -187,7 +187,9 @@
           "removed": []
         }
       ]
-    }
+    },
+    "practices": ["framework/practices.md"],
+    "into": "integration"
   },
   "output": {
     "path": "light",
@@ -502,7 +504,35 @@
               }
             ]
           }
+        ],
+        "practices": [
+          {
+            "id": "P-52",
+            "sentence": "The rules of a todo are pure functions over the stored todos, apart from the read and the write."
+          },
+          {
+            "id": "P-32",
+            "sentence": "The mode has no skill step, so no step that needs no judgement is a skill."
+          },
+          {
+            "id": "P-35",
+            "sentence": "The one module names its interface todo before anything else."
+          }
         ]
+      }
+    ],
+    "practices": [
+      {
+        "id": "P-52",
+        "says": "The rules of the work are pure functions."
+      },
+      {
+        "id": "P-32",
+        "says": "A step that needs no judgement is a script, not a skill."
+      },
+      {
+        "id": "P-35",
+        "says": "Interfaces first."
       }
     ]
   }

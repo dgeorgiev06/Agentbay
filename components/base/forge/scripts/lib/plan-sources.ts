@@ -1,4 +1,4 @@
-import { fieldsOf, readYaml, type Json, type ScriptContext } from "../../../../../bay/sdk.ts";
+import { fieldsOf, readYaml, type Json, type JsonFields, type ScriptContext } from "../../../../../bay/sdk.ts";
 import { counted } from "./card-lines.ts";
 import { designSummaryOf, type DesignSummary } from "./design-summary.ts";
 import { listOf, textOf } from "./json-values.ts";
@@ -40,9 +40,9 @@ export function givenOf(value: Json): Given {
   };
 }
 
-export function plannerInput(start: Json): Json {
+export function plannerAsked(start: Json, adds: JsonFields): JsonFields {
   const { file = null, requirements = null, design = null, document = null, practices = null } = fieldsOf(start);
-  return { file, requirements, design, document, practices };
+  return { file, requirements, design, document, practices, ...adds };
 }
 
 const nothingNamed: SourcesRead = { sources: {}, problems: [] };

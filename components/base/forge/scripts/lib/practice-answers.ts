@@ -66,22 +66,60 @@ export function askedPractices(asked: Json): readonly string[] {
   return listOf(fieldsOf(asked).practices).map((practice) => textOf(fieldsOf(practice).id));
 }
 
+type Once = {
+  readonly left: readonly string[];
+  readonly unknown: readonly string[];
+  readonly twice: readonly string[];
+};
+
+function answeredOnce(asked: readonly string[], answered: readonly string[]): Once {
+  return {
+    left: asked.filter((id) => !answered.includes(id)),
+    unknown: answered.filter((id) => !asked.includes(id)),
+    twice: [...new Set(answered.filter((id, at) => answered.indexOf(id) !== at))],
+  };
+}
+
+type Asker = {
+  readonly named: string;
+  readonly heldBy: HeldBy;
+  readonly asked: readonly string[];
+};
+
+function onceProblems({ named, heldBy, asked }: Asker, once: Once): readonly string[] {
+  return [
+    ...once.unknown.map(
+      (id) => `${named} answers ${id}, which is not a practice held by ${heldBy}; answer only ${joined(asked)}.`,
+    ),
+    ...once.twice.map((id) => `${named} answers ${id} more than once; answer each practice once.`),
+  ];
+}
+
 export function practiceProblems({ heldBy, asked, answers }: Answered): readonly string[] {
   const named = answerNames[heldBy];
-  const answered = answers.map((practice) => practice.id);
-  const left = asked.filter((id) => !answered.includes(id));
-  const unknown = answered.filter((id) => !asked.includes(id));
-  const twice = [...new Set(answered.filter((id, at) => answered.indexOf(id) !== at))];
+  const once = answeredOnce(
+    asked,
+    answers.map((practice) => practice.id),
+  );
   return [
-    ...left.map(
+    ...once.left.map(
       (id) =>
         `${named} leaves out the practice ${id}; answer every practice held by ${heldBy}, ` +
         "each held, not-held or does-not-apply, with its sentence.",
     ),
-    ...unknown.map(
-      (id) => `${named} answers ${id}, which is not a practice held by ${heldBy}; answer only ${joined(asked)}.`,
+    ...onceProblems({ named, heldBy, asked }, once),
+  ];
+}
+
+export function designerPracticeProblems(asked: readonly string[], said: readonly string[]): readonly string[] {
+  const once = answeredOnce(asked, said);
+  return [
+    ...once.left.map(
+      (id) =>
+        `The design does not say how it holds the practice ${id}; add it to practices with one sentence on how ` +
+        "the design holds it, or why it does not apply.",
     ),
-    ...twice.map((id) => `${named} answers ${id} more than once; answer each practice once.`),
+    ...onceProblems({ named: "The design", heldBy: "design", asked }, once),
   ];
 }
 

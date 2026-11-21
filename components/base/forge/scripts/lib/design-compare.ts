@@ -8,15 +8,27 @@ type Sides = {
   readonly second: Design;
 };
 
+export type Labels = {
+  readonly first: string;
+  readonly second: string;
+};
+
+const apartLabels: Labels = { first: "the first", second: "the second" };
+
 function onlyIn(first: readonly Named[], second: readonly Named[]): readonly string[] {
   const names = second.map((each) => each.name);
   return first.map((each) => each.name).filter((name) => !names.includes(name));
 }
 
-function apart(kind: string, sides: { readonly first: readonly Named[]; readonly second: readonly Named[] }): string[] {
+type Lists = {
+  readonly first: readonly Named[];
+  readonly second: readonly Named[];
+};
+
+function apart(kind: string, sides: Lists, labels: Labels): string[] {
   return [
-    ...onlyIn(sides.first, sides.second).map((name) => `${kind} ${name}: only in the first design`),
-    ...onlyIn(sides.second, sides.first).map((name) => `${kind} ${name}: only in the second design`),
+    ...onlyIn(sides.first, sides.second).map((name) => `${kind} ${name}: only in ${labels.first} design`),
+    ...onlyIn(sides.second, sides.first).map((name) => `${kind} ${name}: only in ${labels.second} design`),
   ];
 }
 
@@ -61,22 +73,28 @@ function servers(design: Design, condition: string): string {
   return names.length === 0 ? "no action" : names.join(", ");
 }
 
-function coverageDiffers(sides: Sides, conditions: readonly string[]): readonly string[] {
+function coverageDiffers(sides: Sides, conditions: readonly string[], labels: Labels): readonly string[] {
   return conditions.flatMap((condition) => {
     const first = servers(sides.first, condition);
     const second = servers(sides.second, condition);
-    return first === second ? [] : [`${condition}: served by ${first} in the first, by ${second} in the second`];
+    return first === second
+      ? []
+      : [`${condition}: served by ${first} in ${labels.first}, by ${second} in ${labels.second}`];
   });
 }
 
-export function differences(sides: Sides, conditions: readonly string[]): readonly string[] {
+export function differences(
+  sides: Sides,
+  conditions: readonly string[],
+  labels: Labels = apartLabels,
+): readonly string[] {
   const { first, second } = sides;
   return [
-    ...apart("module", { first: first.modules, second: second.modules }),
+    ...apart("module", { first: first.modules, second: second.modules }, labels),
     ...modulesDiffer(sides),
-    ...apart("interface", { first: first.interfaces, second: second.interfaces }),
-    ...apart("action", { first: placed(first), second: placed(second) }),
+    ...apart("interface", { first: first.interfaces, second: second.interfaces }, labels),
+    ...apart("action", { first: placed(first), second: placed(second) }, labels),
     ...schemasDiffer(sides),
-    ...coverageDiffers(sides, conditions),
+    ...coverageDiffers(sides, conditions, labels),
   ];
 }

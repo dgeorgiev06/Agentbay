@@ -1,14 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "DrawDesignRequest",
-  "description": "The requirements and the challenge step's answer.",
+  "description": "The requirements, the first challenge, the designer's second pass and the challenge that decides.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "file",
-    "requirements",
-    "challenged"
-  ],
+  "required": ["file", "requirements", "first", "again", "challenged"],
   "properties": {
     "file": {
       "type": "string",
@@ -20,9 +16,17 @@
       "$ref": "requirements@1/check-response.json#/$defs/requirements",
       "description": "The requirements file whole, as requirements.check accepted it."
     },
+    "first": {
+      "type": "object",
+      "description": "The first challenge's answer, as challenge-designs-response.json gives it."
+    },
+    "again": {
+      "type": "object",
+      "description": "The designer's second pass, as design-again-response.json gives it."
+    },
     "challenged": {
       "type": "object",
-      "description": "The challenge step's answer, as challenge-designs-response.json gives it."
+      "description": "The second challenge's step answer, as challenge-design-again-response.json gives it."
     }
   }
 }

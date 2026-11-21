@@ -36,6 +36,11 @@ export type Module = {
   readonly files: readonly string[];
 };
 
+export type DesignerAnswer = {
+  readonly id: string;
+  readonly sentence: string;
+};
+
 export type Design = {
   readonly modules: readonly Module[];
   readonly interfaces: readonly Interface[];
@@ -96,4 +101,11 @@ export function actionsOf(design: Design): readonly (Action & { readonly interfa
 
 export function actionName(action: Action & { readonly interface: string }): string {
   return `${action.interface}.${action.name}`;
+}
+
+export function designerAnswersOf(value: Json): readonly DesignerAnswer[] {
+  return listOf(fieldsOf(value).practices).map((said) => ({
+    id: textOf(fieldsOf(said).id),
+    sentence: textOf(fieldsOf(said).sentence),
+  }));
 }

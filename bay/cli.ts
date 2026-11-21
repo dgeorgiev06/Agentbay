@@ -1,20 +1,15 @@
 import { fileURLToPath } from "node:url";
-import { runCommandLine } from "./command-line.ts";
-import { commands } from "./commands.ts";
-import { nodeKernelPorts } from "./kernel.ts";
+import { bayCommand } from "./bay-command.ts";
 import { streamTerminal } from "./terminal.ts";
 import { lastResortHandler } from "./last-resort.ts";
 
 const kit = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
 
 async function main(): Promise<void> {
-  const environment = process.env;
-  const result = await runCommandLine(commands, process.argv.slice(2), {
+  const result = await bayCommand(process.argv.slice(2), {
     kit,
     workingDirectory: process.cwd(),
-    ports: nodeKernelPorts(environment),
-    environment,
-    platform: process.platform,
+    environment: process.env,
     terminal: streamTerminal({ input: process.stdin, output: process.stderr }),
   });
   process.stdout.write(`${result.output}\n`);

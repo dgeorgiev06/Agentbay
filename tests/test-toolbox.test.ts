@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { test } from "node:test";
 import { parse, stringify } from "yaml";
 import { isRecord } from "../bay/json.ts";
 import { kit, makeProject, type Project } from "./project-fixture.ts";
-import { openModeProject, type ModeProject, type Run } from "./test-toolbox.ts";
+import { commandLineIn, openModeProject, type ModeProject, type Run } from "./test-toolbox.ts";
 
 const toolboxFile = new URL("./test-toolbox.ts", import.meta.url);
 
@@ -51,12 +52,14 @@ test("the test toolbox exports these names and no others", async () => {
   const text = await readFile(toolboxFile, "utf8");
   assert.deepEqual(exportedNames(text), [
     "CallOptions",
+    "CommandLineIn",
     "Decision",
     "ModeProject",
     "ProjectOptions",
     "Run",
     "TestProject",
     "WorkflowPart",
+    "commandLineIn",
     "openModeProject",
   ]);
   assert.deepEqual(text.match(/^export\b(?! (?:async function|function|type|const) \w+)/gm), null);
@@ -476,6 +479,60 @@ test("trusted that names no mode of the project, a mode of the kit's base folder
     await assert.rejects(opened(["greeter"]), {
       message: "trusted names greeter, but greeter lists no command and no throwaway folder, so it needs no trust.",
     });
+  } finally {
+    await beside.remove();
+  }
+});
+
+function modeNames(printed: string): readonly string[] {
+  const listed: unknown = JSON.parse(printed);
+  const modes = isRecord(listed) && Array.isArray(listed.modes) ? listed.modes : [];
+  return modes.map((mode: unknown) => (isRecord(mode) ? String(mode.name) : "")).sort();
+}
+
+test("commandLineIn runs a command line in the test's process as bay does, for the project it is given", async () => {
+  const beside = await makeProject();
+  const commandLine = await commandLineIn(kit);
+  try {
+    const inProcess = await commandLine(["actions", "--json", "--project", beside.root]);
+    const ran = spawnSync(
+      process.execPath,
+      [join(kit, "bay", "cli.ts"), "actions", "--json", "--project", basename(beside.root)],
+      {
+        cwd: dirname(beside.root),
+        encoding: "utf8",
+      },
+    );
+    assert.deepEqual(modeNames(inProcess.output), ["greeter", "writer"]);
+    assert.deepEqual(
+      { exitCode: inProcess.exitCode, printed: `${inProcess.output}\n` },
+      {
+        exitCode: ran.status,
+        printed: ran.stdout,
+      },
+    );
+  } finally {
+    await beside.remove();
+  }
+});
+
+test("commandLineIn answers a refused and an unknown command with bay's output and exit code", async () => {
+  const beside = await makeProject();
+  const commandLine = await commandLineIn(kit);
+  try {
+    for (const command of [["runs", "no-such-run", "--json"], ["no-such-command"]]) {
+      const words = [...command, "--project", beside.root];
+      const inProcess = await commandLine(words);
+      const ran = spawnSync(process.execPath, [join(kit, "bay", "cli.ts"), ...words], {
+        cwd: tmpdir(),
+        encoding: "utf8",
+      });
+      assert.notEqual(inProcess.exitCode, 0);
+      assert.deepEqual(
+        { exitCode: inProcess.exitCode, printed: `${inProcess.output}\n` },
+        { exitCode: ran.status, printed: ran.stdout },
+      );
+    }
   } finally {
     await beside.remove();
   }

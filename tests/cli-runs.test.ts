@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync, readdirSync, readlinkSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { Json } from "../bay/contracts.ts";
@@ -391,3 +392,32 @@ test("resume --rerun runs again a step with effects that an unexpected error lef
     assert.equal(textField(runOf(rerun.json), "waitingFor"), "skill");
   });
 });
+
+const openFiles = "/proc/self/fd";
+
+function filesHeldOpen(): readonly string[] {
+  return readdirSync(openFiles).flatMap((handle) => {
+    try {
+      return [readlinkSync(join(openFiles, handle))];
+    } catch {
+      return [];
+    }
+  });
+}
+
+test(
+  "a command has closed the kernel's database before it returns",
+  { skip: existsSync(openFiles) ? false : `${openFiles} lists no open files on this platform` },
+  async () => {
+    await withProject(async (project) => {
+      const database = join(project.root, ".agentbay", "kernel.db");
+      const ran = await bay(["call", "writer.compose", '{"name":"Ada"}', "--project", project.root, "--json"]);
+      assert.ok(existsSync(database), JSON.stringify(ran.json));
+      await bay(["runs", taskOf(ran.json).runId, "--project", project.root, "--json"]);
+      assert.deepEqual(
+        filesHeldOpen().filter((file) => file.startsWith(database)),
+        [],
+      );
+    });
+  },
+);

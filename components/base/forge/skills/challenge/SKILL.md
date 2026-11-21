@@ -11,7 +11,7 @@ metadata:
 `schemas/challenge-request.json`: the requirements, `designs` (one, or the first and the second written
 apart), `differences` between them worked out by script, and `practices`, each held by design. A design
 says in its own `practices` how it holds each. On a second reading, `designs` holds one design, its
-designer's answer, and `answered` holds what the first reading answered not held and found, and `changes`,
+designer's answer, and `answered` holds what the first reading answered not held and found, and in its `changes`
 what changed from the design it judged, worked out by script.
 
 ## Output

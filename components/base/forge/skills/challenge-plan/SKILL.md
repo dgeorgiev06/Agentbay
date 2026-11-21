@@ -10,7 +10,7 @@ metadata:
 
 `schemas/plan-challenge-request.json`: the requirements, the design whole, `practices` held by a plan, and
 `plan`. On a second reading, `answered` holds what the first reading answered not held and found, which the
-plan now answers, and `changes`, what changed from the first plan, worked out by script.
+plan now answers, and in its `changes` what changed from the first plan, worked out by script.
 
 ## Output
 

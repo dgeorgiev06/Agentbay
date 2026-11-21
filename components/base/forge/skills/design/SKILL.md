@@ -60,7 +60,8 @@ As `schemas/design.json`, sent with `submit`:
 4. Design so each practice given holds. For each, say in one sentence where in the design it holds, naming the
    module or action, or why it does not apply.
 5. When `answering` is given, correct what each practice not held and each finding names, keep the rest, and
-   say for each such practice how the design now holds it. You answer once; the challenger judges the answer.
+   say for each such practice how the design now holds it. Where a practice was not held, change the design
+   itself, not only its sentence. You answer once; the challenger judges the answer.
 6. Hold to your stance. Submit. If it comes back with feedback, correct each problem it names.
 
 ## Tools

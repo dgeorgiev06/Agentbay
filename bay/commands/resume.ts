@@ -120,11 +120,11 @@ function ownerWords(answer: Answer): OwnerWords {
 function answerWords(form: Answering): string {
   switch (form.answer.kind) {
     case "rerun":
-      return `You run run ${form.runId} again from where it stopped.`;
+      return `Run ${form.runId} runs again from where it stopped.`;
     case "extend":
-      return `You raise the budget of run ${form.runId} by ${JSON.stringify(form.answer.extra)}.`;
+      return `The budget of run ${form.runId} rises by ${JSON.stringify(form.answer.extra)}.`;
     case "stop":
-      return `You stop run ${form.runId}.`;
+      return `Run ${form.runId} stops.`;
   }
 }
 
@@ -169,7 +169,9 @@ async function resumeAnswering(invocation: Invocation, kernel: Kernel, form: Ans
   return refused ?? runResult(kernel.layout, await answered(kernel, form));
 }
 
-async function resumeOne(invocation: Invocation, kernel: Kernel, form: Exclude<Form, { readonly kind: "due" }>) {
+type OneRun = Exclude<Form, { readonly kind: "due" }>;
+
+async function resumeOne(invocation: Invocation, kernel: Kernel, form: OneRun): Promise<CommandResult> {
   return form.kind === "resume"
     ? runResult(kernel.layout, await kernel.runs.resume(form.runId))
     : resumeAnswering(invocation, kernel, form);

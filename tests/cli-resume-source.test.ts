@@ -103,7 +103,7 @@ test("resume --rerun of a run that asks the owner needs an interactive terminal 
     assert.equal(notConfirmed.exitCode, 1);
     assert.equal(problemOf(notConfirmed), "Not confirmed; nothing changed.\n");
     assert.deepEqual(declined.asked, [
-      `${unfinishedQuestion}\nYou run run ${runId} again from where it stopped. Type yes to confirm: `,
+      `${unfinishedQuestion}\nRun ${runId} runs again from where it stopped. Type yes to confirm: `,
     ]);
     assert.deepEqual(await answeredBy(project, runId), []);
     const rerun = await resume(project, [runId, "--rerun"], yes.terminal);
@@ -204,7 +204,7 @@ test("resume --rerun of a run left running by a dead engine still runs it again,
     const asked = fakeTerminal({ interactive: true, answer: "yes" });
     const rerun = await resume(project, [runId, "--rerun"], asked);
     assert.equal(waitingFor(rerun), "skill", rerun.output);
-    assert.deepEqual(asked.asked, [`You run run ${runId} again from where it stopped. Type yes to confirm: `]);
+    assert.deepEqual(asked.asked, [`Run ${runId} runs again from where it stopped. Type yes to confirm: `]);
     assert.deepEqual(await answeredBy(project, runId), ["rerun: owner at the terminal"]);
   });
 });
@@ -221,7 +221,7 @@ test("resume --extend raises a spent budget only with the owner's source, and re
     const asked = fakeTerminal({ interactive: true, answer: "yes" });
     const extended = await resume(project, [runId, "--extend", "tokens=5"], asked);
     assert.equal(textField(runOf(extended), "status"), "done", extended.output);
-    assert.deepEqual(asked.asked, [`You raise the budget of run ${runId} by {"tokens":5}. Type yes to confirm: `]);
+    assert.deepEqual(asked.asked, [`The budget of run ${runId} rises by {"tokens":5}. Type yes to confirm: `]);
     assert.deepEqual(await answeredBy(project, runId), ["extend: owner at the terminal"]);
   });
 });

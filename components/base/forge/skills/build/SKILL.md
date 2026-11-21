@@ -40,8 +40,8 @@ missing and each decision as your judgement, never as a check. Nothing else you 
 2. Work only in the folder given. Search below its top, such as in `bay/` or `tests/`, not at the top itself: a
    search there is refused.
 3. Write each item's test first, then the code, in the declared files only. Write each rule in `rules` as a
-   pure function of that name: it takes those values and gives those values,
-   and reads, writes and asks nothing on the way. Around it write the thin function of each action that applies
+   pure function of that name: it takes those values and gives those values, and reads, writes and asks
+   nothing on the way. Around it write the thin function of each action that applies
    it: read what the action `reads`, call the rule, write what the rule gives to what the action `writes`, and
    answer; it decides nothing itself (P-52). The function's name is the rule's name in camelCase: `add-todo` is
    `addTodo`. Put it where the slice's code keeps its rules, in a declared file.

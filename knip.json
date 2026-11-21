@@ -16,6 +16,7 @@
     "bay/adapter.ts!",
     "components/*/*/scripts/*.ts!",
     "adapters/claude-code/adapter.ts!",
+    "adapters/claude-code/granted-folders.ts!",
     "adapters/claude-code/step-guard.ts!",
     "schemas/generate-types.ts!"
   ],

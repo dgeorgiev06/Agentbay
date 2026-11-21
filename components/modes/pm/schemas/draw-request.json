@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DrawRequest",
+  "description": "The interviewer's turn, to draw as one card a question.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["job", "turn"],
+  "properties": {
+    "job": {
+      "type": "string"
+    },
+    "turn": {
+      "type": "object",
+      "description": "As schemas/turn.json gives it."
+    }
+  }
+}

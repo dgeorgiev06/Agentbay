@@ -92,7 +92,7 @@ Held by: **check** (fails `npm run check`), **review** (the reviewer verifies it
 |---|---|---|
 | Comments that explain why | pstack | Owner rule: none. The why goes in a decision record. |
 | Citing a principle in every reply | pstack | Noise for the reader. Reports cite a practice only where it changed a choice. |
-| A long interview before every plan | grill-me | The owner prefers a few selectable choices. Used only for a new mode's first brief. |
+| A long interview before every plan | grill-me | Not before every plan. Adopted in another form as the PM mode's interview: optional, started by the owner on a card, each question answered with a lettered choice (the owner, 21 November). |
 | Tickets in an issue tracker | to-tickets | Briefs live in the repo, where builders and the kernel can read them. |
 | A sandbox library under forge | Sandcastle | Owner decision (ADR 8). The pattern is used; the dependency is not. |
 | An agent framework under the kernel | Mastra, Deep Agents | The kernel never drives a model (ADR 2). They are harnesses behind adapters. |

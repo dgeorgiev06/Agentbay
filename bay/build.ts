@@ -1,6 +1,7 @@
 import { join } from "node:path/posix";
 import { pathToFileURL } from "node:url";
-import { agentName, type Adapter, type SkillAgent } from "./adapter.ts";
+import type { Adapter, GrantedFoldersRequest, SkillAgent } from "./adapter.ts";
+import { agentName } from "./agent-name.ts";
 import type { Effect, Tier } from "./contracts.ts";
 import type { FileSystem } from "./ports.ts";
 import type { ActiveMode, System } from "./manifests/manifests.ts";
@@ -102,6 +103,26 @@ function isAdapter(value: unknown): value is Adapter {
 
 function adapterProblem(file: string, message: string, fix: string): Outcome<Adapter> {
   return { ok: false, problems: [{ file, path: "", message, fix }] };
+}
+
+export type GrantedFolderRule = (request: GrantedFoldersRequest) => Promise<readonly Problem[]>;
+
+function isRule(value: unknown): value is GrantedFolderRule {
+  return typeof value === "function";
+}
+
+export async function loadGrantedFolderRule(
+  files: FileSystem,
+  kit: string,
+  name: string,
+): Promise<GrantedFolderRule | undefined> {
+  const file = join(kit, "adapters", name, "granted-folders.ts");
+  if (!adapterNamePattern.test(name) || !(await files.exists(file))) {
+    return undefined;
+  }
+  const loaded: unknown = await import(pathToFileURL(file).href);
+  const rule = isRecord(loaded) ? loaded.grantedFolderProblems : undefined;
+  return isRule(rule) ? rule : undefined;
 }
 
 export async function loadAdapter(files: FileSystem, kit: string, name: string): Promise<Outcome<Adapter>> {

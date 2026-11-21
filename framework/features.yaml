@@ -190,6 +190,7 @@ features:
       - bay/check.ts
     private:
       - bay/check-context.ts
+      - bay/check-granted-folders.ts
       - bay/check-imports.ts
       - bay/check-layout.ts
       - bay/check-limits.ts
@@ -200,6 +201,7 @@ features:
       - vocabulary
       - manifests
       - safety
+      - harness
   scaffold:
     purpose: Generates a new mode, action, skill, interface or workflow from templates.
     entry:
@@ -212,6 +214,7 @@ features:
     purpose: What a harness adapter must provide, and the build that asks it to.
     entry:
       - bay/adapter.ts
+      - bay/agent-name.ts
       - bay/build.ts
     private: []
     may_import:

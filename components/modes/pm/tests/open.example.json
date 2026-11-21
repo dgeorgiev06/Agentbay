@@ -1,0 +1,19 @@
+{
+  "input": {
+    "job": "todo",
+    "words": "A todo mode."
+  },
+  "output": {
+    "job": "todo",
+    "words": "A todo mode.",
+    "card": {
+      "title": "Start an interview of todo?",
+      "lines": [],
+      "withheld": {}
+    },
+    "offered": {
+      "start": true
+    },
+    "namedBy": "owner"
+  }
+}

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Interface } from "../bay/generated/interface.ts";
 import type { Mode } from "../bay/generated/mode.ts";
-import { inspectSystem, loadSystem, type InspectedFolder, type System } from "../bay/manifests/manifests.ts";
+import { inspectOnce, loadSystem, type InspectedFolder, type System } from "../bay/manifests/manifests.ts";
 import type { Problem } from "../bay/outcome.ts";
 import { fakeFileSystem } from "./fakes.ts";
 import { layout, rooted, yamlText } from "./system-fixture.ts";
@@ -128,7 +128,7 @@ async function problemsOf(files: Readonly<Record<string, string>>): Promise<read
 async function greeterFolder(
   files: Readonly<Record<string, string>>,
 ): Promise<Extract<InspectedFolder, { readonly manifest: object }>> {
-  const inspection = await inspectSystem(fakeFileSystem(rooted(files)), layout);
+  const inspection = (await inspectOnce(fakeFileSystem(rooted(files)), layout)).inspection;
   const found = inspection.folders.find((entry) => entry.folder === "/kit/components/modes/greeter");
   assert.ok(found?.manifest !== undefined, "greeter was not read");
   return found;

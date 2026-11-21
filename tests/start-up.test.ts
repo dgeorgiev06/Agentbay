@@ -57,7 +57,7 @@ const readers = [
 const forRuns = [
   ...commandLine,
   ...readers,
-  "bay/adapter.ts",
+  "bay/agent-name.ts",
   "bay/approval-card.ts",
   "bay/approval-screen.ts",
   "bay/approval-words.ts",
@@ -74,7 +74,10 @@ const forRuns = [
 const forCheck = [
   ...commandLine,
   ...readers,
+  "bay/agent-name.ts",
+  "bay/build.ts",
   "bay/check-context.ts",
+  "bay/check-granted-folders.ts",
   "bay/check-imports.ts",
   "bay/check-layout.ts",
   "bay/check-limits.ts",
@@ -82,6 +85,7 @@ const forCheck = [
   "bay/check-trust.ts",
   "bay/check.ts",
   "bay/import-scanner.ts",
+  "bay/skill-tools.ts",
 ];
 
 function inFolder(folder: string, names: readonly string[]): readonly string[] {

@@ -21,6 +21,7 @@ const designedTiers: Readonly<Record<Role, Tier>> = {
   designer: "deep",
   challenger: "deep",
   planner: "balanced",
+  interviewer: "deep",
 };
 
 function notesWithStep(step: unknown): Readonly<Record<string, string>> {
@@ -81,7 +82,7 @@ test("a skill step that names a tier and no role loads exactly as before", async
 });
 
 const notARole =
-  "which is not one of the kit's roles: builder, test writer, reviewer, planter, designer, challenger, planner.";
+  "which is not one of the kit's roles: builder, test writer, reviewer, planter, designer, challenger, planner, interviewer.";
 
 const notWrittenSo = "and the kit has no role written that way.";
 
@@ -95,7 +96,7 @@ function refusedRole(written: string, reason: string, fix: string): Problem {
   };
 }
 
-test("a step that names the role lead is refused with the seven names, the same at load and in bay check", async () => {
+test("a step that names the role lead is refused with the eight names, the same at load and in bay check", async () => {
   assert.deepEqual(await sameInLoadAndCheck({ skill: "skills/write-note", role: "lead" }), [
     refusedRole("lead", notARole, "Name one of those roles, or name a tier in its place: fast, balanced, deep."),
   ]);
@@ -148,7 +149,7 @@ test("a step that names neither a role nor a tier is refused with the names it m
         "Action add of mode notes names neither a role nor a tier for the skill skills/write-note, " +
         "so the kernel cannot say how capable a model its agent needs.",
       fix:
-        "Add role: with one of builder, test writer, reviewer, planter, designer, challenger, planner; " +
+        "Add role: with one of builder, test writer, reviewer, planter, designer, challenger, planner, interviewer; " +
         "or tier: with one of fast, balanced, deep.",
     },
   ]);
@@ -160,19 +161,51 @@ test("the README names the kit's roles, every one and no other, in the kernel's 
   assert.deepEqual(listed.split(/, | and /), [...roles]);
 });
 
-test("ADR 29 lists each of the kit's roles once, under the tier the kernel gives it", async () => {
-  const adr = (await readFile(join(kit, "docs/adr/0029-roles.md"), "utf8")).replace(/\s+/g, " ");
+function listedRoles(words: string | undefined): readonly string[] {
+  return (words ?? "").toLowerCase().split(/, | and /);
+}
+
+async function adrText(file: string): Promise<string> {
+  return (await readFile(join(kit, "docs/adr", file), "utf8")).replace(/\s+/g, " ");
+}
+
+async function rolesAddedByAdr30(): Promise<ReadonlyMap<string, string>> {
+  const adr = await adrText("0030-interviewer.md");
+  const said = [...adr.matchAll(/\*\*A role is added: (\w[\w ]*), at tier (\w+)\.\*\*/g)];
+  return new Map(said.map((match) => [match[1] ?? "", match[2] ?? ""]));
+}
+
+test("the glossary's Role row names the kit's roles, every one and no other, in the kernel's order", async () => {
+  const glossary = await readFile(join(kit, "CONTEXT.md"), "utf8");
+  const listed =
+    /\| \*\*Role\*\* \| One of a closed set the kit owns, in `bay\/roles.ts`: ([^.]+)\./.exec(glossary)?.[1] ?? "";
+  assert.deepEqual(listed.split(/, | and /), [...roles]);
+});
+
+test("ADR 29 lists each role it decided once, under its tier: every role of the kit but those ADR 30 adds", async () => {
+  const added = await rolesAddedByAdr30();
+  const adr = await adrText("0029-roles.md");
   const said = /\*\*The builder runs at balanced\.\*\* ([^;]+) are balanced; ([^.]+) are deep\./.exec(adr);
-  const listed = (words: string | undefined): readonly string[] => (words ?? "").toLowerCase().split(/, | and /);
+  const decided = roles.filter((role) => !added.has(role));
   assert.deepEqual(
-    { balanced: listed(said?.[1]), deep: listed(said?.[2]) },
+    { balanced: listedRoles(said?.[1]), deep: listedRoles(said?.[2]) },
     {
-      balanced: roles.filter((role) => tierOfRole(role) === "balanced"),
-      deep: roles.filter((role) => tierOfRole(role) === "deep"),
+      balanced: decided.filter((role) => tierOfRole(role) === "balanced"),
+      deep: decided.filter((role) => tierOfRole(role) === "deep"),
     },
     "ADR 29 is a dated record of the roles decided on 21 November 2026: when bay/roles.ts no longer agrees with it, " +
       "write the later change of roles as a new ADR, and do not edit ADR 29.",
   );
+});
+
+test("ADR 30 adds the interviewer at tier deep, and every role it adds is in the kit at the tier it says", async () => {
+  const added = await rolesAddedByAdr30();
+  assert.deepEqual([...added], [["interviewer", "deep"]]);
+  for (const [name, tier] of added) {
+    const role = roles.find((each) => each === name);
+    assert.ok(role !== undefined, `${name} is not in bay/roles.ts`);
+    assert.equal(tierOfRole(role), tier);
+  }
 });
 
 function listingNotes(step: unknown, record: Readonly<Record<string, string>> = {}): Readonly<Record<string, string>> {

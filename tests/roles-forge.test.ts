@@ -97,10 +97,10 @@ test("every forge step runs at the tier it ran at before, but the one-slice buil
   );
 });
 
-test("bay build writes the twelve agent files and steps.json as before, but the build agent's model", async () => {
+test("bay build writes the thirteen agent files, the PM interviewer's with them, and steps.json as before, but the build agent's model", async () => {
   const now = await builtKit();
   const before = await builtKit(stepBefore);
-  assert.equal(now.agents.length, 12);
+  assert.equal(now.agents.length, 13);
   assert.deepEqual(Object.keys(now.files), Object.keys(before.files));
   const changedFile = `.claude/agents/${changedAgent}.md`;
   const changed = Object.keys(now.files).filter((path) => now.files[path] !== before.files[path]);

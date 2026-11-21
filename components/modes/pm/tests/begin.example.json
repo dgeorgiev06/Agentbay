@@ -1,0 +1,19 @@
+{
+  "input": {
+    "choice": "start",
+    "opened": {
+      "job": "todo",
+      "words": "A todo mode.",
+      "namedBy": "owner",
+      "card": {
+        "title": "Start an interview of todo?",
+        "lines": [],
+        "withheld": {}
+      }
+    }
+  },
+  "output": {
+    "job": "todo",
+    "summary": "The interview of todo is started. When the owner asks for its turn 1, run: bay call --workflow pm:workflows/ask.yaml '{\"job\": \"todo\"}' --json"
+  }
+}

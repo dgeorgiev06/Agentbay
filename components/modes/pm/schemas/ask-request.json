@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AskRequest",
+  "description": "The job whose interview's next turn is asked.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["job"],
+  "properties": {
+    "job": {
+      "$ref": "requirements@1/check-response.json#/$defs/requirements/properties/job"
+    }
+  }
+}

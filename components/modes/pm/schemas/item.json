@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Item",
+  "description": "One card of a turn and what the approval's rules read.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "kind", "title", "job", "turn", "card", "offer"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^Q[1-9][0-9]{0,3}$"
+    },
+    "kind": {
+      "enum": ["question", "fact"]
+    },
+    "title": {
+      "type": "string"
+    },
+    "job": {
+      "type": "string"
+    },
+    "turn": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "card": {
+      "type": "object",
+      "description": "The card; the kernel checks it when it shows it."
+    },
+    "offer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["c"],
+      "properties": {
+        "c": {
+          "type": "boolean",
+          "description": "Whether the card has a third answer."
+        }
+      }
+    }
+  }
+}

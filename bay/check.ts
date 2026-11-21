@@ -8,6 +8,7 @@ import {
   type Finding,
   type LoadedModeFolder,
 } from "./check-context.ts";
+import { grantedFolderFindings } from "./check-granted-folders.ts";
 import { checkImports, checkKernelImports } from "./check-imports.ts";
 import type { FileListing } from "./ports.ts";
 import { checkKitLayout, checkLayout } from "./check-layout.ts";
@@ -18,7 +19,7 @@ import { defaultScriptTimeLimitSeconds } from "./contracts.ts";
 import { isProjectTheKit, shownPath, type Layout } from "./layout.ts";
 import type { Problem } from "./outcome.ts";
 import type { FileSystem } from "./ports.ts";
-import { inspectSystem, readConfig, skillStepsRunOf, type SkillStepsRun } from "./manifests/manifests.ts";
+import { inspectOnce, readConfig, skillStepsRunOf, type SkillStepsRun } from "./manifests/manifests.ts";
 import { readTrustRecord } from "./trust.ts";
 
 export type CheckPorts = {
@@ -95,7 +96,7 @@ function shownFindings(layout: Layout, findings: readonly Finding[]): readonly F
 }
 
 export async function checkSystem(ports: CheckPorts, layout: Layout): Promise<CheckReport> {
-  const inspection = await inspectSystem(ports.files, layout);
+  const { inspection, build } = await inspectOnce(ports.files, layout);
   const context = await checkContextOf({ ...ports, layout, inspection });
   const record = await readTrustRecord(ports.files, layout);
   const skillSteps = await skillStepsOf(ports.files, layout);
@@ -109,6 +110,7 @@ export async function checkSystem(ports: CheckPorts, layout: Layout): Promise<Ch
     ...longStepWarnings(context),
     ...(await kitFindings(context)),
     ...withoutTheHookWarnings(layout, skillSteps),
+    ...(build === undefined ? [] : await grantedFolderFindings({ files: ports.files, layout, system: await build() })),
   ]);
   const errorCount = findings.filter((finding) => finding.severity === "error").length;
   return { findings, errors: errorCount, warnings: findings.length - errorCount, skillSteps };

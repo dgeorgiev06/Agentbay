@@ -1,5 +1,5 @@
 import { isAbsolute, join, relative, sep } from "node:path";
-import type { BuildRequest, SkillAgent } from "../../bay/adapter.ts";
+import type { GrantedFoldersRequest, SkillAgent } from "../../bay/adapter.ts";
 import type { Files, Problem } from "./adapter-types.ts";
 import { searchBound } from "./guard-input.ts";
 import { closedName } from "./guard-paths.ts";
@@ -34,7 +34,11 @@ async function scanFolder(files: Files, folder: string): Promise<Scan> {
   return { kind: "clear" };
 }
 
-async function rootProblem(request: BuildRequest, agent: SkillAgent, folder: string): Promise<Problem | undefined> {
+async function rootProblem(
+  request: GrantedFoldersRequest,
+  agent: SkillAgent,
+  folder: string,
+): Promise<Problem | undefined> {
   const where = { file: agent.skillFile, path: "" };
   if (ownClosedSegment(folder, [request.layout.project, request.layout.kit])) {
     return { ...where, message: `the step ${agent.agent} is granted ${folder}, whose path names a closed location` };
@@ -60,7 +64,7 @@ async function rootProblem(request: BuildRequest, agent: SkillAgent, folder: str
   }
 }
 
-export async function grantedRootProblems(request: BuildRequest): Promise<readonly Problem[]> {
+export async function grantedRootProblems(request: GrantedFoldersRequest): Promise<readonly Problem[]> {
   const problems: Problem[] = [];
   for (const agent of request.agents) {
     const roots = new Set([...agent.grants.readPaths, ...agent.grants.writePaths]);

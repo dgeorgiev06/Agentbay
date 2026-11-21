@@ -10,7 +10,7 @@ import { sourcesGiven } from "../scripts/lib/plan-sources.ts";
 import { workOut } from "../scripts/lib/plan-waves.ts";
 import type { PracticeAnswer } from "../scripts/lib/practice-answers.ts";
 import { printed } from "./printed-card.ts";
-import { designFile, requirementsFile, tdOne, tdTwo, todoDesignFiles, todoPlan } from "./todo-plan.ts";
+import { designFile, requirementsFile, tdOne, tdTwo, todoDesignFiles, todoPlan, todoVersionOne } from "./todo-plan.ts";
 
 const skills = {
   "plan-1": "forge skills/plan, tier balanced",
@@ -32,7 +32,7 @@ const p34NotHeld: readonly PracticeAnswer[] = [
 ];
 
 async function todoInput(plan: Json): Promise<PlanCardInput> {
-  const read = readYaml(await readFile(new URL(`../../../../${requirementsFile}`, import.meta.url), "utf8"));
+  const read = readYaml(await readFile(todoVersionOne, "utf8"));
   assert.ok(read.ok);
   const [designed] = todoDesignFiles();
   const parsed = readYaml(designed?.text ?? "");

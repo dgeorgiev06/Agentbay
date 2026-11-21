@@ -2,14 +2,18 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
+import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
 import { openModeProject, type ModeProject } from "../../../../tests/test-toolbox.ts";
 
 type Expected = readonly [number, string, string];
 
 const folder = "docs/requirements";
 
-const kitTodo = join(import.meta.dirname, "..", "..", "..", "..", folder, "todo.yaml");
+const kit = join(import.meta.dirname, "..", "..", "..", "..");
+
+const kitTodo = join(kit, folder, "todo.yaml");
+
+const todoVersionOne = join(kit, "tests", "fixtures", "todo-v1.yaml");
 
 const brokenEverywhere = `job: desk
 version: 2
@@ -156,23 +160,13 @@ function problemsOf(answer: Json): readonly Expected[] {
   });
 }
 
-test("the kit's docs/requirements/todo.yaml is accepted, with its 2 outcomes and 13 conditions, 5 of them refused", async () => {
-  const answer = fieldsOf(await checked("todo.yaml", await readFile(kitTodo, "utf8")));
+test("the kit's own docs/requirements/todo.yaml is accepted, and the check hands back what the file holds", async () => {
+  const text = await readFile(kitTodo, "utf8");
+  const read = readYaml(text);
+  assert.ok(read.ok);
+  const answer = fieldsOf(await checked("todo.yaml", text));
   assert.equal(answer.answer, "accepted", JSON.stringify(answer));
-  const outcomes = fieldsOf(answer.requirements ?? null).outcomes;
-  assert.ok(Array.isArray(outcomes));
-  const conditions = outcomes.flatMap((outcome: Json) => {
-    const listed = fieldsOf(outcome).conditions;
-    return Array.isArray(listed) ? listed.map((condition: Json) => fieldsOf(condition).path) : [];
-  });
-  assert.deepEqual(
-    {
-      outcomes: outcomes.length,
-      conditions: conditions.length,
-      refused: conditions.filter((path) => path === "refused").length,
-    },
-    { outcomes: 2, conditions: 13, refused: 5 },
-  );
+  assert.deepEqual(answer.requirements, read.value);
 });
 
 test("a file that breaks every rule of version 2 is refused with each problem, its line and its sentence, by line", async () => {
@@ -250,7 +244,7 @@ test("a first version whose changes do not add exactly its conditions is refused
 });
 
 test("whole words only: a vague word or a moving date inside another word is not refused", async () => {
-  const text = (await readFile(kitTodo, "utf8")).replace(
+  const text = (await readFile(todoVersionOne, "utf8")).replace(
     "        given: no todos\n",
     "        given: something known, handled at breakfast, nowhere\n",
   );
@@ -259,7 +253,7 @@ test("whole words only: a vague word or a moving date inside another word is not
 });
 
 test("a vague word or a moving date inside a quoted value is the owner's data and is accepted", async () => {
-  const text = (await readFile(kitTodo, "utf8")).replace(
+  const text = (await readFile(todoVersionOne, "utf8")).replace(
     'when: the person adds "buy milk", then lists the open todos',
     'when: the person adds "buy some milk now", then lists the open todos',
   );
@@ -268,7 +262,7 @@ test("a vague word or a moving date inside a quoted value is the owner's data an
 });
 
 test("the same words outside the quotes are refused, each with its line and the word quoted", async () => {
-  const text = (await readFile(kitTodo, "utf8")).replace(
+  const text = (await readFile(todoVersionOne, "utf8")).replace(
     'when: the person adds "buy milk", then lists the open todos',
     'when: the person adds some text "buy milk" now, then lists the open todos',
   );

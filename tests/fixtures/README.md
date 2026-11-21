@@ -12,3 +12,7 @@ The reviewer's capture runs `bay check` and `bay new` on these folders and keeps
 `sound/.gitignore` is part of the fixture. It ignores `schemas`, so the files under `sound/` that it covers are added to git by force.
 
 Type check, lint and dead code leave this folder out: `tsconfig.json`, the eslint configuration and `knip.json` each exclude it, because its code is written to be broken. `tests/capture-fixtures.test.ts` holds what the table says.
+
+## The todo requirements, version 1
+
+`todo-v1.yaml` is version 1 of `docs/requirements/todo.yaml`, the 2 outcomes and 13 conditions forge's and requirements' tests were written for. The owner's file moves on with each version he signs; the tests read this copy, and forge's tests write it into each copy of the kit at `docs/requirements/todo.yaml`, so their cards keep their words. Only `components/base/requirements/tests/check.test.ts` reads the owner's file, to check it is accepted.

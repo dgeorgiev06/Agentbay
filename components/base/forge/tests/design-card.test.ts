@@ -15,6 +15,7 @@ import { designerPracticeProblems, type PracticeAnswer } from "../scripts/lib/pr
 import { conditionsOf, requirementsOf, type Requirements } from "../scripts/lib/requirements-form.ts";
 import { printed } from "./printed-card.ts";
 import { todoDesign, todoHides } from "./todo-design.ts";
+import { todoVersionOne } from "./todo-plan.ts";
 
 const file = "docs/requirements/todo.yaml";
 
@@ -45,7 +46,7 @@ const p52NotHeld: readonly PracticeAnswer[] = [
 ];
 
 async function todoRequirements(): Promise<Requirements> {
-  const text = await readFile(new URL(`../../../../${file}`, import.meta.url), "utf8");
+  const text = await readFile(todoVersionOne, "utf8");
   const read = readYaml(text);
   assert.ok(read.ok);
   return requirementsOf(read.value);

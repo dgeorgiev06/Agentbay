@@ -102,7 +102,7 @@ test("the test writer is asked before any builder works; while the builder's tas
   const [writing] = asked;
   assert.ok(writing !== undefined);
   assert.equal(writing.step, "round-1/0.call0/0#1");
-  assert.deepEqual(writing.input, { slice, interface: [schema], folder, practices });
+  assert.deepEqual(writing.input, { slice, interface: [schema], rules: [], folder, practices });
   assert.deepEqual(writing.holding, []);
   const [building] = seen;
   assert.ok(building !== undefined);
@@ -111,6 +111,7 @@ test("the test writer is asked before any builder works; while the builder's tas
   assert.deepEqual(building.input, {
     slice,
     interface: [schema],
+    rules: [],
     fixed: [named, second],
     folder,
     practices,

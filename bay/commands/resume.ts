@@ -6,7 +6,6 @@ import {
   type CommandResult,
   type Invocation,
 } from "../command-context.ts";
-import type { Command } from "../command-line.ts";
 import { measures } from "../contracts.ts";
 import type { Budget } from "../generated/mode.ts";
 import type { Kernel } from "../kernel.ts";
@@ -34,10 +33,6 @@ type Answering = {
 };
 
 type Form = { readonly kind: "due" } | { readonly kind: "resume"; readonly runId: string } | Answering;
-
-const usage =
-  "resume <run> [--rerun | --extend <measure>=<amount>[,...] | --stop] " +
-  '[--via terminal | --via chat --quote "<the owner\'s words>"] | resume --due';
 
 const sourceOptions = ["via", "quote"];
 
@@ -197,30 +192,12 @@ async function resumeOne(invocation: Invocation, kernel: Kernel, form: OneRun): 
     : resumeAnswering(invocation, kernel, form);
 }
 
-function runResume(invocation: Invocation): Promise<CommandResult> {
+export function runResume(invocation: Invocation): Promise<CommandResult> {
   const form = formOf(invocation);
   if (typeof form === "string") {
-    return Promise.resolve(usageResult(form, usage));
+    return Promise.resolve(usageResult(form, invocation.usage));
   }
   return withKernel(invocation, (kernel) =>
     form.kind === "due" ? resumeDue(kernel) : resumeOne(invocation, kernel, form),
   );
 }
-
-export const resumeCommand: Command = {
-  name: "resume",
-  summary:
-    "Continue a run: --rerun runs an unfinished step, or a side-by-side foreach's failed items, again, " +
-    "--extend raises a spent budget, --stop ends it, each from a terminal or from chat if allowed; --due wakes waits.",
-  usage,
-  options: [
-    { name: "rerun", takesValue: false },
-    { name: "due", takesValue: false },
-    { name: "extend", takesValue: true },
-    { name: "stop", takesValue: false },
-    { name: "via", takesValue: true },
-    { name: "quote", takesValue: true },
-  ],
-  positionals: { least: 0, most: 1 },
-  handler: runResume,
-};

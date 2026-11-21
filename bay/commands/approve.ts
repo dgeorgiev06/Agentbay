@@ -7,7 +7,6 @@ import {
   type CommandResult,
   type Invocation,
 } from "../command-context.ts";
-import type { Command } from "../command-line.ts";
 import type { ListTrust, ModeList, ScriptFiles, TrustGiven } from "../contracts.ts";
 import type { Kernel } from "../kernel.ts";
 import type { ActiveMode } from "../manifests/manifests.ts";
@@ -120,11 +119,6 @@ const answerReasons: Readonly<Record<AnswerRefusal["reason"], true>> = {
   "quote lacks the mode": true,
 };
 
-const usage =
-  "approve <run> <stepKey> --hash <hash> [--reject | --choice <name>] " +
-  '[--via terminal | --via chat --quote "<the owner\'s words>"]; ' +
-  'approve --trust <mode> [--reject] [--via chat --hash <hash> --quote "<the owner\'s words>"]';
-
 const approvalWords: OwnerWords = { command: "bay approve", answers: "Approvals", verb: "Approve" };
 
 const prompts = {
@@ -227,19 +221,21 @@ function runApproval(invocation: Invocation): Promise<CommandResult> {
     return Promise.resolve(
       usageResult(
         `bay approve takes a run and a step key, or --trust <mode>, but ${String(positionals.length)} arguments were given.`,
-        usage,
+        invocation.usage,
       ),
     );
   }
   if (hash === undefined) {
-    return Promise.resolve(usageResult("approve needs --hash <the hash of what the approval shows>.", usage));
+    return Promise.resolve(
+      usageResult("approve needs --hash <the hash of what the approval shows>.", invocation.usage),
+    );
   }
   if (typeof channel === "string") {
-    return Promise.resolve(usageResult(channel, usage));
+    return Promise.resolve(usageResult(channel, invocation.usage));
   }
   const answer = answerAsked(invocation);
   if (typeof answer === "string") {
-    return Promise.resolve(usageResult(answer, usage));
+    return Promise.resolve(usageResult(answer, invocation.usage));
   }
   const decision: Decision = { runId, stepKey, hash, ...answer };
   return withKernel(invocation, (kernel) => decide({ invocation, kernel, channel, decision }));
@@ -520,36 +516,18 @@ function runTrust(invocation: Invocation, mode: string): Promise<CommandResult> 
     return Promise.resolve(
       usageResult(
         `bay approve --trust <mode> takes no other argument, but ${String(positionals.length)} were given.`,
-        usage,
+        invocation.usage,
       ),
     );
   }
   if (typeof channel === "string") {
-    return Promise.resolve(usageResult(channel, usage));
+    return Promise.resolve(usageResult(channel, invocation.usage));
   }
   const ask: TrustAsk = { mode, verdict: invocation.flags.has("reject") ? "withdraw" : "give", channel };
   return withKernel(invocation, (kernel) => decideTrust({ invocation, kernel, ask }));
 }
 
-function runApprove(invocation: Invocation): Promise<CommandResult> {
+export function runApprove(invocation: Invocation): Promise<CommandResult> {
   const mode = invocation.values.get("trust");
   return mode === undefined ? runApproval(invocation) : runTrust(invocation, mode);
 }
-
-export const approveCommand: Command = {
-  name: "approve",
-  summary:
-    "Approve or reject what a waiting approval shows, or take one of its choices, naming its hash; or, with " +
-    "--trust, give or withdraw trust in a mode's list. From a terminal, or from chat if allowed.",
-  usage,
-  options: [
-    { name: "hash", takesValue: true },
-    { name: "reject", takesValue: false },
-    { name: "choice", takesValue: true },
-    { name: "via", takesValue: true },
-    { name: "quote", takesValue: true },
-    { name: "trust", takesValue: true },
-  ],
-  positionals: { least: 0, most: 2 },
-  handler: runApprove,
-};

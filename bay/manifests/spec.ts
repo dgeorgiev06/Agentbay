@@ -1,4 +1,4 @@
-import { Ajv2020, type ValidateFunction } from "ajv/dist/2020.js";
+import { Ajv2020, type SchemaObject, type ValidateFunction } from "ajv/dist/2020.js";
 import configSchema from "../../schemas/config.schema.json" with { type: "json" };
 import interfaceSchema from "../../schemas/interface.schema.json" with { type: "json" };
 import modeSchema from "../../schemas/mode.schema.json" with { type: "json" };
@@ -10,7 +10,14 @@ import type { Mode } from "../generated/mode.ts";
 import type { SkillFrontMatter } from "../generated/skill.ts";
 import type { Workflow } from "../generated/workflow.ts";
 import { failedWith, type Outcome, type Problem } from "../outcome.ts";
-import { emptiedRequiredFields, errorProblems, type Loaded, type PathSegments } from "../value-check.ts";
+import {
+  emptiedRequiredFields,
+  errorProblems,
+  madeOnFirstUse,
+  passesMetaSchema,
+  type Loaded,
+  type PathSegments,
+} from "../value-check.ts";
 import { readYaml } from "../yaml-text.ts";
 import type { FileSystem } from "../ports.ts";
 
@@ -55,14 +62,20 @@ type Source = {
   readonly firstLine: number;
 };
 
-const ajv = new Ajv2020({ allErrors: true, strict: true, verbose: true });
+const options = { allErrors: true, strict: true, verbose: true } as const;
 
-const validators: { readonly [Kind in keyof Kinds]: ValidateFunction<Kinds[Kind]> } = {
-  mode: ajv.compile<Mode>(modeSchema),
-  interface: ajv.compile<Interface>(interfaceSchema),
-  workflow: ajv.compile<Workflow>(workflowSchema),
-  config: ajv.compile<Config>(configSchema),
-  skill: ajv.compile<SkillFrontMatter>(skillSchema),
+const ajv = madeOnFirstUse(() => new Ajv2020({ ...options, validateSchema: false }));
+
+function compiled<T>(schema: SchemaObject): ValidateFunction<T> {
+  return passesMetaSchema(schema) ? ajv().compile<T>(schema) : new Ajv2020(options).compile<T>(schema);
+}
+
+const validators: { readonly [Kind in keyof Kinds]: () => ValidateFunction<Kinds[Kind]> } = {
+  mode: madeOnFirstUse(() => compiled<Mode>(modeSchema)),
+  interface: madeOnFirstUse(() => compiled<Interface>(interfaceSchema)),
+  workflow: madeOnFirstUse(() => compiled<Workflow>(workflowSchema)),
+  config: madeOnFirstUse(() => compiled<Config>(configSchema)),
+  skill: madeOnFirstUse(() => compiled<SkillFrontMatter>(skillSchema)),
 };
 
 function parseSpec<Kind extends keyof Kinds>(source: Source, kind: Kind): Outcome<Loaded<Kinds[Kind]>> {
@@ -78,7 +91,7 @@ function parseSpec<Kind extends keyof Kinds>(source: Source, kind: Kind): Outcom
     return line === undefined ? undefined : line + shift;
   };
   const value: unknown = read.value;
-  const validate = validators[kind];
+  const validate = validators[kind]();
   if (validate(value)) {
     return { ok: true, value: { file: source.file, value, lineOf } };
   }

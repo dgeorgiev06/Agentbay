@@ -31,6 +31,7 @@ import {
   writeProjectFile,
 } from "./broker-fixture.ts";
 import { bay } from "./cli-fixture.ts";
+import { commandLineIn } from "./test-toolbox.ts";
 import { finished, messagesOf, openedRuns, runOf, secretValue } from "./runs-fixture.ts";
 import { openProject, startedTask, testEnvironment } from "./kernel-fixture.ts";
 import { kit, makeProject, type Project } from "./project-fixture.ts";
@@ -295,6 +296,41 @@ test("a command that fails inside the kernel answers with a problem that says th
     const text = JSON.stringify(ran.json);
     assert.match(text, /bay stopped at an unexpected error: the terminal went away/);
     assert.match(text, /a run it was advancing can be resumed/);
+  } finally {
+    await project.remove();
+  }
+});
+
+const commandWords: readonly (readonly string[])[] = [
+  ["check"],
+  ["new", "mode", "x"],
+  ["actions"],
+  ["call"],
+  ["submit", "{}"],
+  ["runs"],
+  ["approve"],
+  ["resume"],
+  ["build"],
+  ["secret", "check", "X"],
+  ["config"],
+];
+
+test("a command whose file does not load names that file and the broken line, for every command loaded when chosen", async () => {
+  const project = await makeProject({ ownKernel: true });
+  try {
+    for (const [name = ""] of commandWords) {
+      await project.write(`bay/commands/${name}.ts`, "export const broken = ;\n");
+    }
+    const run = await commandLineIn(project.root);
+    for (const words of commandWords) {
+      const file = `bay/commands/${words[0] ?? ""}.ts`;
+      const ran = await run(words);
+      assert.equal(ran.exitCode, 1, ran.output);
+      assert.ok(
+        ran.output.startsWith(`bay stopped at an unexpected error: ${file} does not load: ${file}:1: `),
+        ran.output,
+      );
+    }
   } finally {
     await project.remove();
   }

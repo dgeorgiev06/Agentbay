@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readdir, readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { runCommandLine, type Command } from "../bay/command-line.ts";
 import { commands } from "../bay/commands.ts";
@@ -152,5 +153,38 @@ test("every command prints its usage with --help and exits 0", async () => {
     const ran = await bay([command.name, "--help"]);
     assert.equal(ran.exitCode, 0, command.name);
     assert.ok(ran.output.startsWith(`usage: bay ${command.usage} [--project <folder>] [--json]`), ran.output);
+  }
+});
+
+const handlerUsageErrors: readonly (readonly [readonly string[], string])[] = [
+  [["new", "bogus", "x"], "There is no kind bogus; the kinds are mode, action, skill, workflow, interface."],
+  [["resume"], "Name the run to resume, or give --due."],
+  [["resume", "r1", "--rerun", "--stop"], "Give at most one of --rerun, --extend and --stop."],
+  [["secret", "bogus", "X"], "secret takes set or check, not bogus."],
+  [["call"], "Name the action to call as <mode>.<action>."],
+  [["approve", "r1", "s1"], "approve needs --hash <the hash of what the approval shows>."],
+  [["approve", "--trust", "m", "extra"], "bay approve --trust <mode> takes no other argument, but 1 were given."],
+  [["submit", "x"], "submit needs --token: the token the task carries."],
+];
+
+async function commandsRaisingUsage(): Promise<readonly string[]> {
+  const folder = new URL("../bay/commands/", import.meta.url);
+  const files = (await readdir(folder)).filter((file) => file.endsWith(".ts"));
+  const raising = [];
+  for (const file of files) {
+    if ((await readFile(new URL(file, folder), "utf8")).includes("usageResult(")) {
+      raising.push(file.replace(/\.ts$/, ""));
+    }
+  }
+  return raising.sort();
+}
+
+test("a usage error a command's own code raises prints that command's usage, for every command that raises one", async () => {
+  const tried = [...new Set(handlerUsageErrors.map(([argv]) => argv[0] ?? ""))].sort();
+  assert.deepEqual(tried, await commandsRaisingUsage());
+  for (const [argv, message] of handlerUsageErrors) {
+    const usage = commands.find((command) => command.name === argv[0])?.usage ?? "";
+    const ran = await bay(argv);
+    assert.deepEqual([ran.exitCode, ran.output], [2, `${message}\nusage: ${usage}`], argv.join(" "));
   }
 });

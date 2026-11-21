@@ -1,50 +1,12 @@
-import { loadAdapter } from "./build.ts";
 import { createBroker, type StepBroker } from "./broker/broker.ts";
-import type { FileListing } from "./check-context.ts";
 import type { Layout } from "./layout.ts";
 import type { Permissions, StepPlace } from "./contracts.ts";
-import {
-  createNodeHttp,
-  createProjectFileListing,
-  nodeChildProcesses,
-  nodeFileInspector,
-  nodeFileSystem,
-  nodeFolders,
-  nodeProcesses,
-  nodeRemoval,
-  nodeThrowawayFolders,
-  systemClock,
-} from "./node-ports.ts";
-import type {
-  ChildProcesses,
-  Clock,
-  FileInspector,
-  FileSystem,
-  Folders,
-  Http,
-  Processes,
-  Removal,
-  ThrowawayFolders,
-} from "./ports.ts";
+import { searchPathOf, type Environment, type KernelPorts } from "./kernel-ports.ts";
+import type { FileSystem } from "./ports.ts";
 import { interfaceSchemasOf, loadSystem, readConfig, type System } from "./manifests/manifests.ts";
 import { openRuns, type Runs } from "./runs/runs.ts";
 import { SecretStore, type SecretStoreOptions } from "./secrets.ts";
 import type { Outcome } from "./outcome.ts";
-
-export type KernelPorts = {
-  readonly files: FileSystem;
-  readonly throwawayFolders: ThrowawayFolders;
-  readonly folders: Folders;
-  readonly removal: Removal;
-  readonly inspector: FileInspector;
-  readonly http: Http;
-  readonly processes: Processes;
-  readonly childProcesses: ChildProcesses;
-  readonly clock: Clock;
-  readonly listing: FileListing;
-};
-
-export type Environment = Readonly<Record<string, string | undefined>>;
 
 export type KernelLimits = {
   readonly toolCallsPerRound: number;
@@ -71,31 +33,11 @@ export type Kernel = {
   readonly close: () => void;
 };
 
-const httpLimits = { maximumResponseBytes: 10 * 1024 * 1024, timeoutMilliseconds: 60_000 };
-
-function searchPathOf(environment: Environment): string {
-  return environment.PATH ?? "/usr/bin:/bin";
-}
-
-export function nodeKernelPorts(environment: Environment): KernelPorts {
-  return {
-    files: nodeFileSystem,
-    throwawayFolders: nodeThrowawayFolders,
-    folders: nodeFolders,
-    removal: nodeRemoval,
-    inspector: nodeFileInspector,
-    http: createNodeHttp(httpLimits),
-    processes: nodeProcesses,
-    childProcesses: nodeChildProcesses,
-    clock: systemClock,
-    listing: createProjectFileListing({ PATH: searchPathOf(environment) }, nodeFileInspector),
-  };
-}
-
 function hookWatchOf(files: FileSystem, layout: Layout) {
   return {
     config: () => readConfig(files, layout),
     saw: async (name: string, handedIn: { readonly token: string; readonly mode: string; readonly skill: string }) => {
+      const { loadAdapter } = await import("./build.ts");
       const adapter = await loadAdapter(files, layout.kit, name);
       if (!adapter.ok || adapter.value.hookSaw === undefined) {
         return false;

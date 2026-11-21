@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import type { Json } from "../bay/contracts.ts";
 import { layoutOf } from "../bay/layout.ts";
-import { loadKernel, nodeKernelPorts, type Kernel, type KernelLimits, type KernelPorts } from "../bay/kernel.ts";
+import { loadKernel, type Kernel, type KernelLimits } from "../bay/kernel.ts";
+import { nodeKernelPorts, type KernelPorts } from "../bay/kernel-ports.ts";
 import { kit, makeProject, type Project, type ProjectOptions } from "./project-fixture.ts";
 
 export type KernelSetup = {

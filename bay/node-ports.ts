@@ -16,7 +16,6 @@ import {
 } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { Readable } from "node:stream";
-import type { FileListing } from "./check-context.ts";
 import { createOwnerOnlyFile } from "./owner-only.ts";
 import type {
   Child,
@@ -27,6 +26,7 @@ import type {
   DirectoryEntry,
   EntryKind,
   FileInspector,
+  FileListing,
   FileSystem,
   Folders,
   Http,

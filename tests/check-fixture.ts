@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import type { FileListing, Finding } from "../bay/check-context.ts";
+import type { Finding } from "../bay/check-context.ts";
+import type { FileListing } from "../bay/ports.ts";
 import { checkSystem, type CheckReport } from "../bay/check.ts";
 import { layoutOf, type Layout } from "../bay/layout.ts";
 import { fakeFileSystem, type FakeFileSystem } from "./fakes.ts";

@@ -333,22 +333,59 @@ export function errorProblems(
   });
 }
 
-function compileSchema(schema: ValidSchema): ValidateFunction | string {
-  if (!isRecord(schema.schema) && typeof schema.schema !== "boolean") {
+const ajvOptions = { allErrors: true, strict: false, verbose: true, logger: false } as const;
+
+type SchemaValue = boolean | Readonly<Record<string, unknown>>;
+
+export function madeOnFirstUse<T>(make: () => T): () => T {
+  let made: { readonly value: T } | undefined;
+  return () => {
+    made ??= { value: make() };
+    return made.value;
+  };
+}
+
+const metaSchemaChecker = madeOnFirstUse(() => new Ajv2020({ allErrors: true, strict: false, logger: false }));
+
+export function passesMetaSchema(schema: SchemaValue): boolean {
+  return metaSchemaChecker().validateSchema(schema) === true;
+}
+
+function schemaValueOf(value: Json): SchemaValue | undefined {
+  return isRecord(value) || typeof value === "boolean" ? value : undefined;
+}
+
+const unchecked = "a schema that does not pass the shared meta-schema check";
+
+function compiledWith(
+  ajv: Ajv2020,
+  schema: ValidSchema,
+  admitted: (part: SchemaValue) => boolean,
+): ValidateFunction | string {
+  const main = schemaValueOf(schema.schema);
+  if (main === undefined) {
     return "a JSON Schema must be a mapping, true or false";
   }
   try {
-    const ajv = new Ajv2020({ allErrors: true, strict: false, verbose: true, logger: false });
-    for (const [name, part] of Object.entries(schema.parts)) {
-      if (!isRecord(part) && typeof part !== "boolean") {
+    for (const [name, value] of Object.entries(schema.parts)) {
+      const part = schemaValueOf(value);
+      if (part === undefined) {
         return `the schema ${name} it refers to is not a mapping, true or false`;
+      }
+      if (!admitted(part)) {
+        return unchecked;
       }
       ajv.addSchema(part, name);
     }
-    return ajv.compile(schema.schema);
+    return admitted(main) ? ajv.compile(main) : unchecked;
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
   }
+}
+
+function compileSchema(schema: ValidSchema): ValidateFunction | string {
+  const shared = compiledWith(new Ajv2020({ ...ajvOptions, validateSchema: false }), schema, passesMetaSchema);
+  return typeof shared === "function" ? shared : compiledWith(new Ajv2020(ajvOptions), schema, () => true);
 }
 
 const keptValidators = 256;

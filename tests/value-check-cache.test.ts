@@ -11,6 +11,7 @@ import {
   checkValue,
   emptiedRequiredFields,
   errorProblems,
+  madeOnFirstUse,
   type SchemaFile,
   type SchemaParts,
 } from "../bay/value-check.ts";
@@ -334,4 +335,22 @@ test("the cache keeps the 256 schemas checked last and compiles an older one aga
   } finally {
     counter.stop();
   }
+});
+
+test("a value made on first use is made once, and a make that fails is not kept but fails again each time", () => {
+  let makes = 0;
+  const made = madeOnFirstUse(() => {
+    makes += 1;
+    return { made: makes };
+  });
+  assert.equal(made(), made());
+  assert.equal(makes, 1);
+  let failures = 0;
+  const broken = madeOnFirstUse((): never => {
+    failures += 1;
+    throw new Error("The kit's schema is broken.");
+  });
+  assert.throws(broken, /The kit's schema is broken/);
+  assert.throws(broken, /The kit's schema is broken/);
+  assert.equal(failures, 2);
 });

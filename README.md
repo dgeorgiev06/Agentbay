@@ -123,7 +123,8 @@ of the digest: `<kit>/bay.sh call --workflow feed-briefing:workflows/daily.yaml`
 
 `bay config` prints every setting the project config may hold, with its type, its description and its current
 value. The config has `modes` (the kit's modes the project uses; its own modes, and the modes they bind, are used
-anyway), `bindings`, `adapter`, `settings` (per mode, checked against the mode's settings schema), `budget` (the
+anyway; of a kit mode the project does not use only the manifest is read, so its workflows, even broken ones, stop
+nothing), `bindings`, `adapter`, `settings` (per mode, checked against the mode's settings schema), `budget` (the
 default limits of a run), `tiers` (the model and effort of each tier), `skillSteps` and `approvals`. No mode may
 name the config. Where the hook runs, it closes the config to step agents' file tools only. For a command, the
 hook checks that it is a listed command's words followed by plain arguments, not which paths those arguments name,

@@ -103,8 +103,7 @@ function workflowReferenceProblems(entry: ModeWorkflow): readonly Problem[] {
 }
 
 export function workflowProblems(context: Context, workflows: readonly ModeWorkflow[]): readonly Problem[] {
-  const active = workflows.filter((entry) => context.active.has(entry.mode.value.name));
-  return active.flatMap((entry) => {
+  return workflows.flatMap((entry) => {
     const actionProblems = workflowStepPlaces(entry.loaded.value.steps, []).flatMap((place) =>
       [workflowActionProblem(context, entry, place), keptActionProblem(context, entry, place)].filter(
         (problem) => problem !== undefined,

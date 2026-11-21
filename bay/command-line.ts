@@ -208,7 +208,7 @@ export async function runCommandLine(
   }
   const project = resolve(context.workingDirectory, parsed.values.get("project") ?? ".");
   const layout = layoutOf({ kit: context.kit, project });
-  const result = await command.handler({ context, layout, ...parsed }).catch(unexpectedResult);
+  const result = await command.handler({ context, layout, usage: command.usage, ...parsed }).catch(unexpectedResult);
   return rendered(result, asJson);
 }
 

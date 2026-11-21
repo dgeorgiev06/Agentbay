@@ -137,7 +137,7 @@ export async function loadConfig(files: FileSystem, layout: Layout): Promise<Out
 export async function loadWorkflows(context: Context): Promise<Collected<ModeWorkflow>> {
   const values: ModeWorkflow[] = [];
   const problems: Problem[] = [];
-  for (const mode of context.modes.values()) {
+  for (const mode of activeModesOf(context)) {
     for (const path of mode.value.workflows ?? []) {
       const file = join(mode.folder, path);
       if (!(await context.files.exists(file))) {
@@ -146,7 +146,7 @@ export async function loadWorkflows(context: Context): Promise<Collected<ModeWor
       const outcome = await loadSpec(context.files, file, "workflow");
       if (outcome.ok) {
         values.push({ mode, path, loaded: outcome.value });
-      } else if (context.active.has(mode.value.name)) {
+      } else {
         problems.push(...outcome.problems);
       }
     }

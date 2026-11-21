@@ -4,7 +4,8 @@ import { sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Json } from "../bay/contracts.ts";
 import { fieldOf, isRecord, parseJson, textField, toJson } from "../bay/json.ts";
-import { loadKernel, nodeKernelPorts } from "../bay/kernel.ts";
+import { loadKernel } from "../bay/kernel.ts";
+import { nodeKernelPorts } from "../bay/kernel-ports.ts";
 import { layoutOf } from "../bay/layout.ts";
 import { failedWith, succeededWith, unplacedProblem, type Outcome, type Problem } from "../bay/outcome.ts";
 

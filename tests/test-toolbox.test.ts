@@ -216,7 +216,7 @@ function declaredTypes(text: string): readonly string[] {
 test("no type the test toolbox declares names the kernel, the runs entry, the broker or a port", async () => {
   const text = await readFile(toolboxFile, "utf8");
   const inner = namesImportedFrom(text, innerFiles);
-  assert.deepEqual([...inner].sort(), ["Clock", "Kernel", "loadKernel", "nodeKernelPorts"]);
+  assert.deepEqual([...inner].sort(), ["Clock", "Kernel", "loadKernel"]);
   const naming = declaredTypes(text).filter((part) => inner.some((name) => new RegExp(`\\b${name}\\b`).test(part)));
   assert.deepEqual(
     naming.map((part) => part.split("=")[0]?.trim()),

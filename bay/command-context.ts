@@ -1,6 +1,7 @@
 import { errorLine } from "./answers.ts";
 import type { Json } from "./contracts.ts";
-import { loadKernel, type Environment, type Kernel, type KernelPorts } from "./kernel.ts";
+import type { Kernel } from "./kernel.ts";
+import type { Environment, KernelPorts } from "./kernel-ports.ts";
 import { parseJson } from "./json.ts";
 import type { Layout } from "./layout.ts";
 import { failedWith, unplacedProblem, type Outcome, type Problem } from "./outcome.ts";
@@ -23,6 +24,7 @@ export type CommandContext = {
 export type Invocation = {
   readonly context: CommandContext;
   readonly layout: Layout;
+  readonly usage: string;
   readonly positionals: readonly string[];
   readonly values: ReadonlyMap<string, string>;
   readonly flags: ReadonlySet<string>;
@@ -81,6 +83,7 @@ export async function withKernel(
   body: (kernel: Kernel) => Promise<CommandResult>,
 ): Promise<CommandResult> {
   const { context } = invocation;
+  const { loadKernel } = await import("./kernel.ts");
   const loaded = await loadKernel({
     layout: invocation.layout,
     ports: context.ports,

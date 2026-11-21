@@ -335,7 +335,10 @@ same order; asked for more, it gets fresh ones. A skill's next round, a foreach 
 step have their own values. A step records at most 64, and on a rerun a value asked in another size than the one
 recorded is a failed answer. The values are stored packed, and a run shows only how many a step drew
 (`drawnValues`). The kit's lint refuses `Date.now()`, `new Date()` with no arguments, `Math.random()`
-and the random calls of `node:crypto` in a mode's `scripts/` (`docs/designs/runs/replay-safe-clock.md`).
+and the random calls of `node:crypto`, also through `globalThis`, computed or taken apart, in every file of a mode
+that is not a test. It cannot see an alias made another way, `Intl` formatting with no date, or
+`performance.now()` and `process.hrtime()`, which it leaves alone by design
+(`docs/designs/runs/replay-safe-clock.md`).
 
 ## Testing a part of a workflow
 

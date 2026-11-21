@@ -24,7 +24,7 @@ type ScriptEvent = { readonly eventKind: string; readonly detail: Json };
 
 type CallToMake = { readonly target: string; readonly input: Json };
 
-type RandomToDraw = { readonly size: number };
+type RandomToDraw = { readonly checkedBytes: number };
 
 const mostRandomBytes = 64;
 
@@ -188,7 +188,7 @@ const random: Definition<"random", RandomToDraw> = {
   described: (request) => `draw ${String(request.bytes)} random bytes`,
   rule: (request, asking) => {
     if (isRandomSize(request.bytes)) {
-      return Promise.resolve(allowedWith({ size: request.bytes }));
+      return Promise.resolve(allowedWith({ checkedBytes: request.bytes }));
     }
     return Promise.resolve(
       refusedWith({
@@ -200,7 +200,7 @@ const random: Definition<"random", RandomToDraw> = {
     );
   },
   handler: async (asked, doing) => {
-    const drawn = await doing.random(asked.size);
+    const drawn = await doing.random(asked.checkedBytes);
     return drawn.status === "done" ? granted(drawn.value) : failed(drawn.reason);
   },
   refusalDetail: noRefusalDetail,

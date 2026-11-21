@@ -95,12 +95,28 @@ const randomMessage =
 const randomCalls = "/^(randomBytes|randomUUID|randomInt|randomFill|randomFillSync|getRandomValues)$/";
 
 const replaySafeSyntax = [
-  { selector: "CallExpression[callee.object.name='Date'][callee.property.name='now']", message: clockMessage },
+  { selector: "CallExpression[callee.property.name='now'][callee.object.name='Date']", message: clockMessage },
+  { selector: "CallExpression[callee.property.value='now'][callee.object.name='Date']", message: clockMessage },
+  { selector: "CallExpression[callee.property.name='now'][callee.object.property.name='Date']", message: clockMessage },
   { selector: "NewExpression[callee.name='Date'][arguments.length=0]", message: clockMessage },
+  { selector: "NewExpression[callee.property.name='Date'][arguments.length=0]", message: clockMessage },
   { selector: "CallExpression[callee.name='Date']", message: clockMessage },
-  { selector: "CallExpression[callee.object.name='Math'][callee.property.name='random']", message: randomMessage },
+  { selector: "CallExpression[callee.property.name='Date']", message: clockMessage },
+  { selector: "VariableDeclarator[init.name='Date']", message: clockMessage },
+  { selector: "VariableDeclarator[init.property.name='Date']", message: clockMessage },
+  { selector: "CallExpression[callee.property.name='random'][callee.object.name='Math']", message: randomMessage },
+  { selector: "CallExpression[callee.property.value='random'][callee.object.name='Math']", message: randomMessage },
+  {
+    selector: "CallExpression[callee.property.name='random'][callee.object.property.name='Math']",
+    message: randomMessage,
+  },
+  { selector: "VariableDeclarator[init.name='Math']", message: randomMessage },
+  { selector: "VariableDeclarator[init.property.name='Math']", message: randomMessage },
+  { selector: "VariableDeclarator[id.type='ObjectPattern'][init.name='crypto']", message: randomMessage },
+  { selector: "VariableDeclarator[id.type='ObjectPattern'][init.property.name='crypto']", message: randomMessage },
   { selector: `CallExpression[callee.name=${randomCalls}]`, message: randomMessage },
   { selector: `CallExpression[callee.property.name=${randomCalls}]`, message: randomMessage },
+  { selector: `CallExpression[callee.property.value=${randomCalls}]`, message: randomMessage },
   {
     selector: `ImportDeclaration[source.value=/^(node:)?crypto$/] ImportSpecifier[imported.name=${randomCalls}]`,
     message: randomMessage,
@@ -178,7 +194,8 @@ export default defineConfig(
     },
   },
   {
-    files: ["components/**/scripts/**/*.ts"],
+    files: ["components/**/*.ts"],
+    ignores: ["components/**/tests/**", "components/**/*.test.ts"],
     rules: {
       "no-restricted-syntax": ["error", ...bannedSyntax, dynamicImportSyntax, ...replaySafeSyntax],
     },

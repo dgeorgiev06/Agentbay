@@ -80,12 +80,23 @@ Calls a script made are still replayed by key whatever script runs (see "Not don
 
 ## The lint rule
 
-The kit's eslint config refuses, in `components/**/scripts/**/*.ts`: `Date.now()`, `Date()` and `new Date()` with
-no arguments, `Math.random()`, and the random calls of `node:crypto` and Web Crypto (`randomBytes`, `randomUUID`,
-`randomInt`, `randomFill`, `randomFillSync`, `getRandomValues`), called by name or through an object, and the
-import of those names from `crypto` or `node:crypto`. The messages point at `context.now()` and
-`context.random(bytes)`. A mode's tests are not scripts and may use them. A script that hands a time to `new
-Date(value)` is untouched.
+The kit's eslint config refuses, in every TypeScript file under `components/` that is not a test (not under a
+`tests/` folder and not `*.test.ts`), so a helper a script imports from beside `scripts/` is held too:
+
+- the clock: `Date.now()`, also as `Date["now"]()` and `globalThis.Date.now()`; `Date()`; `new Date()` and
+  `new globalThis.Date()` with no arguments; `Date` or `globalThis.Date` given to a variable or taken apart
+  (`const D = Date`, `const { now } = Date`);
+- random: `Math.random()`, also computed and through `globalThis`; `Math` given to a variable or taken apart;
+  `randomBytes`, `randomUUID`, `randomInt`, `randomFill`, `randomFillSync` and `getRandomValues`, called by name,
+  through an object or computed, imported from `crypto` or `node:crypto`, or taken apart from `crypto` or
+  `globalThis.crypto`.
+
+The messages point at `context.now()` and `context.random(bytes)`. `new Date(value)` and `Date.UTC(...)` are
+untouched. A selector reads the syntax of one file and nothing else, so the rule cannot see: an alias made any
+other way (`Date` handed to a function, a property of an object that holds it, `Reflect.get`); `Intl` formatting
+with no date, such as `new Intl.DateTimeFormat().format()`, which reads the clock inside; `performance.now()` and
+`process.hrtime()`, left alone by design because they measure and decide nothing; and code outside `components/`
+that a script reaches. It is a guard against the plain mistake, not a proof.
 
 ## Why the frames still hold
 

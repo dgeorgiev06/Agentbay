@@ -67,35 +67,61 @@ async function syntaxMessages(file: string, code: string): Promise<readonly stri
     .map((found) => found.message);
 }
 
-const scriptFile = "components/modes/notes/scripts/lib/probe.ts";
+const modeFiles = [
+  "components/modes/notes/scripts/lib/probe.ts",
+  "components/base/forge/scripts/probe.ts",
+  "components/base/forge/zzlib/stamp.ts",
+];
 
-test("a mode script may not read the clock or draw random values itself, and is pointed at its context", async () => {
-  const banned: readonly (readonly [string, string])[] = [
-    ["const at = Date.now();", clockMessage],
-    ["const at = new Date();", clockMessage],
-    ["const at = Date();", clockMessage],
-    ["const pick = Math.random();", randomMessage],
-    ["const mark = randomBytes(16);", randomMessage],
-    ["const id = crypto.randomUUID();", randomMessage],
-    ["globalThis.crypto.getRandomValues(new Uint8Array(4));", randomMessage],
-    ['import { randomInt } from "node:crypto";', randomMessage],
-    ['import { randomFillSync as fill } from "crypto";', randomMessage],
-  ];
-  for (const [code, message] of banned) {
-    assert.deepEqual(await syntaxMessages(scriptFile, code), [message], code);
+const testFiles = ["components/modes/notes/tests/probe.test.ts", "components/base/forge/tests/lib/probe.ts"];
+
+const banned: readonly (readonly [string, string])[] = [
+  ["const at = Date.now();", clockMessage],
+  ["const at = globalThis.Date.now();", clockMessage],
+  ['const at = Date["now"]();', clockMessage],
+  ["const at = new Date();", clockMessage],
+  ["const at = new globalThis.Date();", clockMessage],
+  ["const at = Date();", clockMessage],
+  ["const D = Date;", clockMessage],
+  ["const { now } = Date;", clockMessage],
+  ["const pick = Math.random();", randomMessage],
+  ["const pick = globalThis.Math.random();", randomMessage],
+  ['const pick = Math["random"]();', randomMessage],
+  ["const { random } = Math;", randomMessage],
+  ["const mark = randomBytes(16);", randomMessage],
+  ["const id = crypto.randomUUID();", randomMessage],
+  ['const id = crypto["randomUUID"]();', randomMessage],
+  ["const { getRandomValues } = globalThis.crypto;", randomMessage],
+  ["const { randomBytes } = crypto;", randomMessage],
+  ["globalThis.crypto.getRandomValues(new Uint8Array(4));", randomMessage],
+  ['import { randomInt } from "node:crypto";', randomMessage],
+  ['import { randomFillSync as fill } from "crypto";', randomMessage],
+];
+
+test("a mode's code outside its tests, base modes and helpers beside scripts/ too, may not read the clock or draw random values itself", async () => {
+  for (const file of modeFiles) {
+    for (const [code, message] of banned) {
+      const found = await syntaxMessages(file, code);
+      assert.ok(found.length > 0 && found.every((each) => each === message), `${file}: ${code}: ${found.join("; ")}`);
+    }
   }
 });
 
-test("a mode script may use its context's clock and random, a given time and a hash, and a test may use the clock", async () => {
+test("a mode's code may use its context's clock and random, a given time and a hash, and its tests may use the clock", async () => {
   const allowed = [
     "const at = context.now();",
     "const mark = await context.random(16);",
     'const at = new Date("2026-11-21T00:00:00Z");',
     "const at = new Date(value);",
+    "const day = Date.UTC(2026, 10, 21);",
     'import { createHash } from "node:crypto";',
   ];
-  for (const code of allowed) {
-    assert.deepEqual(await syntaxMessages(scriptFile, code), [], code);
+  for (const file of modeFiles) {
+    for (const code of allowed) {
+      assert.deepEqual(await syntaxMessages(file, code), [], `${file}: ${code}`);
+    }
   }
-  assert.deepEqual(await syntaxMessages("components/modes/notes/tests/probe.test.ts", "Date.now();"), []);
+  for (const file of testFiles) {
+    assert.deepEqual(await syntaxMessages(file, "Date.now(); Math.random();"), [], file);
+  }
 });

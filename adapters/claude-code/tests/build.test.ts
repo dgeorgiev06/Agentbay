@@ -114,12 +114,13 @@ const trustBlock = [
 ].join("\n");
 
 const neverWithTrust = [
-  "- approve, give trust, run again or stop on your own, or quote words the owner did not write;",
+  "- approve, give trust, run again, stop or raise a budget on your own, or quote words the owner did not write;",
   "- show a summary in place of a card, or suggest the owner skip reading it;",
   "- write the trust record `.agentbay/trust.json`, or edit a mode's list to match the list the owner trusted;",
 ].join("\n");
 
-const neverBeforeTrust = "- approve, run again or stop on your own, or quote words the owner did not write;";
+const neverBeforeTrust =
+  "- approve, run again, stop or raise a budget on your own, or quote words the owner did not write;";
 
 test("the built coordinator text tells the coordinator how the owner gives trust", async () => {
   const files = memoryFiles();

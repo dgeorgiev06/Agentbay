@@ -27,8 +27,6 @@ import { answerableSkill } from "./run-answers.ts";
 import { isLockedError } from "../database-lock.ts";
 import { markIn, type PartMark } from "./workflow-part.ts";
 
-export { itemNameWords, itemPlaceWords } from "./item-name.ts";
-
 type RunsNeeds = {
   readonly project: string;
   readonly folders: Folders;

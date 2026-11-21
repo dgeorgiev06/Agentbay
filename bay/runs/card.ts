@@ -2,7 +2,8 @@ import { tiers, type Json, type RunEvent } from "../contracts.ts";
 import { fieldOf, isRecord, textField, toJson } from "../json.ts";
 import { failedWith, succeededWith, unplacedProblem, type Outcome } from "../outcome.ts";
 import { citedStep, isUnder, type Cited, type Records, type SkillUsed, type StepSource } from "./cited-step.ts";
-import { isItemName, itemNameOf, type DeclaredName, type ItemName } from "./item-name.ts";
+import type { ItemName } from "../item-words.ts";
+import { isItemName, itemNameOf, type DeclaredName } from "./item-name.ts";
 
 const marks = ["ran", "computed", "judged"] as const;
 

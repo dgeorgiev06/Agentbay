@@ -1,8 +1,7 @@
 import type { Json } from "../contracts.ts";
 import type { Step as WorkflowStep } from "../generated/workflow.ts";
+import type { ItemName } from "../item-words.ts";
 import type { Outcome } from "../outcome.ts";
-
-export type ItemName = { readonly id: string; readonly title?: string };
 
 export type DeclaredName = NonNullable<Extract<WorkflowStep, { readonly foreach: string }>["itemName"]>;
 
@@ -73,20 +72,4 @@ function isBounded(text: string | undefined, longest: number): boolean {
 
 export function isItemName(name: ItemName): boolean {
   return isBounded(name.id, longestId) && isBounded(name.title, longestTitle);
-}
-
-function ordinal(position: number): string {
-  const tens = position % 100;
-  const suffixes = ["th", "st", "nd", "rd"];
-  const suffix = tens >= 11 && tens <= 13 ? "th" : (suffixes[position % 10] ?? "th");
-  return `${String(position)}${suffix}`;
-}
-
-export function itemPlaceWords(item: number, count: number | undefined): string {
-  const of = count === undefined ? "item" : `of ${String(count)} ${count === 1 ? "item" : "items"}`;
-  return `the ${ordinal(item + 1)} ${of}`;
-}
-
-export function itemNameWords(name: ItemName): string {
-  return name.title === undefined ? name.id : `${name.id} (${name.title})`;
 }

@@ -1,5 +1,5 @@
 import type { Json } from "../contracts.ts";
-import { itemNameWords, itemPlaceWords, type ItemName } from "./item-name.ts";
+import { itemNameWords, itemPlaceWords, type ItemName } from "../item-words.ts";
 import type { Waiting } from "./run-state.ts";
 
 export type ItemPhase = "resumed" | "queued" | "running" | "holding" | "ended";

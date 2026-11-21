@@ -1,4 +1,5 @@
-import { itemNameWords, itemPlaceWords, type Run } from "./runs/runs.ts";
+import { itemNameWords, itemPlaceWords } from "./item-words.ts";
+import type { Run } from "./runs/runs.ts";
 import { shown } from "./trust.ts";
 import { hanging, hashLine, namedRows } from "./trust-card.ts";
 

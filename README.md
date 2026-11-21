@@ -258,8 +258,9 @@ advances the run is recorded and answered as accepted; the run takes it once, wh
 `bay resume <run>`. A submit the kernel cannot record is refused with its reason, and its token still works.
 
 When items fail, the others still run to their end or to their wait, and are recorded. The run then waits for the
-owner with one sentence that names every failed item, its position, its key and its reason, each reason cut to 200
-characters. `bay resume <run> --rerun` runs only the failed items again, under a new key such as `each[2]~2`;
+owner with one sentence that names every failed item, by the name its foreach declares (below) or else by its
+place, such as `the 3rd of 4 items`, then its key and its reason, each reason cut to 200 characters:
+`Step each failed for 1 of 4 items: the 3rd of 4 items at each[2]: <reason>`. `bay resume <run> --rerun` runs only the failed items again, under a new key such as `each[2]~2`;
 items that finished are not run again and keep their outputs. `bay resume <run> --stop` fails the foreach with that
 sentence, and the run is undone as any failed run.
 
@@ -285,12 +286,13 @@ The foreach says how its items are named with `itemName: { id: <ref>, title: <re
 }`, and its card says `for TD1 (The td1 mode counts what was added)`. The kernel reads both from the item as the
 foreach recorded it, already scrubbed of secrets, so neither a card's script nor a skill can give or change the
 name: a line that brings `itemName` or `itemCount` is refused as one that brings `foreach` is. Each part is made
-one line, control characters and line breaks turned to spaces and parentheses to brackets, and cut with `…`, the
-id to 40 characters and the title to 80. The name stands only in the row that says by whom a line was judged or
-run, never as a line's words. Without `itemName`, or when its id reads no text, the card names the item by its
-place: `for the 1st of 3 items of step slices`; a title that reads no text leaves the id alone. A stored card is
-read back with the same name, and one whose name the kernel could not have written is refused. `bay check` refuses
-an `itemName` part that is not a reference or that reads anything but the item.
+one line, control and format characters (such as a bidi override or a zero-width space) and line breaks turned to
+spaces and parentheses to brackets, and cut with `…`, the id to 40 characters and the title to 80. The name stands
+only in the row that says by whom a line was judged or run and in the owner's question about failed items, never as
+a line's words. Without `itemName`, or when its id reads no text or is blank once cleaned, the card names the item
+by its place: `for the 1st of 3 items of step slices`; a title that reads no text leaves the id alone. A stored
+card is read back with the same name, and one whose name or count the kernel could not have written is refused.
+`bay check` refuses an `itemName` part that is not a reference or that reads anything but the item.
 
 ## Checking a value against a schema
 

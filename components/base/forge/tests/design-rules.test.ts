@@ -92,10 +92,10 @@ describe("the design check, one rule at a time, each problem with its sentence",
   test("a condition no action serves", () => {
     const design = actionChanged("add", (action) => ({
       ...fieldsOf(action),
-      serves: ["O1-C1", "O1-C4", "O1-C5", "O1-C6", "O1-C7"],
+      serves: ["O1-C1", "O1-C4", "O1-C5", "O1-C6", "O2-C4"],
     }));
     assert.deepEqual(problemsOf(design(todoDesign)), [
-      `The condition O2-C4 of ${file} is served by no action; name it in serves of the action a person uses for it.`,
+      `The condition O1-C7 of ${file} is served by no action; name it in serves of the action a person uses for it.`,
     ]);
   });
 

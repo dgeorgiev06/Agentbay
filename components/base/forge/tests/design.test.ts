@@ -441,7 +441,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     await decided(root, start, { step: "path", choice: "light" });
     const [todo = null] = listOf(fieldsOf(todoDesign).interfaces);
     const [add = null, ...others] = listOf(fieldsOf(todo).actions);
-    const short = { ...fieldsOf(add), serves: ["O1-C1", "O1-C4", "O1-C5", "O1-C6", "O1-C7"] };
+    const short = { ...fieldsOf(add), serves: ["O1-C1", "O1-C4", "O1-C5", "O1-C6", "O2-C4"] };
     const broken = { ...fieldsOf(todoDesign), interfaces: [{ ...fieldsOf(todo), actions: [short, ...others] }] };
     const feedback: Json[] = [];
     await playedTo(root, start.id, {
@@ -450,11 +450,11 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
         return Promise.resolve(broken);
       },
     });
-    const sentence = `The condition O2-C4 of ${file} is served by no action; name it in serves of the action a person uses for it.`;
+    const sentence = `The condition O1-C7 of ${file} is served by no action; name it in serves of the action a person uses for it.`;
     assert.deepEqual(feedback.slice(1), [[sentence], [sentence]]);
     const run = await shown(root, start.id);
     assert.equal(textAt(run, "status"), "undone", JSON.stringify(run));
-    assert.match(textAt(run, "reason"), /failed its checks in round 3, the last round: The condition O2-C4/);
+    assert.match(textAt(run, "reason"), /failed its checks in round 3, the last round: The condition O1-C7/);
     assert.deepEqual(worktrees(root), []);
     assert.deepEqual(branches(root), []);
   });

@@ -199,7 +199,7 @@ export type Part =
   | { readonly verdict: "inconclusive"; readonly reason: string };
 
 export type Verdict =
-  | { readonly item: string; readonly kind: Kind; readonly verdict: "passed"; readonly detail: string; readonly printed?: readonly Printed[] }
+  | { readonly item: string; readonly kind: Kind; readonly verdict: "passed"; readonly detail: string; readonly printed?: Printed }
   | { readonly item: string; readonly kind: Kind; readonly verdict: "failed"; readonly detail: string; readonly cases?: Cases }
   | { readonly item: string; readonly kind: Kind; readonly verdict: "inconclusive"; readonly reason: string };
 
@@ -760,13 +760,13 @@ export async function printedBy(context: ScriptContext, request: Request, item: 
     if (!copy.made) {
       return decided(item.id, "printed", [unknown(copy.reason)], "");
     }
-    const printed: Printed[] = [];
+    let printed: Printed = { exitCode: 0, stdout: "" };
     for (const [index, command] of item.runs.entries()) {
       const ended = await commandIn(context, copy.folder, command);
       if (ended.how === "unknown") {
         return decided(item.id, "printed", [unknown("Run " + String(index + 1) + " did not end. " + ended.reason)], "");
       }
-      printed.push({ exitCode: ended.exitCode, stdout: ended.stdout });
+      printed = { exitCode: ended.exitCode, stdout: ended.stdout };
     }
     return { item: item.id, kind: "printed", verdict: "passed", detail: "Every run ended.", printed };
   });

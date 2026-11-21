@@ -5,7 +5,7 @@ type Broken = { readonly verdict: "failed"; readonly detail: string; readonly ca
 
 export type Printed = { readonly exitCode: number; readonly stdout: string };
 
-type Held = { readonly verdict: "passed"; readonly printed?: readonly Printed[] };
+type Held = { readonly verdict: "passed"; readonly printed?: Printed };
 
 export type Part = Held | Broken | { readonly verdict: "inconclusive"; readonly reason: string };
 
@@ -20,7 +20,7 @@ export type Verdict =
       readonly kind: KindName;
       readonly verdict: "passed";
       readonly detail: string;
-      readonly printed?: readonly Printed[];
+      readonly printed?: Printed;
     }
   | {
       readonly item: string;
@@ -41,7 +41,7 @@ export function brokenWithCases(detail: string, cases: Cases): Part {
   return { verdict: "failed", detail, cases };
 }
 
-export function heldWith(printed: readonly Printed[]): Part {
+export function heldWith(printed: Printed): Part {
   return { verdict: "passed", printed };
 }
 
@@ -53,7 +53,7 @@ export function unknown(reason: string): Part {
   return { verdict: "inconclusive", reason };
 }
 
-function printedIn(parts: readonly Part[]): readonly Printed[] | undefined {
+function printedIn(parts: readonly Part[]): Printed | undefined {
   for (const part of parts) {
     if (part.verdict === "passed" && part.printed !== undefined) {
       return part.printed;

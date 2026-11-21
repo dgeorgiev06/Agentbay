@@ -72,27 +72,23 @@
   },
   "$defs": {
     "printed": {
-      "type": "array",
-      "maxItems": 21,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["exitCode", "stdout"],
-        "properties": {
-          "exitCode": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 255,
-            "description": "The exit code the run ended with."
-          },
-          "stdout": {
-            "type": "string",
-            "maxLength": 100000,
-            "description": "What the run printed to its standard output, whole."
-          }
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exitCode", "stdout"],
+      "properties": {
+        "exitCode": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "description": "The exit code the last run ended with."
+        },
+        "stdout": {
+          "type": "string",
+          "maxLength": 20000,
+          "description": "What the last run printed to its standard output, whole; a run that printed more than 20,000 characters makes the item inconclusive."
         }
       },
-      "description": "Each run of an item of the kind printed, in the order they were made: its exit code and what it printed, copied as the run gave them. Only a passed verdict of that kind holds it. Proof filters and judges none of it; it is the caller's to judge, and it is the head's own code's output, never a sentence of proof's."
+      "description": "The last run of an item of the kind printed: its exit code and what it printed, copied as the run gave them. The earlier runs only have to end. Only a passed verdict of that kind holds it. Proof filters and judges none of it; it is the caller's to judge, and it is the head's own code's output, never a sentence of proof's."
     },
     "item": {
       "type": "string",
@@ -100,7 +96,17 @@
       "description": "The item's id as the slice gives it, or scope or declared for the two items proof adds."
     },
     "kind": {
-      "enum": ["checks", "fails-first", "in-scope", "as-declared", "bugs-caught", "same-output", "count", "real-thing", "printed"],
+      "enum": [
+        "checks",
+        "fails-first",
+        "in-scope",
+        "as-declared",
+        "bugs-caught",
+        "same-output",
+        "count",
+        "real-thing",
+        "printed"
+      ],
       "description": "The kind of proof the verdict comes from. The item scope is always in-scope, and the item declared always as-declared."
     },
     "detail": {

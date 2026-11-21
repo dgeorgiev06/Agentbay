@@ -2,6 +2,8 @@ import { fieldsOf, type Json, type JsonFields, type ScriptContext } from "../../
 import type { HandedTest } from "./handed-tests.ts";
 import { listOf, numberOf, oneOf, textOf } from "./json-values.ts";
 import { provedAgainst } from "./kept-proof.ts";
+import { shortened } from "./card-lines.ts";
+import { stringsIn } from "./leaks.ts";
 import { quotesAnyBeyond } from "./quoting.ts";
 import {
   resultOf,
@@ -67,14 +69,12 @@ export function askedWithTrials(asked: Json, trials: readonly Trial[]): Json {
 }
 
 function provedFrom(verdict: JsonFields): Proved {
-  if (verdict.verdict !== "passed") {
-    return { reason: textOf(verdict.reason) || textOf(verdict.detail) };
+  const { printed } = verdict;
+  if (verdict.verdict !== "passed" || printed === undefined) {
+    return { notKnown: true };
   }
-  const printed = listOf(verdict.printed).map((run) => ({
-    exitCode: numberOf(fieldsOf(run).exitCode),
-    stdout: textOf(fieldsOf(run).stdout),
-  }));
-  return { printed };
+  const last = fieldsOf(printed);
+  return { printed: { exitCode: numberOf(last.exitCode), stdout: textOf(last.stdout) } };
 }
 
 export function split(answer: Json): Split {
@@ -85,7 +85,7 @@ export function split(answer: Json): Split {
   return { proof: { ...fields, verdicts: verdicts.filter((verdict) => !isTried(verdict)) }, proved };
 }
 
-const noVerdict = { reason: "proof gave no verdict for it" };
+const noVerdict = { notKnown: true } as const;
 
 export function resultsOf(entries: readonly Entry[], proved: ReadonlyMap<string, Proved>): readonly Result[] {
   let tried = 0;
@@ -98,16 +98,6 @@ export function resultsOf(entries: readonly Entry[], proved: ReadonlyMap<string,
   });
 }
 
-function stringsIn(value: Json): readonly string[] {
-  if (typeof value === "string") {
-    return [value];
-  }
-  if (value === null || typeof value !== "object") {
-    return [];
-  }
-  return (Array.isArray(value) ? listOf(value) : Object.values(fieldsOf(value))).flatMap(stringsIn);
-}
-
 export function givenTexts(trials: readonly Trial[]): readonly string[] {
   return trials.flatMap((trial) => {
     const expected = trial.expected.kind === "answer" ? trial.expected.value : trial.expected.sentence;
@@ -115,8 +105,21 @@ export function givenTexts(trials: readonly Trial[]): readonly string[] {
   });
 }
 
+const longestKept = 240;
+
+function flattened(text: string): string {
+  return shortened(text, Number.MAX_SAFE_INTEGER).toLowerCase();
+}
+
+function designedShown(side: Side): Side {
+  return { how: side.how, text: shortened(side.text, longestKept) };
+}
+
 function shownSide(side: Side, tests: readonly string[], given: readonly string[]): Side {
-  return quotesAnyBeyond(side.text, tests, given) ? { how: side.how, text: keptFromCard, kept: true } : side;
+  if (quotesAnyBeyond(flattened(side.text), tests.map(flattened), given.map(flattened))) {
+    return { how: side.how, text: keptFromCard, kept: true };
+  }
+  return { how: side.how, text: shortened(side.text, longestKept) };
 }
 
 export function shownResults(
@@ -125,7 +128,9 @@ export function shownResults(
   given: readonly string[],
 ): readonly Result[] {
   return results.map((result) =>
-    result.outcome === "otherwise" ? { ...result, built: shownSide(result.built, tests, given) } : result,
+    result.outcome === "otherwise"
+      ? { ...result, designed: designedShown(result.designed), built: shownSide(result.built, tests, given) }
+      : result,
   );
 }
 

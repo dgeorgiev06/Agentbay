@@ -1,4 +1,4 @@
-import { fieldsOf, readYaml, type Json } from "../../../../../bay/sdk.ts";
+import { canonicalJson, fieldsOf, readYaml, type Json } from "../../../../../bay/sdk.ts";
 import { listOf, textOf } from "./json-values.ts";
 import { spelledOut } from "./long-texts.ts";
 
@@ -42,13 +42,13 @@ export type TrialsAt = {
 
 export type Printed = { readonly exitCode: number; readonly stdout: string };
 
-export type Proved = { readonly printed: readonly Printed[] } | { readonly reason: string };
+export type Proved = { readonly printed: Printed } | { readonly notKnown: true };
 
 export type Ran =
   | { readonly kind: "answered"; readonly output: Json }
   | { readonly kind: "refused"; readonly reason: string }
   | { readonly kind: "schema refused"; readonly message: string }
-  | { readonly kind: "not started"; readonly message: string }
+  | { readonly kind: "not started" }
   | { readonly kind: "waited"; readonly reason: string }
   | { readonly kind: "unreadable" };
 
@@ -174,10 +174,7 @@ function runRan(run: Readonly<Record<string, Json>>): Ran {
 
 export function ranOf(stdout: string): Ran {
   const read = readYaml(stdout);
-  if (!read.ok || !isRecord(read.value)) {
-    return { kind: "unreadable" };
-  }
-  const fields = fieldsOf(read.value);
+  const fields = read.ok ? fieldsOf(read.value) : {};
   if (fields.run !== undefined) {
     return runRan(fieldsOf(fields.run));
   }
@@ -186,34 +183,11 @@ export function ranOf(stdout: string): Ran {
   }
   const problem = firstProblem(fields.problems);
   const schema = problem.path === "/input" || problem.path.startsWith("/input/");
-  return { kind: schema ? "schema refused" : "not started", message: problem.message };
-}
-
-function sameList(one: readonly Json[], other: readonly Json[]): boolean {
-  return one.length === other.length && one.every((entry, at) => sameJson(entry, other[at] ?? null));
-}
-
-function sameFields(one: Json, other: Json): boolean {
-  const [ones, others] = [fieldsOf(one), fieldsOf(other)];
-  const keys = Object.keys(ones);
-  return (
-    keys.length === Object.keys(others).length &&
-    keys.every((key) => key in others && sameJson(ones[key] ?? null, others[key] ?? null))
-  );
-}
-
-function isRecord(value: Json): boolean {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
+  return schema ? { kind: "schema refused", message: problem.message } : { kind: "not started" };
 }
 
 export function sameJson(one: Json, other: Json): boolean {
-  if (Array.isArray(one) || Array.isArray(other)) {
-    return Array.isArray(one) && Array.isArray(other) && sameList(listOf(one), listOf(other));
-  }
-  if (isRecord(one) || isRecord(other)) {
-    return isRecord(one) && isRecord(other) && sameFields(one, other);
-  }
-  return one === other;
+  return canonicalJson(one) === canonicalJson(other);
 }
 
 function designedSide(expected: Expected): Side {
@@ -251,27 +225,29 @@ function awaitedWords(reason: string): string {
   return awaited[reason] ?? "an answer";
 }
 
+export const notKnownReasons = {
+  unreadable: "what the last call printed is not the run bay call --json prints",
+  notStarted: "the kernel did not start the call, for a reason other than the request schema",
+  notMade: "proof could not make the calls in a copy or read what the last one printed whole",
+} as const;
+
+function namedOf(trial: Trial): Named {
+  return { slice: trial.slice, action: trial.action, number: trial.number };
+}
+
+function notKnown(trial: Trial, reason: string): Result {
+  return { ...namedOf(trial), outcome: "not known", reason };
+}
+
 function comparedResult(trial: Trial, ran: Ran): Result {
-  const named = { slice: trial.slice, action: trial.action, number: trial.number };
+  const named = namedOf(trial);
   switch (ran.kind) {
     case "unreadable":
-      return {
-        ...named,
-        outcome: "not known",
-        reason: "what the last call printed is not the run bay call --json prints",
-      };
+      return notKnown(trial, notKnownReasons.unreadable);
     case "not started":
-      return {
-        ...named,
-        outcome: "not tried",
-        reason: `the kernel did not start the call: ${JSON.stringify(ran.message)}`,
-      };
+      return notKnown(trial, notKnownReasons.notStarted);
     case "waited":
-      return {
-        ...named,
-        outcome: "not tried",
-        reason: `the call waits for ${awaitedWords(ran.reason)}, which nobody gives in a throwaway copy`,
-      };
+      return notKnown(trial, `the call waits for ${awaitedWords(ran.reason)}, which nobody gives in a throwaway copy`);
     case "schema refused":
       if (trial.expected.kind === "refusal") {
         return { ...named, outcome: "refused by its schema" };
@@ -286,20 +262,9 @@ function comparedResult(trial: Trial, ran: Ran): Result {
 }
 
 export function resultOf(trial: Trial, proved: Proved): Result {
-  if ("reason" in proved) {
-    return {
-      slice: trial.slice,
-      action: trial.action,
-      number: trial.number,
-      outcome: "not known",
-      reason: proved.reason,
-    };
-  }
-  const last = proved.printed.at(-1);
-  if (last === undefined || proved.printed.length !== trial.runs.length) {
-    return comparedResult(trial, { kind: "unreadable" });
-  }
-  return comparedResult(trial, ranOf(last.stdout));
+  return "notKnown" in proved
+    ? notKnown(trial, notKnownReasons.notMade)
+    : comparedResult(trial, ranOf(proved.printed.stdout));
 }
 
 export type SliceToTry = {

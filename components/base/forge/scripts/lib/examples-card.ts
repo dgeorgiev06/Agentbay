@@ -144,15 +144,22 @@ export function examplesLines(block: TriedBlock | undefined, provedBy: ComputedB
   return words.map((said) => computed(provedBy, said));
 }
 
+function countClause(count: number, examples: string, said: string): readonly string[] {
+  return count === 0 ? [] : [`${String(count)} of ${examples} ${said}`];
+}
+
 export function examplesClauses(block: TriedBlock | undefined, whose = ""): readonly string[] {
   if (block === undefined || block.setting !== "must" || !block.carried) {
     return [];
   }
   const examples = whose === "" ? "the design's examples" : `${whose}'s examples`;
-  const otherwise = countOf(block.results, "otherwise");
-  const unknown = countOf(block.results, "not known");
+  const { results } = block;
+  if (triedCount(results) === 0) {
+    return [`none of ${examples} was tried`];
+  }
+  const unknown = countOf(results, "not known");
   return [
-    ...(otherwise === 0 ? [] : [`${String(otherwise)} of ${examples} answered otherwise`]),
-    ...(unknown === 0 ? [] : [`${String(unknown)} of ${examples} ${unknown === 1 ? "is" : "are"} not known`]),
+    ...countClause(countOf(results, "otherwise"), examples, "answered otherwise"),
+    ...countClause(unknown, examples, unknown === 1 ? "is not known" : "are not known"),
   ];
 }

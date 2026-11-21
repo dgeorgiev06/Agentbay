@@ -16,9 +16,11 @@ const addExamples: readonly Json[] = [
 
 const countExamples: readonly Json[] = [{ earlier: [added("bo")], input: { name: "bo" }, answer: { count: 1 } }];
 
-export const addToTry: ToTry = { action: "tally.add", mode: "tally", examples: addExamples };
+export const addToTry: ToTry = { action: "counting.add", mode: "tally", examples: addExamples };
 
-export const countToTry: ToTry = { action: "tally.count", mode: "tally", examples: countExamples };
+export const countToTry: ToTry = { action: "counting.count", mode: "tally", examples: countExamples };
+
+export const inRounds = { built: ["counting.add"], room: 100, notBuilt: "which this slice does not build" };
 
 const nameRequest = {
   type: "object",
@@ -27,7 +29,7 @@ const nameRequest = {
   properties: { name: { type: "string", maxLength: 20 } },
 };
 
-export type TallyVariant = "as designed" | "counts once" | "refuses tersely";
+export type TallyVariant = "as designed" | "counts once" | "refuses tersely" | "broken manifest";
 
 function addScript(variant: TallyVariant): string {
   const refusal = variant === "refuses tersely" ? "Name missing." : emptyName;
@@ -93,7 +95,7 @@ function schema(value: { readonly [key: string]: Json }): string {
 export function tallyFiles(variant: TallyVariant): Readonly<Record<string, string>> {
   const folder = "components/modes/tally";
   return {
-    [`${folder}/mode.yaml`]: manifest,
+    [`${folder}/mode.yaml`]: variant === "broken manifest" ? `${manifest}builder-key: [\n` : manifest,
     [`${folder}/schemas/add-request.json`]: schema(nameRequest),
     [`${folder}/schemas/add-response.json`]: schema({
       type: "object",

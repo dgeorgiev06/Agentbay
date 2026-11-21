@@ -1153,16 +1153,13 @@ const cases: readonly Case[] = [
     },
   },
   {
-    name: "printed: passed when every run in a fresh copy of the head ended, handing back each run's exit code and what it printed, in order",
+    name: "printed: passed when every run in a fresh copy of the head ended, handing back the last run's exit code and what it printed",
     run: async (proof) => {
       const verdict = assertVerdict(await proof.proven("failed"), "printed-pass", {
         kind: "printed",
         verdict: "passed",
       });
-      assert.deepEqual(verdict.printed, [
-        { exitCode: 0, stdout: "5\n" },
-        { exitCode: 0, stdout: "Ada\n" },
-      ]);
+      assert.deepEqual(verdict.printed, { exitCode: 0, stdout: "Ada\n" });
     },
   },
   {

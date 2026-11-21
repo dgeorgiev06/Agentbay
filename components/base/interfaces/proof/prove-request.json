@@ -462,7 +462,7 @@
           "type": "object",
           "additionalProperties": false,
           "required": ["kind", "runs"],
-          "description": "What the runs print: the runs are made one after another in one fresh copy of the head, as real-thing makes them, and each run's exit code and what it printed are handed back for the caller to judge. Proof compares nothing. Passed when every run ended and what it printed was read whole; a run not known makes the item inconclusive.",
+          "description": "What the runs print: the runs are made one after another in one fresh copy of the head, as real-thing makes them, and the last run's exit code and what it printed are handed back for the caller to judge; the earlier runs only set up the state. Proof compares nothing. Passed when every run ended and the last printed at most 20,000 characters, read whole; a run not known makes the item inconclusive.",
           "properties": {
             "kind": {
               "const": "printed",

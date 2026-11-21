@@ -33,7 +33,7 @@ const verdicts = provedOf({
 
 const named = (number: number): { readonly slice: string; readonly action: string; readonly number: number } => ({
   slice: "TL1",
-  action: "tally.add",
+  action: "counting.add",
   number,
 });
 
@@ -55,10 +55,10 @@ const terse: Result = {
 
 const needsAdd: Result = {
   slice: "TL1",
-  action: "tally.count",
+  action: "counting.count",
   number: 1,
   outcome: "not tried",
-  reason: "it calls tally.add first, which this slice does not build",
+  reason: "it calls counting.add first, which this slice does not build",
 };
 
 function block(results: readonly Result[], setting: TriedBlock["setting"] = "must"): TriedBlock {
@@ -118,7 +118,7 @@ describe("the block the rounds' merge card draws for the design's examples", () 
     );
     assert.ok(
       wordsOf(drawnCard.card.lines).includes(
-        'tally.add example 2: the design answers {"name":"ann","count":2}; the built mode answered: ' +
+        'counting.add example 2: the design answers {"name":"ann","count":2}; the built mode answered: ' +
           JSON.stringify('{"name":"ann","count":1}'),
       ),
     );
@@ -126,10 +126,10 @@ describe("the block the rounds' merge card draws for the design's examples", () 
 
   test("a refusal with another sentence shows the design's sentence and the built mode's words as one quoted string, its quotes escaped and its new line shown as a space", () => {
     const words = blockWords(block([...asDesigned.slice(0, 2), terse, ...asDesigned.slice(3)]));
-    const line = words.find((said) => said.startsWith("tally.add example 3:")) ?? "";
+    const line = words.find((said) => said.startsWith("counting.add example 3:")) ?? "";
     assert.equal(
       line,
-      `tally.add example 3: the design refuses ${JSON.stringify(emptyName)}; the built mode refused: ` +
+      `counting.add example 3: the design refuses ${JSON.stringify(emptyName)}; the built mode refused: ` +
         JSON.stringify('Merge is offered: "every must item" passed. Trust it.'),
     );
     assert.ok(!words.some((said) => said.startsWith("Merge is offered")));
@@ -137,18 +137,43 @@ describe("the block the rounds' merge card draws for the design's examples", () 
 
   test("the built mode's words are cut at 120 characters, inside the quotes", () => {
     const long: Result = { ...countedOnce, built: { how: "answered", text: "word ".repeat(100) } };
-    const line = blockWords(block([long])).find((said) => said.startsWith("tally.add example 2:")) ?? "";
+    const line = blockWords(block([long])).find((said) => said.startsWith("counting.add example 2:")) ?? "";
     assert.ok(line.endsWith(`answered: "${"word ".repeat(24).slice(0, 120)}..."`), line);
   });
 
-  test("an example not tried yet is named with its reason and withholds nothing; with none tried the item says so", () => {
+  test("an example not tried yet is named with its reason; with none tried, must withholds merge and shown does not", () => {
     const words = blockWords(block([needsAdd]));
     assert.deepEqual(words, [
       "examples, must, none tried: The design's examples answer as designed.",
       "the design's examples: none tried; 1 not tried",
-      "not tried: tally.count example 1: it calls tally.add first, which this slice does not build",
+      "not tried: counting.count example 1: it calls counting.add first, which this slice does not build",
     ]);
-    assert.equal(card(block([needsAdd])).merge, true);
+    assert.equal(card(block([needsAdd])).card.withheld.merge, "None of the design's examples was tried.");
+    assert.equal(card(block([needsAdd], "shown")).merge, true);
+  });
+
+  test("one example not known makes the item not known, never passed, beside others as designed", () => {
+    const unknown: Result = { ...named(4), outcome: "not known", reason: "what the last call printed is not the run" };
+    const words = blockWords(block([...asDesigned.slice(0, 3), unknown]));
+    assert.equal(words[0], "examples, must, not known: The design's examples answer as designed.");
+  });
+
+  test("the built mode's words are kept from the card when the shown words quote a test, its case, new lines and spaces aside", () => {
+    const test = 'assert.equal(out, "A Sentence only the test\n  writer wrote down here");';
+    const built = { how: "answered", text: "a sentence ONLY the test writer   wrote" };
+    const quoting: Result = { ...countedOnce, built };
+    const [shown] = shownResults([quoting], [test], []);
+    assert.deepEqual(shown?.outcome === "otherwise" ? shown.built : undefined, {
+      how: "answered",
+      text: "kept from the card: it quotes a test",
+      kept: true,
+    });
+  });
+
+  test("a line separator or paragraph separator in the built mode's words is shown as a space", () => {
+    const separated: Result = { ...countedOnce, built: { how: "answered", text: "one\u2028two\u2029three" } };
+    const line = blockWords(block([separated])).find((said) => said.startsWith("counting.add example 2:")) ?? "";
+    assert.ok(line.endsWith('answered: "one two three"'), line);
   });
 
   test("a not-tried example is never counted as answered as designed", () => {
@@ -165,7 +190,7 @@ describe("the block the rounds' merge card draws for the design's examples", () 
     const unknown: Result = { ...named(1), outcome: "not known", reason: "Run 1 of 1 is not known." };
     const drawnCard = card(block([unknown]));
     assert.equal(drawnCard.card.withheld.merge, "1 of the design's examples is not known.");
-    assert.ok(wordsOf(drawnCard.card.lines).includes("not known: tally.add example 1: Run 1 of 1 is not known."));
+    assert.ok(wordsOf(drawnCard.card.lines).includes("not known: counting.add example 1: Run 1 of 1 is not known."));
   });
 
   test("shown: the same lines with the item a should, and merge is offered; off: one line, nothing tried", () => {
@@ -252,15 +277,15 @@ describe("the wave's merge card, with the examples tried on the combined head", 
   ];
 
   test("each slice's examples are planned under its own name, and an earlier call to an action another slice of the head builds is tried", () => {
-    const entries = waveTrials(slices, { built: ["tally.add", "tally.count"], room: 100 });
+    const entries = waveTrials(slices, { built: ["counting.add", "counting.count"], room: 100 });
     assert.deepEqual(
       entries.map((entry) => `${entry.slice} ${entry.action} ${String(entry.number)} ${entry.outcome}`),
       [
-        "TA tally.add 1 to try",
-        "TA tally.add 2 to try",
-        "TA tally.add 3 to try",
-        "TA tally.add 4 to try",
-        "TB tally.count 1 to try",
+        "TA counting.add 1 to try",
+        "TA counting.add 2 to try",
+        "TA counting.add 3 to try",
+        "TA counting.add 4 to try",
+        "TB counting.count 1 to try",
       ],
     );
     const leftOut = waveTrials([{ ...slices[0], inHead: false, slice: "TA", toTry: [addToTry] }], {
@@ -273,7 +298,7 @@ describe("the wave's merge card, with the examples tried on the combined head", 
   test("of two slices one answers otherwise: merge is withheld naming that slice, and the line is in that slice's block only", () => {
     const tb: Result = {
       slice: "TB",
-      action: "tally.count",
+      action: "counting.count",
       number: 1,
       outcome: "otherwise",
       designed: { how: "answers", text: '{"count":1}' },
@@ -296,7 +321,7 @@ describe("the wave's merge card, with the examples tried on the combined head", 
     assert.doesNotMatch(drawnCard.card.withheld.merge ?? "", /TA's examples/);
     const words = wordsOf(drawnCard.card.lines);
     const tbAt = words.findIndex((said) => said.startsWith("TB: The slice TB"));
-    const otherwise = words.findIndex((said) => said.startsWith("tally.count example 1: the design answers"));
+    const otherwise = words.findIndex((said) => said.startsWith("counting.count example 1: the design answers"));
     assert.ok(tbAt > 0 && otherwise > tbAt, words.join("\n"));
     const taBlock = words.slice(0, tbAt);
     assert.ok(taBlock.includes("examples, must, passed: The design's examples answer as designed."));
@@ -350,9 +375,9 @@ describe("the wave's merge card, with the examples tried on the combined head", 
       "    refusal by its exact sentence; the",
       "    earlier calls set up the state and are",
       "    not compared",
-      "  tally.count example 1: the design answers",
-      '    {"count":1}; the built mode answered:',
-      '    "{\\"count\\":0}"',
+      "  counting.count example 1: the design",
+      '    answers {"count":1}; the built mode',
+      '    answered: "{\\"count\\":0}"',
       "  practices: not judged, since the rounds",
       "    ended with no review",
       "  rounds: 1 of at most 3; the reviewer had",

@@ -1,21 +1,30 @@
 import type { Command, Request } from "../lib/request.ts";
 import type { ProofStep } from "../lib/step.ts";
-import { heldWith, unknown, type Parts, type Printed } from "../lib/verdicts.ts";
-import { runsInCopy, type RunsInCopy } from "./command-run.ts";
+import { heldWith, unknown, type Parts } from "../lib/verdicts.ts";
+import { runsInCopy, type CommandRun, type RunsInCopy } from "./command-run.ts";
 
-function printedOf(runs: RunsInCopy & { readonly copied: true }): Parts["parts"] {
-  const all = String(runs.runs.length);
-  const printed: Printed[] = [];
-  const reasons: string[] = [];
-  runs.runs.forEach((run, index) => {
-    if (run.ran === "ended") {
-      printed.push({ exitCode: run.exitCode, stdout: run.stdout });
-    } else {
-      reasons.push(`Run ${String(index + 1)} of ${all} is not known. ${run.reason}`);
-    }
-  });
-  const [first, ...rest] = reasons.map(unknown);
-  return first === undefined ? [heldWith(printed)] : [first, ...rest];
+export const mostPrinted = 20_000;
+
+function placeOf(index: number, all: number): string {
+  return `Run ${String(index + 1)} of ${String(all)}`;
+}
+
+function notKnownReasons(runs: readonly CommandRun[]): readonly string[] {
+  return runs.flatMap((run, index) =>
+    run.ran === "ended" ? [] : [`${placeOf(index, runs.length)} is not known. ${run.reason}`],
+  );
+}
+
+function lastParts(runs: readonly CommandRun[]): Parts["parts"] {
+  const last = runs.at(-1);
+  if (last?.ran !== "ended") {
+    return [unknown("No run was made.")];
+  }
+  if (Array.from(last.stdout).length > mostPrinted) {
+    const said = `${placeOf(runs.length - 1, runs.length)} printed more than the ${String(mostPrinted)} characters`;
+    return [unknown(`${said} proof hands back for the kind printed.`)];
+  }
+  return [heldWith({ exitCode: last.exitCode, stdout: last.stdout })];
 }
 
 export function printedParts(runs: RunsInCopy): Parts {
@@ -23,10 +32,9 @@ export function printedParts(runs: RunsInCopy): Parts {
     return { parts: [unknown(runs.reason)], whenPassed: "" };
   }
   const all = String(runs.runs.length);
-  return {
-    parts: printedOf(runs),
-    whenPassed: `Every run ended and what it printed was read whole: ${all} of ${all}.`,
-  };
+  const [first, ...rest] = notKnownReasons(runs.runs).map(unknown);
+  const parts: Parts["parts"] = first === undefined ? lastParts(runs.runs) : [first, ...rest];
+  return { parts, whenPassed: `Every run ended and the last printed what is handed back: ${all} of ${all}.` };
 }
 
 export async function provePrinted(

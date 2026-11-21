@@ -24,13 +24,11 @@ import {
   textAt,
   type Handed,
 } from "./kit-copy.ts";
-import { addToTry, countToTry, emptyName, tallyFiles, twentyA, type TallyVariant } from "./tally-design.ts";
+import { addToTry, countToTry, emptyName, inRounds, tallyFiles, twentyA, type TallyVariant } from "./tally-design.ts";
 
 const kit = fileURLToPath(new URL("../../../..", import.meta.url));
 
-const variants: readonly TallyVariant[] = ["as designed", "counts once", "refuses tersely"];
-
-const inRounds = { built: ["tally.add"], room: 100, notBuilt: "which this slice does not build" };
+const variants: readonly TallyVariant[] = ["as designed", "counts once", "refuses tersely", "broken manifest"];
 
 let template: string;
 
@@ -66,9 +64,10 @@ function bayIn(folder: string, words: readonly string[]): { readonly exitCode: n
 
 type Printed = { readonly exitCode: number; readonly stdout: string };
 
-async function printedOf(head: string, trial: Trial): Promise<readonly Printed[]> {
+async function printedOf(head: string, trial: Trial): Promise<Printed> {
   const folder = await freshCopy(head);
-  return trial.runs.map((words) => bayIn(folder, words));
+  const printed = trial.runs.map((words) => bayIn(folder, words));
+  return printed.at(-1) ?? assert.fail("a trial makes at least one call");
 }
 
 async function triedInCopies(head: string, entries: readonly Entry[]): Promise<readonly Result[]> {
@@ -110,24 +109,24 @@ describe("the design's examples, run by bay call against a made-up mode, each in
   test("a mode that answers as designed: every example of add, the long text spelled out, answers as the design says", async () => {
     const results = await triedInCopies(headOf("as designed"), addEntries());
     assert.deepEqual(outcomes(results), [
-      "tally.add 1: as designed",
-      "tally.add 2: as designed",
-      "tally.add 3: as designed",
-      "tally.add 4: as designed",
+      "counting.add 1: as designed",
+      "counting.add 2: as designed",
+      "counting.add 3: as designed",
+      "counting.add 4: as designed",
     ]);
   });
 
   test("a mode whose count does not rise answers example 2 otherwise, after its earlier call, and the others as designed", async () => {
     const results = await triedInCopies(headOf("counts once"), addEntries());
     assert.deepEqual(outcomes(results), [
-      "tally.add 1: as designed",
-      "tally.add 2: otherwise",
-      "tally.add 3: as designed",
-      "tally.add 4: as designed",
+      "counting.add 1: as designed",
+      "counting.add 2: otherwise",
+      "counting.add 3: as designed",
+      "counting.add 4: as designed",
     ]);
     assert.deepEqual(results[1], {
       slice: "TL1",
-      action: "tally.add",
+      action: "counting.add",
       number: 2,
       outcome: "otherwise",
       designed: { how: "answers", text: '{"name":"ann","count":2}' },
@@ -139,7 +138,7 @@ describe("the design's examples, run by bay call against a made-up mode, each in
     const results = await triedInCopies(headOf("refuses tersely"), addEntries());
     assert.deepEqual(results[2], {
       slice: "TL1",
-      action: "tally.add",
+      action: "counting.add",
       number: 3,
       outcome: "otherwise",
       designed: { how: "refuses", text: emptyName },
@@ -147,11 +146,22 @@ describe("the design's examples, run by bay call against a made-up mode, each in
     });
   });
 
+  test("a mode whose manifest the kernel cannot load leaves every example not known, which withholds merge under must", async () => {
+    const results = await triedInCopies(headOf("broken manifest"), addEntries());
+    assert.deepEqual(outcomes(results), [
+      "counting.add 1: not known",
+      "counting.add 2: not known",
+      "counting.add 3: not known",
+      "counting.add 4: not known",
+    ]);
+    assert.ok(results.every((result) => !JSON.stringify(result).includes("builder-key")));
+  });
+
   test("an example of count that needs add, which the slice does not build, is not tried yet and runs nothing", () => {
-    const entries = plannedTrials("TL2", [countToTry], { ...inRounds, built: ["tally.count"] });
+    const entries = plannedTrials("TL2", [countToTry], { ...inRounds, built: ["counting.count"] });
     assert.deepEqual(trialsIn(entries), []);
     assert.deepEqual(outcomes(entries.flatMap((entry) => (entry.outcome === "to try" ? [] : [entry]))), [
-      "tally.count 1: not tried",
+      "counting.count 1: not tried",
     ]);
   });
 

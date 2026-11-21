@@ -253,13 +253,17 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["skill", "tier"],
+          "required": ["skill"],
           "properties": {
             "skill": { "description": "The skill folder, which holds SKILL.md.", "$ref": "#/$defs/relativePath" },
             "tier": {
-              "description": "How capable a model the skill needs.",
+              "description": "How capable a model the skill needs. A step names a tier or a role, not both.",
               "type": "string",
               "enum": ["fast", "balanced", "deep"]
+            },
+            "role": {
+              "description": "The role whose agent does the skill, one of the kit's roles in bay/roles.ts. The step runs at the tier that list gives the role. A step names a tier or a role, not both.",
+              "type": "string"
             },
             "checks": {
               "description": "Scripts that check the output; a failure sends the skill back, three rounds at most.",

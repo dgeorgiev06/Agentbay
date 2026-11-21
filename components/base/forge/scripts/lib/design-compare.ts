@@ -117,7 +117,7 @@ function appliedDiffers(mine: Placed, theirs: Placed): readonly string[] {
   const shape = (action: Placed): string => canonicalJson([action.rule ?? null, action.reads, action.writes]);
   return shape(mine) === shape(theirs)
     ? []
-    : [`${actionName(mine)}: the rule it applies, or what it reads or writes, differs`];
+    : [`${mine.name}: the rule it applies, or what it reads or writes, differs`];
 }
 
 function actionsDiffer({ first, second }: Sides): readonly string[] {

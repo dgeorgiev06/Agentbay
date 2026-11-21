@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
+import { answerChanges } from "../scripts/lib/design-compare.ts";
 import { exampleChecks, examplesSpelled } from "../scripts/lib/design-examples.ts";
 import { designOf } from "../scripts/lib/design-form.ts";
 import { designProblems } from "../scripts/lib/design-rules.ts";
@@ -173,6 +174,28 @@ describe("a design states its rules, and the check holds each action to the rule
     const outside = ruleChanged(answeredTodo, "mark-done", { gives: [todos, answer] });
     assert.deepEqual(problemsOf(outside), [
       `The schema of the value "answer" of the rule "mark-done" refers to "../todo.ts"; a rule's schema refers only to a part of itself (#/...) or to a schema file of an interface its module implements, such as schemas/todo/add-request.json.`,
+    ]);
+  });
+});
+
+describe("what the answer changed, by script, compares the rules as it compares the rest", () => {
+  test("the live run's answer, the add rule now giving the next id, is a change to what the rule gives", () => {
+    assert.deepEqual(answerChanges(nextIdNotGiven, answeredTodo, conditions), ["rule add: what it gives differs"]);
+    assert.deepEqual(answerChanges(answeredTodo, answeredTodo, conditions), []);
+  });
+
+  test("a rule added or removed, what it takes or decides, and the rule an action applies or what it reads", () => {
+    const takes = ruleChanged(answeredTodo, "mark-done", {
+      takes: valuesOf(answeredTodo, "mark-done", "takes").slice(0, 1),
+      decides: "Whether a todo may be marked done.",
+    });
+    const readsMore = actionChanged(takes, "done", { reads: ["todos", "todo-ids"] });
+    const removed = withoutRules(readsMore, ["remove-todo"]);
+    assert.deepEqual(answerChanges(answeredTodo, removed, conditions), [
+      "rule remove-todo: only in the first design",
+      "rule mark-done: what it takes differs",
+      "rule mark-done: what it decides is worded differently",
+      "todo.done: the rule it applies, or what it reads or writes, differs",
     ]);
   });
 });

@@ -51,8 +51,8 @@ design card and written by neither the test writer nor the builder: an anchor ou
    and the card says so in one line.
 7. **The card**, all script lines, one block on the rounds' merge card and in each slice's block on the wave's:
    the item line; how many examples were tried in throwaway copies and how many answered as the design says;
-   how each is compared; each that did not, as `<interface>.<action> example <n>: the design says <answer>; the
-   built mode answered "<its words>"`; each not tried and each not known with its reason. The built mode's words are
+   how each is compared; each that did not, as `<interface>.<action> example <n>: the design answers <answer>`
+   (or `refuses "<sentence>"`) `; the built mode answered: "<its words>"`; each not tried and each not known with its reason. The built mode's words are
    shown as data: written as a JSON string, so a quote inside cannot close it, cut at 120 characters, and kept from
    the card when they share a run of 20 characters with a kept test that the design's examples do not hold. A slice
    whose request carries no examples gets one line saying so, and nothing is withheld.

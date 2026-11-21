@@ -108,7 +108,7 @@ test("given a wave's slices built and each passing its own proof, the combined h
   assert.ok(printed.includes("on forge/wave-1, with CA, CB merged in plan order"), printed);
   assert.ok(rows.includes("judged   DOD-CA-1 held by 1 case"), printed);
   assert.ok(rows.includes("judged   DOD-CB-2 held by 1 case"), printed);
-  assert.ok(rows.includes("checked: 0 ran, 32 computed, 6 judged"), printed);
+  assert.ok(rows.includes("checked: 0 ran, 34 computed, 6 judged"), printed);
   assert.equal((await askedOf(root, "wave-1")).length, 1);
   assert.deepEqual(kindsAsked((await askedOf(root, "CA")).slice(-1)), ["checks"]);
   const kept = runOf(await decided(root, card, { step: "card", choice: "keep" }));

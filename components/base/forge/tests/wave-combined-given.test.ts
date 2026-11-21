@@ -21,7 +21,17 @@ import {
   worktrees,
 } from "./kit-copy.ts";
 import { givenIn, partStarted, withCommits } from "./part-run.ts";
-import { checksFailed, checksPassed, codeOf, ownPassed, planOnInto, provedAs, testPath } from "./wave-run.ts";
+import { playedSideBySide } from "./side-by-side-play.ts";
+import {
+  checksFailed,
+  checksPassed,
+  codeOf,
+  ownPassed,
+  planOnInto,
+  provedAs,
+  testPath,
+  wavePlayers,
+} from "./wave-run.ts";
 
 type Made = {
   readonly builder: string;
@@ -116,4 +126,82 @@ test("given a wave's slices built and each passing its own proof, the combined h
   assert.deepEqual(fieldsOf(fieldsOf(kept).output ?? null).kept, stay);
   assert.deepEqual(branches(root), stay);
   assert.deepEqual(worktrees(root), []);
+});
+
+function done(output: Json): string {
+  return `${JSON.stringify({ ok: true, run: { id: "r1", status: "done", output } })}\n`;
+}
+
+function printedVerdict(item: string, output: Json): Json {
+  const printed = { exitCode: 0, stdout: done(output) };
+  return { item, kind: "printed", verdict: "passed", detail: "Ran.", printed };
+}
+
+const examplesOf: Readonly<Record<string, Json>> = {
+  CA: [
+    {
+      action: "counting.add",
+      mode: "tally",
+      examples: [{ input: { name: "ann" }, answer: { name: "ann", count: 1 } }],
+    },
+  ],
+  CB: [
+    {
+      action: "counting.count",
+      mode: "tally",
+      examples: [{ earlier: [{ action: "add", input: { name: "bo" } }], input: { name: "bo" }, answer: { count: 1 } }],
+    },
+  ],
+};
+
+function withExamples(request: Json): Json {
+  const fields = fieldsOf(request);
+  const name = textAt(fieldsOf(fields.planned ?? null).slice ?? null, "name");
+  return { ...fields, examples: examplesOf[name] ?? [] };
+}
+
+async function provedWithExamples(root: string): Promise<void> {
+  await provedAs(root, "CA", ownPassed("CA"));
+  await provedAs(root, "CB", ownPassed("CB"));
+  const tried = [printedVerdict("tried-1", { name: "ann", count: 1 }), printedVerdict("tried-2", { count: 0 })];
+  const checks = checksPassed("checks");
+  await provedAs(root, "wave-1.checks-printed", { ...checks, verdicts: [...checks.verdicts, ...tried] });
+}
+
+async function calledModes(root: string): Promise<readonly (readonly Json[])[]> {
+  const asked = fieldsOf((await askedOf(root, "wave-1"))[0] ?? null);
+  const done = listOf(fieldsOf(asked.slice ?? null).done);
+  return done.map((item) =>
+    listOf(fieldsOf(fieldsOf(item).proof ?? null).runs).map((run) => listOf(fieldsOf(run).bay)[1] ?? null),
+  );
+}
+
+test("given a wave whose slice requests carry the design's examples, settle and combine hand them on, the combined head tries them, and the card withholds merge for the slice that answered otherwise", async () => {
+  const root = await project(template);
+  await planOnInto(root, ["CA", "CB"]);
+  const base = rev(root, into);
+  await provedWithExamples(root);
+  const captured = fieldsOf(await givenIn("given-wave-ca-cb.json"));
+  const commits = capturedAs(captured.commits ?? null, { integration: base });
+  const given = fieldsOf(withCommits(captured.given ?? null, commits));
+  const wave = fieldsOf(given.wave ?? null);
+  const requests = listOf(wave.requests).map(withExamples);
+  const part = {
+    given: { wave: { ...wave, requests, builtBefore: [] }, start: given.start ?? null, begin: given.begin ?? null },
+  };
+  const runId = await partStarted(root, "forge:workflows/wave.yaml", { trigger: { plan: "x", wave: 1 }, part });
+  await playedSideBySide(root, runId, wavePlayers(root));
+  const card = waitingOf(await shown(root, runId), "card");
+  assert.equal(textAt(listOf(card.choices)[0] ?? null, "reason"), "1 of CB's examples answered otherwise.");
+  assert.deepEqual(await calledModes(root), [[], ["tally.add"], ["tally.add", "tally.count"]]);
+  const rows = await printedCard(root, card.id);
+  const printed = flowing(rows);
+  const cbAt = printed.indexOf("CB: The cb mode counts");
+  const caPassed = printed.indexOf("examples, must, passed: The design's examples answer as designed.");
+  const cbFailed = printed.indexOf("examples, must, failed: The design's examples answer as designed.");
+  assert.ok(caPassed > 0 && caPassed < cbAt && cbFailed > cbAt, printed);
+  assert.ok(
+    printed.includes('counting.count example 1: the design answers {"count":1}; the built mode answered:'),
+    printed,
+  );
 });

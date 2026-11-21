@@ -1,5 +1,5 @@
 job: todo
-version: 1
+version: 2
 title: A todo list kept by agentbay
 for: The owner, who keeps short tasks beside his work.
 asked:
@@ -52,6 +52,27 @@ outcomes:
         when: the person adds a text of 501 characters
         then: it is refused with a sentence that contains "at most 500"
         after: the open list shows only "buy milk"
+      - id: O1-C8
+        path: works
+        given: no todos
+        when: the person adds "  buy milk  ", with two spaces before and two after, then lists the open todos
+        then: 1 todo is listed, with the text "buy milk", 8 characters, no spaces around it
+      - id: O1-C9
+        path: works
+        given: no todos
+        when: the person adds a text of exactly 500 thumbs-up emoji, each one character as a person sees it
+        then: the open list shows that text whole, all 500 emoji
+      - id: O1-C10
+        path: refused
+        given: the todo "buy milk" was added
+        when: the person adds a todo whose text is one tab and one line break and nothing else
+        then: it is refused with a sentence that contains "text is empty"
+        after: the open list shows only "buy milk"
+      - id: O1-C11
+        path: works
+        given: no todos
+        when: the person adds a text of 500 letters with one space before it and one after, 502 characters as typed
+        then: the open list shows the 500 letters, without the spaces
   - id: O2
     says: A person marks a todo done, or removes it.
     from: [asked 1]
@@ -96,6 +117,7 @@ leftOut:
   - Reminders.
   - Due dates and overdue todos, asked for next, once add, list, done and remove work.
   - Sharing a list with another person or project.
+  - Two calls at the same moment, such as two adds at once.
 open: []
 decided:
   - question: What happens when a todo already done is marked done again?
@@ -113,6 +135,21 @@ decided:
     by: owner
     on: 2026-11-18
     run: none, written by hand from the PM mode design
+  - question: How is a character of a todo's text counted?
+    answer: As a person sees them, so an emoji is one character
+    by: owner
+    on: 2026-11-21
+    run: none, asked in chat after the third design run
+  - question: What counts as a blank text, and is a text trimmed before it is kept?
+    answer: Any whitespace alone is blank; the text is trimmed, and the 500 limit is counted after trimming
+    by: owner
+    on: 2026-11-21
+    run: none, asked in chat after the third design run
+  - question: What happens when two adds run at the same moment?
+    answer: Left out on purpose
+    by: owner
+    on: 2026-11-21
+    run: none, asked in chat after the third design run
 signed:
   by: owner
   on: 2026-11-18
@@ -121,5 +158,10 @@ changes:
   - version: 1
     on: 2026-11-18
     added: [O1-C1, O1-C2, O1-C3, O1-C4, O1-C5, O1-C6, O1-C7, O2-C1, O2-C2, O2-C3, O2-C4, O2-C5, O2-C6]
+    changed: []
+    removed: []
+  - version: 2
+    on: 2026-11-21
+    added: [O1-C8, O1-C9, O1-C10, O1-C11]
     changed: []
     removed: []

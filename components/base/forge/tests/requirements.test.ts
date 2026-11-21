@@ -4,12 +4,11 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
 import { openModeProject, type ModeProject } from "../../../../tests/test-toolbox.ts";
+import { todoVersionOne } from "./todo-plan.ts";
 
 type Replacement = readonly [string | RegExp, string];
 
 const todoFile = "docs/requirements/todo.yaml";
-
-const kitTodo = join(import.meta.dirname, "..", "..", "..", "..", todoFile);
 
 const thenOfListingNone = "        then: 0 todos are listed\n";
 
@@ -27,7 +26,7 @@ let project: ModeProject;
 let todo: string;
 
 before(async () => {
-  todo = await readFile(kitTodo, "utf8");
+  todo = await readFile(todoVersionOne, "utf8");
   const config = { modes: ["forge"], bindings: { toolchain: "typescript" }, adapter: "claude-code" };
   project = await openModeProject(config);
 });

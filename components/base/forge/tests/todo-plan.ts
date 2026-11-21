@@ -8,6 +8,8 @@ import { todoDesign } from "./todo-design.ts";
 
 export const requirementsFile = "docs/requirements/todo.yaml";
 
+export const todoVersionOne = join(import.meta.dirname, "..", "..", "..", "..", "tests", "fixtures", "todo-v1.yaml");
+
 export const designFile = "docs/designs/todo/design.yaml";
 
 const schemas = "docs/designs/todo/schemas/todo";

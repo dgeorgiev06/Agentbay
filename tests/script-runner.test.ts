@@ -8,6 +8,7 @@ import { noInterfaceSchemas } from "./broker-fixture.ts";
 import type {
   ActionCaller,
   Json,
+  RandomDrawer,
   RunEvent,
   ScriptRequest,
   ScriptRunner,
@@ -49,6 +50,7 @@ type Run = {
   readonly outcome: StepOutcome;
   readonly events: ReturnType<typeof recordingSink>;
   readonly calls: readonly (readonly [string, Json])[];
+  readonly draws: readonly number[];
 };
 
 type RunOptions = {
@@ -57,6 +59,8 @@ type RunOptions = {
   readonly timeLimit?: number;
   readonly timeLimitSetBy?: StepTimeLimit["timeLimitSetBy"];
   readonly call?: ActionCaller;
+  readonly random?: RandomDrawer;
+  readonly startedAt?: Date;
   readonly outputBytes?: number;
   readonly script?: string;
   readonly caller?: string;
@@ -117,6 +121,7 @@ function runnerFor(root: string, options: RunOptions, events: RecordingSink): Sc
 async function runScript(root: string, options: RunOptions): Promise<Run> {
   const events = options.events ?? recordingSink();
   const calls: (readonly [string, Json])[] = [];
+  const draws: number[] = [];
   const runner = runnerFor(root, options, events);
   const request: ScriptRequest = {
     place,
@@ -133,11 +138,18 @@ async function runScript(root: string, options: RunOptions): Promise<Run> {
         calls.push([reference, input]);
         return Promise.resolve({ status: "done", output: { called: reference }, spent: noSpend });
       }),
+    random:
+      options.random ??
+      ((bytes) => {
+        draws.push(bytes);
+        return Promise.resolve({ status: "done", value: "ab".repeat(bytes) });
+      }),
+    startedAt: options.startedAt ?? new Date("2026-11-14T09:00:00.000Z"),
     ...(options.caller === undefined ? {} : { caller: options.caller }),
     ...(options.skillInput === undefined ? {} : { skillInput: options.skillInput }),
   };
   const outcome = await runner.run(request);
-  return { outcome, events, calls };
+  return { outcome, events, calls, draws };
 }
 
 const noSpend = { items: 0, usd: 0, tokens: 0, minutes: 0 };
@@ -1203,15 +1215,49 @@ test("a script sees the caller and the skill input the engine gives it, and none
   });
 });
 
-test("context.now() is the kernel clock's time when the step started, so a fake clock controls it", async () => {
+test("context.now() is the time the kernel gives as the step's start, whatever the runner's clock says", async () => {
   await withProject(async (root) => {
     const clock = fakeClock(new Date("2026-11-30T23:59:59.000Z"));
+    const startedAt = new Date("2026-11-14T09:00:00.000Z");
     const body = "  return { now: context.now().toISOString(), again: context.now().toISOString() };";
-    const before = await attempt(root, body, { clock });
-    assert.deepEqual(outputOf(before), { now: "2026-11-30T23:59:59.000Z", again: "2026-11-30T23:59:59.000Z" });
-    clock.advance(1000);
-    const after = await attempt(root, body, { clock });
-    assert.equal(fieldOf(outputOf(after), "now"), "2026-12-01T00:00:00.000Z");
+    const run = await attempt(root, body, { clock, startedAt });
+    assert.deepEqual(outputOf(run), { now: "2026-11-14T09:00:00.000Z", again: "2026-11-14T09:00:00.000Z" });
+  });
+});
+
+test("context.random asks the kernel for each value, and a size outside 1 to 64 bytes is refused", async () => {
+  await withProject(async (root) => {
+    const body = [
+      "  const shown = (answer) => (answer.ok ? answer.value : answer.message);",
+      "  const given = await context.random(16);",
+      "  const most = await context.random(64);",
+      "  const big = await context.random(65);",
+      "  const none = await context.random(0);",
+      "  const half = await context.random(1.5);",
+      "  return { given: shown(given), most: shown(most).length, big: shown(big), none: shown(none), half: shown(half) };",
+    ].join("\n");
+    const run = await attempt(root, body);
+    const sentence = (asked: string): string =>
+      `The step look.0 asked for ${asked} random bytes in one value, but a value is a whole number of 1 to 64 bytes. ` +
+      "Ask for at most 64, and ask again for more.";
+    assert.deepEqual(outputOf(run), {
+      given: "ab".repeat(16),
+      most: 128,
+      big: sentence("65"),
+      none: sentence("0"),
+      half: sentence("1.5"),
+    });
+    assert.deepEqual(run.draws, [16, 64]);
+    assert.equal(run.events.events.filter((event) => event.kind === "refused").length, 3);
+  });
+});
+
+test("a value the kernel cannot give reaches the script as a failed answer with the kernel's sentence", async () => {
+  await withProject(async (root) => {
+    const random: RandomDrawer = () => Promise.resolve({ status: "failed", reason: "Step 0 has drawn enough." });
+    const body = "  const drawn = await context.random(4);\n  return drawn.ok ? drawn.value : [drawn.kind, drawn.message];";
+    const run = await attempt(root, body, { random });
+    assert.deepEqual(outputOf(run), ["failed", "Step 0 has drawn enough."]);
   });
 });
 

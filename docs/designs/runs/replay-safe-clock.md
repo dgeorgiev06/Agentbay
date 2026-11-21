@@ -21,18 +21,18 @@ around that (plan 0024, "After LK1").
 
 ## What is recorded, and where
 
-Both values are kept in the script step's own detail, beside `script`:
+Both values are kept with the script step's own record:
 
-- `clock`: the time the step first started, written with the record when it is created. `context.now()` returns
-  it on every attempt of that record. It does not move within a step, as today, and as Codemod's clock, which
-  moves only when a step finishes.
-- `drawn`: the values `context.random(bytes)` gave, in the order asked, each as lowercase hex. The kernel draws a
-  fresh value with `node:crypto`, writes the detail with the value appended, and only then answers the script.
-  A value the script has seen is therefore always in the record.
+- The time: the record's `startedAt`, written when the record is created and never changed by an attempt.
+  `context.now()` returns it on every attempt of that record. It does not move within a step, as today, and as
+  Codemod's clock, which moves only when a step finishes. Nothing new is stored for it.
+- `drawn`, a new optional field of a script's detail beside `script`: the values `context.random(bytes)` gave, in
+  the order asked, each as lowercase hex. The kernel draws a fresh value with `node:crypto`, writes the detail
+  with the value appended, and only then answers the script. A value the script has seen is therefore always in
+  the record. A step that draws nothing stores the same detail as before.
 
-Nothing new is stored elsewhere, so no migration is needed: a detail is JSON and both fields are optional when
-read. A record written before KW3 has no `clock`; its next attempt records the time it starts. Under a call kept
-packed (`calledOutputs: kept-packed`) the detail is packed with the record, as its input and output are.
+No migration is needed: a detail is JSON and `drawn` is optional when read. Under a call kept packed
+(`calledOutputs: kept-packed`) the detail is packed with the record, as its input and output are.
 
 ## Replay or a fresh value
 
@@ -57,8 +57,9 @@ The values belong to one record, so the rule is the rule for finished calls: sam
 
 ## Bounds
 
-- One value is 1 to 64 bytes. Another size is refused before anything is drawn: "The step asked for 100 random
-  bytes in one value, but a value is 1 to 64 bytes. Change: ask for at most 64, and ask again for more."
+- One value is a whole number of 1 to 64 bytes. Another size is refused by the broker's rule before the kernel
+  is asked: "The step <key> asked for 100 random bytes in one value, but a value is a whole number of 1 to 64
+  bytes. Ask for at most 64, and ask again for more."
 - One step records at most 64 values, so a detail grows by at most about 64 × 130 characters. The 65th call fails:
   "Step <key> has drawn 64 random values, the most one step records."
 

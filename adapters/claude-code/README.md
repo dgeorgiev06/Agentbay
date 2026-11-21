@@ -19,7 +19,7 @@ All paths are in the project. Every effect goes through the file port of the req
 
 ## Tiers
 
-A skill step names a tier: `fast`, `balanced` or `deep`. The config's `tiers` may give each tier a model and an effort:
+A skill step names a tier, `fast`, `balanced` or `deep`, or a role, which gives it the role's tier in `bay/roles.ts`; the adapter is handed only the tier. The config's `tiers` may give each tier a model and an effort:
 
 ```yaml
 tiers:

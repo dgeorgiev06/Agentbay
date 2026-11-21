@@ -160,6 +160,21 @@ test("the README names the kit's roles, every one and no other, in the kernel's 
   assert.deepEqual(listed.split(/, | and /), [...roles]);
 });
 
+test("ADR 29 lists each of the kit's roles once, under the tier the kernel gives it", async () => {
+  const adr = (await readFile(join(kit, "docs/adr/0029-roles.md"), "utf8")).replace(/\s+/g, " ");
+  const said = /\*\*The builder runs at balanced\.\*\* ([^;]+) are balanced; ([^.]+) are deep\./.exec(adr);
+  const listed = (words: string | undefined): readonly string[] => (words ?? "").toLowerCase().split(/, | and /);
+  assert.deepEqual(
+    { balanced: listed(said?.[1]), deep: listed(said?.[2]) },
+    {
+      balanced: roles.filter((role) => tierOfRole(role) === "balanced"),
+      deep: roles.filter((role) => tierOfRole(role) === "deep"),
+    },
+    "ADR 29 is a dated record of the roles decided on 21 November 2026: when bay/roles.ts no longer agrees with it, " +
+      "write the later change of roles as a new ADR, and do not edit ADR 29.",
+  );
+});
+
 function listingNotes(step: unknown, record: Readonly<Record<string, string>> = {}): Readonly<Record<string, string>> {
   const add = { ...notesMode.actions.add, run: [step, { call: "items-store.put" }] };
   const resources = { commands: { probe: { run: "node --version", effects: ["read", "write"] } } };

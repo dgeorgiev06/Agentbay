@@ -6,10 +6,11 @@ import { parse } from "yaml";
 import type { Tier } from "../bay/contracts.ts";
 import { isRecord } from "../bay/json.ts";
 import { layoutOf } from "../bay/layout.ts";
-import { tierOfRole, type Role } from "../bay/roles.ts";
+import { roleNamed, tierOfRole, type Role } from "../bay/roles.ts";
 import { kit } from "./project-fixture.ts";
 import { built, kitFiles, type Built } from "./roles-fixture.ts";
 import { toolsFor } from "../adapters/claude-code/agent-file.ts";
+import { pathCard } from "../components/base/forge/scripts/lib/path-card.ts";
 
 type ForgeStep = {
   readonly skill: string;
@@ -58,9 +59,9 @@ function agentOf(skill: string): string {
   return `agentbay-forge-${skill.replace("skills/", "")}`;
 }
 
-async function builtNowAndBefore(): Promise<{ readonly now: Built; readonly before: Built }> {
+async function builtKit(rewrite?: typeof stepBefore): Promise<Built> {
   const layout = layoutOf({ kit, project: kit });
-  return { now: await built(kitFiles(layout), layout), before: await built(kitFiles(layout, stepBefore), layout) };
+  return built(kitFiles(layout, rewrite), layout);
 }
 
 function differingLines(now: string, before: string): readonly string[] {
@@ -97,7 +98,8 @@ test("every forge step runs at the tier it ran at before, but the one-slice buil
 });
 
 test("bay build writes the twelve agent files and steps.json as before, but the build agent's model", async () => {
-  const { now, before } = await builtNowAndBefore();
+  const now = await builtKit();
+  const before = await builtKit(stepBefore);
   assert.equal(now.agents.length, 12);
   assert.deepEqual(Object.keys(now.files), Object.keys(before.files));
   const changedFile = `.claude/agents/${changedAgent}.md`;
@@ -117,7 +119,7 @@ test("bay build writes the twelve agent files and steps.json as before, but the 
 });
 
 test("each forge agent has the tools it had before: read and submit, and Write and Edit for the two builds", async () => {
-  const { now } = await builtNowAndBefore();
+  const now = await builtKit();
   const toolsBySkill = forgeSteps.map((step) => {
     const agent = now.agents.find((candidate) => candidate.agent === agentOf(step.skill));
     assert.ok(agent !== undefined, step.skill);
@@ -127,4 +129,41 @@ test("each forge agent has the tools it had before: read and submit, and Write a
     toolsBySkill,
     forgeSteps.map((step) => [step.skill, step.writes ? [...readTools, "Write", "Edit"] : readTools]),
   );
+});
+
+test("the test writer and the builder are different roles: write-tests is never a builder, and no build or declare is a test writer", async () => {
+  const roleOf = new Map(
+    (await skillStepsOf("components/base/forge/mode.yaml")).map((step) => [step.skill, step.role]),
+  );
+  assert.equal(roleOf.get("skills/write-tests"), "test writer");
+  for (const skill of ["skills/declare", "skills/build", "skills/build-without-tests"]) {
+    assert.equal(roleOf.get(skill), "builder", skill);
+  }
+});
+
+test("forge's README names each skill with the role its step names and the tier the kit gives that role", async () => {
+  const readme = (await readFile(join(kit, "components/base/forge/README.md"), "utf8")).replace(/\s+/g, " ");
+  const said = [...readme.matchAll(/skill `([a-z-]+)` \(the ([a-z ]+), tier ([a-z]+)/gi)].map(
+    ([, skill = "", role = "", tier = ""]) => `skills/${skill}: the ${role}, tier ${tier}`,
+  );
+  const steps = await skillStepsOf("components/base/forge/mode.yaml");
+  const expected = steps.map((step) => {
+    const role = roleNamed(typeof step.role === "string" ? step.role : undefined);
+    assert.ok(role !== undefined, String(step.skill));
+    return `${String(step.skill)}: the ${role}, tier ${tierOfRole(role)}`;
+  });
+  assert.deepEqual([...new Set(said)].sort(), [...expected].sort());
+});
+
+test("the design's first card counts its calls at the tier of the designer, which is the challenger's too", () => {
+  const requirements = { job: "todo", version: 1, signedBy: "owner", outcomes: [], leftOut: 0 };
+  const counted = JSON.stringify(pathCard("docs/requirements/todo.yaml", requirements).lines);
+  const tiersSaid = [...counted.matchAll(/calls at tier ([a-z]+)/g)].map(([, tier]) => tier);
+  assert.equal(
+    tierOfRole("challenger"),
+    tierOfRole("designer"),
+    "The design's first card counts the designer's and the challenger's calls as calls at one tier; " +
+      "now that the two roles run at different tiers, reword the card in components/base/forge/scripts/lib/path-card.ts.",
+  );
+  assert.deepEqual(tiersSaid, [tierOfRole("designer"), tierOfRole("designer")]);
 });

@@ -1,6 +1,6 @@
 # ADR 29: a skill step names its role, a name the kit owns that gives it a tier
 
-Status: accepted, 21 November 2026. Decided by the owner, on the design `docs/designs/roles/design.md`. Questions 4, 5 and 6 of that design are open. Builds on ADR 24 item 8.
+Status: accepted, 21 November 2026. Decided by the owner, on the design `docs/designs/roles/design.md`. Questions 4, 5 and 6 of that design are open. Amends ADR 24 item 8: a skill step names a tier or a role that gives one.
 
 ## Context
 

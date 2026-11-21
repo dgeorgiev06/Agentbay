@@ -18,9 +18,9 @@ export type Built = {
   readonly files: Readonly<Record<string, string>>;
 };
 
-export type StepRewrite = (step: Readonly<Record<string, unknown>>) => unknown;
+type StepRewrite = (step: Readonly<Record<string, unknown>>) => unknown;
 
-export function manifestRewritten(text: string, rewrite: StepRewrite): string {
+function manifestRewritten(text: string, rewrite: StepRewrite): string {
   const manifest: unknown = parse(text);
   if (!isRecord(manifest) || !isRecord(manifest.actions)) {
     return text;

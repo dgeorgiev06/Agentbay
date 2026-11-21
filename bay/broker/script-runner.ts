@@ -60,7 +60,6 @@ const filesTheHostReads: readonly string[] = [
   `${bayFolder}sdk.ts`,
   `${bayFolder}yaml-text.ts`,
   `${bayFolder}value-check.ts`,
-  `${bayFolder}meta-schema.ts`,
   `${bayFolder}given-schema.ts`,
   `${bayFolder}json.ts`,
 ];

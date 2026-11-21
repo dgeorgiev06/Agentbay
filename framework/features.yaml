@@ -25,7 +25,6 @@ features:
       - bay/item-words.ts
       - bay/yaml-text.ts
       - bay/value-check.ts
-      - bay/meta-schema.ts
       - bay/given-schema.ts
       - bay/schema-files.ts
       - bay/database-lock.ts

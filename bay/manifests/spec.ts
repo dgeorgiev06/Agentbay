@@ -9,9 +9,14 @@ import type { Interface } from "../generated/interface.ts";
 import type { Mode } from "../generated/mode.ts";
 import type { SkillFrontMatter } from "../generated/skill.ts";
 import type { Workflow } from "../generated/workflow.ts";
-import { passesMetaSchema } from "../meta-schema.ts";
 import { failedWith, type Outcome, type Problem } from "../outcome.ts";
-import { emptiedRequiredFields, errorProblems, type Loaded, type PathSegments } from "../value-check.ts";
+import {
+  emptiedRequiredFields,
+  errorProblems,
+  passesMetaSchema,
+  type Loaded,
+  type PathSegments,
+} from "../value-check.ts";
 import { readYaml } from "../yaml-text.ts";
 import type { FileSystem } from "../ports.ts";
 

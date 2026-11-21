@@ -1,7 +1,6 @@
 import { Ajv2020, type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
 import type { Json } from "./contracts.ts";
 import { isRecord } from "./json.ts";
-import { passesMetaSchema, type SchemaValue } from "./meta-schema.ts";
 import type { Problem } from "./outcome.ts";
 
 export type Wording = {
@@ -335,6 +334,21 @@ export function errorProblems(
 }
 
 const ajvOptions = { allErrors: true, strict: false, verbose: true, logger: false } as const;
+
+type SchemaValue = boolean | Readonly<Record<string, unknown>>;
+
+const defaultMetaSchema = "https://json-schema.org/draft/2020-12/schema";
+
+let metaSchemaChecker: Ajv2020 | undefined;
+
+function namesDefaultMetaSchema(schema: SchemaValue): boolean {
+  return typeof schema === "boolean" || schema.$schema === undefined || schema.$schema === defaultMetaSchema;
+}
+
+export function passesMetaSchema(schema: SchemaValue): boolean {
+  metaSchemaChecker ??= new Ajv2020({ allErrors: true, strict: false, logger: false });
+  return namesDefaultMetaSchema(schema) && metaSchemaChecker.validateSchema(schema) === true;
+}
 
 function schemaValueOf(value: Json): SchemaValue | undefined {
   return isRecord(value) || typeof value === "boolean" ? value : undefined;

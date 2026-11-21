@@ -36,6 +36,18 @@ const takeScript = [
   "",
 ].join("\n");
 
+const checkScript = [
+  'import { defineScript, fail } from "agentbay/sdk";',
+  "",
+  "export const run = defineScript(async (input) => {",
+  '  if (JSON.stringify(input).includes("broken")) {',
+  '    fail("it broke");',
+  "  }",
+  "  return input;",
+  "});",
+  "",
+].join("\n");
+
 const shipMode = {
   name: "shipper",
   version: "1.0.0",
@@ -48,8 +60,15 @@ const shipMode = {
       effects: ["read"],
       run: [{ script: "scripts/take.ts" }],
     },
+    check: {
+      description: "When a workflow checks one item.",
+      input: "schemas/anything.json",
+      output: "schemas/anything.json",
+      effects: ["read"],
+      run: [{ script: "scripts/check.ts" }],
+    },
   },
-  workflows: ["workflows/ship.yaml", "workflows/carded.yaml"],
+  workflows: ["workflows/ship.yaml", "workflows/carded.yaml", "workflows/each.yaml"],
 };
 
 const shipWorkflow = {
@@ -83,6 +102,20 @@ const cardedWorkflow = {
   ],
 };
 
+const eachWorkflow = {
+  name: "each",
+  trigger: { manual: true },
+  steps: [
+    { id: "offer", action: "take" },
+    {
+      id: "each",
+      foreach: "$steps.offer.output.items",
+      sideBySide: 2,
+      steps: [{ id: "do", action: "check", input: { item: "$item" } }],
+    },
+  ],
+};
+
 async function withBuiltProject(body: (project: Project, coordinator: string) => Promise<void>): Promise<void> {
   const project = await makeProject({ adapter: "claude-code", approvalsFrom: ["chat"] });
   try {
@@ -92,6 +125,8 @@ async function withBuiltProject(body: (project: Project, coordinator: string) =>
     await project.write("components/modes/shipper/mode.yaml", stringify(shipMode));
     await project.write("components/modes/shipper/schemas/anything.json", '{ "type": "object" }\n');
     await project.write("components/modes/shipper/scripts/take.ts", takeScript);
+    await project.write("components/modes/shipper/scripts/check.ts", checkScript);
+    await project.write("components/modes/shipper/workflows/each.yaml", stringify(eachWorkflow));
     await project.write("components/modes/shipper/workflows/ship.yaml", stringify(shipWorkflow));
     await project.write("components/modes/shipper/workflows/carded.yaml", stringify(cardedWorkflow));
     const built = await bay(["build", "--project", project.root]);
@@ -264,5 +299,56 @@ test("the coordinator's commands for an approval, filled with a stale hash, are 
       "Approve or reject exactly what the waiting approval shows, naming its hash.",
       "Take one of the choices the waiting approval offers, naming the hash it shows.",
     ]);
+  });
+});
+
+function resumeCommand(coordinator: string, flag: string): string {
+  const quoted = [...coordinator.matchAll(/`([^`]+)`/g)].map((match) => match[1] ?? "");
+  const found = quoted.filter((command) => command.includes(` resume <runId> ${flag} --json`));
+  assert.equal(found.length, 1, `one resume command with ${flag}, found: ${JSON.stringify(found)}`);
+  return found[0] ?? "";
+}
+
+async function failedItemRun(project: Project): Promise<{ readonly runId: string; readonly question: string }> {
+  const input = JSON.stringify({ items: ["fine", "broken"] });
+  const call = ["call", "--workflow", "shipper:workflows/each.yaml", input, "--project", project.root, "--json"];
+  const stopped = fieldOf(toJson((await bay(call)).json), "run") ?? null;
+  const waiting = fieldOf(stopped, "waiting") ?? null;
+  assert.equal(textField(waiting, "reason"), "owner", JSON.stringify(stopped));
+  return { runId: textField(stopped, "id") ?? "", question: textField(waiting, "question") ?? "" };
+}
+
+test("the coordinator's command to run a foreach's failed items again, filled with the run, runs only them again", async () => {
+  await withBuiltProject(async (project, coordinator) => {
+    const { runId, question } = await failedItemRun(project);
+    assert.match(question, /^Step each failed for 1 of 2 items: the 2nd of 2 items at each\[1\]: /);
+    const sixth = coordinator.slice(
+      coordinator.indexOf("\n6. "),
+      coordinator.indexOf("\n\n", coordinator.indexOf("\n6. ")),
+    );
+    const shows = [...sixth.matchAll(/`([^`]+ runs <runId>)`/g)].map((match) => match[1] ?? "");
+    assert.equal(shows.length, 1, sixth);
+    const shown = await ranAsWritten(shows[0] ?? "", { "<runId>": runId });
+    assert.equal(shown.exitCode, 0, shown.output);
+    assert.ok(shown.output.includes(`\n${question}\n`), shown.output);
+    const rerun = await ranAsWritten(resumeCommand(coordinator, "--rerun"), { "<runId>": runId });
+    assert.equal(rerun.exitCode, 0, rerun.output);
+    const run = fieldOf(toJson(rerun.json), "run") ?? null;
+    const again = textField(fieldOf(run, "waiting") ?? null, "question") ?? "";
+    assert.match(again, /^Step each failed for 1 of 2 items: the 2nd of 2 items at each\[1\]~2: /);
+  });
+});
+
+test("the coordinator's command to stop a run whose foreach items failed, filled with the run, stops it", async () => {
+  await withBuiltProject(async (project, coordinator) => {
+    const { runId } = await failedItemRun(project);
+    const stopped = await ranAsWritten(resumeCommand(coordinator, "--stop"), { "<runId>": runId });
+    assert.equal(stopped.exitCode, 1, stopped.output);
+    const run = fieldOf(toJson(stopped.json), "run") ?? null;
+    assert.equal(textField(run, "status"), "failed");
+    assert.match(
+      textField(run, "reason") ?? "",
+      /^Step each failed for 1 of 2 items: the 2nd of 2 items at each\[1\]: /,
+    );
   });
 });

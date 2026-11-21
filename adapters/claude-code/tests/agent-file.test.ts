@@ -317,12 +317,12 @@ test("a step whose skill lists actions has the actions tool and the guard allows
   assert.deepEqual(actionsDecision("agentbay-todo-plan"), { verdict: "allow" });
 });
 
-test("the coordinator block states the protocol between its markers in under 50 lines", () => {
+test("the coordinator block states the protocol between its markers in at most 56 lines", () => {
   const block = coordinatorBlock("./bay.sh");
   const blockLines = block.split("\n");
   assert.equal(blockLines[0], "<!-- agentbay:start -->");
   assert.equal(blockLines.at(-1), "<!-- agentbay:end -->");
-  assert.ok(blockLines.length < 50, String(blockLines.length));
+  assert.ok(blockLines.length <= 56, String(blockLines.length));
   for (const phrase of [
     "When you do not know which action fits what the owner asks, run\n`./bay.sh actions --json` for the active modes",
     "then `./bay.sh actions <mode> --json` for that mode's actions.",
@@ -338,13 +338,40 @@ test("the coordinator block states the protocol between its markers in under 50 
     "with `<runId>` the run's `id`, and `<stepKey>` and `<hash>` the `stepKey` and `hash` of its `waiting`,\n" +
       "   as bay printed them when the run stopped for the approval.",
     "Never choose for the owner, and never pass a choice the card shows under Not available.",
-    "approve or give trust on your own",
+    "approve, give trust, run again or stop on your own",
     "edit `.agentbay/`, `.claude/`, `.mcp.json`, or the agentbay kit",
     "do a skill step's work yourself",
     "At the start of a session, run `./bay.sh check`. If skill steps run with the hook and it reports that the hook is\n" +
       "not registered, stop and tell the owner: the kernel refuses their outputs. Without the hook, nothing confines them.",
     "start other subagents here: where the agentbay hook runs, it denies every subagent that is not a step.",
     "Change `approvals` or `skillSteps` in agentbay.config.yaml only when the owner asks for exactly that, in their own words.",
+  ]) {
+    assert.ok(block.includes(phrase), phrase);
+  }
+});
+
+test("the coordinator block leaves a question for the owner to the owner, and says the two commands that answer it", () => {
+  const block = coordinatorBlock("./bay.sh");
+  for (const phrase of [
+    "(step 4), a question (step 6), done",
+    "take an approval or question there as in step 4 or 6.",
+    "6. When its `waiting`, or one in `alsoWaiting`, has the reason `owner`, the run asks the owner a question",
+    "Running again or stopping is the owner's decision, never\n   yours.",
+    "show the owner every line it prints for the question, unchanged and whole,\n   and wait.",
+    "Only after the owner answers in his own words, run `./bay.sh resume <runId> --rerun --json` to run\n" +
+      "   again or `./bay.sh resume <runId> --stop --json` to stop the run",
+  ]) {
+    assert.ok(block.includes(phrase), phrase);
+  }
+});
+
+test("the coordinator block says to wait out a run shown as running, and to resume it when nothing advances it", () => {
+  const block = coordinatorBlock("./bay.sh");
+  for (const phrase of [
+    "A run shown as `running` is advanced by another call, which takes the outputs recorded for the run\n" +
+      "   when it ends: wait for your other subagents to return, then show the run again.",
+    "If none of yours still works and\n   it is still `running`, run `./bay.sh resume <runId> --json`",
+    "for any other, run `./bay.sh runs <runId> --new-token --step <stepKey> --json`,\n   then step 2.",
   ]) {
     assert.ok(block.includes(phrase), phrase);
   }

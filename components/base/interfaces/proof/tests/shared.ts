@@ -599,6 +599,8 @@ const casesDeclared = {
   names: nothingNamed(),
 };
 
+const chosenTests = ["tests/sum-five.test.ts", "tests/name.test.ts"];
+
 const casesRequest: Fields = {
   slice: sliceOf("CASES", casesScope, [
     item("fails-first-one", { kind: "fails-first", tests: ["tests/sum.test.ts"] }),
@@ -608,6 +610,8 @@ const casesRequest: Fields = {
       tests: ["tests/unloaded.test.ts", "tests/unloaded-too.test.ts"],
     }),
     item("checks-cases", { kind: "checks" }),
+    item("checks-chosen", { kind: "checks", testsFrom: [...chosenTests, "src/sum.txt"] }),
+    item("checks-none-chosen", { kind: "checks", testsFrom: ["src/sum.txt", "fixtures/sound.txt"] }),
     item("bugs-mixed", { kind: "bugs-caught" }),
   ]),
   base: "cases-base",
@@ -1057,6 +1061,18 @@ const cases: readonly Case[] = [
           notLoaded: ["tests/unloaded-too.test.ts", "tests/unloaded.test.ts"],
         },
       );
+    },
+  },
+  {
+    name: "checks: with testsFrom, only its files that the toolchain's testFiles patterns hold are run, and none of them is inconclusive",
+    run: async (proof) => {
+      const result = await proof.proven("cases");
+      assertVerdict(result, "checks-chosen", { kind: "checks", verdict: "passed" });
+      assertVerdict(result, "checks-none-chosen", { kind: "checks", verdict: "inconclusive" });
+      const runs = (await proof.asked()).filter((entry) => entry.action === "test");
+      const named = runs.map((entry) => JSON.stringify(entry.request.files ?? null));
+      assert.ok(named.includes(JSON.stringify(chosenTests)), named.join(" "));
+      assert.ok(!named.some((files) => files.includes("src/sum.txt")), named.join(" "));
     },
   },
   {

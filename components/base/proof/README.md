@@ -10,7 +10,7 @@ Each kind of proof is one file under `scripts/kinds/`, and `scripts/kinds.ts` is
 
 ### checks
 
-Built. A copy of the head; the toolchain's `describe`, then `check` and `test` on the copy; the copy removed. Passed when every check passed and the test run passed. A check the project is not set up for, a run stopped at its limit, and a copy that could not be made each make the item inconclusive, with the reason the toolchain or the worktrees interface gave. When the item fails and the test run failed, the verdict carries that run's failing cases (see below).
+Built. A copy of the head; the toolchain's `describe`, then `check` and `test` on the copy; the copy removed. Passed when every check passed and the test run passed. An item that gives `testsFrom` runs, in place of every test, only those of its files that the toolchain's `testFiles` patterns from `describe` hold, and its detail when passed says how many test files ran; none of them a test file, or no answer from `describe`, and no test runs and the item is inconclusive. The checks run whole either way. A check the project is not set up for, a run stopped at its limit, and a copy that could not be made each make the item inconclusive, with the reason the toolchain or the worktrees interface gave. When the item fails and the test run failed, the verdict carries that run's failing cases (see below).
 
 ### fails-first
 

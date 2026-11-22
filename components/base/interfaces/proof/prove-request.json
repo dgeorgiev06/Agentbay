@@ -308,11 +308,21 @@
           "type": "object",
           "additionalProperties": false,
           "required": ["kind"],
-          "description": "The checks pass: every check of the toolchain, and then a run of every test, on a copy of the head. Passed when every check passed and the test run passed.",
+          "description": "The checks pass: every check of the toolchain, and then a run of every test, or of the test files testsFrom holds, on a copy of the head. Passed when every check passed and the test run passed.",
           "properties": {
             "kind": {
               "const": "checks",
               "description": "The checks pass."
+            },
+            "testsFrom": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 200,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/path"
+              },
+              "description": "Files to take the test run from, in place of every test: those the toolchain's testFiles patterns hold are run, and the others are not. When none of them is a test file, no test runs and the item is inconclusive. Left out, every test runs."
             }
           }
         },

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { checksParts, type ChecksEvidence } from "../scripts/kinds/checks.ts";
+import { checksParts, chosenTests, type ChecksEvidence } from "../scripts/kinds/checks.ts";
 import type { CheckRun, TestRun } from "../scripts/lib/toolchain.ts";
 import { verdictOf, type Verdict } from "../scripts/lib/verdicts.ts";
 
@@ -126,4 +126,46 @@ test("checks: checks that could not start, or a toolchain that ran none, are inc
 test("checks: a copy that could not be made is inconclusive with the reason worktrees gave", () => {
   const reason = "No copy of c9bb216 could be made: There is no commit c9bb216.";
   assert.deepEqual(judged({ copy: "not made", reason }), inconclusiveWith(reason));
+});
+
+test("checks: a run of the test files chosen from testsFrom that passed is passed, and the detail says how many files ran", () => {
+  const evidence: ChecksEvidence = {
+    copy: "made",
+    checks: allPassed,
+    tests: ninePassed,
+    ran: { of: "chosen", files: 3 },
+  };
+  assert.deepEqual(judged(evidence), {
+    item: "DOD-1",
+    kind: "checks",
+    verdict: "passed",
+    detail: "Every check passed (format, lint), and so did the run of the 3 test files chosen from testsFrom: 9 tests.",
+  });
+});
+
+test("checks: testsFrom keeps only the files the toolchain's testFiles patterns hold, in their order", () => {
+  const described = { checks: 5, testFiles: ["**/*.test.ts"] };
+  const testsFrom = [
+    "components/modes/todo/tests/todo.test.ts",
+    "components/modes/todo/tests/fixture.json",
+    "components/modes/todo/tests/deep/lists.test.ts",
+    "components/modes/todo/tests/helpers.ts",
+  ];
+  assert.deepEqual(chosenTests(testsFrom, described), {
+    kind: "files",
+    files: ["components/modes/todo/tests/todo.test.ts", "components/modes/todo/tests/deep/lists.test.ts"],
+  });
+  assert.deepEqual(chosenTests(undefined, described), { kind: "every test" });
+});
+
+test("checks: testsFrom with no test file in it, or a toolchain that did not describe its tests, runs no test", () => {
+  const described = { checks: 5, testFiles: ["**/*.test.ts"] };
+  assert.deepEqual(chosenTests(["tests/fixture.json", "tests/helpers.ts"], described), {
+    kind: "none",
+    reason: "None of the 2 files in testsFrom is a test file by the toolchain's patterns.",
+  });
+  assert.deepEqual(chosenTests(["tests/a.test.ts"], undefined), {
+    kind: "none",
+    reason: "The toolchain did not say which files are tests, so none of testsFrom was run.",
+  });
 });

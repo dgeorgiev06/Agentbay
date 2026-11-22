@@ -1,39 +1,19 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { cp, mkdir, realpath, symlink } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { fileURLToPath } from "node:url";
-import type { ModeProject } from "../../../../tests/test-toolbox.ts";
+import { copyKitInto, linkNodeModules, type ModeProject } from "../../../../tests/test-toolbox.ts";
 import { listed, openToolchainProject, withoutSeconds } from "./checkouts.ts";
 
 let project: ModeProject;
-
-const kit = fileURLToPath(new URL("../../../..", import.meta.url));
 
 const copy = "kit-copy";
 
 const secondsForEachCheckWhenThreeSuitesShareTwoCores = 200;
 
-function kitFiles(): readonly string[] {
-  const listing = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: kit });
-  return listing
-    .toString("utf8")
-    .split("\0")
-    .filter((path) => path !== "");
-}
-
-async function copyKitInto(folder: string): Promise<void> {
-  for (const path of kitFiles()) {
-    await mkdir(dirname(join(folder, path)), { recursive: true });
-    await cp(join(kit, path), join(folder, path), { force: false, errorOnExist: false });
-  }
-  await symlink(await realpath(join(kit, "node_modules")), join(folder, "node_modules"));
-}
-
 before(async () => {
   project = await openToolchainProject();
   await copyKitInto(join(project.root, copy));
+  await linkNodeModules(join(project.root, copy));
 });
 
 after(async () => {

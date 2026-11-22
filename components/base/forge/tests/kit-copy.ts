@@ -1,14 +1,13 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
-import { commandLineIn, type CommandLineIn } from "../../../../tests/test-toolbox.ts";
-import { requirementsFile, todoVersionOne } from "./todo-plan.ts";
+import { commandLineIn, copyKitInto, linkNodeModules, type CommandLineIn } from "../../../../tests/test-toolbox.ts";
 
 export type Waiting = {
   readonly id: string;
@@ -100,14 +99,6 @@ export function git(root: string, words: readonly string[]): string {
   return execFileSync("git", [...gitWords, ...words], { cwd: root, encoding: "utf8" });
 }
 
-function kitFiles(): readonly string[] {
-  const listing = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: kit });
-  return listing
-    .toString("utf8")
-    .split("\0")
-    .filter((path) => path !== "");
-}
-
 export function jsonOf(text: string): Json {
   const read = readYaml(text);
   assert.ok(read.ok, text);
@@ -134,12 +125,7 @@ async function madeFolder(prefix: string): Promise<string> {
 
 export async function kitTemplate(forge: Json = {}): Promise<string> {
   const folder = await madeFolder("agentbay-rounds-");
-  const files = kitFiles();
-  for (const path of files) {
-    await mkdir(dirname(join(folder, path)), { recursive: true });
-    await cp(join(kit, path), join(folder, path));
-  }
-  await cp(todoVersionOne, join(folder, requirementsFile));
+  const files = await copyKitInto(folder);
   await writeFile(join(folder, "agentbay.config.yaml"), await configForTheTest(forge), "utf8");
   await mkdir(join(folder, standIn, "scripts"), { recursive: true });
   await writeFile(join(folder, standIn, "mode.yaml"), standInManifest, "utf8");
@@ -164,7 +150,7 @@ export async function project(template: string): Promise<string> {
   const root = await madeFolder("agentbay-rounds-case-");
   git(root, ["clone", "-q", template, "."]);
   git(root, ["branch", into]);
-  await symlink(await realpath(join(kit, "node_modules")), join(root, "node_modules"));
+  await linkNodeModules(root);
   return root;
 }
 

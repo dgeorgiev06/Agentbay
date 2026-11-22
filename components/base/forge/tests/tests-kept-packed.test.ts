@@ -269,7 +269,7 @@ test("after a round whose proof quotes a test, no table of kernel.db and no othe
     items: ["DOD-K2-1"],
     cases: [
       { name: "counts once", file: quotedFile },
-      { name: "counts twice", file: quotedFile },
+      { name: "counts twice", file: quotedFile, message: "got… back" },
       { name: "counts thrice", file: quotedFile, message: plainMessage },
     ],
     withheld: 2,

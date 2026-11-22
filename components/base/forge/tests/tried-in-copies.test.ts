@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, describe, test } from "node:test";
-import { fileURLToPath } from "node:url";
 import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
+import { linkNodeModules } from "../../../../tests/test-toolbox.ts";
 import { plannedTrials, resultOf, type Entry, type Result, type Trial } from "../scripts/lib/tried-examples.ts";
 import { trialsIn } from "../scripts/lib/tried-block.ts";
 import {
@@ -25,8 +25,6 @@ import {
   type Handed,
 } from "./kit-copy.ts";
 import { addToTry, countToTry, emptyName, inRounds, tallyFiles, twentyA, type TallyVariant } from "./tally-design.ts";
-
-const kit = fileURLToPath(new URL("../../../..", import.meta.url));
 
 const variants: readonly TallyVariant[] = ["as designed", "counts once", "refuses tersely", "broken manifest"];
 
@@ -53,7 +51,7 @@ async function freshCopy(head: string): Promise<string> {
   const folder = await realpath(await mkdtemp(join(tmpdir(), "forge-tried-")));
   scratch.push(folder);
   git(template, ["worktree", "add", "-q", "--detach", folder, head]);
-  await symlink(await realpath(join(kit, "node_modules")), join(folder, "node_modules"));
+  await linkNodeModules(folder);
   return folder;
 }
 

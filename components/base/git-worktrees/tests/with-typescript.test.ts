@@ -1,21 +1,9 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { cp, mkdir, realpath, symlink } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
 import type { Json } from "../../../../bay/sdk.ts";
+import { copyKitInto, linkNodeModules } from "../../../../tests/test-toolbox.ts";
 import { commitFiles, openRepositoryProject } from "./repository.ts";
-
-const kit = fileURLToPath(new URL("../../../..", import.meta.url));
-
-function kitFiles(): readonly string[] {
-  const listing = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: kit });
-  return listing
-    .toString("utf8")
-    .split("\0")
-    .filter((path) => path !== "");
-}
 
 type Fields = { readonly [key: string]: Json };
 
@@ -38,11 +26,8 @@ function namedVerdicts(output: Json): readonly Json[] {
 test("a copy of a commit of the kit, with node_modules linked, passes the TypeScript mode's type check", async () => {
   const project = await openRepositoryProject(["git-worktrees", "typescript"]);
   try {
-    for (const path of kitFiles()) {
-      await mkdir(dirname(join(project.root, "kit", path)), { recursive: true });
-      await cp(join(kit, path), join(project.root, "kit", path));
-    }
-    await symlink(await realpath(join(kit, "node_modules")), join(project.root, "kit/node_modules"));
+    await copyKitInto(join(project.root, "kit"));
+    await linkNodeModules(join(project.root, "kit"));
     const ignored = { ".gitignore": ".agentbay/\n.forge/\nnode_modules\n" };
     const commit = await commitFiles(project, { files: ignored, message: "Add a copy of the kit" });
     const copy = await project.output("git-worktrees.copy", { commit, name: "kit", links: ["kit/node_modules"] });

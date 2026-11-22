@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
+import { copyKitInto, linkNodeModules } from "../../../../tests/test-toolbox.ts";
 import { answered, bayRan, byProcess, modeGateTestsOfTheKit, submitted, testsFromAsked } from "./kit-copy.ts";
 
 type Answer = { readonly verdict: "approve" | "reject" } | { readonly choice: string };
@@ -214,14 +215,6 @@ function git(root: string, words: readonly string[]): string {
   return execFileSync("git", [...gitWords, ...words], { cwd: root, encoding: "utf8" });
 }
 
-function kitFiles(): readonly string[] {
-  const listing = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: kit });
-  return listing
-    .toString("utf8")
-    .split("\0")
-    .filter((path) => path !== "");
-}
-
 function jsonOf(text: string): Json {
   const read = readYaml(text);
   assert.ok(read.ok, text);
@@ -241,11 +234,7 @@ async function configForTheTest(): Promise<string> {
 }
 
 async function writeTemplate(folder: string): Promise<void> {
-  const files = kitFiles();
-  for (const path of files) {
-    await mkdir(dirname(join(folder, path)), { recursive: true });
-    await cp(join(kit, path), join(folder, path));
-  }
+  const files = await copyKitInto(folder);
   await writeFile(join(folder, "agentbay.config.yaml"), await configForTheTest(), "utf8");
   await mkdir(join(folder, standIn, "scripts"), { recursive: true });
   await writeFile(join(folder, standIn, "mode.yaml"), standInManifest, "utf8");
@@ -278,7 +267,7 @@ async function project(): Promise<string> {
   const root = await madeFolder("agentbay-one-slice-case-");
   git(root, ["clone", "-q", template, "."]);
   git(root, ["branch", into]);
-  await symlink(await realpath(join(kit, "node_modules")), join(root, "node_modules"));
+  await linkNodeModules(root);
   return root;
 }
 

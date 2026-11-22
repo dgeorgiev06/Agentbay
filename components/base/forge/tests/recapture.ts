@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
+import { copyKitInto, linkNodeModules } from "../../../../tests/test-toolbox.ts";
 import { recapturing } from "./kit-copy.ts";
 
 type Capture = {
@@ -131,12 +132,8 @@ export function withCapture(text: string, source: Source, into: string): string 
 
 async function kitCopy(): Promise<string> {
   const copy = await realpath(await mkdtemp(join(tmpdir(), "agentbay-recapture-")));
-  const listed = run(kit, "git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"]).split("\0");
-  for (const path of listed.filter((each) => each !== "")) {
-    await mkdir(dirname(join(copy, path)), { recursive: true });
-    await cp(join(kit, path), join(copy, path));
-  }
-  await symlink(await realpath(join(kit, "node_modules")), join(copy, "node_modules"));
+  await copyKitInto(copy);
+  await linkNodeModules(copy);
   run(copy, "git", ["init", "-q"]);
   await writeFile(join(copy, ".git/info/exclude"), "node_modules\n", "utf8");
   run(copy, "git", [...gitWords, "add", "-A"]);

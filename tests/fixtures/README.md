@@ -13,6 +13,10 @@ The reviewer's capture runs `bay check` and `bay new` on these folders and keeps
 
 Type check, lint and dead code leave this folder out: `tsconfig.json`, the eslint configuration and `knip.json` each exclude it, because its code is written to be broken. `tests/capture-fixtures.test.ts` holds what the table says.
 
-## The todo requirements, version 1
+## The owner's documents, frozen
 
-`todo-v1.yaml` is version 1 of `docs/requirements/todo.yaml`, the 2 outcomes and 13 conditions forge's and requirements' tests were written for. The owner's file moves on with each version he signs; the tests read this copy, and forge's tests write it into each copy of the kit at `docs/requirements/todo.yaml`, so their cards keep their words. Only `components/base/requirements/tests/check.test.ts` reads the owner's file, to check it is accepted.
+Everything under `docs/requirements/`, `docs/designs/` and `docs/plans/` is the owner's and moves on as he signs new versions, so no test reads it. `tests/test-toolbox.ts` is the one place that copies the kit, with `copyKitInto` and `copyOfTheKit`: it leaves those three folders out of every copy and writes the frozen copies below at the paths the workflows expect. `tests/living-documents.test.ts` holds that, and the lint rules `agentbay/no-living-documents` and `agentbay/kit-copied-in-one-place` keep tests from reading the folders or copying the kit another way.
+
+`todo-v1.yaml` is version 1 of `docs/requirements/todo.yaml`, the 2 outcomes and 13 conditions forge's and requirements' tests were written for. Each copy of the kit holds it at `docs/requirements/todo.yaml`, so the cards keep their words. Only `components/base/requirements/tests/check.test.ts` reads the owner's file, to check it is accepted.
+
+`plans/` holds plans 0022, 0023 and 0024 as they were when the todo plan was approved. Each copy of the kit holds them under `docs/plans/`, so forge's tests work out real plans and the next free number for a new plan is 0025.

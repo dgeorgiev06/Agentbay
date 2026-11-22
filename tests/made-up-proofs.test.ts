@@ -5,13 +5,13 @@ import { after, before, test } from "node:test";
 import {
   addMode,
   assertFailsOnlyTheChosenCases,
-  copyOfTheKit,
   failedTests,
   modeTestFile,
   modeTestRan,
   type Cases,
   type ModeTestRun,
 } from "./kit-copy.ts";
+import { copyOfTheKit } from "./test-toolbox.ts";
 import { assay, proofFiles, wrongProofs } from "./made-up-proofs.ts";
 
 const baseFolder = "components/base";

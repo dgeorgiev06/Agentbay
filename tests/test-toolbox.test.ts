@@ -60,6 +60,12 @@ test("the test toolbox exports these names and no others", async () => {
     "TestProject",
     "WorkflowPart",
     "commandLineIn",
+    "copyKitInto",
+    "copyOfTheKit",
+    "frozenDocuments",
+    "isLivingDocument",
+    "linkNodeModules",
+    "livingFolders",
     "openModeProject",
   ]);
   assert.deepEqual(text.match(/^export\b(?! (?:async function|function|type|const) \w+)/gm), null);

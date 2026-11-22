@@ -149,23 +149,31 @@ function agentbayPlugin(): ESLint.Plugin {
   return plugin;
 }
 
-async function livingRuleFor(file: string): Promise<Linter.RuleEntry> {
+async function pluginRuleFor(name: string, file: string): Promise<Linter.RuleEntry> {
   const config: unknown = await kitLint.calculateConfigForFile(file);
   const rules = typeof config === "object" && config !== null && "rules" in config ? config.rules : undefined;
-  const rule = typeof rules === "object" && rules !== null && livingRule in rules ? rules[livingRule] : undefined;
+  const rule: unknown = typeof rules === "object" && rules !== null ? Reflect.get(rules, name) : undefined;
   return isRuleEntry(rule) ? rule : "off";
 }
 
-async function livingMessages(file: string, code: string): Promise<readonly string[]> {
+async function pluginMessages(name: string, file: string, code: string): Promise<readonly string[]> {
   const only = {
     files: ["**/*.ts"],
     languageOptions: { parser },
     plugins: { agentbay: agentbayPlugin() },
-    rules: { [livingRule]: await livingRuleFor(file) },
+    rules: { [name]: await pluginRuleFor(name, file) },
   };
   return new Linter({ configType: "flat", cwd: kit })
     .verify(code, [only], { filename: join(kit, file) })
     .map((found) => found.message);
+}
+
+function livingRuleFor(file: string): Promise<Linter.RuleEntry> {
+  return pluginRuleFor(livingRule, file);
+}
+
+function livingMessages(file: string, code: string): Promise<readonly string[]> {
+  return pluginMessages(livingRule, file, code);
 }
 
 const theOneTest = "components/base/requirements/tests/check.test.ts";
@@ -192,6 +200,10 @@ const livingReads: readonly (readonly [string, string])[] = [
     "docs/plans/0024-forge-whole.yaml",
   ],
   ['const url = new URL("../../../../docs/plans/README.md", import.meta.url);', "docs/plans/README.md"],
+  [
+    'const kit = fileURLToPath(new URL("../../../..", import.meta.url)); const at = join(kit, "docs/plans/0025-todo.yaml");',
+    "docs/plans/0025-todo.yaml",
+  ],
   [
     'const file = "docs/requirements/todo.yaml"; const url = new URL(`../../../../${file}`, import.meta.url);',
     "docs/requirements/todo.yaml",
@@ -244,4 +256,50 @@ test("code outside the tests is not judged by the rule against living documents"
     assert.equal(await livingRuleFor(file), "off", file);
     assert.deepEqual(await livingMessages(file, read), [], file);
   }
+});
+
+const copyRule = "agentbay/kit-copied-in-one-place";
+
+const copyMessage =
+  "A test lists or copies the kit itself: make the copy with copyKitInto or copyOfTheKit from " +
+  "tests/test-toolbox.ts, which leaves the owner's living documents out of every copy.";
+
+const forgeTest = "components/base/forge/tests/probe.test.ts";
+
+const kitCopies: readonly string[] = [
+  'const top = fileURLToPath(new URL("../../../..", import.meta.url)); execFileSync("git", ["ls-files", "-z"], { cwd: top });',
+  'const root = join(import.meta.dirname, "..", "..", "..", ".."); spawnSync("git", ["archive", "HEAD"], { cwd: root });',
+  'run(kit, "git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"]);',
+  'git(template, ["clone", "-q", kitFolder, "."]);',
+  'git(kitRoot, ["worktree", "add", "-q", folder, "main"]);',
+  "await cp(kit, folder, { recursive: true });",
+  'const top = new URL("../../../..", import.meta.url); cpSync(top, folder, { recursive: true });',
+];
+
+test("a test file or a helper of a tests folder may not list or copy the kit itself", async () => {
+  for (const code of kitCopies) {
+    assert.deepEqual(await pluginMessages(copyRule, forgeTest, code), [copyMessage], code);
+  }
+});
+
+test("a test may list and copy its own projects, copy single files of the kit, and run bay in the kit", async () => {
+  const allowed = [
+    'git(root, ["ls-files"]);',
+    'git(template, ["worktree", "add", "-q", "--detach", folder, head]);',
+    'await cp(join(kit, "components/base/forge/README.md"), join(root, "README.md"));',
+    'spawnSync(process.execPath, [join(kitFolder, "bay", "cli.ts"), "check", "--json"], { cwd: kitFolder });',
+    'const forge = join(import.meta.dirname, ".."); execFileSync("git", ["ls-files"], { cwd: forge });',
+  ];
+  for (const code of allowed) {
+    assert.deepEqual(await pluginMessages(copyRule, forgeTest, code), [], code);
+  }
+});
+
+test("only the test toolbox lists and copies the kit, and tests/lint-ignores.test.ts lists its code to lint it", async () => {
+  const listing =
+    'execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: kitRoot });';
+  assert.deepEqual(await pluginMessages(copyRule, "tests/test-toolbox.ts", listing), []);
+  assert.deepEqual(await pluginMessages(copyRule, "tests/lint-ignores.test.ts", listing), []);
+  assert.deepEqual(await pluginMessages(copyRule, "tests/kit-copy.ts", listing), [copyMessage]);
+  assert.equal(await pluginRuleFor(copyRule, "components/base/forge/scripts/probe.ts"), "off");
 });

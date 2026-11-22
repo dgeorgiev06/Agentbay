@@ -104,11 +104,15 @@ export async function provedAs(root: string, file: string, proved: Proved): Prom
 }
 
 export async function planOnInto(root: string, names: readonly string[]): Promise<void> {
+  await slicesPlannedOnInto(root, names.map(plannedSlice));
+}
+
+export async function slicesPlannedOnInto(root: string, slices: readonly Json[]): Promise<void> {
   const folder = join(root, ".planning");
   git(root, ["worktree", "add", "-q", folder, into]);
   const path = join(folder, planFile);
   await mkdir(dirname(path), { recursive: true });
-  const plan = { title: "A wave of counting modes", slices: names.map(plannedSlice) };
+  const plan = { title: "A wave of counting modes", slices: [...slices] };
   await writeFile(path, `${JSON.stringify(plan, null, 2)}\n`, "utf8");
   git(folder, ["add", planFile]);
   git(folder, ["commit", "-q", "-m", "The plan of the wave"]);

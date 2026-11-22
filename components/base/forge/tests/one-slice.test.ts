@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { after, before, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
-import { answered, bayRan, byProcess, submitted } from "./kit-copy.ts";
+import { answered, bayRan, byProcess, modeGateTestsOfTheKit, submitted, testsFromAsked } from "./kit-copy.ts";
 
 type Answer = { readonly verdict: "approve" | "reject" } | { readonly choice: string };
 
@@ -585,6 +585,33 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
     assert.deepEqual(fieldsOf(fieldsOf(fieldsOf(building).task ?? null).input ?? null).rules, [rule]);
   });
 
+  test("10. a slice that writes only inside one mode's folder is proved by the mode gate, and both cards say so", async () => {
+    const root = await project();
+    const files = [
+      "components/modes/a10/scripts/a10.ts",
+      "components/modes/a10/tests/a10.test.ts",
+      "components/modes/a10/tests/deep/more.test.ts",
+    ];
+    const slice = planned("A10", ["components/modes/a10/**"], [item("DOD-A10-1", "must", "checks")]);
+    await provedIn(root, "A10", {
+      verdicts: [passed("DOD-A10-1", "checks"), passed("scope", "in-scope"), passed("declared", "as-declared")],
+      judgement: [],
+      size: files.map((path) => ({ path, head: 1 })),
+    });
+    const start = await started(root, slice);
+    const gate =
+      "gate: the mode's own tests and the fast checks of the whole project, since A10 writes only inside " +
+      "components/modes/a10; the other tests are not run";
+    assert.ok(wordsOf(start).join(" ").includes(gate), wordsOf(start).join("\n"));
+    const card = await builtToCard(root, start, { files, built: { outcome: "built" } });
+    const asked = jsonOf(await readFile(join(root, ".stand-in/A10-asked.json"), "utf8"));
+    assert.deepEqual(testsFromAsked([asked]), [[...files.slice(1).sort(), ...modeGateTestsOfTheKit]]);
+    const said = wordsOf(card).join(" ");
+    assert.ok(said.includes("gate: the mode's own tests and the fast checks of the whole project ran"), said);
+    assert.ok(!said.includes("The checks pass"), said);
+    assert.equal(listOf(card.choices).map((choice) => textAt(choice, "status"))[0], "offered");
+  });
+
   test("6. the cards for TR2's verdicts, as the kernel prints them: every line computed, none citing build, the answer first", async () => {
     const root = await project();
     await provedIn(root, "TR2", tr2Proved);
@@ -632,10 +659,12 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
       "  DOD-TR2-8, must: The checks and the tests",
       "    pass",
       "  held by: checks",
+      "  gate: the whole test run, since TR2 is of",
+      "    kind capability, not mode",
       "  1 bug to inject: the record is not read",
       "    again",
       "All lines worked out by script.",
-      "checked: 0 ran, 31 computed, 0 judged",
+      "checked: 0 ran, 32 computed, 0 judged",
       `hash ${start.hash.slice(0, 12)}`,
     ]);
     assert.ok(startPrinted.every((row) => Array.from(row).length <= 44));
@@ -694,6 +723,8 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
       "  proof's reason: The kind as-declared is",
       "    not built in this version of the proof",
       "    mode, so nothing is known.",
+      "  gate: the whole test run, since TR2 is of",
+      "    kind capability, not mode",
       "  11 files changed; the work is set aside on",
       "    forge/wip/TR2/1",
       "  size in lines: bay/ +107, tests/ +393,",
@@ -721,7 +752,7 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
       "  discard    Stop; the worktree goes",
       "             why: Discarding comes with",
       "             slice WD1.",
-      "checked: 0 ran, 34 computed, 0 judged",
+      "checked: 0 ran, 35 computed, 0 judged",
       `hash ${card.hash.slice(0, 12)}`,
     ]);
     assert.ok(printed.every((row) => Array.from(row).length <= 44));
@@ -741,7 +772,7 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
         ...fromProve(11),
         "draw",
         ...fromProve(12),
-        ...Array.from({ length: 7 }, () => "draw"),
+        ...Array.from({ length: 8 }, () => "draw"),
       ],
     );
     const asked = jsonOf(await readFile(join(root, ".stand-in/TR2-asked.json"), "utf8"));

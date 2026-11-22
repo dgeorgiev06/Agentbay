@@ -4,7 +4,7 @@ import type { Gate } from "./gate.ts";
 import { modeTestsFolder } from "./gate-words.ts";
 import { textOf, textsOf } from "./json-values.ts";
 import { mostListed } from "./listing.ts";
-import { withTestsFrom } from "./tool-checks.ts";
+import { withGateSaid, withTestsFrom } from "./tool-checks.ts";
 
 type ModeGate = Extract<Gate, { readonly gate: "mode" }>;
 
@@ -37,5 +37,5 @@ export async function gatedAsked(context: ScriptContext, asked: JsonFields, gate
   const at = { cutAs: `${textOf(fieldsOf(slice).name)}-gate`, head: textOf(asked.head) };
   const listed = await listedAt(context, gate, at);
   const testsFrom = testsFromOf(gate, listed, textsOf(context.settings.modeGateTests));
-  return { ...asked, slice: withTestsFrom(slice, testsFrom) };
+  return { ...asked, slice: withTestsFrom(withGateSaid(slice, gate), testsFrom) };
 }

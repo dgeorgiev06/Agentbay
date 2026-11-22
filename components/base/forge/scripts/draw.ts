@@ -12,6 +12,7 @@ import { roundsOnCard } from "./lib/round-card.ts";
 import { roundsStateOf, type RoundsState } from "./lib/rounds.ts";
 import { stayedOf } from "./lib/branch-endings.ts";
 import { triedBlockOf } from "./lib/tried-block.ts";
+import { withGateSaid } from "./lib/tool-checks.ts";
 
 function roundsParts(rounds: RoundsState | undefined, pinned: Json | undefined): Partial<MergeCardInput> {
   if (rounds === undefined) {
@@ -40,7 +41,8 @@ export const run = defineScript((input, context) => {
   const proof = provedOf(fields.proof);
   const planted = typeof fields.planted === "number" ? fields.planted : 0;
   const bugs = fields.bugs === undefined ? {} : { bugs: bugsOnCard(bugsOf(fields.bugs), proof.verdicts, planted) };
-  const slice = sliceOf(fields.slice);
+  const gate = gateOf([sliceOf(fields.slice)]);
+  const slice = sliceOf(withGateSaid(fields.slice ?? null, gate));
   const merge = drawn({
     slice,
     proof,
@@ -55,7 +57,7 @@ export const run = defineScript((input, context) => {
     mustPractices: textsOf(context.settings.mustPractices),
     ...bugs,
     ...triedPart(fields.proof),
-    gate: { gate: gateOf([slice]), alsoRun: textsOf(context.settings.modeGateTests) },
+    gate: { gate, alsoRun: textsOf(context.settings.modeGateTests) },
   });
   return Promise.resolve(merge);
 });

@@ -50,8 +50,7 @@ function roundsCard(starting: Starting, slice: Json): JsonFields {
   const agreed: InterfaceFiles = starting.interface.length > 0 ? "named" : "none";
   const choices = startChoices(starting.interface, starting.leftovers);
   const card = startCard({ ...starting, planter: "runs", interface: agreed });
-  const proved = withGateSaid(withToolChecks(slice), starting.gate.gate);
-  return { card: { ...card, withheld: choices.withheld }, offered: choices.offered, proved };
+  return { card: { ...card, withheld: choices.withheld }, offered: choices.offered, proved: withToolChecks(slice) };
 }
 
 function gatedOf(slice: Json): { readonly gate: Gate; readonly said: Json } {
@@ -90,7 +89,7 @@ export const run = defineScript((input, context) => {
   const bugs = request.bugs ?? [];
   const { rules = [], examples = [] } = request;
   const handed = {
-    slice: planter ? slice : said,
+    slice,
     base,
     bugs,
     interface: [...starting.interface],

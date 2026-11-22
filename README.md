@@ -201,6 +201,14 @@ owner's shell, runs `bay approve` in a pseudo-terminal, or quotes words the owne
 README, under What the hook does not stop, and the Trust row of [CONTEXT.md](CONTEXT.md) say so. Forge builds a mode in slices, with tests, proof and the owner's cards:
 [components/base/forge/README.md](components/base/forge/README.md).
 
+A mode's test opens a throwaway project with `openModeProject(config, { project: import.meta.dirname })`, from
+`tests/test-toolbox.ts`, wherever the mode lives. The toolbox finds the project that the test's folder is in, the
+nearest folder above it with an `agentbay.config.yaml`. When that is a project beside the kit, it copies the
+project's `components/` and lays `config` over the project's own config. When it is the kit the toolbox is in,
+as in a worktree of the kit or a copy of it, the kit's modes are already there: nothing is copied and the kit's
+own config is not read, exactly as when `options` is left out. A folder in no project fails the test's setup with
+a sentence that names it.
+
 ## Safety, in one paragraph
 
 Where it runs, the guard hook narrows what step agents can do: a step's tools, the folders it reads and writes and

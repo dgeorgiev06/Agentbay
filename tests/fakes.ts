@@ -1,5 +1,5 @@
 import { normalize } from "node:path/posix";
-import type { Clock, FileSystem, Folders, Removal } from "../bay/ports.ts";
+import type { Clock, FileInspector, FileSystem, Folders, Removal } from "../bay/ports.ts";
 
 export type FakeFileSystem = FileSystem & {
   readonly contents: ReadonlyMap<string, string>;
@@ -19,6 +19,20 @@ function childNames(contents: ReadonlyMap<string, string>, directory: string): r
     }
   }
   return [...names].sort();
+}
+
+export function fakeInspector(contents: ReadonlyMap<string, string>): FileInspector {
+  return {
+    realPath: (path) => Promise.resolve(normalize(path)),
+    isLink: () => Promise.resolve(false),
+    entries: (directory) =>
+      Promise.resolve(
+        childNames(contents, directory).map((name) => ({
+          name,
+          kind: contents.has(normalize(`${directory}/${name}`)) ? ("file" as const) : ("directory" as const),
+        })),
+      ),
+  };
 }
 
 export function fakeFileSystem(initial: Readonly<Record<string, string>> = {}): FakeFileSystem {

@@ -10,7 +10,7 @@ import {
 } from "./check-context.ts";
 import { grantedFolderFindings } from "./check-granted-folders.ts";
 import { checkImports, checkKernelImports } from "./check-imports.ts";
-import type { FileListing } from "./ports.ts";
+import type { FileInspector, FileListing } from "./ports.ts";
 import { checkKitLayout, checkLayout } from "./check-layout.ts";
 import { checkLimits } from "./check-limits.ts";
 import { checkSkills } from "./check-skills.ts";
@@ -25,6 +25,7 @@ import { readTrustRecord } from "./trust.ts";
 export type CheckPorts = {
   readonly files: FileSystem;
   readonly listing: FileListing;
+  readonly inspector: FileInspector;
 };
 
 export type CheckReport = {
@@ -110,7 +111,7 @@ export async function checkSystem(ports: CheckPorts, layout: Layout): Promise<Ch
     ...longStepWarnings(context),
     ...(await kitFindings(context)),
     ...withoutTheHookWarnings(layout, skillSteps),
-    ...(build === undefined ? [] : await grantedFolderFindings({ files: ports.files, layout, system: await build() })),
+    ...(build === undefined ? [] : await grantedFolderFindings({ ...ports, layout, system: await build() })),
   ]);
   const errorCount = findings.filter((finding) => finding.severity === "error").length;
   return { findings, errors: errorCount, warnings: findings.length - errorCount, skillSteps };

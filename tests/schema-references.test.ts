@@ -222,7 +222,7 @@ test("bay check says of each reference that names nothing, or names a file the m
   try {
     const listing = createProjectFileListing(testEnvironment, nodeFileInspector);
     const report = await checkSystem(
-      { files: nodeFileSystem, listing },
+      { files: nodeFileSystem, listing, inspector: nodeFileInspector },
       layoutOf({ kit: kit.root, project: kit.root }),
     );
     const referring = report.findings.filter((finding) => finding.message.includes(" refers to "));

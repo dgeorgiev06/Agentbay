@@ -1,34 +1,18 @@
-import { normalize } from "node:path";
 import type { BuildRequest, Layout, SkillAgent } from "../../../bay/adapter.ts";
+import { fakeFileSystem, fakeInspector } from "../../../tests/fakes.ts";
 import { grantsWith } from "../../../tests/grants-fixture.ts";
-import type { Files, Removal } from "../adapter-types.ts";
+import type { Files, Inspector, Removal } from "../adapter-types.ts";
 
-export type FilesWithRemoval = Files & { readonly removal: Removal };
+export type FilesWithRemoval = Files & { readonly removal: Removal; readonly inspector: Inspector };
 
 export type MemoryFiles = FilesWithRemoval & { readonly snapshot: () => Readonly<Record<string, string>> };
 
 export function memoryFiles(initial: Readonly<Record<string, string>> = {}): MemoryFiles {
-  const contents = new Map(Object.entries(initial).map(([path, text]) => [normalize(path), text]));
-  const childNames = (directory: string): readonly string[] => {
-    const prefix = `${normalize(directory).replace(/\/$/, "")}/`;
-    const names = [...contents.keys()].filter((path) => path.startsWith(prefix));
-    return [...new Set(names.map((path) => path.slice(prefix.length).split("/")[0] ?? ""))].sort();
-  };
+  const files = fakeFileSystem(initial);
   return {
-    readText: (path) => Promise.resolve(contents.get(normalize(path))),
-    list: (directory) => Promise.resolve(childNames(directory)),
-    exists: (path) => Promise.resolve(contents.has(normalize(path)) || childNames(path).length > 0),
-    writeAtomic: (path, text) => {
-      contents.set(normalize(path), text);
-      return Promise.resolve();
-    },
-    removal: {
-      remove: (path) => {
-        contents.delete(normalize(path));
-        return Promise.resolve();
-      },
-    },
-    snapshot: () => Object.fromEntries([...contents.entries()].sort(([left], [right]) => left.localeCompare(right))),
+    ...files,
+    inspector: fakeInspector(files.contents),
+    snapshot: () => Object.fromEntries([...files.contents].sort(([left], [right]) => left.localeCompare(right))),
   };
 }
 
@@ -121,7 +105,7 @@ export function buildRequest(files: FilesWithRemoval, agents: readonly SkillAgen
     workflow: () => ({ ok: false, problems: [] }),
     listing: () => ({ ok: false, problems: [] }),
   };
-  return { system, layout, agents, files, removal: files.removal };
+  return { system, layout, agents, files, inspector: files.inspector, removal: files.removal };
 }
 
 export const userSettings =

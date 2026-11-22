@@ -101,9 +101,12 @@ rule, the sheet says "by convention".
 
 - A mode's tests are `.test.ts` files in its `tests/` folder, run with `node --test`. They may import the kit's
   `tests/test-toolbox.ts`, besides what mode code may import.
-- `openModeProject(config, options)` from the test toolbox opens a throwaway project: `config` is a project
-  config, such as `{ modes: ["todo"], bindings: {}, adapter: "claude-code" }`, and a mode of a project, not of
-  the kit, gives `{ project: import.meta.dirname }` as `options`. It answers with these, among others:
+- A mode's test opens a throwaway project with `openModeProject(config, { project: import.meta.dirname })`
+  from the test toolbox: `config` is a project config, such as
+  `{ modes: ["todo"], bindings: {}, adapter: "claude-code" }`. The call is the same for a mode of the kit and
+  for a mode of a project beside it: the toolbox opens the project that the test's folder is in, and when that
+  is the kit itself, it opens the kit's modes once, as it does when `options` is left out. It answers with
+  these, among others:
   - `output(reference, input)`: runs the action, such as `todo.add`, asserts that the run is done, and gives its
     output.
   - `failure(reference, input)`: runs the action, asserts that the run failed, and gives its reason, which holds

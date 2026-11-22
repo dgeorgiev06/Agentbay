@@ -1,3 +1,4 @@
+import { basename } from "node:path/posix";
 import type { Json } from "../../../../../bay/sdk.ts";
 import type { Written } from "./commit-files.ts";
 import { ruleDocument, type Action, type Design, type Example, type Interface, type Module } from "./design-form.ts";
@@ -19,12 +20,22 @@ export function designPath(job: string): string {
   return `${designFolder(job)}/design.yaml`;
 }
 
+function schemaEnding(side: Side): string {
+  return `-${side}.json`;
+}
+
 export function schemaPath(
   job: string,
   at: { readonly interface: string; readonly action: string },
   side: Side,
 ): string {
-  return `${designFolder(job)}/schemas/${at.interface}/${at.action}-${side}.json`;
+  return `${designFolder(job)}/schemas/${at.interface}/${at.action}${schemaEnding(side)}`;
+}
+
+export function requestedActionOf(file: string): string | undefined {
+  const ending = schemaEnding("request");
+  const name = basename(file);
+  return name.endsWith(ending) ? name.slice(0, -ending.length) : undefined;
 }
 
 function textOfJson(value: Json): string {

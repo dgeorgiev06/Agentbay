@@ -4,6 +4,8 @@ The mode `forge` builds a piece of work in slices that run side by side. It runs
 
 Each skill step in `mode.yaml` names its role in place of a tier, and runs at the tier the kit gives that role in `bay/roles.ts` (ADR 29). Below, each skill is named with its role and tier.
 
+`skills/kit-for-a-mode.md` says what the kit offers a mode: its folder, its actions and schema files, what a script's context gives, how it keeps data, its effects, settings, tests, what it may not do, and the two meanings of interface. The skills `design`, `declare`, `write-tests`, `build` and `build-without-tests` name it in their Resources; `tests/kit-sheet.test.ts` holds the field names and the path sentence it quotes to the kit's code.
+
 ## What it does today
 
 The action `waves` reads a plan file and works out, by script, what the owner reads before work starts:

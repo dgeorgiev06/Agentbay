@@ -83,7 +83,8 @@ As `schemas/design.json`, sent with `submit`:
 
 ## Instructions
 
-1. Read the conditions. Decide what is stored and which module owns it.
+1. Read the conditions. Decide what is stored and which module owns it. A module that owns tables keeps them in
+   its mode's database, as `skills/kit-for-a-mode.md` says; the design need not say how unless it differs.
 2. Draw the modules by what each hides; give each the interface it offers.
 3. For each action write the request and response as JSON Schema, the conditions it serves, and examples:
    `earlier` calls when the example needs them, the `input`, and the `answer` or the `refusal` sentence. An
@@ -123,6 +124,8 @@ Read the project's files if you need to. Write no file. Submit with `submit`.
 ## Resources
 
 - `schemas/design.json`: the shape of the output.
+- `skills/kit-for-a-mode.md`: what the kit offers a mode, with its files, its database and the two meanings of interface; 
+  read it before you draw the modules.
 
 ## Rules and constraints
 

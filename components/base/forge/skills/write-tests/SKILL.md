@@ -57,8 +57,9 @@ path and its whole text.
    through the interface must show.
 5. A design's example may say a long text by rule, as `{"$text": [...]}`: each part is a text or
    `{"repeat": "<text>", "times": <count>}`, in order. Write the text it spells in the test, such as
-   `"a".repeat(500)`, never the form itself. A character is a Unicode code point, as a schema's `maxLength`
-   counts it, so 500 emoji are 500 characters.
+   `"a".repeat(500)`, never the form itself. Here, and only for sizing this form, a character is a Unicode code
+   point: `times` repeats its text whole. How the mode counts the characters of a text, for example as a person
+   sees them, is what the requirements decide, and the tests count as they say.
 6. Give each assertion a message in plain words that says what should hold, without the expected value.
    A case's name and such a message can reach the builder; neither holds a value of the test.
 7. From round 2 on, start from `earlier` and correct what each finding names. Hand in every named file
@@ -73,6 +74,8 @@ You have the harness's tools to read and search files, and none to write them. S
 
 - `schemas/tests.json`: the shape of the output.
 - `skills/review/reviewing-tests.md`: what a good test is, with examples.
+- `skills/kit-for-a-mode.md`: what the kit offers a mode, with its files, its database and the two meanings of interface; 
+  read it before you write how a test opens the project and calls the mode.
 
 The practices files are named in the input.
 

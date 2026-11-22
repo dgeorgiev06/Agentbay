@@ -11,6 +11,7 @@ import { provedOf } from "../scripts/lib/proof-answer.ts";
 import { sliceOf } from "../scripts/lib/slice-form.ts";
 import { startCard } from "../scripts/lib/start-card.ts";
 import { testsFromNamed, withGateSaid, withTestsFrom } from "../scripts/lib/tool-checks.ts";
+import { jsonOf } from "./kit-copy.ts";
 import { plannedSlice } from "./wave-run.ts";
 
 function mode(name: string, scope: readonly string[]): Gated {
@@ -122,7 +123,7 @@ describe("the gate, by forge's rule from the slices' kinds and scopes", () => {
 
   test("a gate handed on as data reads back as itself, and one not in the form of mode reads as whole", () => {
     for (const each of cases) {
-      assert.deepEqual(gateFrom(JSON.parse(JSON.stringify(each.gate)) as Json), each.gate);
+      assert.deepEqual(gateFrom(jsonOf(JSON.stringify(each.gate))), each.gate);
     }
     const forged = { gate: "mode", mode: "todo", folder: "components" };
     assert.equal(gateFrom(forged).gate, "whole");

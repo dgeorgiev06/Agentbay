@@ -579,7 +579,9 @@ export const modeGateTestsOfTheKit = ["tests/kit-check.test.ts", "tests/feature-
 export function testsFromAsked(requests: readonly Json[]): readonly (readonly string[])[] {
   return requests.map((request) =>
     listOf(fieldsOf(fieldsOf(request).slice ?? null).done).flatMap((item) =>
-      listOf(fieldsOf(fieldsOf(item).proof ?? null).testsFrom).map((path) => String(path)),
+      listOf(fieldsOf(fieldsOf(item).proof ?? null).testsFrom).flatMap((path) =>
+        typeof path === "string" ? [path] : [],
+      ),
     ),
   );
 }

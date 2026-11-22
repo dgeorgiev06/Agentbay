@@ -18,6 +18,7 @@ steps:
       slice: $steps.slice.output.slice
       folder: $steps.cut.output.folder
       practices: $settings.practices
+      interface: $steps.slice.output.interface
   - id: build
     action: build
     input:

@@ -1,5 +1,5 @@
 import type { BuildRequest, Layout, SkillAgent } from "../../../bay/adapter.ts";
-import { fakeFileSystem, fakeInspector } from "../../../tests/fakes.ts";
+import { fakeFileSystem, fakeInspector, noProcesses } from "../../../tests/fakes.ts";
 import { grantsWith } from "../../../tests/grants-fixture.ts";
 import type { Files, Inspector, Removal } from "../adapter-types.ts";
 
@@ -95,7 +95,11 @@ export const buildAgent = skillAgent({
 
 export const allAgents = [digestAgent, scanAgent, buildAgent];
 
-export function buildRequest(files: FilesWithRemoval, agents: readonly SkillAgent[] = allAgents): BuildRequest {
+export function buildRequest(
+  files: FilesWithRemoval,
+  agents: readonly SkillAgent[] = allAgents,
+  processes: BuildRequest["processes"] = noProcesses,
+): BuildRequest {
   const system: BuildRequest["system"] = {
     modes: new Map(),
     inactive: new Set<string>(),
@@ -105,7 +109,16 @@ export function buildRequest(files: FilesWithRemoval, agents: readonly SkillAgen
     workflow: () => ({ ok: false, problems: [] }),
     listing: () => ({ ok: false, problems: [] }),
   };
-  return { system, layout, agents, files, inspector: files.inspector, removal: files.removal };
+  return {
+    system,
+    layout,
+    agents,
+    files,
+    inspector: files.inspector,
+    processes,
+    searchPath: "/usr/bin:/bin",
+    removal: files.removal,
+  };
 }
 
 export const userSettings =

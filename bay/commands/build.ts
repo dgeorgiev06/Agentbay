@@ -1,10 +1,11 @@
 import { problemsResult, succeeded, withKernel, type CommandResult, type Invocation } from "../command-context.ts";
 import { loadAdapter, planAgents } from "../build.ts";
 import type { Kernel } from "../kernel.ts";
+import { searchPathOf } from "../kernel-ports.ts";
 import type { Outcome } from "../outcome.ts";
 
 async function built(invocation: Invocation, kernel: Kernel): Promise<Outcome<readonly string[]>> {
-  const { files, inspector, removal } = kernel.ports;
+  const { files, inspector, processes, removal } = kernel.ports;
   const name = invocation.values.get("adapter") ?? kernel.system.config.adapter;
   const { layout } = kernel;
   const adapter = await loadAdapter(files, layout.kit, name);
@@ -25,6 +26,8 @@ async function built(invocation: Invocation, kernel: Kernel): Promise<Outcome<re
     removal,
     files,
     inspector,
+    processes,
+    searchPath: searchPathOf(invocation.context.environment),
   });
 }
 

@@ -10,7 +10,7 @@ import {
 } from "./check-context.ts";
 import { grantedFolderFindings } from "./check-granted-folders.ts";
 import { checkImports, checkKernelImports } from "./check-imports.ts";
-import type { FileInspector, FileListing } from "./ports.ts";
+import type { FileInspector, FileListing, Processes } from "./ports.ts";
 import { checkKitLayout, checkLayout } from "./check-layout.ts";
 import { checkLimits } from "./check-limits.ts";
 import { checkSkills } from "./check-skills.ts";
@@ -26,6 +26,8 @@ export type CheckPorts = {
   readonly files: FileSystem;
   readonly listing: FileListing;
   readonly inspector: FileInspector;
+  readonly processes: Processes;
+  readonly searchPath: string;
 };
 
 export type CheckReport = {

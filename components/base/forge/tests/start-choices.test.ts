@@ -64,7 +64,7 @@ test("a branch an earlier run left offers only building over it, with or without
 test("a wave is built when no earlier run left a branch of it, and built over the branches when one did", () => {
   assert.deepEqual(waveChoices([]), {
     offered: { build: true, "build-over": false },
-    withheld: { "build-over": "No earlier run left a branch of this wave." },
+    withheld: { "build-over": "Nothing is left over from an earlier build, so there is nothing to build over." },
   });
   assert.deepEqual(waveChoices(left), {
     offered: { build: false, "build-over": true },

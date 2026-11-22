@@ -232,8 +232,8 @@ function checksShortWords(checks: WaveChecks): string {
       if (counts === undefined) {
         return "The checks passed";
       }
-      const passed = counts.bayCheck ? "The checks and bay check passed" : "The checks passed";
-      return `${passed}: ${counted(counts.tests, "test")}`;
+      const passed = counts.bayCheck ? "The fast checks and bay check passed" : "The checks passed";
+      return `${passed}; ${counted(counts.tests, "test")} passed`;
     }
     case "failed":
       return "The checks failed";
@@ -285,10 +285,11 @@ function reviewShortWords(slices: readonly Settled[]): string {
   const sum = (count: (each: Reviewed) => number): number => reviewed.reduce((total, each) => total + count(each), 0);
   const held = sum((each) => each.held);
   const all = held + sum((each) => each.notHeld);
-  return `Review step: ${String(held)} of ${String(all)} held, ${counted(
+  const left = counted(
     sum((each) => each.remaining),
     "finding",
-  )} left`;
+  );
+  return `Review step: ${String(held)} of ${counted(all, "condition")} held, ${left} left`;
 }
 
 function shortChecks(input: WaveCardInput): readonly Fact[] {

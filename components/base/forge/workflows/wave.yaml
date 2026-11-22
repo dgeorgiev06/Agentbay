@@ -29,7 +29,7 @@ steps:
       slices: $steps.wave.output.slices
   - id: slices
     foreach: $steps.wave.output.requests
-    itemName: { id: $item.planned.slice.name, title: $item.planned.title }
+    itemName: { id: $item.planned.slice.name }
     sideBySide: $steps.wave.output.sideBySide
     steps:
       - id: slice

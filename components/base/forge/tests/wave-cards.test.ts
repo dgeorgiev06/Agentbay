@@ -140,8 +140,8 @@ const oneFailingFacts: readonly Fact[] = (
     ["what", false, "slice TD2", "computed", "draw", "Interface files: 1 unchanged since the base, by hash."],
     ["what", false, "slice TD2", "computed", "draw", "Rounds: 1 of at most 3; the reviewer had no findings."],
     ["what", false, "slice TD2", "judged", "round-1", "The builder decided: TD2 counts in memory."],
-    ["checks", true, "", "computed", "draw", "The checks passed: 40 tests."],
-    ["checks", true, "", "computed", "draw", "Review step: 2 of 2 held, 0 findings left."],
+    ["checks", true, "", "computed", "draw", "The checks passed; 40 tests passed."],
+    ["checks", true, "", "computed", "draw", "Review step: 2 of 2 conditions held, 0 findings left."],
     ["checks", false, "the checks on the slices combined", "computed", "prove", "The must item checks passed."],
     ["checks", false, "the checks on the slices combined", "computed", "prove", "Checks passed: typecheck, lint."],
     ["checks", false, "the checks on the slices combined", "computed", "prove", "Tests passed: 40."],
@@ -420,7 +420,7 @@ describe("the wave's merge card under the mode gate", () => {
       .card.lines.filter((line) => line.section === "checks" && line.short === true)
       .map((line) => line.words);
     assert.deepEqual(short.slice(0, 2), [
-      "The checks and bay check passed: 9 tests.",
+      "The fast checks and bay check passed; 9 tests passed.",
       "Not run: tests outside the td1 mode.",
     ]);
     const wholeGate: Gate = { gate: "whole", because: { why: "no slice" } };

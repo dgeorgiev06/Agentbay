@@ -51,7 +51,7 @@ const startChoices = [
     name: "build-over",
     status: "withheld",
     does: "Drop the branches an earlier run left, then build the slices side by side",
-    reason: "No earlier run left a branch of this wave.",
+    reason: "Nothing is left over from an earlier build, so there is nothing to build over.",
   },
   { name: "stop", status: "offered", does: "Stop now; nothing is built" },
 ];
@@ -106,7 +106,7 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     const asking = await shown(root, start.id);
     const question = textAt(fieldsOf(asking).waiting ?? null, "question");
     assert.equal(textAt(fieldsOf(asking).waiting ?? null, "reason"), "owner", JSON.stringify(asking));
-    assert.match(question, /1 of 3 items: TD10 \(The td10 mode counts what was added\) at slices\[1\]: /);
+    assert.match(question, /1 of 3 items: TD10 at slices\[1\]: /);
     assert.deepEqual(keptSlices(root), ["TD1", "TD10", "TD2"]);
     await provedAs(root, "TD10", ownPassed("TD10"));
     await ownerAnswered(root, start.id, "--rerun");

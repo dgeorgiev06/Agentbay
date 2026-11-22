@@ -362,8 +362,8 @@ test("a plan cannot choose the gate: a checks item that names testsFrom, or a sl
   const claiming = { ...named, slice: { ...fieldsOf(named.slice), done: [checks] } };
   assert.deepEqual(fieldsOf(await waves("claims-tests", plan("Claims", [claiming]))).lines, [
     "docs/plans/claims-tests.yaml is not a plan forge can read, for 1 reason:",
-    "line 13: Slice A's checks item DOD-A names testsFrom, which forge alone sets, deciding the gate from the " +
-      "slices' kinds and scopes; leave testsFrom out.",
+    "line 13: Slice A's checks item DOD-A names testsFrom or bayCheck, which forge alone sets, deciding the gate " +
+      "from the slices' kinds and scopes; leave them out.",
   ]);
   const gated = { ...named, slice: { ...fieldsOf(named.slice), gate: "mode" } };
   assert.deepEqual(fieldsOf(await waves("claims-gate", plan("Claims", [gated]))).problems, [

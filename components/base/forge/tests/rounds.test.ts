@@ -179,7 +179,7 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
     );
   });
 
-  test("tests that fail in round 1 go back to the builder as names, and messages that quote no test; they pass in round 2", async () => {
+  test("tests that fail in round 1 go back to the builder as names, and messages less what quotes a test; they pass in round 2", async () => {
     const root = await project(template);
     const name = "A1";
     const tests = [testsOf(name, 1)];
@@ -232,7 +232,7 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       items: ["DOD-A1-1"],
       cases: [
         { name: caseName(name), file: testPath(name), message: nineteen },
-        { name: `${caseName(name)} twice`, file: testPath(name) },
+        { name: `${caseName(name)} twice`, file: testPath(name), message: "got …!" },
       ],
       withheld: 1,
       notListed: 0,

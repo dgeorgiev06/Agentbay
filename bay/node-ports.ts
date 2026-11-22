@@ -16,6 +16,7 @@ import {
 } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { Readable } from "node:stream";
+import { gitReading } from "./git-reading.ts";
 import { createOwnerOnlyFile } from "./owner-only.ts";
 import type {
   Child,
@@ -394,8 +395,6 @@ export function createNodeHttp(options: NodeHttpOptions): Http {
   };
 }
 
-const listingMilliseconds = 30_000;
-
 const unlistedFolders: readonly string[] = ["node_modules", ".git", ".agentbay"];
 
 async function walkedFiles(inspector: FileInspector, root: string, folder = ""): Promise<readonly string[]> {
@@ -417,13 +416,8 @@ export function createProjectFileListing(
 ): FileListing {
   return {
     projectFiles: async (root) => {
-      const result = await runProcess({
-        command: "git",
-        arguments: ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
-        directory: root,
-        environment,
-        timeoutMilliseconds: listingMilliseconds,
-      });
+      const words = ["ls-files", "-z", "--cached", "--others", "--exclude-standard"];
+      const result = await runProcess(gitReading(words, { directory: root, searchPath: environment.PATH ?? "" }));
       if (result.end.how !== "exited" || result.end.exitCode !== 0) {
         return [...(await walkedFiles(inspector, root))].sort();
       }

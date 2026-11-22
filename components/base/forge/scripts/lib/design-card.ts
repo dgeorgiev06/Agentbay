@@ -98,10 +98,10 @@ function notHeldReasons(input: DesignCardInput): readonly string[] {
   if (notHeld.length === 0) {
     return [];
   }
-  const which = notHeld.length === 1 ? "this practice" : `these ${String(notHeld.length)} practices`;
-  const named = notHeld.map((practice) => practiceWords(input, practice.id)).join("; ");
+  const ids = joined(notHeld.map((practice) => practice.id));
+  const which = notHeld.length === 1 ? `the practice ${ids}, named` : `the practices ${ids}, each named`;
   const reasons = [
-    `The review step answered that the design does not hold ${which}: ${named}.`,
+    `The review step answered that the design does not hold ${which} in words below.`,
     "A practice held by design must be held before the design is committed.",
   ];
   const once = "The designer has answered the review once, which is the most a design run asks.";
@@ -341,7 +341,7 @@ function findingFacts(input: DesignCardInput): readonly Fact[] {
   const lines = [
     computed("draw", count),
     ...input.findings.map((finding) =>
-      judged(challengerStep(input), `In ${finding.where}: ${finding.wrong} Fix: ${finding.fix}`),
+      judged(challengerStep(input), `Finding in ${finding.where}: ${finding.wrong} Fix: ${finding.fix}`),
     ),
   ];
   const about = input.second === undefined ? "findings of the review step" : "findings left after the answer";
@@ -400,7 +400,9 @@ function openFacts(input: DesignCardInput): readonly Fact[] {
   if (input.undecided.length === 0) {
     return shortFacts("open", [computed("draw", "The review step listed nothing the design leaves undecided.")]);
   }
-  const lines = input.undecided.map((item) => judged(challengerStep(input), undecidedWords(item)));
+  const lines = input.undecided.map((item, at) =>
+    judged(challengerStep(input), `${String(at + 1)}. ${undecidedWords(item)}`),
+  );
   return [
     ...shortFacts("open", lines.slice(0, undecidedOnShortScreen)),
     ...facts("open", lines.slice(undecidedOnShortScreen)),

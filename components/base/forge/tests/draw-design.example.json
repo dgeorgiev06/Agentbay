@@ -1885,7 +1885,7 @@
         },
         {
           "mark": "judged",
-          "words": "How a text is split into the characters a person sees. It touches a condition you signed (O1-C4).",
+          "words": "1. How a text is split into the characters a person sees. It touches a condition you signed (O1-C4).",
           "source": {
             "step": "challenge"
           },
@@ -1894,7 +1894,7 @@
         },
         {
           "mark": "judged",
-          "words": "Which characters count as spaces. It touches a condition you signed (O1-C6).",
+          "words": "2. Which characters count as spaces. It touches a condition you signed (O1-C6).",
           "source": {
             "step": "challenge"
           },
@@ -1903,7 +1903,7 @@
         },
         {
           "mark": "judged",
-          "words": "Whether a refused call writes nothing or the same values.",
+          "words": "3. Whether a refused call writes nothing or the same values.",
           "source": {
             "step": "challenge"
           },

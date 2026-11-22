@@ -325,8 +325,8 @@ describe("the design's first card and the design card, for the todo mode", () =>
     assert.deepEqual(drawn.offered, { approve: false });
     assert.deepEqual(drawn.card.withheld, {
       approve:
-        "The review step answered that the design does not hold this practice: The rules of the work are pure " +
-        "functions (P-52). A practice held by design must be held before the design is committed.",
+        "The review step answered that the design does not hold the practice P-52, named in words below. A " +
+        "practice held by design must be held before the design is committed.",
     });
     assert.deepEqual(factsIn(drawn, "problems"), [
       about(
@@ -356,10 +356,10 @@ describe("the design's first card and the design card, for the todo mode", () =>
     const drawn = designCard({ ...(await lightInput(allHeld)), undecided });
     const asked = by("open", "judged", "challenge");
     assert.deepEqual(factsIn(drawn, "open"), [
-      short(asked, "How 500 characters are counted. It touches a condition you signed (O1-C4)."),
-      short(asked, "Whether text is trimmed."),
-      short(asked, "What a refused add says next. It touches a requirement you signed for a person to judge (J1)."),
-      plain(asked, "Two adds at the same moment."),
+      short(asked, "1. How 500 characters are counted. It touches a condition you signed (O1-C4)."),
+      short(asked, "2. Whether text is trimmed."),
+      short(asked, "3. What a refused add says next. It touches a requirement you signed for a person to judge (J1)."),
+      plain(asked, "4. Two adds at the same moment."),
     ]);
     assert.deepEqual(drawn.offered, { approve: true });
   });
@@ -368,7 +368,7 @@ describe("the design's first card and the design card, for the todo mode", () =>
     const undecided = [{ sentence: "Whether text is trimmed." }];
     const drawn = designCard({ ...(await lightInput(allHeld)), second: answeredP52, undecided });
     assert.deepEqual(factsIn(drawn, "open"), [
-      short(by("open", "judged", "challenge-again"), "Whether text is trimmed."),
+      short(by("open", "judged", "challenge-again"), "1. Whether text is trimmed."),
     ]);
   });
 
@@ -387,8 +387,8 @@ describe("the design's first card and the design card, for the todo mode", () =>
     );
     assert.equal(
       drawn.card.withheld.approve,
-      `The review step answered that the design does not hold these 2 practices: ${long.replace(/\.$/, "")} ` +
-        "(P-52); Interfaces first (P-35). A practice held by design must be held before the design is committed.",
+      "The review step answered that the design does not hold the practices P-52 and P-35, each named in words " +
+        "below. A practice held by design must be held before the design is committed.",
     );
   });
 
@@ -432,9 +432,9 @@ describe("the design's first card and the design card, for the todo mode", () =>
     assert.deepEqual(drawn.offered, { approve: false });
     assert.equal(
       drawn.card.withheld.approve,
-      "The review step answered that the design does not hold this practice: The rules of the work are pure " +
-        "functions (P-52). A practice held by design must be held before the design is committed. The designer " +
-        "has answered the review once, which is the most a design run asks.",
+      "The review step answered that the design does not hold the practice P-52, named in words below. A " +
+        "practice held by design must be held before the design is committed. The designer has answered the " +
+        "review once, which is the most a design run asks.",
     );
     assert.deepEqual(
       factsIn(drawn, "problems").map((fact) => [fact.mark, fact.step, fact.words]),
@@ -448,7 +448,7 @@ describe("the design's first card and the design card, for the todo mode", () =>
         ],
       ],
     );
-    const finding = factsIn(drawn, "checks").find((fact) => fact.words.startsWith("In todo.add:"));
+    const finding = factsIn(drawn, "checks").find((fact) => fact.words.startsWith("Finding in todo.add:"));
     assert.deepEqual([finding?.mark, finding?.step, finding?.short], ["judged", "challenge-again", false]);
     assert.equal(
       shortWords(drawn, "checks")[1],
@@ -459,7 +459,7 @@ describe("the design's first card and the design card, for the todo mode", () =>
   test("a finding with every practice held is shown as judged by the challenger and withholds nothing, as on the plan card", async () => {
     const drawn = designCard({ ...(await lightInput(allHeld)), findings: [refusalExample] });
     assert.deepEqual(drawn.offered, { approve: true });
-    const finding = drawn.card.lines.find((line) => line.words.startsWith("In todo.add:"));
+    const finding = drawn.card.lines.find((line) => line.words.startsWith("Finding in todo.add:"));
     assert.deepEqual([finding?.mark, finding?.source], ["judged", { step: "challenge" }]);
   });
 

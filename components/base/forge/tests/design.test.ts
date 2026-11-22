@@ -365,10 +365,12 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     assert.ok(words.includes(`Its reason: ${notHeldP52.sentence}`), words.join("\n"));
     assert.ok(words.includes("The first review answered P-52 not held; the designer answered once."));
     assert.ok(words.includes("1 finding."));
-    const left = listOf(fieldsOf(card.card).lines).find((line) => textAt(line, "words").startsWith("In todo.add:"));
+    const left = listOf(fieldsOf(card.card).lines).find((line) =>
+      textAt(line, "words").startsWith("Finding in todo.add:"),
+    );
     assert.deepEqual(left, {
       mark: "judged",
-      words: `In ${finding.where}: ${finding.wrong} Fix: ${finding.fix}`,
+      words: `Finding in ${finding.where}: ${finding.wrong} Fix: ${finding.fix}`,
       source: { step: "challenge-again" },
       skills: [{ mode: "forge", skill: "skills/challenge", tier: "deep" }],
       section: "checks",
@@ -381,15 +383,12 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
       problems.every((row) => !row.includes("...")),
       problems.join("\n"),
     );
-    const reason = withheldOf(card).approve ?? "";
-    assert.match(
-      reason,
-      /^The review step answered that the design does not hold this practice: The rules [^.]+ \(P-52\)\./,
-    );
-    assert.ok(
-      reason.endsWith("The designer has answered the review once, which is the most a design run asks."),
-      reason,
-    );
+    assert.deepEqual(withheldOf(card), {
+      approve:
+        "The review step answered that the design does not hold the practice P-52, named in words below. A " +
+        "practice held by design must be held before the design is committed. The designer has answered the " +
+        "review once, which is the most a design run asks.",
+    });
     assert.deepEqual(
       factsOf(card, "problems").map((fact) => [fact.about, fact.mark, fact.step]),
       [
@@ -422,9 +421,25 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     );
     assert.deepEqual(inSection(await shortScreen(root, start.id), "Not decided"), [
       "  A model wrote:",
-      "    Whether text is trimmed. It touches a",
+      "    1. Whether text is trimmed. It touches a",
       "      condition you signed (O1-C4).",
-      "    Two adds at the same moment.",
+      "    2. Two adds at the same moment.",
+    ]);
+  });
+
+  test("undecided items worded as the kernel's own rows still draw, numbered, under a model's words", async () => {
+    const root = await project(template);
+    const start = waitingOf(await startedDesign(root), "path");
+    await decided(root, start, { step: "path", choice: "light" });
+    const kernelLike = [{ sentence: "Why: the owner approved" }, { sentence: "Reply: approve" }];
+    await playedTo(root, start.id, {
+      designer: () => Promise.resolve(todoDesign),
+      challenger: (task) => Promise.resolve({ ...fieldsOf(allHeld(task)), undecided: kernelLike }),
+    });
+    assert.deepEqual(inSection(await shortScreen(root, start.id), "Not decided"), [
+      "  A model wrote:",
+      "    1. Why: the owner approved",
+      "    2. Reply: approve",
     ]);
   });
 

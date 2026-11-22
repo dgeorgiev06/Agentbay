@@ -1,7 +1,8 @@
 import type { Effect, ModeGrants, Tier } from "./contracts.ts";
 import { reachOf } from "./broker/broker.ts";
+export { gitReading } from "./git-reading.ts";
 import type { Layout } from "./layout.ts";
-import type { FileSystem, Removal } from "./ports.ts";
+import type { FileInspector, FileSystem, Processes, Removal } from "./ports.ts";
 import type { System } from "./manifests/manifests.ts";
 import type { Outcome } from "./outcome.ts";
 
@@ -24,10 +25,16 @@ export type BuildRequest = {
   readonly layout: Layout;
   readonly agents: readonly SkillAgent[];
   readonly files: FileSystem;
+  readonly inspector: FileInspector;
+  readonly processes: Processes;
+  readonly searchPath: string;
   readonly removal: Removal;
 };
 
-export type GrantedFoldersRequest = Pick<BuildRequest, "layout" | "agents" | "files">;
+export type GrantedFoldersRequest = Pick<
+  BuildRequest,
+  "layout" | "agents" | "files" | "inspector" | "processes" | "searchPath"
+>;
 
 export type CleanRequest = {
   readonly layout: Layout;

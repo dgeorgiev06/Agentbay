@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { mkdir, readdir, readFile, rm, rmdir, writeFile } from "node:fs/promises";
+import {
+  type Dirent,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { lstat, mkdir, readdir, readFile, realpath, rm, rmdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, test } from "node:test";
@@ -19,6 +28,13 @@ after(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
+function diskKind(entry: Dirent): "directory" | "file" | "other" {
+  if (entry.isDirectory()) {
+    return "directory";
+  }
+  return entry.isFile() ? "file" : "other";
+}
+
 const diskFiles: FilesWithRemoval = {
   readText: async (path) => readFile(path, "utf8").catch(() => undefined),
   list: async (directory) => readdir(directory).catch(() => []),
@@ -30,6 +46,14 @@ const diskFiles: FilesWithRemoval = {
   removal: {
     remove: async (path) => {
       await rm(path, { recursive: false }).catch(async () => rmdir(path).catch(() => undefined));
+    },
+  },
+  inspector: {
+    realPath: async (path) => realpath(path).catch(() => undefined),
+    isLink: async (path) => (await lstat(path).catch(() => undefined))?.isSymbolicLink() ?? false,
+    entries: async (directory) => {
+      const found = await readdir(directory, { withFileTypes: true }).catch(() => []);
+      return found.map((entry) => ({ name: entry.name, kind: entry.isSymbolicLink() ? "link" : diskKind(entry) }));
     },
   },
 };

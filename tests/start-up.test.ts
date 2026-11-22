@@ -31,6 +31,7 @@ const commandLine = [
   "bay/command-context.ts",
   "bay/command-line.ts",
   "bay/commands.ts",
+  "bay/git-reading.ts",
   "bay/json.ts",
   "bay/kernel-ports.ts",
   "bay/last-resort.ts",

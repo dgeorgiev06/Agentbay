@@ -4,6 +4,10 @@ export type Files = BuildRequest["files"];
 
 export type Removal = BuildRequest["removal"];
 
+export type Inspector = BuildRequest["inspector"];
+
+export type DirectoryEntry = Awaited<ReturnType<Inspector["entries"]>>[number];
+
 export type Tier = SkillAgent["tier"];
 
 export type ListOutcome = Awaited<ReturnType<Adapter["build"]>>;

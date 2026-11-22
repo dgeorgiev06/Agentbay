@@ -1,9 +1,13 @@
 import { checkSystem, summarizeCheck } from "../check.ts";
 import type { Invocation, CommandResult } from "../command-context.ts";
+import { searchPathOf } from "../kernel-ports.ts";
 
 export async function runCheck(invocation: Invocation): Promise<CommandResult> {
   const { ports } = invocation.context;
-  const report = await checkSystem({ files: ports.files, listing: ports.listing }, invocation.layout);
+  const report = await checkSystem(
+    { ...ports, searchPath: searchPathOf(invocation.context.environment) },
+    invocation.layout,
+  );
   const findings = report.findings.map((finding) => ({
     severity: finding.severity,
     file: finding.file,

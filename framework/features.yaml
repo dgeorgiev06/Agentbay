@@ -30,6 +30,7 @@ features:
       - bay/given-schema.ts
       - bay/schema-files.ts
       - bay/database-lock.ts
+      - bay/git-reading.ts
     private: []
     may_import: []
   platform:

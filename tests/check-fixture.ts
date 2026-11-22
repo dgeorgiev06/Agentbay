@@ -3,7 +3,8 @@ import type { Finding } from "../bay/check-context.ts";
 import type { FileListing } from "../bay/ports.ts";
 import { checkSystem, type CheckReport } from "../bay/check.ts";
 import { layoutOf, type Layout } from "../bay/layout.ts";
-import { fakeFileSystem, type FakeFileSystem } from "./fakes.ts";
+import { noProcesses } from "./broker-fixture.ts";
+import { fakeFileSystem, fakeInspector, type FakeFileSystem } from "./fakes.ts";
 import { layout, paths, rooted, validFiles } from "./system-fixture.ts";
 
 export const notesSkillFile = "components/modes/notes/skills/write-note/SKILL.md";
@@ -80,7 +81,16 @@ export function listingOf(files: FakeFileSystem): FileListing {
 }
 
 export async function checkFake(files: FakeFileSystem, checkedLayout: Layout = layout): Promise<CheckReport> {
-  return checkSystem({ files, listing: listingOf(files) }, checkedLayout);
+  return checkSystem(
+    {
+      files,
+      listing: listingOf(files),
+      inspector: fakeInspector(files.contents),
+      processes: noProcesses,
+      searchPath: "",
+    },
+    checkedLayout,
+  );
 }
 
 export async function check(files: Readonly<Record<string, string>>): Promise<CheckReport> {

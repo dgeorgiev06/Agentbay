@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { rm, symlink } from "node:fs/promises";
+import { chmod, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import { stringify } from "yaml";
@@ -90,6 +90,20 @@ test("the git file listing gives tracked and untracked files and leaves ignored 
   assert.ok(listed.includes("notes.txt"));
   assert.ok(listed.includes("components/modes/writer/mode.yaml"));
   assert.ok(!listed.some((path) => path.startsWith("out/")));
+  await project.remove();
+});
+
+test("the git file listing does not run a repository's own core.fsmonitor", async () => {
+  const project = await makeProject();
+  const marker = join(project.root, "out", "fsmonitor-ran");
+  const monitor = join(project.root, "out", "monitor.sh");
+  await project.write("out/monitor.sh", `#!/bin/sh\ntouch ${marker}\n`);
+  await chmod(monitor, 0o755);
+  const configured = spawnSync("git", ["config", "core.fsmonitor", monitor], { cwd: project.root });
+  assert.equal(configured.status, 0);
+  const listed = await createProjectFileListing(testEnvironment, nodeFileInspector).projectFiles(project.root);
+  assert.ok(listed.includes("components/modes/writer/mode.yaml"));
+  assert.equal(existsSync(marker), false);
   await project.remove();
 });
 

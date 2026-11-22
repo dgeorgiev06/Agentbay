@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { fakeProcesses, type FakeProcesses } from "../../../tests/fakes.ts";
 import { adapter } from "../adapter.ts";
 import type { ListOutcome } from "../adapter-types.ts";
 import { guardEntry } from "../settings.ts";
@@ -347,6 +348,362 @@ test("a build refuses a step granted a folder that holds a closed name, and writ
   const outcome = await adapter.build(buildRequest(memoryFiles(), [closedRoot]));
   assert.ok(!outcome.ok);
   assert.match(outcome.problems[0]?.message ?? "", /names a closed location/);
+});
+
+const worktree = `${project}/notes/wt`;
+
+const pointer = `${worktree}/.git`;
+
+type Contents = readonly (readonly [string, string])[];
+
+function emptyFiles(folder: string, names: readonly string[]): Contents {
+  return names.map((name) => [`${folder}/${name}`, ""]);
+}
+
+function numbered(prefix: string, count: number): readonly string[] {
+  return Array.from({ length: count }, (_, index) => `${prefix}${String(index)}`);
+}
+
+function backLink(folder: string, name: string, root = project): Contents {
+  return [[`${root}/.git/worktrees/${name}/gitdir`, `${folder}/.git\n`]];
+}
+
+function linked(folder: string, name: string): Contents {
+  return [[`${folder}/.git`, `gitdir: ${project}/.git/worktrees/${name}\n`], ...backLink(folder, name)];
+}
+
+function withPointer(text: string, root = project): MemoryFiles {
+  const records = [...backLink(worktree, "wt", root), ...backLink(worktree, "other-name", root)];
+  return memoryFiles(Object.fromEntries([[pointer, text], [`${worktree}/a.ts`, "a"], ...records]));
+}
+
+test("a build passes a granted folder that holds a git worktree's pointer into the project's own worktrees", async () => {
+  for (const text of [`gitdir: ${project}/.git/worktrees/wt\n`, `gitdir: ${project}/.git/worktrees/other-name`]) {
+    const outcome = await adapter.build(buildRequest(withPointer(text)));
+    assert.ok(outcome.ok, `${text}: ${JSON.stringify(outcome)}`);
+  }
+});
+
+test("a pointer names the project's worktrees by its real path, as git writes it when the project is reached by a link", async () => {
+  const files = withPointer("gitdir: /real/proj/.git/worktrees/wt\n", "/real/proj");
+  const realPath = (path: string) => Promise.resolve(path === project ? "/real/proj" : path);
+  const linked = { ...files, inspector: { ...files.inspector, realPath } };
+  const outcome = await adapter.build(buildRequest(linked));
+  assert.ok(outcome.ok, JSON.stringify(outcome));
+  assert.ok(!(await adapter.build(buildRequest(files))).ok);
+  const written = withPointer(`gitdir: ${project}/.git/worktrees/wt\n`);
+  assert.ok(!(await adapter.build(buildRequest({ ...written, inspector: { ...written.inspector, realPath } }))).ok);
+});
+
+test("a build refuses a .git entry that is not exactly a pointer into the project's own worktrees", async () => {
+  const refused = [
+    `gitdir: ${project}/.git/worktrees/wt\nextra\n`,
+    `gitdir: ${project}/.git/worktrees/wt\n\n`,
+    `gitdir: ${project}/.git/worktrees/wt\r\n`,
+    ` gitdir: ${project}/.git/worktrees/wt\n`,
+    `gitdir:${project}/.git/worktrees/wt\n`,
+    `GITDIR: ${project}/.git/worktrees/wt\n`,
+    `x gitdir: ${project}/.git/worktrees/wt\n`,
+    "gitdir: /elsewhere/.git/worktrees/wt\n",
+    `gitdir: ${project}/.git\n`,
+    `gitdir: ${project}/.git/modules/wt\n`,
+    `gitdir: ${project}/.git/worktrees/\n`,
+    `gitdir: ${project}/.git/worktrees/wt/deeper\n`,
+    `gitdir: ${project}/.git/worktrees/../wt\n`,
+    `gitdir: ${project}/.git/worktrees//wt\n`,
+    `gitdir: ${project}/.git/worktrees/./wt\n`,
+    `gitdir: ${project}/.git/worktrees/..\n`,
+    `gitdir: ${project}/.git/worktrees/.\n`,
+    "gitdir: proj/.git/worktrees/wt\n",
+    "gitdir: \n",
+    "ref: refs/heads/main\n",
+    "",
+  ];
+  for (const text of refused) {
+    const files = withPointer(text);
+    const outcome = await adapter.build(buildRequest(files));
+    assert.ok(!outcome.ok, JSON.stringify(text));
+    assert.deepEqual(
+      outcome.problems.map(({ file, message }) => ({ file, message })),
+      [
+        {
+          file: digestAgent.skillFile,
+          message: `the step ${digestAgent.agent} is granted /proj/notes, which holds ${pointer}`,
+        },
+      ],
+    );
+    assert.equal(files.snapshot()[`${project}/.agentbay/build.json`], undefined);
+  }
+});
+
+test("a worktree's pointer lets nothing else through when git cannot say what the worktree tracks", async () => {
+  const valid = `gitdir: ${project}/.git/worktrees/wt\n`;
+  const record = Object.fromEntries(backLink(worktree, "wt"));
+  const cases: readonly (readonly [Readonly<Record<string, string>>, string])[] = [
+    [{ [`${pointer}/HEAD`]: valid }, pointer],
+    [{ [`${worktree}/.GIT`]: valid }, `${worktree}/.GIT`],
+    [{ [pointer]: valid, [`${worktree}/.env`]: "" }, `${worktree}/.env`],
+    [{ [pointer]: valid, [`${worktree}/agentbay.config.yaml`]: "" }, `${worktree}/agentbay.config.yaml`],
+    [{ [pointer]: valid, [`${worktree}/sub/CLAUDE.md`]: "" }, `${worktree}/sub/CLAUDE.md`],
+  ];
+  for (const [start, holds] of cases) {
+    const outcome = await adapter.build(buildRequest(memoryFiles({ ...record, ...start })));
+    assert.ok(!outcome.ok, holds);
+    assert.equal(
+      outcome.problems[0]?.message,
+      `the step ${digestAgent.agent} is granted /proj/notes, which holds ${holds}`,
+    );
+  }
+});
+
+const blob = "0123456789abcdef0123456789abcdef01234567";
+
+function indexOf(records: readonly (readonly [string, string, string])[]): string {
+  return records.map(([mode, stage, path]) => `${mode} ${blob} ${stage}\t${path}\0`).join("");
+}
+
+const index = indexOf([
+  ["100644", "0", "agentbay.config.yaml"],
+  ["100644", "0", "CLAUDE.md"],
+  ["100755", "0", ".claude/settings.json"],
+  ["100644", "0", ".mcp.json"],
+  ["100644", "0", ".env.example"],
+  ["100644", "0", "deep/.ENV.Sample"],
+  ["100644", "0", "config/.env.template"],
+  ["100644", "0", ".agentbay/notes.md"],
+  ["100644", "0", ".env"],
+  ["100644", "0", "app/.env.local"],
+  ["100644", "0", ".env.example.local"],
+  ["120000", "0", "docs/CLAUDE.md"],
+  ["100644", "1", "conflict/CLAUDE.md"],
+  ["100644", "0", "sub/.git/HEAD"],
+  ["100644", "0", ".GIT"],
+  ["100644", "0", "src/app.ts"],
+  ["100644", "0", ".env.local/x.txt"],
+  ["100644", "0", "lines\nin/CLAUDE.md"],
+]);
+
+async function builtWithIndex(paths: readonly string[], git: FakeProcesses): Promise<ListOutcome> {
+  const start = Object.fromEntries([...linked(worktree, "wt"), ...emptyFiles(worktree, paths)]);
+  return adapter.build(buildRequest(memoryFiles(start), allAgents, git));
+}
+
+test("inside a worktree of the project, a closed name git tracks as a regular file is a copy and passes", async () => {
+  const copies = [
+    "agentbay.config.yaml",
+    "CLAUDE.md",
+    ".claude/settings.json",
+    ".mcp.json",
+    ".env.example",
+    "deep/.ENV.Sample",
+    "config/.env.template",
+    ".agentbay/notes.md",
+    "lines\nin/CLAUDE.md",
+  ];
+  for (const copy of copies) {
+    const outcome = await builtWithIndex([copy, "src/app.ts"], fakeProcesses(index));
+    assert.ok(outcome.ok, `${copy}: ${JSON.stringify(outcome)}`);
+  }
+  const git = fakeProcesses(index);
+  assert.ok((await builtWithIndex(copies, git)).ok);
+  assert.deepEqual(git.asked, [
+    {
+      command: "git",
+      arguments: [
+        "-c",
+        "core.fsmonitor=false",
+        "--no-optional-locks",
+        `--git-dir=${project}/.git/worktrees/wt`,
+        `--work-tree=${worktree}`,
+        "ls-files",
+        "--stage",
+        "-z",
+      ],
+      directory: worktree,
+      environment: { PATH: "/usr/bin:/bin", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
+      timeoutMilliseconds: 30_000,
+    },
+  ]);
+});
+
+test("git is asked once for a worktree, however many steps are granted the folder that holds it", async () => {
+  const git = fakeProcesses(index);
+  const reader = skillAgent({ ...shape, read: [`${project}/notes`] });
+  const start = Object.fromEntries([...linked(worktree, "wt"), ...emptyFiles(worktree, ["CLAUDE.md", "src/app.ts"])]);
+  assert.ok((await adapter.build(buildRequest(memoryFiles(start), [digestAgent, reader], git))).ok);
+  assert.equal(git.asked.length, 1);
+});
+
+test("inside a worktree, an untracked, secret, linked, conflicted or git-named closed entry refuses in the same sentence", async () => {
+  const refused: readonly (readonly [string, string])[] = [
+    ["other/CLAUDE.md", "other/CLAUDE.md"],
+    [".claude/extra.json", ".claude/extra.json"],
+    [".mcp.json/x", ".mcp.json"],
+    [".env", ".env"],
+    ["app/.env.local", "app/.env.local"],
+    [".env.example.local", ".env.example.local"],
+    ["docs/CLAUDE.md", "docs/CLAUDE.md"],
+    ["conflict/CLAUDE.md", "conflict/CLAUDE.md"],
+    ["sub/.git/HEAD", "sub/.git"],
+    [".GIT", ".GIT"],
+    ["src/app.ts/CLAUDE.md", "src/app.ts/CLAUDE.md"],
+    [".env.local/x.txt", ".env.local"],
+  ];
+  for (const [path, holds] of refused) {
+    const outcome = await builtWithIndex([path], fakeProcesses(index));
+    assert.ok(!outcome.ok, path);
+    assert.equal(
+      outcome.problems[0]?.message,
+      `the step ${digestAgent.agent} is granted /proj/notes, which holds ${worktree}/${holds}`,
+    );
+  }
+});
+
+test("inside a worktree, a closed copy refuses whenever git does not answer whole and plainly", async () => {
+  const cut: FakeProcesses = {
+    asked: [],
+    run: () =>
+      Promise.resolve({
+        end: { how: "exited", exitCode: 0 },
+        stdout: { text: index, characters: index.length + 1, hash: "" },
+        stderr: { text: "", characters: 0, hash: "" },
+      }),
+  };
+  const answers: readonly FakeProcesses[] = [
+    fakeProcesses(index, { how: "exited", exitCode: 1 }),
+    fakeProcesses(index, { how: "timed-out" }),
+    fakeProcesses(index, { how: "signalled", signal: "SIGKILL" }),
+    fakeProcesses("", { how: "not-started", reason: "no git" }),
+    fakeProcesses(index.slice(0, -1)),
+    fakeProcesses(`${index}garbage\0`),
+    fakeProcesses(`x${index}`),
+    fakeProcesses(index.replace("100644 ", "10064 ")),
+    fakeProcesses(index.replace(blob, blob.slice(1))),
+    cut,
+  ];
+  for (const git of answers) {
+    const outcome = await builtWithIndex(["CLAUDE.md"], git);
+    assert.ok(!outcome.ok);
+    assert.equal(
+      outcome.problems[0]?.message,
+      `the step ${digestAgent.agent} is granted /proj/notes, which holds ${worktree}/CLAUDE.md`,
+    );
+  }
+});
+
+test("a folder whose pointer leads elsewhere is no worktree of the project: its tracked-looking copies refuse", async () => {
+  const start = Object.fromEntries([
+    [pointer, "gitdir: /other/.git/worktrees/wt\n"],
+    ...backLink(worktree, "wt", "/other"),
+    ...emptyFiles(worktree, ["CLAUDE.md"]),
+  ]);
+  const git = fakeProcesses(index);
+  const outcome = await adapter.build(buildRequest(memoryFiles(start), allAgents, git));
+  assert.ok(!outcome.ok);
+  assert.deepEqual(git.asked, []);
+});
+
+test("a worktree inside a worktree is no copy: its pointer refuses", async () => {
+  const inner = `${worktree}/inner/.git`;
+  const start = Object.fromEntries([...linked(worktree, "wt"), ...linked(`${worktree}/inner`, "inner")]);
+  const outcome = await adapter.build(buildRequest(memoryFiles(start), allAgents, fakeProcesses(index)));
+  assert.ok(!outcome.ok);
+  assert.equal(
+    outcome.problems[0]?.message,
+    `the step ${digestAgent.agent} is granted /proj/notes, which holds ${inner}`,
+  );
+});
+
+async function refusedPointer(
+  start: Contents,
+  realPath?: (path: string) => Promise<string | undefined>,
+): Promise<void> {
+  const files = memoryFiles(Object.fromEntries([...start, ...emptyFiles(worktree, ["CLAUDE.md"])]));
+  const inspector = realPath === undefined ? files.inspector : { ...files.inspector, realPath };
+  const outcome = await adapter.build(buildRequest({ ...files, inspector }, allAgents, fakeProcesses(index)));
+  assert.ok(!outcome.ok, JSON.stringify(start));
+  assert.equal(
+    outcome.problems[0]?.message,
+    `the step ${digestAgent.agent} is granted /proj/notes, which holds ${pointer}`,
+  );
+}
+
+test("a folder that only claims to be a worktree refuses: its record must point back to it, by real path", async () => {
+  const claimed: Contents = [[pointer, `gitdir: ${project}/.git/worktrees/b\n`]];
+  await refusedPointer([...claimed, ...linked(`${project}/notes/b`, "b")]);
+  await refusedPointer([...claimed, ...backLink(`${project}/notes/b`, "b")]);
+  await refusedPointer([[pointer, `gitdir: ${project}/.git/worktrees/wt\n`]]);
+  const record = `${project}/.git/worktrees/wt/gitdir`;
+  for (const text of [
+    `${project}/notes/other/.git\n`,
+    `${worktree}\n`,
+    `${worktree}/notgit\n`,
+    `${worktree}/.git\0\n`,
+    `${worktree}/x/../.git\n`,
+    "",
+  ]) {
+    await refusedPointer([
+      [pointer, `gitdir: ${project}/.git/worktrees/wt\n`],
+      [record, text],
+    ]);
+  }
+  const elsewhere = (path: string) => Promise.resolve(path === `${project}/.git/worktrees/wt` ? "/elsewhere/wt" : path);
+  await refusedPointer(linked(worktree, "wt"), elsewhere);
+});
+
+test("a pointer or record with a NUL or another control character refuses in the ordinary sentence", async () => {
+  for (const bad of ["\0", "\r", "\t", "\x7f", "\x1b"]) {
+    await refusedPointer([
+      [pointer, `gitdir: ${project}/.git/worktrees/w${bad}t\n`],
+      ...backLink(worktree, `w${bad}t`),
+    ]);
+  }
+});
+
+test("a worktree is walked to 12 levels from its top: a copy or a secret deeper down refuses, never passes", async () => {
+  const deep = `${worktree}/${numbered("d", 13).join("/")}`;
+  for (const name of ["CLAUDE.md", ".env", "plain.md"]) {
+    const start = Object.fromEntries([...linked(worktree, "wt"), ...emptyFiles(deep, [name])]);
+    const outcome = await adapter.build(buildRequest(memoryFiles(start), allAgents, fakeProcesses(index)));
+    assert.ok(!outcome.ok, name);
+    assert.match(outcome.problems[0]?.message ?? "", /deeper than 12 levels/);
+  }
+});
+
+test("the worktrees under one granted folder share a total bound of 30000 entries", async () => {
+  const worktrees = (count: number): MemoryFiles =>
+    memoryFiles(
+      Object.fromEntries(
+        numbered("w", count).flatMap((name): Contents => [
+          ...linked(`${project}/notes/${name}`, name),
+          ...emptyFiles(`${project}/notes/${name}`, numbered("f", 4400)),
+        ]),
+      ),
+    );
+  assert.ok((await adapter.build(buildRequest(worktrees(6), allAgents, fakeProcesses(index)))).ok);
+  const outcome = await adapter.build(buildRequest(worktrees(7), allAgents, fakeProcesses(index)));
+  assert.ok(!outcome.ok);
+  assert.equal(
+    outcome.problems[0]?.message,
+    `the step ${digestAgent.agent} is granted /proj/notes, whose worktrees of this project hold more than ` +
+      "30000 entries together, more than the build checks",
+  );
+});
+
+test("each worktree of the project has its own scan bound, and an ordinary folder keeps the bound", async () => {
+  const deep = `${project}/notes/${numbered("d", 10).join("/")}`;
+  const spread = Object.fromEntries([
+    ...emptyFiles(`${project}/notes`, numbered("f", 3000)),
+    ...["a", "b"].flatMap((name): Contents => [
+      ...linked(`${deep}/${name}`, name),
+      ...emptyFiles(`${deep}/${name}/${numbered("d", 5).join("/")}`, numbered("f", 3000)),
+    ]),
+  ]);
+  assert.ok((await adapter.build(buildRequest(memoryFiles(spread)))).ok);
+  const oneTooMany = Object.fromEntries([...linked(worktree, "wt"), ...emptyFiles(worktree, numbered("f", 5001))]);
+  const wide = await adapter.build(buildRequest(memoryFiles(oneTooMany)));
+  assert.ok(!wide.ok);
+  assert.match(wide.problems[0]?.message ?? "", /more than 5000 entries/);
 });
 
 test("a build refuses a granted folder larger than the bound it checks", async () => {

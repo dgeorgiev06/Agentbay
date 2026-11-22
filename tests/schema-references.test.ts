@@ -9,7 +9,7 @@ import type { Json } from "../bay/contracts.ts";
 import { loadKernel } from "../bay/kernel.ts";
 import { nodeKernelPorts } from "../bay/kernel-ports.ts";
 import { layoutOf } from "../bay/layout.ts";
-import { createProjectFileListing, nodeFileInspector, nodeFileSystem } from "../bay/node-ports.ts";
+import { createProjectFileListing, nodeFileInspector, nodeFileSystem, nodeProcesses } from "../bay/node-ports.ts";
 import { isJson } from "../bay/protocol-json.ts";
 import { checkedValue } from "../bay/value-check.ts";
 import { testEnvironment } from "./kernel-fixture.ts";
@@ -222,7 +222,13 @@ test("bay check says of each reference that names nothing, or names a file the m
   try {
     const listing = createProjectFileListing(testEnvironment, nodeFileInspector);
     const report = await checkSystem(
-      { files: nodeFileSystem, listing },
+      {
+        files: nodeFileSystem,
+        listing,
+        inspector: nodeFileInspector,
+        processes: nodeProcesses,
+        searchPath: testEnvironment.PATH,
+      },
       layoutOf({ kit: kit.root, project: kit.root }),
     );
     const referring = report.findings.filter((finding) => finding.message.includes(" refers to "));

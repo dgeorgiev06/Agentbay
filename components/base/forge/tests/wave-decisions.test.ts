@@ -176,7 +176,7 @@ describe("what the wave asks proof", () => {
       examples: [{ action: "counting.done", examples: [] }],
     };
     const asking = fieldsOf(
-      proving({ name: "wave-1", base, gate: gateOf([sliceOf(ca.slice)]) }, [ca], {
+      proving({ name: "wave-1", base, gate: gateOf([sliceOf(ca.slice)]), gatedBy: [sliceOf(ca.slice)] }, [ca], {
         head: "combined",
         trying: { builtBefore: ["counting.list"], slices: [ca, left] },
       }),
@@ -191,7 +191,8 @@ describe("what the wave asks proof", () => {
   });
 
   const joined = [joining("TD1", ["a.ts"]), joining("TD10", ["b.ts", "a.ts"])];
-  const wave = { name: "wave-1", base, gate: gateOf(joined.map((each) => sliceOf(each.slice))) };
+  const gatedBy = joined.map((each) => sliceOf(each.slice));
+  const wave = { name: "wave-1", base, gate: gateOf(gatedBy), gatedBy };
 
   test("the combined head is asked once, with the checks only, over every merged slice's scope and declaration", () => {
     const request = fieldsOf(waveProofRequest(wave, joined, "combined"));

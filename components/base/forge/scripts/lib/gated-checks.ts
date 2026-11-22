@@ -1,43 +1,62 @@
-import { fail, fieldsOf, type JsonFields, type ScriptContext } from "../../../../../bay/sdk.ts";
+import { fail, fieldsOf, pathMatch, type JsonFields, type ScriptContext } from "../../../../../bay/sdk.ts";
 import { answerOf } from "./called.ts";
 import type { Gate } from "./gate.ts";
-import { modeTestsFolder } from "./gate-words.ts";
-import { textOf, textsOf } from "./json-values.ts";
-import { withGateSaid, withTestsFrom } from "./tool-checks.ts";
+import { listOf, textOf, textsOf } from "./json-values.ts";
+import { withGatedRuns, withGateSaid, withoutGatedRuns } from "./tool-checks.ts";
 
 type ModeGate = Extract<Gate, { readonly gate: "mode" }>;
-
-const mostProofTakes = 200;
-
-export function testsFromOf(gate: ModeGate, listed: readonly string[], alsoRun: readonly string[]): readonly string[] {
-  const testsFrom = [...new Set([...listed, ...alsoRun])];
-  if (testsFrom.length > mostProofTakes) {
-    const most = String(mostProofTakes);
-    return fail(
-      `forge found more than ${most} files to take the mode gate's tests from under ${modeTestsFolder(gate)} ` +
-        `and the setting modeGateTests, and proof takes at most ${most}.`,
-    );
-  }
-  return testsFrom.length === 0 ? [modeTestsFolder(gate)] : testsFrom;
-}
 
 type ReadAt = {
   readonly cutAs: string;
   readonly head: string;
 };
 
+export const mostTestsFrom = 200;
+
+export function modeTestsOf(listed: readonly string[], testFiles: readonly string[]): readonly string[] {
+  return listed.filter((path) => testFiles.some((pattern) => pathMatch(pattern, path).kind === "matched"));
+}
+
+export function testsFromOf(
+  gate: ModeGate,
+  modeTests: readonly string[],
+  alsoRun: readonly string[],
+): readonly string[] {
+  if (modeTests.length === 0) {
+    return [gate.folder];
+  }
+  const testsFrom = [...new Set([...modeTests, ...alsoRun])];
+  if (testsFrom.length > mostTestsFrom) {
+    const most = String(mostTestsFrom);
+    return fail(
+      `forge found more than ${most} test files for the mode gate under ${gate.folder} and in the setting ` +
+        `modeGateTests, and proof takes at most ${most}.`,
+    );
+  }
+  return testsFrom;
+}
+
 async function listedAt(context: ScriptContext, gate: ModeGate, at: ReadAt): Promise<readonly string[]> {
-  const asked = { cutAs: at.cutAs, base: at.head, paths: [], list: [modeTestsFolder(gate)] };
-  return textsOf((await answerOf(context, "read-on-branch", asked)).listed);
+  const asked = { cutAs: at.cutAs, base: at.head, paths: [], list: [gate.folder] };
+  const answer = await answerOf(context, "read-on-branch", asked);
+  if (answer.listedCut === true) {
+    return fail(`forge could not list every file under ${gate.folder} at ${at.head}: there are more than it lists.`);
+  }
+  return textsOf(answer.listed);
+}
+
+async function testFilesOf(context: ScriptContext): Promise<readonly string[]> {
+  const described = await answerOf(context, "toolchain.describe", {});
+  return listOf(described.testFiles).map(textOf);
 }
 
 export async function gatedAsked(context: ScriptContext, asked: JsonFields, gate: Gate): Promise<JsonFields> {
-  if (gate.gate === "whole") {
-    return asked;
-  }
   const slice = asked.slice ?? null;
+  if (gate.gate === "whole") {
+    return { ...asked, slice: withoutGatedRuns(slice) };
+  }
   const at = { cutAs: `${textOf(fieldsOf(slice).name)}-gate`, head: textOf(asked.head) };
-  const listed = await listedAt(context, gate, at);
-  const testsFrom = testsFromOf(gate, listed, textsOf(context.settings.modeGateTests));
-  return { ...asked, slice: withTestsFrom(withGateSaid(slice, gate), testsFrom) };
+  const modeTests = modeTestsOf(await listedAt(context, gate, at), await testFilesOf(context));
+  const testsFrom = testsFromOf(gate, modeTests, textsOf(context.settings.modeGateTests));
+  return { ...asked, slice: withGatedRuns(withGateSaid(slice, gate), testsFrom) };
 }

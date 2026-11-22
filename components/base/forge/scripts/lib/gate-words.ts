@@ -1,7 +1,7 @@
 import { joined } from "./card-lines.ts";
 import type { Gate, Whole } from "./gate.ts";
 
-export type Told = "before" | "after";
+type ModeGate = Extract<Gate, { readonly gate: "mode" }>;
 
 const settingName = "modeGateTests";
 
@@ -25,36 +25,54 @@ function wholeReason(because: Whole): string {
   }
 }
 
-export function modeTestsFolder(gate: Extract<Gate, { readonly gate: "mode" }>): string {
-  return `${gate.folder}/tests`;
+export type GateRan = "chosen" | "no own test" | "every test" | "not said";
+
+export type Told = "before" | GateRan;
+
+function sinceMode(gate: ModeGate, slices: readonly string[]): string {
+  return `since ${writers(slices)} only inside ${gate.folder}`;
+}
+
+function modeGateLine(gate: ModeGate, slices: readonly string[], told: Told): string {
+  const since = sinceMode(gate, slices);
+  const gated = "gate: the mode's own tests and the fast checks of the whole project";
+  switch (told) {
+    case "before":
+      return `${gated}, ${since}; the other tests are not run`;
+    case "chosen":
+      return `${gated} ran, ${since}; the other tests were not run`;
+    case "no own test":
+      return `gate: the mode gate, ${since}; the mode has no test file of its own, so the checks item is not known`;
+    case "every test":
+      return `gate: the mode gate was asked for, ${since}, but proof's answer says it ran every test`;
+    case "not said":
+      return `gate: the mode gate was asked for, ${since}; proof's answer does not say which tests ran`;
+  }
 }
 
 export function gateLine(gate: Gate, slices: readonly string[], told: Told): string {
   if (gate.gate === "whole") {
     return `gate: the whole test run, since ${wholeReason(gate.because)}`;
   }
-  const ran = told === "before" ? "" : " ran";
-  const others = told === "before" ? "the other tests are not run" : "the other tests were not run";
-  const since = `since ${writers(slices)} only inside ${gate.folder}`;
-  return `gate: the mode's own tests and the fast checks of the whole project${ran}, ${since}; ${others}`;
+  return modeGateLine(gate, slices, told);
 }
 
 export function fastChecksLine(gate: Gate, alsoRun: readonly string[]): readonly string[] {
   if (gate.gate === "whole") {
     return [];
   }
-  const own = `every test file under ${modeTestsFolder(gate)} at the head`;
-  const checks = "the toolchain's checks of the whole project";
+  const own = `every test file under ${gate.folder} at the head`;
+  const checks = "the toolchain's checks of the whole project, bay check on the head";
   if (alsoRun.length === 0) {
-    return [`the mode gate: ${own} and ${checks}; the setting ${settingName} names no other test`];
+    return [`the mode gate: ${own}, ${checks}; the setting ${settingName} adds no test`];
   }
-  return [`the mode gate: ${own}, ${checks}, and ${joined([...alsoRun])}, the setting ${settingName}`];
+  return [`the mode gate: ${own}, ${checks}, and ${joined([...alsoRun])}, which the setting ${settingName} adds`];
 }
 
-export function modeChecksSays(gate: Extract<Gate, { readonly gate: "mode" }>): string {
+export function modeChecksSays(gate: ModeGate): string {
   return (
-    `The toolchain's checks of the whole project and the mode gate's tests, those under ${modeTestsFolder(gate)} ` +
-    `and those the setting ${settingName} names, pass; the project's other tests are not run.`
+    `The toolchain's checks of the whole project, bay check on the head and the mode gate's tests, those under ` +
+    `${gate.folder} and those the setting ${settingName} adds, pass; the project's other tests are not run.`
   );
 }
 
@@ -68,7 +86,15 @@ export function scopeClause(gate: Gate, scope: "passed" | "not passed"): readonl
 export function claimSentence(slice: string, items: readonly string[]): string {
   const named = items.length === 1 ? `item ${items[0] ?? ""} names` : `items ${joined([...items])} name`;
   return (
-    `Slice ${slice}'s checks ${named} testsFrom, which forge alone sets, deciding the gate from the slices' kinds ` +
-    "and scopes; leave testsFrom out."
+    `Slice ${slice}'s checks ${named} testsFrom or bayCheck, which forge alone sets, deciding the gate from the ` +
+    "slices' kinds and scopes; leave them out."
+  );
+}
+
+export function gateDiffers(handed: Gate, worked: Gate): string {
+  const said = (gate: Gate): string => (gate.gate === "mode" ? `mode, ${gate.folder}` : "whole");
+  return (
+    `forge was handed the gate ${said(handed)}, but the slices give ${said(worked)}; the checks ran by the slices' ` +
+    "gate, and this item fails for the difference."
   );
 }

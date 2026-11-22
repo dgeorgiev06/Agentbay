@@ -137,7 +137,7 @@ function drawnLines(input: MergeCardInput, reason: string | undefined): readonly
     computed("draw", answerWords(reason)),
     ...(input.leaks ?? []).map((leak) => computed("draw", leakWords(leak))),
     ...verdictLines(slice, proof.verdicts, { messages: input.caseMessages, provedBy: "prove" }),
-    ...gateRanLines(input.gate, { slices: [slice.name], verdicts: proof.verdicts }),
+    ...gateRanLines(input.gate, { slices: [slice.name], verdicts: proof.verdicts, scopedBy: [proof.verdicts] }),
     ...examplesLines(input.tried, "prove"),
     ...reviewedPracticeLines(input.rounds, input.mustPractices ?? []),
     ...[...drawnWords, ...bugWords(input.bugs)].map((said) => computed("draw", said)),
@@ -155,7 +155,7 @@ export function drawn(input: MergeCardInput): Drawn {
     leaked: (input.leaks ?? []).length > 0,
     mustNotHeld: mustNotHeld(input.rounds, input.mustPractices ?? []),
     interfaceChanges: interfaceChanges(input.pins ?? noPins),
-    gate: gateClauses(input.gate, input.proof.verdicts),
+    gate: gateClauses(input.gate, [input.proof.verdicts]),
     examples: examplesClauses(input.tried),
   });
   return {

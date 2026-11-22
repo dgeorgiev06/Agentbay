@@ -1,5 +1,5 @@
 import { fieldsOf, type Json, type JsonFields } from "../../../../../bay/sdk.ts";
-import { textOf, textsOf } from "./json-values.ts";
+import { listOf, textOf, textsOf } from "./json-values.ts";
 
 export type Gated = {
   readonly name: string;
@@ -20,7 +20,7 @@ export type Gate =
 
 const modesFolder = ["components", "modes"] as const;
 
-const modeName = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+export const modeNamePattern = /^(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 
 export function modeFolder(mode: string): string {
   return [...modesFolder, mode].join("/");
@@ -30,7 +30,7 @@ export function modeOfPath(path: string): string | undefined {
   const [top, tier, mode, ...below] = path.split("/");
   const inModes = top === modesFolder[0] && tier === modesFolder[1];
   const plain = below.every((part) => part !== "" && part !== "." && part !== "..");
-  if (!inModes || mode === undefined || !modeName.test(mode) || below.length === 0 || !plain) {
+  if (!inModes || mode === undefined || !modeNamePattern.test(mode) || below.length === 0 || !plain) {
     return undefined;
   }
   return mode;
@@ -81,8 +81,23 @@ function wholeOf(fields: JsonFields): Whole {
 export function gateFrom(value: Json | undefined): Gate {
   const fields = fieldsOf(value ?? null);
   const mode = textOf(fields.mode);
-  if (fields.gate === "mode" && modeName.test(mode) && fields.folder === modeFolder(mode)) {
+  if (fields.gate === "mode" && modeNamePattern.test(mode) && fields.folder === modeFolder(mode)) {
     return { gate: "mode", mode, folder: modeFolder(mode) };
   }
   return { gate: "whole", because: wholeOf(fieldsOf(fields.because ?? null)) };
+}
+
+export function gatedOf(value: Json | undefined): readonly Gated[] {
+  return listOf(value).map((entry) => {
+    const fields = fieldsOf(entry);
+    return { name: textOf(fields.name), kind: textOf(fields.kind), scope: textsOf(fields.scope) };
+  });
+}
+
+export function slicesOfRequests(requests: Json | undefined): readonly Gated[] {
+  return gatedOf(listOf(requests).map((request) => fieldsOf(fieldsOf(request).planned ?? null).slice ?? null));
+}
+
+export function gateOfRequests(requests: Json | undefined): Gate {
+  return gateOf(slicesOfRequests(requests));
 }

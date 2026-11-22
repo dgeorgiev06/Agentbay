@@ -2,11 +2,10 @@ import { defineScript, fail, fieldsOf, type Json, type JsonFields } from "../../
 import { gateOf, type Gate } from "./lib/gate.ts";
 import { claimSentence } from "./lib/gate-words.ts";
 import { namedTests } from "./lib/handed-tests.ts";
-import { textsOf } from "./lib/json-values.ts";
 import { sliceOf, type Slice } from "./lib/slice-form.ts";
-import { startCard, type GateShown, type InterfaceFiles } from "./lib/start-card.ts";
+import { gateShownOf, startCard, type GateShown, type InterfaceFiles } from "./lib/start-card.ts";
 import { startChoices } from "./lib/start-choices.ts";
-import { testsFromNamed, withGateSaid, withToolChecks } from "./lib/tool-checks.ts";
+import { gatedFieldsNamed, withGateSaid, withToolChecks } from "./lib/tool-checks.ts";
 import { droppedOf, type Dropped } from "./lib/branch-endings.ts";
 
 type Asked = {
@@ -55,7 +54,7 @@ function roundsCard(starting: Starting, slice: Json): JsonFields {
 
 function gatedOf(slice: Json): { readonly gate: Gate; readonly said: Json } {
   const form = sliceOf(slice);
-  const claimed = testsFromNamed(slice);
+  const claimed = gatedFieldsNamed(slice);
   if (claimed.length > 0) {
     return fail(claimSentence(form.name, claimed));
   }
@@ -82,7 +81,7 @@ export const run = defineScript((input, context) => {
   const { request, planter } = asked;
   const slice = fieldsOf(request.planned ?? null).slice ?? null;
   const { gate, said } = gatedOf(slice);
-  const starting = startingOf(asked, said, { gate, alsoRun: textsOf(context.settings.modeGateTests) });
+  const starting = startingOf(asked, said, gateShownOf(gate, context.settings.modeGateTests));
   const { base } = starting;
   const shown = planter ? roundsCard(starting, slice) : oneSliceCard(starting);
   const fixed = namedTests(starting.slice);

@@ -39,6 +39,13 @@
           "path": "components/base/store/**"
         }
       },
+      "gatedBy": [
+        {
+          "name": "TB",
+          "kind": "mode",
+          "scope": ["components/base/store/**"]
+        }
+      ],
       "keptOf": ["ONE"],
       "whenFailed": []
     }

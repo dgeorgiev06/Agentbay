@@ -27,7 +27,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "asked", "gate", "keptOf", "whenFailed"],
+          "required": ["kind", "asked", "gate", "gatedBy", "keptOf", "whenFailed"],
           "properties": {
             "kind": {
               "const": "asked"
@@ -44,6 +44,21 @@
                 }
               },
               "description": "The wave's gate, as the step wave decided it, by which the checks run: under mode, only the mode's own tests and the tests the setting modeGateTests names run beside the toolchain's checks. A gate forge cannot read as mode is taken as whole."
+            },
+            "gatedBy": {
+              "type": "array",
+              "maxItems": 50,
+              "description": "Each slice of the wave, with its name, kind and write scope, from which prove-checks works the gate out again; a handed gate that differs fails the checks item.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "kind", "scope"],
+                "properties": {
+                  "name": { "$ref": "proof@1/prove-request.json#/$defs/sliceName" },
+                  "kind": { "type": "string", "maxLength": 64 },
+                  "scope": { "type": "array", "maxItems": 200, "items": { "type": "string", "maxLength": 1000 } }
+                }
+              }
             },
             "keptOf": {
               "type": "array",

@@ -3,6 +3,7 @@ import { bugsOnCard } from "./lib/bug-card.ts";
 import { builtOf } from "./lib/builder-answer.ts";
 import { pinsOf } from "./lib/interface-pins.ts";
 import { gateOf } from "./lib/gate.ts";
+import { gateShownOf } from "./lib/start-card.ts";
 import { textsOf } from "./lib/json-values.ts";
 import { drawn, type MergeCardInput } from "./lib/merge-card.ts";
 import { provedOf } from "./lib/proof-answer.ts";
@@ -57,7 +58,7 @@ export const run = defineScript((input, context) => {
     mustPractices: textsOf(context.settings.mustPractices),
     ...bugs,
     ...triedPart(fields.proof),
-    gate: { gate, alsoRun: textsOf(context.settings.modeGateTests) },
+    gate: gateShownOf(gate, context.settings.modeGateTests),
   });
   return Promise.resolve(merge);
 });

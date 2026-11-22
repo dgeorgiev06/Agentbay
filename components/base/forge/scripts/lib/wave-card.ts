@@ -66,11 +66,17 @@ function combinedVerdicts(checks: WaveChecks): readonly Verdict[] {
   return checks.kind === "asked" ? checks.proof.verdicts : [];
 }
 
+function scopedBy(input: WaveCardInput): readonly (readonly Verdict[])[] {
+  const included = input.slices.filter((settled) => settled.reason === undefined);
+  return [combinedVerdicts(input.checks), ...included.map((settled) => settled.proof.verdicts)];
+}
+
 function checksAndGateLines(input: WaveCardInput): readonly CardLine[] {
   if (input.checks.kind !== "asked") {
     return [];
   }
-  const ran = { slices: input.slices.map((settled) => settled.name), verdicts: combinedVerdicts(input.checks) };
+  const slices = input.slices.map((settled) => settled.name);
+  const ran = { slices, verdicts: combinedVerdicts(input.checks), scopedBy: scopedBy(input) };
   return [...checkedLines(input.checks, "prove"), ...gateRanLines(input.gate, ran)];
 }
 
@@ -95,7 +101,7 @@ function triedOf(tried: readonly SliceTried[], name: string): { readonly tried?:
 
 export function waveDrawn(input: WaveCardInput): WaveDrawn {
   const tried = input.tried ?? [];
-  const gate = input.checks.kind === "asked" ? gateClauses(input.gate, combinedVerdicts(input.checks)) : [];
+  const gate = input.checks.kind === "asked" ? gateClauses(input.gate, scopedBy(input)) : [];
   const answer = waveAnswer(input.slices, input.joined, {
     checks: input.checks,
     examples: examplesReason(tried),

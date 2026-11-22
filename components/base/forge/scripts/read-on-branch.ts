@@ -15,7 +15,8 @@ export const run = defineScript(async (input, context) => {
     }),
   );
   const folders = textsOf(fields.list);
-  const listed = folders.length === 0 ? {} : { listed: await filesUnder(context, cut.folder, folders) };
+  const found = folders.length === 0 ? undefined : await filesUnder(context, cut.folder, folders);
+  const listed = found === undefined ? {} : { listed: [...found.files], listedCut: found.cut };
   const drops = await removedThenDropped(context, cut, into);
   return { commit: cut.commit, files, ...listed, ...branchesSaid([], drops.stayed) };
 });

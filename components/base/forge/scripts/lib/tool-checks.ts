@@ -48,12 +48,23 @@ export function withGateSaid(slice: Json, gate: Gate): Json {
   return withChecksItems(slice, (item) => ({ ...item, says: modeChecksSays(gate) }));
 }
 
-export function withTestsFrom(slice: Json, testsFrom: readonly string[]): Json {
-  return withChecksItems(slice, (item) => ({ ...item, proof: { kind: "checks", testsFrom: [...testsFrom] } }));
+const gatedFields = ["testsFrom", "bayCheck"];
+
+export function withGatedRuns(slice: Json, testsFrom: readonly string[]): Json {
+  const proof = { kind: "checks", testsFrom: [...testsFrom], bayCheck: true };
+  return withChecksItems(slice, (item) => ({ ...item, proof }));
 }
 
-export function testsFromNamed(slice: Json): readonly string[] {
+export function withoutGatedRuns(slice: Json): Json {
+  return withChecksItems(slice, (item) => ({ ...item, proof: { kind: "checks" } }));
+}
+
+function namesAGatedField(item: Json): boolean {
+  const proof = fieldsOf(fieldsOf(item).proof ?? null);
+  return gatedFields.some((field) => field in proof);
+}
+
+export function gatedFieldsNamed(slice: Json): readonly string[] {
   const done = listOf(fieldsOf(slice).done);
-  const named = done.filter((item) => isChecks(item) && fieldsOf(fieldsOf(item).proof ?? null).testsFrom !== undefined);
-  return named.map((item) => textOf(fieldsOf(item).id));
+  return done.filter((item) => isChecks(item) && namesAGatedField(item)).map((item) => textOf(fieldsOf(item).id));
 }

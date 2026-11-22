@@ -1,6 +1,8 @@
 import type { Dropped } from "./branch-endings.ts";
 import { computed, counted, joined, shortCommit, type Card } from "./card-lines.ts";
+import type { Json } from "../../../../../bay/sdk.ts";
 import type { Gate } from "./gate.ts";
+import { textsOf } from "./json-values.ts";
 import { fastChecksLine, gateLine } from "./gate-words.ts";
 import type { Item, Proof, Slice } from "./slice-form.ts";
 
@@ -12,6 +14,10 @@ export type GateShown = {
   readonly gate: Gate;
   readonly alsoRun: readonly string[];
 };
+
+export function gateShownOf(gate: Gate, setting: Json | undefined): GateShown {
+  return { gate, alsoRun: textsOf(setting) };
+}
 
 export type StartCardInput = {
   readonly slice: Slice;

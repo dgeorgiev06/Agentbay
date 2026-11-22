@@ -33,12 +33,16 @@
     },
     "listed": {
       "type": "array",
-      "maxItems": 201,
+      "maxItems": 2000,
       "uniqueItems": true,
       "items": {
         "$ref": "proof@1/prove-request.json#/$defs/path"
       },
-      "description": "Every file under the folders asked for in list, relative to the project, sorted, at most 201, so a caller can tell more than 200; left out when no folder was asked for."
+      "description": "The files under the folders asked for in list, relative to the project, sorted, at most 2000; left out when no folder was asked for."
+    },
+    "listedCut": {
+      "type": "boolean",
+      "description": "True when the folders hold more files than listed holds; left out when no folder was asked for."
     },
     "stayed": {
       "type": "array",

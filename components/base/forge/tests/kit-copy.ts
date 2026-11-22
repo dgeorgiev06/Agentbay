@@ -560,7 +560,12 @@ export function keptRows(root: string): readonly Json[] {
 
 export const scopePassed = { item: "scope", kind: "in-scope", verdict: "passed", detail: "It held." };
 
-export const modeGateTestsOfTheKit = ["tests/kit-check.test.ts", "tests/feature-map.test.ts", "tests/build.test.ts"];
+export const modeGateTestsOfTheKit = [
+  "tests/kit-check.test.ts",
+  "tests/feature-map.test.ts",
+  "tests/build.test.ts",
+  "tests/readme-references.test.ts",
+];
 
 export function testsFromAsked(requests: readonly Json[]): readonly (readonly string[])[] {
   return requests.map((request) =>

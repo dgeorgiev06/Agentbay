@@ -4,7 +4,7 @@ import { namedTests } from "./handed-tests.ts";
 import { listOf, textOf, textsOf } from "./json-values.ts";
 import type { Plan, PlannedSlice } from "./plan.ts";
 import { sliceOf } from "./slice-form.ts";
-import { testsFromNamed } from "./tool-checks.ts";
+import { gatedFieldsNamed } from "./tool-checks.ts";
 
 function plannedSliceOf(value: Json): PlannedSlice {
   const planned = fieldsOf(value);
@@ -62,7 +62,7 @@ export type GateClaimed = {
 export function gatesClaimed(document: Json): readonly GateClaimed[] {
   return listOf(fieldsOf(document).slices).flatMap((planned, at) => {
     const slice = fieldsOf(planned).slice ?? null;
-    const claimed = testsFromNamed(slice);
+    const claimed = gatedFieldsNamed(slice);
     if (claimed.length === 0) {
       return [];
     }

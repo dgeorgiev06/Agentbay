@@ -3,7 +3,7 @@ version: 1.0.0
 description: Builds a piece of work in slices that run side by side. It reads a plan file and works out its waves, and it carries one slice through a builder in a worktree, proof and the merge card, or through up to three rounds of a test writer, a builder who never has the tests, proof and a reviewer, and then a planter who never saw the tests.
 
 requires:
-  interfaces: [proof@1, worktrees@1, requirements@1]
+  interfaces: [proof@1, worktrees@1, requirements@1, toolchain@1]
 
 settings: schemas/settings.json
 
@@ -163,7 +163,7 @@ actions:
     run:
       - script: scripts/worktrees-left.ts
   gate-checks:
-    description: When a slice of the workflow one-slice is about to be proved, its checks items are planned by the gate its kind and scope decide; under the mode gate each takes its test run from the mode's test files at the head and the setting modeGateTests.
+    description: When a slice of the workflow one-slice is about to be proved, its checks items are planned by the gate its kind and scope decide; under the mode gate each runs bay check on the head and takes its test run from the mode's test files at the head and the setting modeGateTests.
     input: schemas/gate-checks-request.json
     output: schemas/gate-checks-response.json
     effects: [read, write, delete]

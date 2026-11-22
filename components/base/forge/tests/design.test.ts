@@ -177,6 +177,8 @@ function choiceRows(names: readonly (readonly [string, string])[]): readonly { n
   return names.map(([name, does]) => ({ name, does }));
 }
 
+const secondUndecided = { sentence: "Which characters count as spaces.", touches: "O1-C6" };
+
 const twoUndecided = [
   { sentence: "Whether text is trimmed.", touches: "O1-C4" },
   { sentence: "Two adds at the same moment." },
@@ -299,7 +301,11 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     const asked = await playedTo(root, start.id, {
       designer: (task) => Promise.resolve(inputOf(task).answering === undefined ? todoDesign : answeredDesign()),
       challenger: (task) =>
-        Promise.resolve(inputOf(task).answered === undefined ? p52NotHeld(task, [finding]) : allHeld(task)),
+        Promise.resolve(
+          inputOf(task).answered === undefined
+            ? { ...fieldsOf(p52NotHeld(task, [finding])), undecided: [...twoUndecided] }
+            : { ...fieldsOf(allHeld(task)), undecided: [secondUndecided] },
+        ),
     });
     assert.deepEqual(actionsAsked(asked), [
       "designs design",
@@ -319,7 +325,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
       refusedSchemas: 0,
       practices: challengeOf(allHeld(asked[3]?.task ?? null)).practices,
       findings: [],
-      undecided: [],
+      undecided: [secondUndecided],
       said: designerAnswersOf(answeredDesign()),
       differences: [],
       second: { notHeld: ["P-52"], findings: 1, changes },
@@ -329,7 +335,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     const judged = listOf(fieldsOf(card.card).lines).filter((line) => textAt(line, "mark") === "judged");
     assert.deepEqual(
       [...new Set(judged.map((line) => textAt(fieldsOf(line).source ?? null, "step")))],
-      ["design-again"],
+      ["design-again", "challenge-again"],
     );
     const done = runOf(await decided(root, card, { step: "card", choice: "approve" }));
     assert.equal(textAt(done, "status"), "done", JSON.stringify(done));

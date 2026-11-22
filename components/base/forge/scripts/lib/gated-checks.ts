@@ -11,7 +11,7 @@ type ReadAt = {
   readonly head: string;
 };
 
-export const mostTestsFrom = 200;
+const mostTestsFrom = 200;
 
 export function modeTestsOf(listed: readonly string[], testFiles: readonly string[]): readonly string[] {
   return listed.filter((path) => testFiles.some((pattern) => pathMatch(pattern, path).kind === "matched"));

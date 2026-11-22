@@ -3,12 +3,12 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
-import { gateFrom, gateOf, modeNamePattern, type Gate, type Gated } from "../scripts/lib/gate.ts";
+import { gateFrom, gateOf, modeOfPath, type Gate, type Gated } from "../scripts/lib/gate.ts";
 import { gateRanOf } from "../scripts/lib/gate-card.ts";
 import { claimSentence, gateLine } from "../scripts/lib/gate-words.ts";
 import { askedUnderWhole, modeTestsOf, testsFromOf } from "../scripts/lib/gated-checks.ts";
 import { gateWorkedOut, withDifferenceFailed } from "../scripts/lib/gate-handed.ts";
-import { listOf } from "../scripts/lib/json-values.ts";
+import { listOf, textOf } from "../scripts/lib/json-values.ts";
 import { drawn, type MergeCardInput } from "../scripts/lib/merge-card.ts";
 import { gatesClaimed } from "../scripts/lib/plan-form.ts";
 import { givenOf } from "../scripts/lib/plan-sources.ts";
@@ -154,10 +154,27 @@ describe("the gate, by forge's rule from the slices' kinds and scopes", () => {
     });
   }
 
-  test("a mode's name is what the manifest's own schema allows, by the same pattern", async () => {
+  test("a mode's name is what the manifest's own schema allows for a name, and nothing else", async () => {
     const schema = jsonOf(await readFile(join(kitFolder, "schemas/mode.schema.json"), "utf8"));
-    const name = fieldsOf(fieldsOf(fieldsOf(schema).$defs ?? null).name ?? null);
-    assert.equal(modeNamePattern.source, name.pattern);
+    const allowed = new RegExp(textOf(fieldsOf(fieldsOf(fieldsOf(schema).$defs ?? null).name ?? null).pattern));
+    const names = [
+      "todo",
+      "to-do",
+      "a1",
+      "Todo",
+      "to.do",
+      "constructor",
+      "constructors",
+      "-a",
+      "a--b",
+      "1a",
+      "a_b",
+      "",
+    ];
+    for (const name of names) {
+      const inside = modeOfPath(`components/modes/${name}/mode.yaml`) !== undefined;
+      assert.equal(inside, allowed.test(name), name);
+    }
   });
 
   test("a gate handed on as data reads back as itself, and one not in the form of mode reads as whole", () => {

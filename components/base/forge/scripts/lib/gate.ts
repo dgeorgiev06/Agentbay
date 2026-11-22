@@ -20,7 +20,7 @@ export type Gate =
 
 const modesFolder = ["components", "modes"] as const;
 
-export const modeNamePattern = /^(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+const modeNamePattern = /^(?!constructor(?![a-z0-9-]))[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 
 export function modeFolder(mode: string): string {
   return [...modesFolder, mode].join("/");

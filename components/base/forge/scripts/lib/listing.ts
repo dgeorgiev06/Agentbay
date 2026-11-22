@@ -1,6 +1,6 @@
 import { fail, type ScriptContext } from "../../../../../bay/sdk.ts";
 
-export const mostListed = 201;
+const mostListed = 201;
 
 async function namesIn(context: ScriptContext, path: string): Promise<readonly string[]> {
   const listed = await context.files.list(path);

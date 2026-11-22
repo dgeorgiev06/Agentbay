@@ -3,17 +3,19 @@ import { answerOf } from "./called.ts";
 import type { Gate } from "./gate.ts";
 import { modeTestsFolder } from "./gate-words.ts";
 import { textOf, textsOf } from "./json-values.ts";
-import { mostListed } from "./listing.ts";
 import { withGateSaid, withTestsFrom } from "./tool-checks.ts";
 
 type ModeGate = Extract<Gate, { readonly gate: "mode" }>;
 
+const mostProofTakes = 200;
+
 export function testsFromOf(gate: ModeGate, listed: readonly string[], alsoRun: readonly string[]): readonly string[] {
   const testsFrom = [...new Set([...listed, ...alsoRun])];
-  if (listed.length >= mostListed || testsFrom.length >= mostListed) {
+  if (testsFrom.length > mostProofTakes) {
+    const most = String(mostProofTakes);
     return fail(
-      `forge found more than ${String(mostListed - 1)} files to take the mode gate's tests from under ` +
-        `${modeTestsFolder(gate)} and the setting modeGateTests, and proof takes at most ${String(mostListed - 1)}.`,
+      `forge found more than ${most} files to take the mode gate's tests from under ${modeTestsFolder(gate)} ` +
+        `and the setting modeGateTests, and proof takes at most ${most}.`,
     );
   }
   return testsFrom.length === 0 ? [modeTestsFolder(gate)] : testsFrom;

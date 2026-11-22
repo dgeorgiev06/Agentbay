@@ -34,6 +34,7 @@ import {
   type Proved,
   printedCard,
   modeGateTestsOfTheKit,
+  scopePassed,
   testsFromAsked,
 } from "./kit-copy.ts";
 
@@ -95,8 +96,6 @@ function sliceOf(name: string): Json {
     ],
   };
 }
-
-const scopePassed = { item: "scope", kind: "in-scope", verdict: "passed", detail: "It held." };
 
 function passed(name: string): Proved {
   return {
@@ -544,8 +543,5 @@ test("the tests' text and the builder's code are in no file a later step could r
     "    gate's tests, those under",
     "    components/modes/e1/tests and those the",
   ]);
-  assert.deepEqual(testsFromAsked(await askedOf(root, name)), [
-    [],
-    [testPath(name), ...modeGateTestsOfTheKit],
-  ]);
+  assert.deepEqual(testsFromAsked(await askedOf(root, name)), [[], [testPath(name), ...modeGateTestsOfTheKit]]);
 });

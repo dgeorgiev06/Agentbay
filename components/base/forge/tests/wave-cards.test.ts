@@ -408,6 +408,29 @@ describe("the wave's merge card under the mode gate", () => {
     gate: { gate: td1, alsoRun: [] },
   });
 
+  test("the short screen says what the gate did not run, as proof's answer tells", () => {
+    const detail =
+      "Every check passed (typecheck, lint), and so did the run of the 5 test files chosen from testsFrom: 9 tests. " +
+      "bay check on the head found no error.";
+    const chosen: WaveChecks = {
+      ...passedChecks,
+      proof: provedOf({ verdicts: [{ item: "checks", kind: "checks", verdict: "passed", detail }, scope("passed")] }),
+    };
+    const short = waveDrawn(input(chosen, settled("TD1", ownPassed("TD1"))))
+      .card.lines.filter((line) => line.section === "checks" && line.short === true)
+      .map((line) => line.words);
+    assert.deepEqual(short.slice(0, 2), [
+      "The checks and bay check passed: 9 tests.",
+      "Not run: tests outside the td1 mode.",
+    ]);
+    const wholeGate: Gate = { gate: "whole", because: { why: "no slice" } };
+    const whole = waveDrawn({
+      ...input(chosen, settled("TD1", ownPassed("TD1"))),
+      gate: { gate: wholeGate, alsoRun: [] },
+    });
+    assert.ok(whole.card.lines.some((line) => line.short === true && line.words === "Ran: every test of the project."));
+  });
+
   test("with every scope passed, merge is offered", () => {
     assert.equal(waveDrawn(input(checksWith([scope("passed")]), settled("TD1", ownPassed("TD1")))).merge, true);
   });

@@ -147,14 +147,9 @@ function whereWords(slice: PlannedSlice): string {
 }
 
 function actionName(action: string): string | undefined {
-  const [named, name, ...rest] = action.split(".");
-  return named !== undefined &&
-    designName.test(named) &&
-    name !== undefined &&
-    designName.test(name) &&
-    rest.length === 0
-    ? name
-    : undefined;
+  const parts = action.split(".");
+  const [, name] = parts;
+  return parts.length === 2 && parts.every((part) => designName.test(part)) ? name : undefined;
 }
 
 function designWords(slice: PlannedSlice, design: DesignSummary | undefined): readonly string[] {

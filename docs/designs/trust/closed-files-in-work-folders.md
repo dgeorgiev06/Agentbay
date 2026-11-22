@@ -93,34 +93,55 @@ your merge approval still catch any change to a copy."
 
 ## 5. The rule as built
 
-One rule, `adapters/claude-code/root-scan.ts` with `worktree-copies.ts`, run by `bay build` and `bay check`.
+One rule, `adapters/claude-code/root-scan.ts` with `worktree-copies.ts`, run by `bay build` and `bay check`. Each
+granted folder is scanned once per command, and the result serves every step granted it.
 
-- **A worktree of this project** is a folder, under a granted folder, whose `.git` is the pointer of (a): a
-  regular file, one line `gitdir: <project's real path>/.git/worktrees/<one name>`. Any other folder is
-  ordinary: a closed name in it refuses, as before.
+- **A worktree of this project** is a folder, under a granted folder, for which all of these hold:
+  - its `.git` is a regular file of one line `gitdir: <path>`, with no control character in it;
+  - `<path>` is, by real path, a direct child of the project's real `.git/worktrees/`, and is its own real path,
+    so a linked record folder refuses;
+  - the `gitdir` file in that record, git's link back, is one line naming `<folder>/.git`, with no control
+    character, and the real path of that `<folder>` is the real path of the folder holding the pointer.
+
+  A folder that borrows another worktree's record, a made folder with a copied pointer, and a record that names
+  another folder are therefore ordinary. In an ordinary folder a closed name refuses, as before.
 - **Inside a worktree**, an entry whose path below the worktree has no closed segment passes. One with a closed
   segment passes only when it is a copy:
-  - a regular file that git tracks at stage 0 with mode `100644` or `100755`, at that very path; or
-  - a folder that holds such a file somewhere below it.
-- **Never a copy**, tracked or not: any segment named `.git` other than the worktree's own pointer, so a nested
-  repository or a worktree inside a worktree refuses; and `.env` or `.env.*`, except a name that ends in
-  `.example`, `.sample` or `.template`, in any case. A project that commits its `.env` still has a secret in it.
+  - no folder between the worktree's top and the entry is a link, the entry is not a link, and its real path
+    lies under the worktree's real path; and
+  - it is a regular file that git tracks at stage 0 with mode `100644` or `100755`, at that very path, or a
+    folder that holds such a file somewhere below it.
+
+  Links are listed and followed, so what lies behind them is scanned, but nothing reached through a link is a
+  copy.
+- **Never a copy**, tracked or not, judged at every segment of the path: a segment named `.git` other than the
+  worktree's own pointer, so a nested repository or a worktree inside a worktree refuses; and `.env` or `.env.*`,
+  except a name that ends in `.example`, `.sample` or `.template`, in any case. A project that commits its `.env`
+  still has a secret in it.
 - **Refused**, in the sentence of today ("the step … is granted …, which holds …"): an untracked file or an
   empty folder with a closed name (a real `.env`, an `agentbay.config.yaml` or `CLAUDE.md` written later,
-  `.agentbay/`, `.claude/`, `.mcp.json`), a tracked link (mode `120000`), a tracked copy swapped on disk for a
-  link, a conflicted entry, a submodule's folder, a pointer that leads elsewhere.
+  `.agentbay/`, `.claude/`, `.mcp.json`), a tracked link (mode `120000`), a tracked copy with a link anywhere
+  above it or in its place, a conflicted entry, a submodule's folder, a pointer or record that does not hold.
 - **How "tracked" is known.** The rule asks git, through the kernel's process port, by an argument array with no
-  shell: `git --git-dir=<the pointer's folder> --work-tree=<worktree> -c core.fsmonitor=false
-  --no-optional-locks ls-files --stage -z`, with only `PATH` and no global or system git config, 30 seconds at
-  most. Nothing from a mode reaches the words: the paths are the accepted pointer's and the worktree's. Git reads
-  its own index (versions 2 to 4, split and sparse indexes, SHA-256); a parser here would be a second, weaker
-  reader of a binary format. Git is asked once per worktree, and only when the worktree holds a closed name.
-  When git does not answer whole and plainly (does not start, fails, times out, is stopped, an output cut short,
-  a record not of the form `mode object stage<TAB>path`), every closed name in that worktree refuses.
-- **The scan bound.** Each worktree of this project is walked with its own bound of 5,000 entries and 12 levels,
-  counted from its top; an ordinary folder keeps the bound. Every entry is still looked at: `git ls-files` does
-  not list names under `.git`, so it cannot stand in for the walk. The work grows with the number of worktrees,
-  each a real checkout of this project.
+  shell: `git -c core.fsmonitor=false --no-optional-locks --git-dir=<record> --work-tree=<worktree's real path>
+  ls-files --stage -z`, with only `PATH` and no global or system git config, 30 seconds at most. The kernel's
+  project listing calls git the same way (`bay/git-reading.ts`), so a repository's own fsmonitor runs for
+  neither. Nothing from a mode reaches the words: the paths are the accepted record's and the worktree's. Git
+  reads its own index (versions 2 to 4, split and sparse indexes, SHA-256); a parser here would be a second,
+  weaker reader of a binary format. Git is asked once per worktree per command, when the worktree is found, before
+  anything in it is judged. When git does not answer whole and plainly (does not start, fails, times out, is
+  stopped, an output cut short, a record not of the form `mode object stage<TAB>path`), every closed name in that
+  worktree refuses.
+- **The scan bounds.** Each worktree is walked with its own bound of 5,000 entries and 12 levels, counted from
+  its top; going past either refuses, whatever lies beyond. All the worktrees under one granted folder share a
+  total of 30,000 entries, six full checkouts of this kit; past it, the step "is granted <folder>, whose
+  worktrees of this project hold more than 30000 entries together, more than the build checks". An ordinary
+  folder keeps its bound of 5,000 entries and 12 levels. Every entry is still looked at: `git ls-files` does not
+  list names under `.git`, so it cannot stand in for the walk.
+- **Owed, not changed here.** `.envrc` is not a closed name anywhere; that predates this slice and is the
+  owner's to decide. A locked index (`index.lock`) does not stop git answering, so it passes. Proof's `bay` runs a
+  throwaway copy's own config, which the builder can already shape, as it already writes that copy's `bay.sh` and
+  tests: no new power.
 
 ## 6. What is allowed now, and what a step can still do
 

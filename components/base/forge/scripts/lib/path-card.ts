@@ -1,4 +1,4 @@
-import { computed, counted, type Card } from "./card-lines.ts";
+import { computed, counted, facts, shortFacts, type Fact, type Screen } from "./card-lines.ts";
 import { conditionsOf, type Outcome, type Requirements } from "./requirements-form.ts";
 
 export type DesignPath = "light" | "full";
@@ -27,32 +27,85 @@ export function pathOf(choice: string): DesignPath | undefined {
 
 export const stoppedOnPath = "The owner chose stop on the first card, so no design is written.";
 
-function costWords(designers: number): string {
+type Calls = { readonly calls: number; readonly answered: number; readonly most: number };
+
+function callCounts(designers: number): Calls {
   const calls = designers + 1;
   const answered = calls + 2;
+  return { calls, answered, most: answered * checkRounds };
+}
+
+function rangeWords(designers: number): string {
+  const { calls, most } = callCounts(designers);
+  return `${String(calls)} to ${String(most)}`;
+}
+
+function callWords(designers: number): string {
+  const { calls, answered, most } = callCounts(designers);
   return (
-    `${String(calls)} calls at tier ${designTier}, ${String(answered)} when the designer answers the challenger ` +
-    `once, up to ${String(answered * checkRounds)} when checks send them back`
+    `${String(calls)} model calls; ${String(answered)} when the designer answers the review step once; ` +
+    `up to ${String(most)} when checks send answers back to be written again.`
   );
 }
 
-function outcomeWords(outcome: Outcome): string {
-  return `${outcome.id}, ${counted(outcome.conditions.length, "condition")}: ${outcome.says}`;
+function outcomeFacts(outcome: Outcome): readonly Fact[] {
+  const lines = [
+    computed("start", `The outcome: ${outcome.says}`),
+    computed("start", `${counted(outcome.conditions.length, "condition")}.`),
+  ];
+  return facts("what", lines, `outcome ${outcome.id}`);
 }
 
-export function pathCard(file: string, requirements: Requirements): Card {
+function shortWhat(requirements: Requirements): readonly Fact[] {
   const { outcomes } = requirements;
-  const words = [
-    `requirements: ${file}, version ${String(requirements.version)}, signed by ${requirements.signedBy}`,
-    ...outcomes.map(outcomeWords),
-    `in all: ${counted(outcomes.length, "outcome")}, ${counted(conditionsOf(requirements).length, "condition")}; ` +
-      `${String(requirements.leftOut)} left out on purpose`,
-    `light: one designer, then a challenger who answers the practices held by design: ${costWords(1)}`,
-    `full: two designers who write apart, then a challenger who compares the two and chooses: ${costWords(2)}`,
-    "either path writes each action's request and response as schema files",
+  const counts = `${counted(outcomes.length, "outcome")}, ${counted(conditionsOf(requirements).length, "condition")}.`;
+  return shortFacts("what", [
+    computed("start", `Your ${requirements.job} requirements, version ${String(requirements.version)}.`),
+    computed("start", counts),
+    computed("start", `Model calls: light ${rangeWords(1)}, full ${rangeWords(2)}.`),
+  ]);
+}
+
+function requirementsFacts(file: string, requirements: Requirements): readonly Fact[] {
+  const lines = [
+    computed("start", `The file: ${file}.`),
+    computed("start", `Version ${String(requirements.version)}, signed by ${requirements.signedBy}.`),
+    computed("start", `${counted(requirements.leftOut, "thing")} left out on purpose.`),
   ];
+  return facts("what", lines, "your requirements");
+}
+
+function pathFacts(): readonly Fact[] {
+  const light = [
+    computed("start", "One designer writes the design; then a review step says which practices it holds."),
+    computed("start", callWords(1)),
+  ];
+  const full = [
+    computed(
+      "start",
+      "Two designers write apart; then a review step compares the two and chooses one, or merges them.",
+    ),
+    computed("start", callWords(2)),
+  ];
+  const both = [
+    computed("start", `Every model call is at the ${designTier} tier, the strongest of the three model tiers.`),
+    computed("start", "Each action's request and response are written as schema files."),
+  ];
+  return [
+    ...facts("what", light, "the light path"),
+    ...facts("what", full, "the full path"),
+    ...facts("what", both, "either path"),
+  ];
+}
+
+export function pathCard(file: string, requirements: Requirements): Screen {
   return {
-    title: `Which path for the design of ${requirements.job}?`,
-    lines: words.map((said) => computed("start", said)),
+    title: `How should the ${requirements.job} design be written?`,
+    lines: [
+      ...shortWhat(requirements),
+      ...requirementsFacts(file, requirements),
+      ...requirements.outcomes.flatMap(outcomeFacts),
+      ...pathFacts(),
+    ],
   };
 }

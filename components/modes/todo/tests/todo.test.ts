@@ -329,11 +329,7 @@ test("listing leaves the todos as they were", async () => {
     await project.output("todo.list", { which: "open" });
     await project.output("todo.list", { which: "all" });
     const listed = await project.output("todo.list", { which: "all" });
-    assert.deepEqual(
-      listed,
-      { todos: [{ id: 1, text: "buy milk", status: "open" }] },
-      "reading should change nothing",
-    );
+    assert.deepEqual(listed, { todos: [{ id: 1, text: "buy milk", status: "open" }] }, "reading should change nothing");
     const added = await project.output("todo.add", { text: "call the bank" });
     assert.deepEqual(added, { id: 2, text: "call the bank", status: "open" }, "reading should use up no id");
   });
@@ -382,11 +378,7 @@ test("marking a todo done twice is refused the second time and it stays done", a
     const reason = await project.failure("todo.done", { id: 1 });
     assertSentence(reason, alreadyDoneSentence, "the refusal should say the todo is already done and what to do");
     const listed = await project.output("todo.list", { which: "all" });
-    assert.deepEqual(
-      listed,
-      { todos: [{ id: 1, text: "buy milk", status: "done" }] },
-      "the todo should stay done",
-    );
+    assert.deepEqual(listed, { todos: [{ id: 1, text: "buy milk", status: "done" }] }, "the todo should stay done");
   });
 });
 
@@ -406,11 +398,7 @@ test("marking done the id 0 is refused before the action runs", async () => {
     const refused = await project.refusal("todo.done", { id: 0 });
     assert.match(refused, /id/, "the refusal should name the field");
     const listed = await project.output("todo.list", { which: "open" });
-    assert.deepEqual(
-      listed,
-      { todos: [{ id: 1, text: "buy milk", status: "open" }] },
-      "the todo should be untouched",
-    );
+    assert.deepEqual(listed, { todos: [{ id: 1, text: "buy milk", status: "open" }] }, "the todo should be untouched");
   });
 });
 
@@ -420,11 +408,7 @@ test("marking done an id that is not a whole number is refused", async () => {
     const refused = await project.refusal("todo.done", { id: "1" });
     assert.match(refused, /id/, "the refusal should name the field of the wrong kind");
     const listed = await project.output("todo.list", { which: "open" });
-    assert.deepEqual(
-      listed,
-      { todos: [{ id: 1, text: "buy milk", status: "open" }] },
-      "the todo should be untouched",
-    );
+    assert.deepEqual(listed, { todos: [{ id: 1, text: "buy milk", status: "open" }] }, "the todo should be untouched");
   });
 });
 
@@ -433,7 +417,11 @@ test("removing a todo answers with it and leaves the other todo", async () => {
     await project.output("todo.add", { text: "buy milk" });
     await project.output("todo.add", { text: "call the bank" });
     const removed = await project.output("todo.remove", { id: 2 });
-    assert.deepEqual(removed, { id: 2, text: "call the bank", status: "open" }, "the answer should be the removed todo");
+    assert.deepEqual(
+      removed,
+      { id: 2, text: "call the bank", status: "open" },
+      "the answer should be the removed todo",
+    );
     const listed = await project.output("todo.list", { which: "all" });
     assert.deepEqual(
       listed,
@@ -467,11 +455,7 @@ test("removing the same todo twice is refused the second time", async () => {
     const reason = await project.failure("todo.remove", { id: 2 });
     assertSentence(reason, noTodo2Sentence, "the refusal should say the todo is gone and what to do");
     const listed = await project.output("todo.list", { which: "all" });
-    assert.deepEqual(
-      listed,
-      { todos: [{ id: 1, text: "buy milk", status: "open" }] },
-      "the other todo should remain",
-    );
+    assert.deepEqual(listed, { todos: [{ id: 1, text: "buy milk", status: "open" }] }, "the other todo should remain");
   });
 });
 
@@ -492,10 +476,6 @@ test("removing the id 0 is refused before the action runs", async () => {
     const refused = await project.refusal("todo.remove", { id: 0 });
     assert.match(refused, /id/, "the refusal should name the field");
     const listed = await project.output("todo.list", { which: "all" });
-    assert.deepEqual(
-      listed,
-      { todos: [{ id: 1, text: "buy milk", status: "open" }] },
-      "the todo should be untouched",
-    );
+    assert.deepEqual(listed, { todos: [{ id: 1, text: "buy milk", status: "open" }] }, "the todo should be untouched");
   });
 });

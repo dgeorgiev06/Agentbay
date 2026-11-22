@@ -3,6 +3,7 @@ import type { BugsOnCard } from "./bug-card.ts";
 import type { Built, Missing } from "./builder-answer.ts";
 import { computed, counted, grouped, judged, type Card, type CardLine } from "./card-lines.ts";
 import { examplesClauses, examplesLines } from "./examples-card.ts";
+import { gateClauses, gateRanLines } from "./gate-card.ts";
 import { interfaceChanges, interfaceWords, type Pins } from "./interface-pins.ts";
 import { verdictLines, type CaseMessages } from "./item-lines.ts";
 import type { Leak } from "./leaks.ts";
@@ -12,6 +13,7 @@ import type { Proved, Sized } from "./proof-answer.ts";
 import type { RoundsOnCard } from "./round-card.ts";
 import { bugWords, leakWords, roundsRanWords } from "./slice-words.ts";
 import type { Slice } from "./slice-form.ts";
+import type { GateShown } from "./start-card.ts";
 import type { TriedBlock } from "./tried-block.ts";
 
 type Kept = "set-aside" | "with-tests";
@@ -35,6 +37,7 @@ export type MergeCardInput = {
   readonly pins?: Pins;
   readonly stayed?: readonly Stayed[];
   readonly tried?: TriedBlock;
+  readonly gate?: GateShown;
 };
 
 export type Drawn = {
@@ -134,6 +137,7 @@ function drawnLines(input: MergeCardInput, reason: string | undefined): readonly
     computed("draw", answerWords(reason)),
     ...(input.leaks ?? []).map((leak) => computed("draw", leakWords(leak))),
     ...verdictLines(slice, proof.verdicts, { messages: input.caseMessages, provedBy: "prove" }),
+    ...gateRanLines(input.gate, { slices: [slice.name], verdicts: proof.verdicts }),
     ...examplesLines(input.tried, "prove"),
     ...reviewedPracticeLines(input.rounds, input.mustPractices ?? []),
     ...[...drawnWords, ...bugWords(input.bugs)].map((said) => computed("draw", said)),
@@ -151,6 +155,7 @@ export function drawn(input: MergeCardInput): Drawn {
     leaked: (input.leaks ?? []).length > 0,
     mustNotHeld: mustNotHeld(input.rounds, input.mustPractices ?? []),
     interfaceChanges: interfaceChanges(input.pins ?? noPins),
+    gate: gateClauses(input.gate, input.proof.verdicts),
     examples: examplesClauses(input.tried),
   });
   return {

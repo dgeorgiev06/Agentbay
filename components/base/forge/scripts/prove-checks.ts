@@ -1,5 +1,7 @@
 import { defineScript, fail, fieldsOf, type Json } from "../../../../bay/sdk.ts";
 import { listOf, textOf, textsOf } from "./lib/json-values.ts";
+import { gateFrom } from "./lib/gate.ts";
+import { gatedAsked } from "./lib/gated-checks.ts";
 import { keptTests } from "./lib/kept-tests.ts";
 import { provedOf } from "./lib/proof-answer.ts";
 import { sliceOf } from "./lib/slice-form.ts";
@@ -27,7 +29,7 @@ export const run = defineScript(async (input, context) => {
   if (fields.kind !== "asked") {
     return { kind: "not asked", alone: [] };
   }
-  const asked = fields.asked ?? null;
+  const asked = await gatedAsked(context, fieldsOf(fields.asked ?? null), gateFrom(fields.gate));
   const setting = settingOf(context.settings.tryExamples);
   const entries = entriesOf(asked, fields.trying, setting);
   const kept = await Promise.all(textsOf(fields.keptOf).map((name) => keptTests(context, name)));

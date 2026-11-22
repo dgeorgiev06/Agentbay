@@ -1,5 +1,7 @@
 import { defineScript, fail, fieldsOf, type Json, type JsonFields } from "../../../../bay/sdk.ts";
 import { listOf, textOf } from "./lib/json-values.ts";
+import { gateOf } from "./lib/gate.ts";
+import { gatedAsked } from "./lib/gated-checks.ts";
 import { forgetKept, keptTests } from "./lib/kept-tests.ts";
 import { sliceOf } from "./lib/slice-form.ts";
 import { plannedTrials, roomBeside, type Entry } from "./lib/tried-examples.ts";
@@ -16,7 +18,8 @@ function entriesOf(asked: JsonFields, examples: Json, setting: Setting): readonl
 }
 
 export const run = defineScript(async (input, context) => {
-  const { examples = [], ...asked } = fieldsOf(input);
+  const { examples = [], ...given } = fieldsOf(input);
+  const asked = await gatedAsked(context, given, gateOf([sliceOf(given.slice)]));
   const name = sliceOf(asked.slice).name;
   const setting = settingOf(context.settings.tryExamples);
   const entries = entriesOf(asked, examples, setting);

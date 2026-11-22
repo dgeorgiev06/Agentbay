@@ -44,6 +44,15 @@
       },
       "description": "The ids of the practices the workflow rounds treats as must, such as P-12. While the reviewer's last answer says one of them is not held, the merge card withholds merge, naming it; keep stays. Left out, none: a practice not held is then shown on the card and withholds nothing."
     },
+    "modeGateTests": {
+      "type": "array",
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "Test files of the project that read every mode, such as one that runs bay check on the project, which the mode gate runs beside the mode's own tests. It names tests only: forge decides the gate from the slices' kinds and scopes, and no setting chooses it. Left out, none: the mode gate then runs no test outside the mode's folder."
+    },
     "tryExamples": {
       "enum": ["must", "shown", "off"],
       "description": "Whether the merge card tries the design's worked examples against the built mode, each in a throwaway copy of the head of its own, and what an example that answers otherwise does: must withholds merge while one answers otherwise or is not known; shown draws the same lines and withholds nothing; off tries none, and the card says so. Left out, must."

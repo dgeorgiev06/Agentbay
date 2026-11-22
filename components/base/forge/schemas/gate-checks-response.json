@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GateChecksResponse",
+  "description": "The slice as proof is to judge it: under the mode gate each checks item takes its test run from the mode's test files at the head and the setting modeGateTests; under the whole gate the slice is as it was given.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["slice"],
+  "properties": {
+    "slice": {
+      "$ref": "proof@1/prove-request.json#/$defs/slice"
+    }
+  }
+}

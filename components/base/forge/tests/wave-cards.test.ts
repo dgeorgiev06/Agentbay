@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { fieldsOf } from "../../../../bay/sdk.ts";
+import { gateOf } from "../scripts/lib/gate.ts";
 import { planOf } from "../scripts/lib/plan-form.ts";
 import { provedOf } from "../scripts/lib/proof-answer.ts";
 import { sliceOf, type Slice } from "../scripts/lib/slice-form.ts";
@@ -106,6 +107,7 @@ describe("the wave's start card", () => {
       slices: plan.slices,
       sideBySide: 2,
       leftovers: [],
+      gate: { gate: gateOf(plan.slices), alsoRun: [] },
     });
     assert.equal(
       printed(card, [
@@ -128,14 +130,18 @@ describe("the wave's start card", () => {
         "  cost: at most 27 model calls a slice, 54",
         "    for the wave",
         "  each slice's own proof leaves out the",
-        "    checks; they and the whole test run go",
-        "    once, on the slices combined",
+        "    checks; they go once, on the slices",
+        "    combined",
+        "  gate: the whole test run, since the slices",
+        "    write inside more than one mode's folder",
+        "    (components/modes/td1 and",
+        "    components/modes/td10)",
         "All lines worked out by script.",
         "You can:",
         "  build  Build the wave's slices side by",
         "         side",
         "  stop   Stop; nothing is cut",
-        "checked: 0 ran, 9 computed, 0 judged",
+        "checked: 0 ran, 10 computed, 0 judged",
       ].join("\n"),
     );
   });

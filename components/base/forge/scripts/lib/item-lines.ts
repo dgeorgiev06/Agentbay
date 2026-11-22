@@ -81,7 +81,8 @@ const notKnownSaid = "proof could not tell, so nothing is known";
 
 const noVerdictSaid = "proof gave no verdict";
 
-const checksPassed = /^Every check passed \(([^()]+)\), and so did the test run: (\d+) tests?\.$/;
+const checksPassed =
+  /^Every check passed \(([^()]+)\), and so did (?:the test run|the run of the (\d+) test files? chosen from testsFrom): (\d+) tests?\.$/;
 
 const checkName = /^[A-Za-z0-9:._-]+$/;
 
@@ -121,11 +122,13 @@ function failedReason(kind: ProofKind, detail: string): string {
 function checksWords(verdict: Verdict): readonly string[] {
   const found = verdict.verdict === "passed" ? checksPassed.exec(verdict.detail) : null;
   const names = found?.[1]?.split(", ") ?? [];
-  const tests = found?.[2];
+  const files = found?.[2];
+  const tests = found?.[3];
   if (tests === undefined || !names.every((name) => checkName.test(name))) {
     return [];
   }
-  return [`checks passed: ${names.join(", ")}`, `tests passed: ${grouped(Number(tests))}`];
+  const among = files === undefined ? "" : `, in ${counted(Number(files), "test file")} chosen by the gate`;
+  return [`checks passed: ${names.join(", ")}`, `tests passed: ${grouped(Number(tests))}${among}`];
 }
 
 function namedCaseWords(failing: FailingCase, messages: CaseMessages): readonly string[] {

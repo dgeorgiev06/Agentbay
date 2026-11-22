@@ -81,6 +81,11 @@
       }
     ],
     "sideBySide": 2,
-    "builtBefore": []
+    "builtBefore": [],
+    "gate": {
+      "gate": "mode",
+      "mode": "todo",
+      "folder": "components/modes/todo"
+    }
   }
 }

@@ -1,6 +1,6 @@
 import { fail, fieldsOf, readYaml, segmentsOfPointer, type Json, type ScriptContext } from "../../../../../bay/sdk.ts";
 import type { Feature, Plan } from "./plan.ts";
-import { planOf, twiceNamed } from "./plan-form.ts";
+import { gatesClaimed, planOf, twiceNamed } from "./plan-form.ts";
 import { textsOf } from "./json-values.ts";
 
 export type Refusal = {
@@ -58,8 +58,9 @@ export async function planOfText(context: ScriptContext, text: string): Promise<
   }
   const document = checked.value.value;
   const plan = planOf(document);
-  const twice = namedTwice(plan, read.lineOf);
-  return twice.length > 0 ? { kind: "refused", refusals: twice } : { kind: "read", plan, document };
+  const claimed = gatesClaimed(document).map((claim) => refusalAt(read.lineOf, claim.at, claim.sentence));
+  const refusals = [...namedTwice(plan, read.lineOf), ...claimed];
+  return refusals.length > 0 ? { kind: "refused", refusals } : { kind: "read", plan, document };
 }
 
 function featuresOf(value: Json): readonly Feature[] {

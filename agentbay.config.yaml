@@ -28,6 +28,7 @@ settings:
     into: feat/0022-agentbay5
     practices: [framework/practices.md, components/base/typescript/practices.md]
     mustPractices: [P-12, P-52, TS-17, TS-21, TS-25]
+    modeGateTests: [tests/kit-check.test.ts, tests/feature-map.test.ts, tests/build.test.ts]
   feed-briefing:
     selector:
       labels: [staking, custody]

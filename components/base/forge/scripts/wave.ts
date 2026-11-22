@@ -3,7 +3,7 @@ import { branchOf, roundsBranches, type Dropped } from "./lib/branch-endings.ts"
 import { answerOf } from "./lib/called.ts";
 import { shortCommit } from "./lib/card-lines.ts";
 import type { DesignSummary } from "./lib/design-summary.ts";
-import { listOf, numberOf, textOf } from "./lib/json-values.ts";
+import { listOf, numberOf, textOf, textsOf } from "./lib/json-values.ts";
 import { workOut } from "./lib/plan-waves.ts";
 import { readSources } from "./lib/plan-sources.ts";
 import { planOfText, readFeatures } from "./lib/reading.ts";
@@ -12,6 +12,7 @@ import { lastRound } from "./lib/rounds.ts";
 import { waveChoices } from "./lib/start-choices.ts";
 import { builtBefore, testsToLookFor, waveOf, type PlanFound, type WaveAsked } from "./lib/wave-plan.ts";
 import { sideBySideOf } from "./lib/side-by-side.ts";
+import { gateOf } from "./lib/gate.ts";
 import { waveStartCard } from "./lib/wave-start-card.ts";
 
 type Read = {
@@ -99,7 +100,8 @@ export const run = defineScript(async (input, context) => {
   );
   const shown = { ...asked, waves: wave.waves, base: shortCommit(base), slices: wave.slices, sideBySide, ...design };
   const choices = waveChoices(leftovers);
-  const card = waveStartCard({ ...shown, leftovers });
+  const gate = gateOf(wave.slices);
+  const card = waveStartCard({ ...shown, leftovers, gate: { gate, alsoRun: textsOf(context.settings.modeGateTests) } });
   return {
     name,
     plan: asked.plan,
@@ -113,5 +115,6 @@ export const run = defineScript(async (input, context) => {
     requests: [...wave.requests],
     builtBefore: [...builtBefore(found, asked.wave)],
     sideBySide,
+    gate,
   };
 });

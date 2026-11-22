@@ -33,6 +33,8 @@ import {
   type Handed,
   type Proved,
   printedCard,
+  modeGateTestsOfTheKit,
+  testsFromAsked,
 } from "./kit-copy.ts";
 
 const alphabet = Array.from({ length: 26 }, (_, at) => String.fromCharCode(65 + at)).join("");
@@ -94,11 +96,14 @@ function sliceOf(name: string): Json {
   };
 }
 
+const scopePassed = { item: "scope", kind: "in-scope", verdict: "passed", detail: "It held." };
+
 function passed(name: string): Proved {
   return {
     verdicts: [
       { item: `DOD-${name}-1`, kind: "fails-first", verdict: "passed", detail: "It held." },
       { item: `DOD-${name}-2`, kind: "checks", verdict: "passed", detail: "It held." },
+      scopePassed,
     ],
     judgement: [],
     size: [{ path: codeOf(name), head: 1 }],
@@ -124,6 +129,7 @@ function failed(name: string): Proved {
         },
       },
       { item: `DOD-${name}-2`, kind: "checks", verdict: "passed", detail: "It held." },
+      scopePassed,
     ],
     judgement: [],
     size: [{ path: codeOf(name), head: 1 }],
@@ -260,7 +266,26 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "    proof judged passed.",
       "  DOD-A1-1, must, passed: A quill that was",
       "    added is counted.",
-      "  DOD-A1-2, must, passed: The checks pass.",
+      "  DOD-A1-2, must, passed: The toolchain's",
+      "    checks of the whole project and the mode",
+      "    gate's tests, those under",
+      "    components/modes/a1/tests and those the",
+      "    setting modeGateTests names, pass; the",
+      "    project's other tests are not run.",
+      "  scope, must, passed: Every changed path is",
+      "    in the write scope.",
+      "  gate: the mode's own tests and the fast",
+      "    checks of the whole project ran, since",
+      "    A1 writes only inside",
+      "    components/modes/a1; the other tests",
+      "    were not run",
+      "  the mode gate: every test file under",
+      "    components/modes/a1/tests at the head,",
+      "    the toolchain's checks of the whole",
+      "    project, and tests/kit-check.test.ts,",
+      "    tests/feature-map.test.ts and",
+      "    tests/build.test.ts, the setting",
+      "    modeGateTests",
       "  the design's examples: none, since the",
       "    slice's request carries none of a",
       "    design's examples; nothing is withheld",
@@ -291,7 +316,7 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "  discard    Stop; the worktrees go",
       "             why: Discarding comes with",
       "             slice WD1.",
-      "checked: 0 ran, 9 computed, 3 judged",
+      "checked: 0 ran, 12 computed, 3 judged",
     ]);
     await decided(root, card, { step: "card", choice: "merge" });
     assert.deepEqual(branches(root), []);
@@ -491,7 +516,7 @@ test("the tests' text and the builder's code are in no file a later step could r
   await declared(root, start, [codeOf(name)]);
   const [failsFirst] = passed(name).verdicts;
   const checks = { item: "checks", kind: "checks", verdict: "passed", detail: "It held." };
-  await provedIn(root, name, { ...passed(name), verdicts: [failsFirst ?? null, checks] });
+  await provedIn(root, name, { ...passed(name), verdicts: [failsFirst ?? null, checks, scopePassed] });
   let atReview: readonly string[] = [];
   await playedTo(root, start.id, {
     tests: () => Promise.resolve({ tests }),
@@ -512,13 +537,15 @@ test("the tests' text and the builder's code are in no file a later step could r
   );
   assert.deepEqual(proofs, [["DOD-E1-1"], ["DOD-E1-1", "checks"]]);
   const printed = await printedCard(root, start.id);
-  const added = printed.indexOf("  checks, must, passed: Added by forge, as");
-  assert.deepEqual(printed.slice(added, added + 6), [
-    "  checks, must, passed: Added by forge, as",
-    "    the plan lists no checks item: the",
-    "    toolchain's checks, such as types, lint,",
-    "    format and dead code, and its whole test",
-    "    run pass.",
-    "  the design's examples: none, since the",
+  const added = printed.indexOf("  checks, must, passed: The toolchain's");
+  assert.deepEqual(printed.slice(added, added + 4), [
+    "  checks, must, passed: The toolchain's",
+    "    checks of the whole project and the mode",
+    "    gate's tests, those under",
+    "    components/modes/e1/tests and those the",
+  ]);
+  assert.deepEqual(testsFromAsked(await askedOf(root, name)), [
+    [],
+    [testPath(name), ...modeGateTestsOfTheKit],
   ]);
 });

@@ -2,6 +2,7 @@ import { defineScript, fieldsOf } from "../../../../bay/sdk.ts";
 import { branchesSaid } from "./lib/branch-endings.ts";
 import { cutAfresh, intoOf, removedThenDropped } from "./lib/drops.ts";
 import { textOf, textsOf } from "./lib/json-values.ts";
+import { filesUnder } from "./lib/listing.ts";
 
 export const run = defineScript(async (input, context) => {
   const fields = fieldsOf(input);
@@ -13,6 +14,8 @@ export const run = defineScript(async (input, context) => {
       return read.ok ? { path, text: read.value } : { path };
     }),
   );
+  const folders = textsOf(fields.list);
+  const listed = folders.length === 0 ? {} : { listed: await filesUnder(context, cut.folder, folders) };
   const drops = await removedThenDropped(context, cut, into);
-  return { commit: cut.commit, files, ...branchesSaid([], drops.stayed) };
+  return { commit: cut.commit, files, ...listed, ...branchesSaid([], drops.stayed) };
 });

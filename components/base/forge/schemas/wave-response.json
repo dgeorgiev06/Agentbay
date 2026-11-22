@@ -16,7 +16,8 @@
     "sideBySide",
     "offered",
     "leftovers",
-    "builtBefore"
+    "builtBefore",
+    "gate"
   ],
   "properties": {
     "name": {
@@ -164,6 +165,16 @@
           }
         }
       }
+    },
+    "gate": {
+      "type": "object",
+      "required": ["gate"],
+      "properties": {
+        "gate": {
+          "enum": ["mode", "whole"]
+        }
+      },
+      "description": "The gate forge decided by its rule from the slices' kinds and scopes: mode, with the one mode's name and folder, when every slice is of kind mode and writes only inside that folder; otherwise whole, with the reason. The start card says it, and the wave's checks run by it."
     },
     "builtBefore": {
       "type": "array",

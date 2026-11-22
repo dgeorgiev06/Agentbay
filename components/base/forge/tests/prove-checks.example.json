@@ -31,6 +31,14 @@
         },
         "bugs": []
       },
+      "gate": {
+        "gate": "whole",
+        "because": {
+          "why": "outside",
+          "slice": "TB",
+          "path": "components/base/store/**"
+        }
+      },
       "keptOf": ["ONE"],
       "whenFailed": []
     }

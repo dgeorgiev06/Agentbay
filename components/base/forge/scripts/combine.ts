@@ -3,6 +3,7 @@ import { branchesSaid, type Dropped, type Stayed } from "./lib/branch-endings.ts
 import { answerOf } from "./lib/called.ts";
 import { cutAfresh, intoOf, removedThenDropped } from "./lib/drops.ts";
 import { textOf, textsOf } from "./lib/json-values.ts";
+import { gateFrom } from "./lib/gate.ts";
 import { proving, slicesToJoin, type ToJoin, type WaveNamed } from "./lib/wave-join.ts";
 
 type Combining = {
@@ -58,7 +59,7 @@ function joinedOf(at: Combined, slices: readonly ToJoin[]): Json {
 export const run = defineScript(async (input, context) => {
   const fields = fieldsOf(input);
   const started = fieldsOf(fields.wave ?? null);
-  const wave = { name: textOf(started.name), base: textOf(started.base) };
+  const wave = { name: textOf(started.name), base: textOf(started.base), gate: gateFrom(started.gate) };
   const settled = slicesToJoin(fields.slices ?? null);
   const included = settled.filter((slice) => slice.included);
   if (included.length === 0) {

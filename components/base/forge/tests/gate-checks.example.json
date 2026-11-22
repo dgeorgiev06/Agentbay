@@ -1,0 +1,21 @@
+{
+  "input": {
+    "slice": {
+      "name": "TB",
+      "kind": "mode",
+      "scope": ["components/base/store/**"],
+      "after": [],
+      "done": [{ "id": "DOD-TB-1", "says": "The checks pass.", "level": "must", "proof": { "kind": "checks" } }]
+    },
+    "head": "forge/wip/TB/1"
+  },
+  "output": {
+    "slice": {
+      "name": "TB",
+      "kind": "mode",
+      "scope": ["components/base/store/**"],
+      "after": [],
+      "done": [{ "id": "DOD-TB-1", "says": "The checks pass.", "level": "must", "proof": { "kind": "checks" } }]
+    }
+  }
+}

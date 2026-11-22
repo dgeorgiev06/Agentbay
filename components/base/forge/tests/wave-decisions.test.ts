@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
 import { designSummaryOf } from "../scripts/lib/design-summary.ts";
+import { gateOf } from "../scripts/lib/gate.ts";
 import { listOf } from "../scripts/lib/json-values.ts";
 import { planDocument } from "../scripts/lib/plan-file.ts";
 import { planOf } from "../scripts/lib/plan-form.ts";
 import { workOut } from "../scripts/lib/plan-waves.ts";
 import { sideBySideOf } from "../scripts/lib/side-by-side.ts";
+import { sliceOf } from "../scripts/lib/slice-form.ts";
 import { proving, waveProofRequest, type ToJoin } from "../scripts/lib/wave-join.ts";
 import { builtBefore, nameClashes, testsToLookFor, waveOf, type PlanFound } from "../scripts/lib/wave-plan.ts";
 import { modelCallsOfASlice } from "../scripts/lib/wave-start-card.ts";
@@ -174,7 +176,7 @@ describe("what the wave asks proof", () => {
       examples: [{ action: "counting.done", examples: [] }],
     };
     const asking = fieldsOf(
-      proving({ name: "wave-1", base }, [ca], {
+      proving({ name: "wave-1", base, gate: gateOf([sliceOf(ca.slice)]) }, [ca], {
         head: "combined",
         trying: { builtBefore: ["counting.list"], slices: [ca, left] },
       }),
@@ -188,8 +190,8 @@ describe("what the wave asks proof", () => {
     });
   });
 
-  const wave = { name: "wave-1", base };
   const joined = [joining("TD1", ["a.ts"]), joining("TD10", ["b.ts", "a.ts"])];
+  const wave = { name: "wave-1", base, gate: gateOf(joined.map((each) => sliceOf(each.slice))) };
 
   test("the combined head is asked once, with the checks only, over every merged slice's scope and declaration", () => {
     const request = fieldsOf(waveProofRequest(wave, joined, "combined"));

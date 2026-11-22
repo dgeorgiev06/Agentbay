@@ -74,6 +74,11 @@ function sectionsOf(screen: Screen): readonly InSection[] {
   });
 }
 
+function headingOf(screen: Screen, { section, facts }: InSection): string {
+  const onlyWithheld = section === "problems" && facts.length === 0 && withheldOf(screen.choices).length > 0;
+  return onlyWithheld ? kernelWords.notAvailable : headings[section];
+}
+
 function titleRows(title: string): Rows {
   return rowsOf(title.toUpperCase(), "", "");
 }
@@ -128,11 +133,12 @@ function cappedFactRows(facts: readonly Fact[]): Rows {
   return more === 0 ? rows : [...rows, `  ${moreWords(more)}`];
 }
 
-function shortSection(screen: Screen, { section, facts }: InSection): Rows {
-  if (section === "problems") {
-    return [headings.problems, ...withheldRows(screen.choices), ...allFactRows(facts)];
+function shortSection(screen: Screen, shown: InSection): Rows {
+  const heading = headingOf(screen, shown);
+  if (shown.section === "problems") {
+    return [heading, ...withheldRows(screen.choices), ...allFactRows(shown.facts)];
   }
-  return [headings[section], ...cappedFactRows(facts)];
+  return [heading, ...cappedFactRows(shown.facts)];
 }
 
 function offeredRows(choices: readonly Choice[]): Rows {
@@ -197,13 +203,14 @@ function blockRows({ first, facts }: Run): Rows {
   return about === undefined ? sourcedRows(facts, atTop) : [...rowsOf(about, "  "), ...sourcedRows(facts, inBlock)];
 }
 
-function sectionDetails(screen: Screen, { section, facts }: InSection): Rows {
-  const withheld = section === "problems" ? withheldRows(screen.choices) : [];
-  return [headings[section], ...withheld, ...runsOf(facts, (fact) => fact.about).flatMap(blockRows)];
+function sectionDetails(screen: Screen, shown: InSection): Rows {
+  const withheld = shown.section === "problems" ? withheldRows(screen.choices) : [];
+  const blocks = runsOf(shown.facts, (fact) => fact.about).flatMap(blockRows);
+  return [headingOf(screen, shown), ...withheld, ...blocks];
 }
 
-function contentsRows(listed: readonly InSection[], runId: string): Rows {
-  const counts = listed.map(({ section, facts }) => `  ${headings[section]}: ${counted(facts.length, "fact")}`);
+function contentsRows(screen: Screen, listed: readonly InSection[], runId: string): Rows {
+  const counts = listed.map((shown) => `  ${headingOf(screen, shown)}: ${counted(shown.facts.length, "fact")}`);
   const named = joinedWith(
     listed.map(({ section }) => section),
     "or",
@@ -258,7 +265,7 @@ export function detailsLines(screen: Screen, record: ScreenRecord, section?: Sec
   const listed = sectionsOf(screen);
   return spaced([
     [...titleRows(screen.title), kernelWords.everyFact],
-    contentsRows(listed, runId),
+    contentsRows(screen, listed, runId),
     ...listed.map((each) => sectionDetails(screen, each)),
     offeredRows(screen.choices),
     replyLine(screen.choices),

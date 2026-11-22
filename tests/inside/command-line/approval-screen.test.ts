@@ -255,14 +255,28 @@ test("problems come first and whole: each withheld choice with its reason, then 
   ]);
 });
 
-test("a withheld choice puts its reason under Problems even when no fact is in that section", () => {
-  assert.deepEqual(inSection(short(many("what", 1), stopOnly), "Problems"), [
+test("with no problem fact, a withheld choice and its reason come first, whole, under Not available now", () => {
+  const rows = short(many("what", 1), stopOnly);
+  assert.deepEqual(rows.slice(0, 7), [
+    "APPROVE THE TODO DESIGN?",
+    "",
+    "Not available now",
     "  You cannot reply approve now: The design",
     "    is saved to the feature branch.",
     "    Why: The design check found 1 problem.",
     "      The challenger answered P-52 not held.",
   ]);
-  assert.ok(!short(many("what", 1)).includes("Problems"));
+  assert.ok(!rows.includes("Problems"));
+  assert.ok(!short(many("what", 1)).includes("Not available now"));
+  const details = detailsLines(screenFrom(many("what", 1), stopOnly), record);
+  assert.ok(details.includes("  Not available now: 0 facts"), details.join("\n"));
+  assert.deepEqual(inSection(details, "Not available now"), rows.slice(3, 7));
+});
+
+test("with a problem fact, the withheld choices stay under Problems, before the facts", () => {
+  const rows = short([...many("what", 1), script("problems", "A check found: x.")], stopOnly);
+  assert.deepEqual(inSection(rows, "Problems").slice(0, 1), ["  You cannot reply approve now: The design"]);
+  assert.ok(!rows.includes("Not available now"));
 });
 
 test("in the details, facts about one thing form one block, and the author is said once for each source in it", () => {
@@ -491,6 +505,7 @@ test("a fact may not begin with words only the kernel writes, nor be a heading",
     "What each reply does",
     "  checks",
     "Problems:",
+    "Not available now: build",
     "The full hash: 00",
   ];
   assert.deepEqual(

@@ -53,7 +53,10 @@ screen.
   command for the details. A section with nothing in it is left out.
 - Problems come first and whole. The kernel itself prints each withheld choice there, from the hashed `withheld`:
   `You cannot reply approve now: <what it does>` and `Why: <reason>`, whatever the facts say, so a problem cannot
-  hide in another section. Then every fact of the section, short or not, never cut.
+  hide in another section. Then every fact of the section, short or not, never cut. When choices are withheld but
+  no fact is in `problems`, the same rows come first under the heading `Not available now` instead (AS4): a choice
+  that does not apply, such as building over branches no earlier run left, is not a problem. Nothing moves down and
+  nothing is hidden; only the heading differs, and it is one of the kernel's own phrases.
 - Other sections show at most 4 rows of their short facts; a fact is shown whole or not at all, and the facts left
   out are counted: `and 16 more, see details`.
 - A model's facts are led by `A model wrote:` and indented under it; a tool's by `<command> reported:`; a script's
@@ -94,8 +97,9 @@ kernel adds (read from the run); hashing them is a later slice, since it changes
 4. No forged kernel rows. Rows at the left edge (headings, the title, `Reply:`, `Details:`, `For the record`) cannot
    be imitated, since facts are always indented. Rows the kernel writes inside a section cannot be either: the
    kernel refuses a fact or an about whose words begin with one of its own phrases (`and N more`, `A model wrote`,
-   `A script worked this out`, `A tool ran`, `<command> reported:`, `You cannot reply`, `Why:`, `Reply:`,
-   `Details:`, `For the record` and the rest of `kernelWords`, matched as whole words) or that is a heading.
+   `A script worked this out`, `A tool ran`, `<command> reported:`, `Not available now`, `You cannot reply`,
+   `Why:`, `Reply:`, `Details:`, `For the record` and the rest of `kernelWords`, matched as whole words) or that is
+   a heading.
    Control, bidi and zero-width characters (U+061C, U+200B to U+200F, U+2028, U+2029, U+202A to U+202E, U+2060,
    U+2066 to U+2069, U+FEFF) are shown as `\uXXXX`, so a fact cannot break onto a row of its own. A title is plain
    ASCII printed in capitals, so no row of it has the lowercase letters every kernel row has.

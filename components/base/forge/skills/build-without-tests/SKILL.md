@@ -22,8 +22,9 @@ metadata:
 - `declared`: the files and action names you declared in the step before.
 - `findings`: from round 2 on, the reviewer's findings for you: the case, the question it fails, the fix.
 - `failing`: from round 2 on, what you are told of the tests that failed on your work: the must items that
-  failed, each failing case's name, its file, and its message only when the message quotes no test; how
-  many messages were left out; and the test files that did not load.
+  failed, each failing case's name, its file, and the first line of its message with each stretch that
+  quotes a test shown as …; how many messages were withheld in part or whole; how many failures the list
+  does not show; and the test files that did not load.
 
 ## Output
 

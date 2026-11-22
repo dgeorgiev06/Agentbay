@@ -308,7 +308,7 @@
           "type": "object",
           "additionalProperties": false,
           "required": ["kind"],
-          "description": "The checks pass: every check of the toolchain, and then a run of every test, or of the test files testsFrom holds, on a copy of the head. Passed when every check passed and the test run passed.",
+          "description": "The checks pass: every check of the toolchain, bay check when bayCheck asks for it, and then a run of every test, or of the test files testsFrom holds, on a copy of the head. Passed when every check passed, bay check found no error and the test run passed.",
           "properties": {
             "kind": {
               "const": "checks",
@@ -323,6 +323,10 @@
                 "$ref": "#/$defs/path"
               },
               "description": "Files to take the test run from, in place of every test: those the toolchain's testFiles patterns hold are run, and the others are not. When none of them is a test file, no test runs and the item is inconclusive. Left out, every test runs."
+            },
+            "bayCheck": {
+              "const": true,
+              "description": "Also run the copy's own ./bay.sh check, after the toolchain's checks: passed only when it ends with exit code 0, failed when it ends with 1, which is how bay check says it found errors, and inconclusive otherwise. Left out, bay check is not run."
             }
           }
         },

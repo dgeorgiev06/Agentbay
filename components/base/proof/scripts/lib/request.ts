@@ -23,7 +23,7 @@ export type Command =
 export type RealRun = { readonly command: Command; readonly stdout: string; readonly exitCode: number };
 
 export type Proof =
-  | { readonly kind: "checks"; readonly testsFrom?: readonly string[] }
+  | { readonly kind: "checks"; readonly testsFrom?: readonly string[]; readonly bayCheck?: true }
   | { readonly kind: "fails-first"; readonly tests: readonly string[] }
   | { readonly kind: "in-scope" }
   | { readonly kind: "as-declared" }
@@ -112,7 +112,11 @@ function proofOf(fields: JsonFields): Proof {
   const kind = text(fields, "kind");
   switch (kind) {
     case "checks":
-      return fields.testsFrom === undefined ? { kind } : { kind, testsFrom: texts(fields, "testsFrom") };
+      return {
+        kind,
+        ...(fields.testsFrom === undefined ? {} : { testsFrom: texts(fields, "testsFrom") }),
+        ...(fields.bayCheck === true ? { bayCheck: true } : {}),
+      };
     case "bugs-caught":
       return { kind };
     case "fails-first":

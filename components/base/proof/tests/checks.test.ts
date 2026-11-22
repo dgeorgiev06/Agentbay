@@ -169,3 +169,42 @@ test("checks: testsFrom with no test file in it, or a toolchain that did not des
     reason: "The toolchain did not say which files are tests, so none of testsFrom was run.",
   });
 });
+
+test("checks: bay check on the head that ended with 0 is passed and said; with 1 it is failed with the count it printed", () => {
+  const chosen = { of: "chosen", files: 2 } as const;
+  const clean = { ran: "ended", exitCode: 0, stdout: "bay check: 0 errors, 5 warnings.\n" } as const;
+  assert.deepEqual(judged({ copy: "made", checks: allPassed, tests: ninePassed, ran: chosen, bay: clean }), {
+    item: "DOD-1",
+    kind: "checks",
+    verdict: "passed",
+    detail:
+      "Every check passed (format, lint), and so did the run of the 2 test files chosen from testsFrom: 9 tests. " +
+      "bay check on the head found no error.",
+  });
+  const broken = { ran: "ended", exitCode: 1, stdout: "a.yaml: error: x\nbay check: 2 errors, 5 warnings.\n" } as const;
+  assert.deepEqual(
+    judged({ copy: "made", checks: allPassed, tests: ninePassed, bay: broken }),
+    failedWith("bay check on the head found 2 errors."),
+  );
+});
+
+test("checks: bay check not known, or ended with another code, is inconclusive, never passed", () => {
+  const notKnown = { ran: "not known", reason: "It did not finish within 9 seconds." } as const;
+  assert.deepEqual(
+    judged({ copy: "made", checks: allPassed, tests: ninePassed, bay: notKnown }),
+    inconclusiveWith("bay check on the head is not known: It did not finish within 9 seconds."),
+  );
+  const odd = { ran: "ended", exitCode: 3, stdout: "" } as const;
+  assert.deepEqual(
+    judged({ copy: "made", checks: allPassed, tests: ninePassed, bay: odd }),
+    inconclusiveWith("bay check on the head ended with exit code 3, which is neither 0 nor 1."),
+  );
+});
+
+test("checks: a failed run of the chosen test files says it was that run", () => {
+  const ran = { of: "chosen", files: 3 } as const;
+  assert.deepEqual(judged({ copy: "made", checks: allPassed, tests: { ran: "failed", failed: 2, cases: {} }, ran }), {
+    ...failedWith("2 tests failed in the run of the 3 test files chosen from testsFrom."),
+    cases: {},
+  });
+});

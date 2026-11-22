@@ -118,7 +118,7 @@ async function toolchainRun(
   return toolchainRunOf(answer.value, { seconds, limits: step.limits });
 }
 
-async function commandRun(step: ProofStep, folder: string, command: Command): Promise<CommandRun> {
+export async function commandRun(step: ProofStep, folder: string, command: Command): Promise<CommandRun> {
   const seconds = step.secondsLeft(1);
   if (seconds < 1) {
     return notKnown(noTimeLeftSentence(step.limits, "run"));

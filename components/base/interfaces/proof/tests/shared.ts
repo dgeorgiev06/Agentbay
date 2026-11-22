@@ -159,7 +159,12 @@ const checkoutFiles: Files = {
     '  cat "$2"',
     "  exit $?",
     "fi",
-    'echo "This bay.sh knows only print."',
+    'if [ "$1" = check ]; then',
+    '  if [ "$(head -n 1 checks/bay 2>/dev/null)" = passes ]; then echo "bay check: 0 errors, 0 warnings."; exit 0; fi',
+    '  echo "bay check: 2 errors, 0 warnings."',
+    "  exit 1",
+    "fi",
+    'echo "This bay.sh knows only print and check."',
     "exit 2",
     "",
   ].join("\n"),
@@ -173,6 +178,7 @@ const checkoutFiles: Files = {
   "checks/format": "passes\n",
   "checks/lint": "passes\n",
   "checks/types": "passes\n",
+  "checks/bay": "passes\n",
 };
 
 const declaredCommands = {
@@ -334,6 +340,11 @@ const casesHead: Files = {
   "tests/many.test.ts": ["src/long.txt short", ...missingFiles.map((path) => `${path} there`), ""].join("\n"),
 };
 
+const bayCheckFails: Files = {
+  "checks/bay": "fails\n",
+  "tests/greeting.test.ts": "src/greeting.txt hello, louder\n",
+};
+
 const projectCommandFiles: Files = {
   "commands/greet.sh": "cat src/greeting.txt\n",
   "commands/echo-words.sh": ['for word in "$@"; do', "  printf '%s\\n' \"$word\"", "done", ""].join("\n"),
@@ -353,12 +364,14 @@ const projectCommandFiles: Files = {
 const commandsBase: Files = {
   ...fixtures,
   ...projectCommandFiles,
+  ...bayCheckFails,
   "src/greeting.txt": "hello\n",
 };
 
 const commandsHead: Files = {
   ...fixtures,
   ...projectCommandFiles,
+  ...bayCheckFails,
   "src/greeting.txt": "hello, louder\n",
 };
 
@@ -612,6 +625,7 @@ const casesRequest: Fields = {
     item("checks-cases", { kind: "checks" }),
     item("checks-chosen", { kind: "checks", testsFrom: [...chosenTests, "src/sum.txt"] }),
     item("checks-none-chosen", { kind: "checks", testsFrom: ["src/sum.txt", "fixtures/sound.txt"] }),
+    item("checks-bay-passes", { kind: "checks", testsFrom: chosenTests, bayCheck: true }),
     item("bugs-mixed", { kind: "bugs-caught" }),
   ]),
   base: "cases-base",
@@ -673,6 +687,7 @@ const projectCommandsRequest: Fields = {
       }),
       item("real-thing-run-not-started", { kind: "real-thing", runs: [commandRun("break", "", 0)] }),
       item("real-thing-run-much", { kind: "real-thing", runs: [commandRun("much", "", 0)] }),
+      item("checks-bay-fails", { kind: "checks", testsFrom: ["tests/greeting.test.ts"], bayCheck: true }),
     ],
   ),
   base: "commands-base",
@@ -1073,6 +1088,13 @@ const cases: readonly Case[] = [
       const named = runs.map((entry) => JSON.stringify(entry.request.files ?? null));
       assert.ok(named.includes(JSON.stringify(chosenTests)), named.join(" "));
       assert.ok(!named.some((files) => files.includes("src/sum.txt")), named.join(" "));
+    },
+  },
+  {
+    name: "checks: with bayCheck, the copy's own bay check runs; it passes the item only when it ends with 0, and one that ends with 1 fails it",
+    run: async (proof) => {
+      assertVerdict(await proof.proven("cases"), "checks-bay-passes", { kind: "checks", verdict: "passed" });
+      assertVerdict(await proof.proven("project commands"), "checks-bay-fails", { kind: "checks", verdict: "failed" });
     },
   },
   {

@@ -72,7 +72,7 @@ export type Command =
 export type Run = { readonly command: Command; readonly stdout: string; readonly exitCode: number };
 
 export type Proof =
-  | { readonly kind: "checks"; readonly testsFrom?: readonly string[] }
+  | { readonly kind: "checks"; readonly testsFrom?: readonly string[]; readonly bayCheck?: true }
   | { readonly kind: "fails-first"; readonly tests: readonly string[] }
   | { readonly kind: "bugs-caught" }
   | { readonly kind: "same-output"; readonly differ: readonly string[] }
@@ -156,7 +156,11 @@ function proofOf(fields: JsonFields): Proof {
     case "bugs-caught":
       return { kind };
     default:
-      return Array.isArray(fields.testsFrom) ? { kind: "checks", testsFrom: texts(fields, "testsFrom") } : { kind: "checks" };
+      return {
+        kind: "checks",
+        ...(Array.isArray(fields.testsFrom) ? { testsFrom: texts(fields, "testsFrom") } : {}),
+        ...(fields.bayCheck === true ? { bayCheck: true } : {}),
+      };
   }
 }
 
@@ -670,7 +674,18 @@ async function testPartOf(context: ScriptContext, folder: string, testsFrom: rea
   return tests.verdict === "passed" ? held : tests.verdict === "failed" ? brokenShowing(counted(tests.failed, "test failed.", "tests failed."), tests.cases) : unknown(tests.reason);
 }
 
-async function checkParts(context: ScriptContext, copy: Copy, testsFrom?: readonly string[]): Promise<readonly Part[]> {
+async function bayPartOf(context: ScriptContext, folder: string): Promise<Part> {
+  const ended = await commandIn(context, folder, { through: "bay", words: ["check"] });
+  if (ended.how !== "exited") {
+    return unknown(ended.reason);
+  }
+  if (ended.exitCode === 0) {
+    return held;
+  }
+  return ended.exitCode === 1 ? broken("bay check found errors.") : unknown("bay check ended otherwise.");
+}
+
+async function checkParts(context: ScriptContext, copy: Copy, testsFrom?: readonly string[], bayCheck?: true): Promise<readonly Part[]> {
   if (!copy.made) {
     return [unknown(copy.reason)];
   }
@@ -686,11 +701,12 @@ async function checkParts(context: ScriptContext, copy: Copy, testsFrom?: readon
     };
     return partOfCheck(field("name"), field("verdict"), field("reason"));
   });
-  return [...parts, await testPartOf(context, copy.folder, testsFrom)];
+  const bay = bayCheck === true ? [await bayPartOf(context, copy.folder)] : [];
+  return [...parts, ...bay, await testPartOf(context, copy.folder, testsFrom)];
 }
 
-export async function checks(context: ScriptContext, id: string, head: Copy, testsFrom?: readonly string[]): Promise<Verdict> {
-  const parts = await checkParts(context, head, testsFrom);
+export async function checks(context: ScriptContext, id: string, head: Copy, testsFrom?: readonly string[], bayCheck?: true): Promise<Verdict> {
+  const parts = await checkParts(context, head, testsFrom, bayCheck);
   return decided(id, "checks", parts, "Every check passed, and so did the test run.");
 }
 
@@ -801,7 +817,7 @@ function verdictOf(context: ScriptContext, request: Request, item: ProvenItem, c
   const { id, proof } = item;
   switch (proof.kind) {
     case "checks":
-      return checks(context, id, copies.head, proof.testsFrom);
+      return checks(context, id, copies.head, proof.testsFrom, proof.bayCheck);
     case "fails-first":
       return failsFirst(context, request, { id, tests: proof.tests }, copies.head);
     case "bugs-caught":
@@ -899,7 +915,7 @@ const worktreeChecks = String.raw`  const cut = await called(context, "worktrees
     return decided(id, "checks", [unknown(cut.reason)], "");
   }
   const folder = textOf(cut.value, "folder");
-  const parts = await checkParts(context, { made: true, folder }, testsFrom);
+  const parts = await checkParts(context, { made: true, folder }, testsFrom, bayCheck);
   await called(context, "worktrees.remove", { folder, into: commit });`;
 
 const codeKindsImport =
@@ -921,15 +937,19 @@ const replacements: Readonly<Record<ProofVariant, readonly Replacement[]>> = {
     ["scripts/lib/code-kinds.ts", codeKindsImport, codeKindsImportWithText],
     [
       "scripts/lib/code-kinds.ts",
-      "export async function checks(context: ScriptContext, id: string, head: Copy, testsFrom?: readonly string[]): Promise<Verdict> {",
-      "export async function checks(context: ScriptContext, id: string, head: Copy, commit: string, testsFrom?: readonly string[]): Promise<Verdict> {",
+      "export async function checks(context: ScriptContext, id: string, head: Copy, testsFrom?: readonly string[], bayCheck?: true): Promise<Verdict> {",
+      "export async function checks(context: ScriptContext, id: string, head: Copy, commit: string, testsFrom?: readonly string[], bayCheck?: true): Promise<Verdict> {",
     ],
     [
       "scripts/prove.ts",
-      "      return checks(context, id, copies.head, proof.testsFrom);",
-      "      return checks(context, id, copies.head, request.head, proof.testsFrom);",
+      "      return checks(context, id, copies.head, proof.testsFrom, proof.bayCheck);",
+      "      return checks(context, id, copies.head, request.head, proof.testsFrom, proof.bayCheck);",
     ],
-    ["scripts/lib/code-kinds.ts", "  const parts = await checkParts(context, head, testsFrom);", worktreeChecks],
+    [
+      "scripts/lib/code-kinds.ts",
+      "  const parts = await checkParts(context, head, testsFrom, bayCheck);",
+      worktreeChecks,
+    ],
   ],
   "leaves a copy behind when the toolchain fails": [
     ["scripts/lib/code-kinds.ts", codeKindsImport, codeKindsImportWithText],

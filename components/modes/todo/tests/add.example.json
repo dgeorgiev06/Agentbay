@@ -1,0 +1,10 @@
+{
+  "input": {
+    "text": "buy milk"
+  },
+  "output": {
+    "id": 1,
+    "text": "buy milk",
+    "status": "open"
+  }
+}

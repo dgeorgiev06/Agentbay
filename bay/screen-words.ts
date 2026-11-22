@@ -49,21 +49,30 @@ export function moreWords(count: number): string {
   return `and ${String(count)} more, see details`;
 }
 
-function bare(text: string): string {
-  return text.trim().toLowerCase().replace(/[.:]$/, "");
+function lowered(text: string): string {
+  return text.trim().toLowerCase();
+}
+
+function opensWith(said: string, phrase: string): boolean {
+  const opening = lowered(phrase).replace(/\.$/, "");
+  return said.startsWith(opening) && !/[\p{L}\p{N}]/u.test(said.charAt(opening.length));
+}
+
+function isHeading(said: string): boolean {
+  return Object.values(headings).some((heading) => said.replace(/[.:]$/, "") === lowered(heading));
 }
 
 export function kernelPhraseIn(words: string): string | undefined {
-  const said = bare(words);
-  const opening = Object.values(kernelWords).find((phrase) => said.startsWith(bare(phrase)));
+  const said = lowered(words);
+  const opening = Object.values(kernelWords).find((phrase) => opensWith(said, phrase));
   if (opening !== undefined) {
     return opening;
   }
-  const heading = Object.values(headings).find((each) => said === bare(each));
-  if (heading !== undefined) {
-    return heading;
+  if (isHeading(said)) {
+    return words.trim();
   }
-  return [moreLeft, reportedBy].map((pattern) => pattern.exec(words.trim())?.[0]).find((found) => found !== undefined);
+  const found = [moreLeft, reportedBy].map((pattern) => pattern.exec(words.trim())?.[0]);
+  return found.find((each) => each !== undefined);
 }
 
 export function isPlainTitle(title: string): boolean {

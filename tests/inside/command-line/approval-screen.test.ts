@@ -497,10 +497,17 @@ test("a fact may not begin with words only the kernel writes, nor be a heading",
     kernels.filter((words) => kernelPhraseIn(words) === undefined),
     [],
   );
-  const facts = ["Checks passed: 3.", "34 automatic checks: no problem found.", "A check found: x.", "Takes request."];
+  const facts = [
+    "Checks passed: 3.",
+    "34 automatic checks: no problem found.",
+    "A check found: x.",
+    "Why this design was chosen: it is small.",
+    "Replying is not needed.",
+    "For the records kept, see x.",
+  ];
   assert.deepEqual(
-    facts.map((words) => kernelPhraseIn(words)),
-    [undefined, undefined, undefined, undefined],
+    facts.filter((words) => kernelPhraseIn(words) !== undefined),
+    [],
   );
 });
 

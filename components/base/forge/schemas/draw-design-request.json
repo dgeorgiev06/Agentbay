@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "DrawDesignRequest",
-  "description": "The requirements, the first challenge, the designer's second pass and the challenge that decides.",
+  "description": "The requirements, the first challenge, the designer's second pass, the challenge that decides, and the practices held by design.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["file", "requirements", "first", "again", "challenged"],
+  "required": ["file", "requirements", "first", "again", "challenged", "practices"],
   "properties": {
     "file": {
       "type": "string",
@@ -27,6 +27,20 @@
     "challenged": {
       "type": "object",
       "description": "The second challenge's step answer, as challenge-design-again-response.json gives it."
+    },
+    "practices": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "says"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[A-Z]{1,4}-\\d{1,3}$" },
+          "says": { "type": "string", "minLength": 1, "maxLength": 2000 }
+        }
+      },
+      "description": "The practices held by design, each its id and its words, as the designs step read them."
     }
   }
 }

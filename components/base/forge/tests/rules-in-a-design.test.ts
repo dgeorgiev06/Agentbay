@@ -54,28 +54,31 @@ async function startedOnTheLightPath(root: string): Promise<string> {
 const ruleFact = {
   section: "what",
   short: false,
+  about: "rule add, in module todo",
   mark: "computed",
   words:
-    "rule add, in todo: takes request, todos from todos, next-id from todo-ids; gives todos into todos, " +
-    "next-id into todo-ids, answer",
+    "Takes request, todos (from todos) and next-id (from todo-ids); gives todos (into todos), next-id (into " +
+    "todo-ids) and answer.",
   step: "draw",
 };
 
 const addFact = {
   section: "what",
   short: false,
+  about: "action add",
   mark: "computed",
   words:
-    "add: serves O1-C1, O1-C4, O1-C5, O1-C6, O1-C7, O2-C4; applies the rule add, reads todos and todo-ids, " +
-    "writes todos and todo-ids; 7 examples",
+    "Meets 6 of your conditions (O1-C1, O1-C4, O1-C5, O1-C6, O1-C7 and O2-C4). Applies the rule add; reads todos " +
+    "and todo-ids; writes todos and todo-ids. 7 worked examples.",
   step: "draw",
 };
 
 const spelledFact = {
   section: "checks",
   short: false,
+  about: "",
   mark: "computed",
-  words: "examples that say a long text by rule: 5, spelled out by forge before any check",
+  words: "5 worked examples say a long text by rule; forge spelled them out before any check.",
   step: "draw",
 };
 
@@ -95,9 +98,9 @@ describe("a design that states its rules, through the workflow design", { concur
         JSON.stringify(facts, null, 2),
       );
     }
-    const decides = facts.find((fact) => fact.words.startsWith("add decides:"));
-    assert.deepEqual([decides?.mark, decides?.step], ["judged", "designs"]);
-    assert.ok(facts.some((fact) => fact.short && fact.words === "34 automatic checks: no problem found."));
+    const decides = facts.find((fact) => fact.words.startsWith("Decides: Whether a text may be"));
+    assert.deepEqual([decides?.mark, decides?.step, decides?.about], ["judged", "designs", "rule add, in module todo"]);
+    assert.ok(facts.some((fact) => fact.short && fact.words === "35 automatic checks: no problem found."));
     assert.equal(textAt(runOf(await decided(root, card, { step: "card", choice: "approve" })), "status"), "done");
     const committed = readYaml(git(root, ["show", `${into}:docs/designs/todo/design.yaml`]));
     assert.ok(committed.ok);

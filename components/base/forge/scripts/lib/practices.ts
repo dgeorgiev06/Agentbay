@@ -1,3 +1,6 @@
+import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
+import { listOf, textOf } from "./json-values.ts";
+
 export type Practice = {
   readonly id: string;
   readonly says: string;
@@ -92,4 +95,11 @@ export function designPractices(text: string): readonly Practice[] {
 
 export function planPractices(text: string): readonly Practice[] {
   return practicesHeldBy(text, planWords);
+}
+
+export function practicesOf(value: Json | undefined): readonly Practice[] {
+  return listOf(value).map((entry) => {
+    const fields = fieldsOf(entry);
+    return { id: textOf(fields.id), says: textOf(fields.says) };
+  });
 }

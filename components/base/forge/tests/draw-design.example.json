@@ -1572,7 +1572,21 @@
         "differences": [],
         "findings": []
       }
-    }
+    },
+    "practices": [
+      {
+        "id": "P-52",
+        "says": "The rules of the work are pure functions."
+      },
+      {
+        "id": "P-32",
+        "says": "A step that needs no judgement is a script, not a skill."
+      },
+      {
+        "id": "P-35",
+        "says": "Interfaces first."
+      }
+    ]
   },
   "output": {
     "card": {
@@ -1589,7 +1603,7 @@
         },
         {
           "mark": "computed",
-          "words": "Covers all 13 of your conditions.",
+          "words": "Meets all 13 of your conditions.",
           "source": {
             "step": "draw"
           },
@@ -1598,7 +1612,7 @@
         },
         {
           "mark": "computed",
-          "words": "the one design, on the light path; approve is offered",
+          "words": "This is the one design written, on the light path.",
           "source": {
             "step": "draw"
           },
@@ -1606,7 +1620,7 @@
         },
         {
           "mark": "computed",
-          "words": "requirements: docs/requirements/todo.yaml: 2 outcomes, 13 conditions",
+          "words": "Your requirements: docs/requirements/todo.yaml, 2 outcomes, 13 conditions.",
           "source": {
             "step": "draw"
           },
@@ -1614,71 +1628,124 @@
         },
         {
           "mark": "computed",
-          "words": "module todo: implements todo; owns the table todos",
+          "words": "It implements todo and owns the table todos.",
           "source": {
             "step": "draw"
           },
-          "section": "what"
+          "section": "what",
+          "about": "module todo"
         },
         {
           "mark": "judged",
-          "words": "todo hides: How todos are kept, numbered and never given a removed id again.",
+          "words": "Hides: How todos are kept, numbered and never given a removed id again.",
           "source": {
             "step": "designs"
           },
-          "section": "what"
+          "section": "what",
+          "about": "module todo"
         },
         {
           "mark": "computed",
-          "words": "rule add-todo, in todo: takes request, todos from todos; gives todos into todos, answer",
+          "words": "Takes request and todos (from todos); gives todos (into todos) and answer.",
           "source": {
             "step": "draw"
           },
-          "section": "what"
+          "section": "what",
+          "about": "rule add-todo, in module todo"
         },
         {
           "mark": "judged",
-          "words": "add-todo decides: Whether a text may be added, and the id the new todo gets.",
+          "words": "Decides: Whether a text may be added, and the id the new todo gets.",
           "source": {
             "step": "designs"
           },
-          "section": "what"
+          "section": "what",
+          "about": "rule add-todo, in module todo"
         },
         {
           "mark": "computed",
-          "words": "rule mark-done, in todo: takes request, todos from todos; gives todos into todos, answer",
+          "words": "Takes request and todos (from todos); gives todos (into todos) and answer.",
           "source": {
             "step": "draw"
           },
-          "section": "what"
+          "section": "what",
+          "about": "rule mark-done, in module todo"
         },
         {
           "mark": "judged",
-          "words": "mark-done decides: Whether a todo may be marked done.",
+          "words": "Decides: Whether a todo may be marked done.",
           "source": {
             "step": "designs"
           },
-          "section": "what"
+          "section": "what",
+          "about": "rule mark-done, in module todo"
         },
         {
           "mark": "computed",
-          "words": "rule remove-todo, in todo: takes request, todos from todos; gives todos into todos, answer",
+          "words": "Takes request and todos (from todos); gives todos (into todos) and answer.",
           "source": {
             "step": "draw"
           },
-          "section": "what"
+          "section": "what",
+          "about": "rule remove-todo, in module todo"
         },
         {
           "mark": "judged",
-          "words": "remove-todo decides: Whether a todo may be removed.",
+          "words": "Decides: Whether a todo may be removed.",
           "source": {
             "step": "designs"
           },
-          "section": "what"
+          "section": "what",
+          "about": "rule remove-todo, in module todo"
         },
         {
           "mark": "computed",
-          "words": "interface todo: 4 actions, 8 schema files",
+          "words": "4 actions, 8 schema files.",
+          "source": {
+            "step": "draw"
+          },
+          "section": "what",
+          "about": "interface todo"
+        },
+        {
+          "mark": "computed",
+          "words": "Meets 6 of your conditions (O1-C1, O1-C4, O1-C5, O1-C6, O1-C7 and O2-C4). Applies the rule add-todo; reads todos; writes todos. 3 worked examples.",
+          "source": {
+            "step": "draw"
+          },
+          "section": "what",
+          "about": "action add"
+        },
+        {
+          "mark": "computed",
+          "words": "Meets 6 of your conditions (O1-C1, O1-C2, O1-C3, O2-C1, O2-C2 and O2-C3). Applies no rule; reads todos; writes nothing. 2 worked examples.",
+          "source": {
+            "step": "draw"
+          },
+          "section": "what",
+          "about": "action list"
+        },
+        {
+          "mark": "computed",
+          "words": "Meets 4 of your conditions (O2-C1, O2-C2, O2-C5 and O2-C6). Applies the rule mark-done; reads todos; writes todos. 3 worked examples.",
+          "source": {
+            "step": "draw"
+          },
+          "section": "what",
+          "about": "action done"
+        },
+        {
+          "mark": "computed",
+          "words": "Meets 3 of your conditions (O2-C3, O2-C4 and O2-C5). Applies the rule remove-todo; reads todos; writes todos. 2 worked examples.",
+          "source": {
+            "step": "draw"
+          },
+          "section": "what",
+          "about": "action remove"
+        },
+        {
+          "mark": "computed",
+          "words": "One design was written, so none was compared.",
           "source": {
             "step": "draw"
           },
@@ -1686,47 +1753,7 @@
         },
         {
           "mark": "computed",
-          "words": "add: serves O1-C1, O1-C4, O1-C5, O1-C6, O1-C7, O2-C4; applies the rule add-todo, reads todos, writes todos; 3 examples",
-          "source": {
-            "step": "draw"
-          },
-          "section": "what"
-        },
-        {
-          "mark": "computed",
-          "words": "list: serves O1-C1, O1-C2, O1-C3, O2-C1, O2-C2, O2-C3; applies no rule, reads todos, writes nothing; 2 examples",
-          "source": {
-            "step": "draw"
-          },
-          "section": "what"
-        },
-        {
-          "mark": "computed",
-          "words": "done: serves O2-C1, O2-C2, O2-C5, O2-C6; applies the rule mark-done, reads todos, writes todos; 3 examples",
-          "source": {
-            "step": "draw"
-          },
-          "section": "what"
-        },
-        {
-          "mark": "computed",
-          "words": "remove: serves O2-C3, O2-C4, O2-C5; applies the rule remove-todo, reads todos, writes todos; 2 examples",
-          "source": {
-            "step": "draw"
-          },
-          "section": "what"
-        },
-        {
-          "mark": "computed",
-          "words": "one design was written, so none was compared",
-          "source": {
-            "step": "draw"
-          },
-          "section": "what"
-        },
-        {
-          "mark": "computed",
-          "words": "34 automatic checks: no problem found.",
+          "words": "35 automatic checks: no problem found.",
           "source": {
             "step": "draw"
           },
@@ -1735,7 +1762,7 @@
         },
         {
           "mark": "computed",
-          "words": "A second model reviewed it and reported no findings and no practice not held.",
+          "words": "A review step by a model reported 0 findings; 2 of the 3 practices it judged are held, and 1 does not apply.",
           "source": {
             "step": "draw"
           },
@@ -1744,7 +1771,7 @@
         },
         {
           "mark": "computed",
-          "words": "examples: 10, checked against their actions' schemas, but not the input of the 4 refusals",
+          "words": "10 worked examples checked against their actions' schemas, but not the input of the 4 refusals.",
           "source": {
             "step": "draw"
           },
@@ -1752,7 +1779,70 @@
         },
         {
           "mark": "computed",
-          "words": "practices held by the script's checks: P-35, P-36, P-38 and P-42",
+          "words": "Every module implements an interface, and every interface is defined and implemented (P-35).",
+          "source": {
+            "step": "draw"
+          },
+          "section": "checks",
+          "about": "practices a script checks"
+        },
+        {
+          "mark": "computed",
+          "words": "No module or interface has a vague name such as utils or helpers (P-36).",
+          "source": {
+            "step": "draw"
+          },
+          "section": "checks",
+          "about": "practices a script checks"
+        },
+        {
+          "mark": "computed",
+          "words": "Each table or file a module owns has that one owner (P-38).",
+          "source": {
+            "step": "draw"
+          },
+          "section": "checks",
+          "about": "practices a script checks"
+        },
+        {
+          "mark": "computed",
+          "words": "No table is owned by two modules (P-42).",
+          "source": {
+            "step": "draw"
+          },
+          "section": "checks",
+          "about": "practices a script checks"
+        },
+        {
+          "mark": "computed",
+          "words": "The rules of the work are pure functions (P-52): held.",
+          "source": {
+            "step": "draw"
+          },
+          "section": "checks",
+          "about": "practices the review step judged"
+        },
+        {
+          "mark": "computed",
+          "words": "A step that needs no judgement is a script, not a skill (P-32): does not apply.",
+          "source": {
+            "step": "draw"
+          },
+          "section": "checks",
+          "about": "practices the review step judged"
+        },
+        {
+          "mark": "computed",
+          "words": "Interfaces first (P-35): held.",
+          "source": {
+            "step": "draw"
+          },
+          "section": "checks",
+          "about": "practices the review step judged"
+        },
+        {
+          "mark": "computed",
+          "words": "The designer was asked once; a second answer is asked only when the review step answers a practice not held or gives a finding.",
           "source": {
             "step": "draw"
           },
@@ -1760,27 +1850,12 @@
         },
         {
           "mark": "computed",
-          "words": "practices answered by the challenger: 3; 2 held, 0 not held, 1 do not apply",
+          "words": "No findings.",
           "source": {
             "step": "draw"
           },
-          "section": "checks"
-        },
-        {
-          "mark": "computed",
-          "words": "the designer was asked once; a second answer is asked only when the challenger answers a practice not held or gives a finding",
-          "source": {
-            "step": "draw"
-          },
-          "section": "checks"
-        },
-        {
-          "mark": "computed",
-          "words": "findings of the challenger: none",
-          "source": {
-            "step": "draw"
-          },
-          "section": "checks"
+          "section": "checks",
+          "about": "findings of the review step"
         }
       ],
       "withheld": {}

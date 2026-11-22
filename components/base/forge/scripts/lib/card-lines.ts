@@ -19,7 +19,7 @@ export type Card = {
 
 export type Section = "what" | "checks" | "open" | "problems";
 
-export type Fact = CardLine & { readonly section: Section; readonly short?: true };
+export type Fact = CardLine & { readonly section: Section; readonly short?: true; readonly about?: string };
 
 export type Screen = {
   readonly title: string;
@@ -112,8 +112,8 @@ export function inItem(item: number, lines: readonly CardLine[]): readonly CardL
   return lines.map((line) => (line.mark === "judged" ? { ...line, source: { step: line.source.step, item } } : line));
 }
 
-export function facts(section: Section, lines: readonly CardLine[]): readonly Fact[] {
-  return lines.map((line) => ({ ...line, section }));
+export function facts(section: Section, lines: readonly CardLine[], about?: string): readonly Fact[] {
+  return lines.map((line) => ({ ...line, section, ...(about === undefined ? {} : { about }) }));
 }
 
 export function shortFacts(section: Section, lines: readonly CardLine[]): readonly Fact[] {

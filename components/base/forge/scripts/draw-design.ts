@@ -8,6 +8,7 @@ import { designerAnswersOf, designOf } from "./lib/design-form.ts";
 import { problemsByCheck } from "./lib/design-rules.ts";
 import { textOf, textsOf } from "./lib/json-values.ts";
 import { notHeldIds } from "./lib/practice-answers.ts";
+import { practicesOf } from "./lib/practices.ts";
 import { conditionsOf, requirementsOf } from "./lib/requirements-form.ts";
 
 function secondPass(first: Challenge, changes: readonly string[]): SecondPass {
@@ -29,8 +30,8 @@ export const run = defineScript(async (input, context) => {
   const final = fieldsOf(again).design ?? null;
   const deciding = challengeOf(fieldsOf(fields.challenged ?? null).challenge ?? null);
   const design = designOf(final);
-  const byCheck = problemsByCheck({ job: requirements.job, file, conditions, design });
   const examples = await checkedExamples(context, design);
+  const byCheck = [...problemsByCheck({ job: requirements.job, file, conditions, design }), examples.problems];
   return designCard({
     file,
     requirements,
@@ -38,9 +39,10 @@ export const run = defineScript(async (input, context) => {
     chosen: first.chosen,
     because: first.because,
     design,
-    problems: [...byCheck.flat(), ...examples.problems],
+    problems: byCheck.flat(),
     checks: byCheck.length,
     refusedSchemas: examples.refusedSchemas,
+    asked: practicesOf(fields.practices),
     practices: deciding.practices,
     findings: deciding.findings,
     said: designerAnswersOf(final),

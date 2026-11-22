@@ -4,6 +4,7 @@ import { designFolder, designPaths } from "./design-files.ts";
 import { exampleValues, referencesIn, siblingSchemas } from "./design-examples.ts";
 import { actionName, actionsOf, type Action, type Design, type Interface } from "./design-form.ts";
 import { spelledOut } from "./long-texts.ts";
+import type { Practice } from "./practices.ts";
 import { ruleChecks } from "./rules-applied.ts";
 
 export type Checked = {
@@ -272,7 +273,12 @@ const checks: readonly Check[] = [
   ...fromRules,
 ];
 
-export const heldByRules = ["P-35", "P-36", "P-38", "P-42"];
+export const heldByRules: readonly Practice[] = [
+  { id: "P-35", says: "Every module implements an interface, and every interface is defined and implemented" },
+  { id: "P-36", says: "No module or interface has a vague name such as utils or helpers" },
+  { id: "P-38", says: "Each table or file a module owns has that one owner" },
+  { id: "P-42", says: "No table is owned by two modules" },
+];
 
 export function problemsByCheck(checked: Checked): readonly (readonly string[])[] {
   return checks.map((check) => check(checked));

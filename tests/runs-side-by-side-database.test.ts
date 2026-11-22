@@ -7,7 +7,7 @@ import { openKernel } from "./kernel-fixture.ts";
 import { makeProject } from "./project-fixture.ts";
 
 const todo = {
-  name: "todo",
+  name: "jotter",
   version: "1.0.0",
   description: "Keeps todos in its own database.",
   resources: { db: { migrations: "migrations" } },
@@ -47,7 +47,7 @@ const addScript = [
 
 test("two side-by-side items that each write through a mode's database both leave their row", async () => {
   const project = await makeProject();
-  const folder = "components/modes/todo";
+  const folder = "components/modes/jotter";
   await project.write(`${folder}/mode.yaml`, stringify(todo));
   await project.write(`${folder}/workflows/both.yaml`, stringify(both));
   await project.write(`${folder}/schemas/anything.json`, '{ "type": "object" }\n');
@@ -55,10 +55,10 @@ test("two side-by-side items that each write through a mode's database both leav
   await project.write(`${folder}/scripts/add.ts`, addScript);
   const kernel = await openKernel(project);
   try {
-    const run = await kernel.runs.start({ workflow: { mode: "todo", path: "workflows/both.yaml" } }, ["one", "two"]);
+    const run = await kernel.runs.start({ workflow: { mode: "jotter", path: "workflows/both.yaml" } }, ["one", "two"]);
     assert.ok(run.ok, JSON.stringify(run));
     assert.deepEqual(run.value.state, { status: "done", output: [{ added: "one" }, { added: "two" }] });
-    const database = new DatabaseSync(join(project.root, ".agentbay/data/todo.db"), { readOnly: true });
+    const database = new DatabaseSync(join(project.root, ".agentbay/data/jotter.db"), { readOnly: true });
     const rows = database.prepare("select title from todos order by title").all();
     database.close();
     assert.deepEqual(

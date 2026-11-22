@@ -21,14 +21,14 @@ type Busy = {
   readonly action: string;
 };
 
-const unnamedFile = join(".agentbay", "data", "todo.db");
+const unnamedFile = join(".agentbay", "data", "jotter.db");
 
 const releaseAfterMilliseconds = 1000;
 
 const releaseAfterAllHaveStartedMilliseconds = 2500;
 
 const todo = {
-  name: "todo",
+  name: "jotter",
   version: "1.0.0",
   description: "Keeps todos in its own database and in partitions of it.",
   resources: { db: { migrations: "migrations" } },
@@ -95,7 +95,7 @@ const countScript = [
 
 async function opened(): Promise<Opened> {
   const project = await makeProject();
-  const folder = "components/modes/todo";
+  const folder = "components/modes/jotter";
   await project.write(`${folder}/mode.yaml`, stringify(todo));
   await project.write(`${folder}/schemas/anything.json`, '{ "type": "object" }\n');
   await project.write(`${folder}/migrations/0001-todos.sql`, "create table todos (title text not null);\n");
@@ -189,7 +189,7 @@ test("first uses of a mode's database at the same moment all run, and the schema
   await withTodo(async ({ project, kernel }) => {
     const file = join(project.root, unnamedFile);
     for (const round of rounds) {
-      const started = () => Promise.all(callsAtOnce.map((call) => ended(kernel, "todo.add", { call })));
+      const started = () => Promise.all(callsAtOnce.map((call) => ended(kernel, "jotter.add", { call })));
       await firstUsesAtOnce(file, round.held, started);
       await removedDatabase(file);
     }
@@ -200,8 +200,8 @@ test("first uses of a fresh partition at the same moment all run, and the partit
   await withTodo(async ({ project, kernel }) => {
     for (const [index, round] of rounds.entries()) {
       const partition = `round-${String(index)}`;
-      const file = join(project.root, ".agentbay", "data", `todo--${partition}.db`);
-      const started = () => Promise.all(callsAtOnce.map((call) => ended(kernel, "todo.file", { partition, call })));
+      const file = join(project.root, ".agentbay", "data", `jotter--${partition}.db`);
+      const started = () => Promise.all(callsAtOnce.map((call) => ended(kernel, "jotter.file", { partition, call })));
       await firstUsesAtOnce(file, round.held, started);
     }
   });
@@ -210,9 +210,9 @@ test("first uses of a fresh partition at the same moment all run, and the partit
 test("writes at the same moment after the first use all land, also while the test is writing", async () => {
   await withTodo(async ({ project, kernel }) => {
     const file = join(project.root, unnamedFile);
-    await done(kernel, "todo.add", { call: 0 });
+    await done(kernel, "jotter.add", { call: 0 });
     releasedSoon(lockedFile(file, "immediate", true));
-    const runs = callsAtOnce.map((call) => ended(kernel, "todo.add", { call: call + 1 }));
+    const runs = callsAtOnce.map((call) => ended(kernel, "jotter.add", { call: call + 1 }));
     assert.deepEqual(await Promise.all(runs), allDone);
     assert.deepEqual(counts(file), { todos: callsAtOnce.length + 1, migrations: 1 });
   });
@@ -227,7 +227,7 @@ test("a first migration that several actions meet while the database is being wr
     holder.exec("create table _migrations (name text primary key, applied_at text not null)");
     holder.exec("begin immediate");
     releasedSoon(holder, releaseAfterAllHaveStartedMilliseconds);
-    const runs = callsAtOnce.map((call) => ended(kernel, "todo.add", { call }));
+    const runs = callsAtOnce.map((call) => ended(kernel, "jotter.add", { call }));
     assert.deepEqual(await Promise.all(runs), allDone);
     assert.deepEqual(counts(file), { todos: callsAtOnce.length, migrations: 1 });
   });
@@ -235,11 +235,11 @@ test("a first migration that several actions meet while the database is being wr
 
 test("a read waits while another connection holds the database, then answers", async () => {
   await withTodo(async ({ project, kernel }) => {
-    const file = join(project.root, ".agentbay", "data", "todo--kept.db");
+    const file = join(project.root, ".agentbay", "data", "jotter--kept.db");
     const holder = lockedFile(file, "exclusive", false);
     holder.exec("create table todos (title text not null)");
     releasedSoon(holder);
-    await done(kernel, "todo.count", { partition: "kept" });
+    await done(kernel, "jotter.count", { partition: "kept" });
   });
 });
 
@@ -253,20 +253,20 @@ function busySentence(busy: Busy): string {
 test("when the database stays locked past the wait, the action fails with a sentence a person can act on", async () => {
   await withTodo(async ({ project, kernel }) => {
     const unnamed = lockedFile(join(project.root, unnamedFile), "exclusive", false);
-    const keptFile = join(".agentbay", "data", "todo--kept.db");
+    const keptFile = join(".agentbay", "data", "jotter--kept.db");
     const kept = lockedFile(join(project.root, keptFile), "exclusive", false);
     kept.exec("create table todos (title text not null)");
     const [added, counted] = await Promise.all([
-      ended(kernel, "todo.add", { call: 0 }),
-      ended(kernel, "todo.count", { partition: "kept" }),
+      ended(kernel, "jotter.add", { call: 0 }),
+      ended(kernel, "jotter.count", { partition: "kept" }),
     ]);
-    assert.equal(added, busySentence({ file: unnamedFile, held: "its migrations", action: "todo.add" }));
-    assert.equal(counted, busySentence({ file: keptFile, held: "the statement", action: "todo.count" }));
+    assert.equal(added, busySentence({ file: unnamedFile, held: "its migrations", action: "jotter.add" }));
+    assert.equal(counted, busySentence({ file: keptFile, held: "the statement", action: "jotter.count" }));
     for (const holder of [unnamed, kept]) {
       holder.exec("commit");
       holder.close();
     }
-    await done(kernel, "todo.add", { call: 1 });
-    await done(kernel, "todo.count", { partition: "kept" });
+    await done(kernel, "jotter.add", { call: 1 });
+    await done(kernel, "jotter.count", { partition: "kept" });
   });
 });

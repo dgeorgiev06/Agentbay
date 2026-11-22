@@ -123,25 +123,51 @@ function notTriedWords(results: readonly Result[]): readonly string[] {
   return [...groups.values()].map(groupWords);
 }
 
-export function examplesLines(block: TriedBlock | undefined, provedBy: ComputedBy): readonly CardLine[] {
+export function examplesWords(block: TriedBlock | undefined): readonly string[] {
   if (block === undefined) {
     return [];
   }
   if (block.setting === "off") {
-    return [computed(provedBy, offWords)];
+    return [offWords];
   }
   if (!block.carried) {
-    return [computed(provedBy, noneWords)];
+    return [noneWords];
   }
   const { results } = block;
-  const words = [
+  return [
     `examples, ${levelOf(block)}, ${verdictOf(results)}: ${says}`,
     summaryWords(block),
     ...(triedCount(results) === 0 ? [] : [comparedWords]),
     ...results.flatMap(resultWords),
     ...notTriedWords(results),
   ];
-  return words.map((said) => computed(provedBy, said));
+}
+
+export function examplesLines(block: TriedBlock | undefined, provedBy: ComputedBy): readonly CardLine[] {
+  return examplesWords(block).map((said) => computed(provedBy, said));
+}
+
+export function withholdingWords(block: TriedBlock): readonly string[] {
+  if (block.setting !== "must" || !block.carried) {
+    return [];
+  }
+  const withholding = block.results.filter(
+    (result) => result.outcome === "otherwise" || result.outcome === "not known",
+  );
+  return withholding.flatMap(resultWords);
+}
+
+export type ExampleCounts = Readonly<Record<Outcome, number>>;
+
+export function exampleCounts(blocks: readonly TriedBlock[]): ExampleCounts {
+  const results = blocks.filter((block) => block.carried && block.setting !== "off").flatMap((block) => block.results);
+  return {
+    "as designed": countOf(results, "as designed"),
+    "refused by its schema": countOf(results, "refused by its schema"),
+    otherwise: countOf(results, "otherwise"),
+    "not known": countOf(results, "not known"),
+    "not tried": countOf(results, "not tried"),
+  };
 }
 
 function countClause(count: number, examples: string, said: string): readonly string[] {

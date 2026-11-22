@@ -14,7 +14,6 @@ import {
   onlyWhenRecapturing,
   offeredOf,
   ownerAnswered,
-  printedCard,
   processProject,
   project,
   removeAll,
@@ -26,6 +25,7 @@ import {
   waitingOf,
   withheldOf,
   worktrees,
+  type Waiting,
 } from "./kit-copy.ts";
 import { playedSideBySide } from "./side-by-side-play.ts";
 import {
@@ -77,12 +77,8 @@ function keptSlices(root: string): readonly string[] {
   return [...new Set(keptRows(root).map((row) => textAt(row, "slice")))].sort();
 }
 
-function flowing(rows: readonly string[]): string {
-  return rows.join(" ").replace(/\s+/g, " ");
-}
-
-function unmarked(rows: readonly string[]): string {
-  return flowing(rows.map((row) => row.replace(/^judged\s+/, "")));
+function wordsIn(waiting: Waiting, section: string): readonly string[] {
+  return factsOf(waiting, section).map((fact) => fact.words);
 }
 
 function sliceAsked(task: Json): string {
@@ -118,27 +114,32 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     const builds = [...first.asked, ...second.asked].filter((each) => each.action === "build-without-tests");
     assert.deepEqual(builds.map((each) => sliceAsked(each.task)).sort(), ["TD1", "TD10", "TD10", "TD2"]);
     const card = cardOf(await shown(root, start.id));
-    const printed = await printedCard(root, card.id);
-    assert.equal(printed[0], "Merge wave 1 into integration?");
-    const said = flowing(printed);
-    assert.ok(said.includes("Merge is offered for 2 of 3 slices: each passed its own proof"), said);
-    assert.ok(
-      said.includes("left out: TD2 (The td2 mode counts what was added), as its own proof did not pass."),
-      said,
-    );
-    assert.ok(said.includes("TD2 is left out: 1 must item failed. Its branches stay"), said);
+    assert.equal(textAt(card.card, "title"), "Merge wave 1 into integration?");
+    assert.deepEqual(offeredOf(card), ["merge", "keep"]);
+    assert.ok(wordsIn(card, "what").includes("In the combined head: 2 of 3 slices."));
+    assert.deepEqual(wordsIn(card, "problems"), [
+      "TD2 is left out: 1 must item failed. Its branches stay.",
+      "TD2: the must item DOD-TD2-1 failed, as the named tests fail on the head.",
+    ]);
     const td10 = "the work and the tests are on forge/TD10-tests-1, the builder's work alone on forge/TD10";
-    assert.ok(said.includes(`TD10 is in the combined head; ${td10}`), said);
-    const judged = unmarked(printed);
+    assert.ok(wordsIn(card, "what").includes(`TD10 is in the combined head; ${td10}.`));
     for (const name of ["TD1", "TD10", "TD2"]) {
-      const named = `${name} (The ${name.toLowerCase()} mode counts what was added)`;
-      assert.ok(judged.includes(`by forge skills/review, tier deep, for ${named}`), judged);
+      const review = factsOf(card).filter((fact) => fact.about === `${name}'s review`);
+      assert.ok(
+        review.some((fact) => fact.mark === "judged" && fact.step === "review-1"),
+        name,
+      );
     }
-    assert.ok(!judged.includes(" in item "), judged);
     assert.deepEqual(kindsAsked(await askedOf(root, "wave-1")), ["checks"]);
     assert.equal((await askedOf(root, "wave-1")).length, 1);
     assert.deepEqual(testsFromAsked(await askedOf(root, "wave-1")), [[]]);
-    assert.ok(said.includes("gate: the whole test run, since the slices write inside more than one mode's folder"));
+    assert.ok(
+      wordsIn(card, "checks").includes(
+        "Gate: the whole test run, since the slices write inside more than one mode's folder " +
+          "(components/modes/td1, components/modes/td10 and components/modes/td2).",
+      ),
+      wordsIn(card, "checks").join("\n"),
+    );
     for (const name of ["TD1", "TD10", "TD2"]) {
       assert.ok(!kindsAsked(await askedOf(root, name)).includes("checks"), name);
     }
@@ -167,12 +168,13 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
       const played = await playedSideBySide(root, start.id, wavePlayers(root));
       assert.equal(played.mostAtOnce, 2);
       const card = cardOf(await shown(root, start.id));
-      assert.equal(textAt(listOf(card.choices)[0] ?? null, "status"), "withheld");
-      const printed = flowing(await printedCard(root, card.id));
-      assert.ok(printed.includes("Merge is not offered: the wave's checks failed on the slices combined."), printed);
-      assert.ok(printed.includes("CA proved alone with the checks: DOD-CA-2, must, passed"), printed);
-      assert.ok(printed.includes("CB fails the checks alone, so its work breaks the suite"), printed);
-      assert.ok(printed.includes("on forge/wave-1, with CA, CB merged in plan order"), printed);
+      assert.deepEqual(withheldOf(card), { merge: "The wave's checks failed on the slices combined." });
+      assert.ok(wordsIn(card, "problems").includes("CB fails the checks alone, so its work breaks the suite."));
+      const alone = factsOf(card).filter((fact) => fact.about === "CA alone with the checks");
+      assert.equal(alone[0]?.words, "The must item DOD-CA-2 passed.");
+      assert.ok(
+        wordsIn(card, "what").some((words) => words.endsWith("on forge/wave-1, with CA, CB merged in plan order.")),
+      );
       assert.equal((await askedOf(root, "wave-1")).length, 1);
       assert.deepEqual(kindsAsked((await askedOf(root, "CA")).slice(-1)), ["checks"]);
       const kept = runOf(await decided(root, card, { step: "card", choice: "keep" }));
@@ -198,14 +200,10 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
       [[agreed]],
     );
     const card = cardOf(await shown(root, start.id));
-    const printed = flowing(await printedCard(root, card.id));
-    assert.ok(
-      printed.includes(
-        "Merge is not offered: no slice passed its own proof; left out: NA (The na mode counts what was added)",
-      ),
-      printed,
-    );
-    assert.ok(printed.includes("no combined head: no slice passed its own proof"), printed);
+    assert.deepEqual(withheldOf(card), {
+      merge: "No slice passed its own proof; left out: NA, as its own proof did not pass.",
+    });
+    assert.ok(wordsIn(card, "problems").includes("No slice passed its own proof, so there is no combined head."));
     await decided(root, card, { step: "card", choice: "keep" });
     assert.deepEqual(branches(root), ["forge/NA-3", "forge/NA-tests-3"]);
     assert.deepEqual(worktrees(root), []);

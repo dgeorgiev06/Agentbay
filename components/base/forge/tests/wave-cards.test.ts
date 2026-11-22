@@ -7,8 +7,7 @@ import { sliceOf, type Slice } from "../scripts/lib/slice-form.ts";
 import { aloneWords, waveAnswer, type Alone, type Joined, type WaveChecks } from "../scripts/lib/wave-answer.ts";
 import { waveDrawn, type WaveCardInput } from "../scripts/lib/wave-card.ts";
 import { ownProofReason, type Settled } from "../scripts/lib/wave-standing.ts";
-import { printed, widest } from "./printed-card.ts";
-import type { Proved } from "./kit-copy.ts";
+import { factOf, type Fact, type Proved } from "./kit-copy.ts";
 import { checksFailed, checksPassed, ownFailed, ownPassed, plannedSlice } from "./wave-run.ts";
 
 const head = "3710c98d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b";
@@ -27,16 +26,12 @@ const reviewed = {
   step: "review-1",
   round: 1,
   sentences: ["DOD-TD1-1 held by 2 cases", "no finding remains"],
+  reviewed: { held: 1, notHeld: 0, remaining: 0 },
   practices: {
     tally: { held: 64, notHeld: 1, doesNotApply: 0 },
     notHeld: [{ id: "P-12", says: "Functions stay small.", path: "src/count.ts", sentence: "count is 40 lines." }],
     checks: 12,
   },
-};
-
-const waveSkills = {
-  "review-1": "forge skills/review, tier deep",
-  "round-1": "forge skills/write-tests, tier balanced; forge skills/build-without-tests, tier balanced",
 };
 
 function settled(name: string, proof: Proved, reason?: string): Settled {
@@ -93,152 +88,190 @@ const oneFailing: WaveCardInput = {
   must: [],
 };
 
-describe("the wave's merge card", () => {
-  test("two slices, one failing its own proof, read line by line as pinned", () => {
+type Said = readonly [section: string, short: boolean, about: string, mark: string, step: string, words: string];
+
+function mergeFact([section, short, about, mark, step, words]: Said): Fact {
+  return { section, short, about, mark, words, step };
+}
+
+const oneFailingFacts: readonly Fact[] = (
+  [
+    ["problems", false, "", "computed", "draw", "TD2 is left out: 1 must item failed. Its branches stay."],
+    [
+      "problems",
+      false,
+      "",
+      "computed",
+      "draw",
+      "TD2: the must item DOD-TD2-1 failed, as the named tests fail on the head.",
+    ],
+    ["what", true, "", "computed", "draw", "In the combined head: 1 of 2 slices."],
+    ["what", true, "", "computed", "draw", "1 file changed."],
+    ["what", true, "", "computed", "draw", "The work is on forge/wave-1."],
+    [
+      "what",
+      false,
+      "the combined head",
+      "computed",
+      "draw",
+      "The combined head is 3710c98d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b on forge/wave-1, with TD1 merged in plan order.",
+    ],
+    [
+      "what",
+      false,
+      "slice TD1",
+      "computed",
+      "draw",
+      "TD1 is in the combined head; the work and the tests are on forge/TD1-tests-1, the builder's work alone on forge/TD1.",
+    ],
+    ["what", false, "slice TD1", "computed", "draw", "It changed 1 file."],
+    ["what", false, "slice TD1", "computed", "draw", "Interface files: 1 unchanged since the base, by hash."],
+    ["what", false, "slice TD1", "computed", "draw", "Rounds: 1 of at most 3; the reviewer had no findings."],
+    ["what", false, "slice TD1", "judged", "round-1", "The builder decided: TD1 counts in memory."],
+    [
+      "what",
+      false,
+      "slice TD2",
+      "computed",
+      "draw",
+      "TD2 is left out; the work and the tests are on forge/TD2-tests-1, the builder's work alone on forge/TD2.",
+    ],
+    ["what", false, "slice TD2", "computed", "draw", "It changed 1 file."],
+    ["what", false, "slice TD2", "computed", "draw", "Interface files: 1 unchanged since the base, by hash."],
+    ["what", false, "slice TD2", "computed", "draw", "Rounds: 1 of at most 3; the reviewer had no findings."],
+    ["what", false, "slice TD2", "judged", "round-1", "The builder decided: TD2 counts in memory."],
+    ["checks", true, "", "computed", "draw", "The checks passed: 40 tests."],
+    ["checks", true, "", "computed", "draw", "Review step: 2 of 2 held, 0 findings left."],
+    ["checks", false, "the checks on the slices combined", "computed", "prove", "The must item checks passed."],
+    ["checks", false, "the checks on the slices combined", "computed", "prove", "Checks passed: typecheck, lint."],
+    ["checks", false, "the checks on the slices combined", "computed", "prove", "Tests passed: 40."],
+    ["checks", false, "TD1's own proof", "computed", "draw", "The must item DOD-TD1-1 passed."],
+    [
+      "checks",
+      false,
+      "TD1's own proof",
+      "computed",
+      "draw",
+      "The must item scope passed: Every changed path is in the write scope.",
+    ],
+    [
+      "checks",
+      false,
+      "TD1's own proof",
+      "computed",
+      "draw",
+      "The must item declared passed: What changed is as declared.",
+    ],
+    [
+      "checks",
+      false,
+      "TD1's review",
+      "computed",
+      "draw",
+      "Practices answered by the reviewer in round 1: 65; 64 held, 1 not held, 0 do not apply; a check holds 12 more.",
+    ],
+    [
+      "checks",
+      false,
+      "TD1's review",
+      "judged",
+      "review-1",
+      "P-12, not held: Functions stay small. In src/count.ts: count is 40 lines.",
+    ],
+    [
+      "checks",
+      false,
+      "TD1's review",
+      "computed",
+      "draw",
+      "The review step, in round 1, before the final proof, wrote these.",
+    ],
+    ["checks", false, "TD1's review", "judged", "review-1", "DOD-TD1-1 held by 2 cases."],
+    ["checks", false, "TD1's review", "judged", "review-1", "No finding remains."],
+    ["checks", false, "TD2's own proof", "computed", "draw", "The must item DOD-TD2-1 failed."],
+    ["checks", false, "TD2's own proof", "computed", "draw", "The reason: the named tests fail on the head."],
+    ["checks", false, "TD2's own proof", "computed", "draw", "Proof's reason: The named tests fail on the head."],
+    [
+      "checks",
+      false,
+      "TD2's own proof",
+      "computed",
+      "draw",
+      "The must item scope passed: Every changed path is in the write scope.",
+    ],
+    [
+      "checks",
+      false,
+      "TD2's own proof",
+      "computed",
+      "draw",
+      "The must item declared passed: What changed is as declared.",
+    ],
+    [
+      "checks",
+      false,
+      "TD2's review",
+      "computed",
+      "draw",
+      "Practices answered by the reviewer in round 1: 65; 64 held, 1 not held, 0 do not apply; a check holds 12 more.",
+    ],
+    [
+      "checks",
+      false,
+      "TD2's review",
+      "judged",
+      "review-1",
+      "P-12, not held: Functions stay small. In src/count.ts: count is 40 lines.",
+    ],
+    [
+      "checks",
+      false,
+      "TD2's review",
+      "computed",
+      "draw",
+      "The review step, in round 1, before the final proof, wrote these.",
+    ],
+    ["checks", false, "TD2's review", "judged", "review-1", "DOD-TD1-1 held by 2 cases."],
+    ["checks", false, "TD2's review", "judged", "review-1", "No finding remains."],
+  ] satisfies readonly Said[]
+).map(mergeFact);
+
+describe("the wave's merge screen", () => {
+  test("two slices, one failing its own proof: these facts, in this order", () => {
     const drawn = waveDrawn(oneFailing);
     assert.equal(drawn.merge, true);
-    const text = printed(
-      drawn.card,
-      [
-        { name: "merge", does: "Merge the combined head into the integration branch" },
-        { name: "keep", does: "Stop; every slice's branches stay" },
-      ],
-      {
-        skills: waveSkills,
-        items: ["TD1 (The td1 mode counts what was added)", "TD2 (The td2 mode counts what was added)"],
-      },
+    assert.deepEqual(drawn.card.withheld, {});
+    assert.equal(drawn.card.title, "Merge wave 1 into integration?");
+    assert.deepEqual(
+      drawn.card.lines.map((line) => factOf({ ...line })),
+      oneFailingFacts,
     );
-    assert.equal(
-      text,
-      [
-        "Merge wave 1 into integration?",
-        "  Merge is offered for 1 of 2 slices: each",
-        "    passed its own proof, and the wave's",
-        "    checks passed on them combined; left",
-        "    out: TD2 (The td2 mode counts what was",
-        "    added), as its own proof did not pass.",
-        "  TD1: The td1 mode counts what was added",
-        "  TD1 is in the combined head; the work and",
-        "    the tests are on forge/TD1-tests-1, the",
-        "    builder's work alone on forge/TD1",
-        "  DOD-TD1-1, must, passed: What was added is",
-        "    counted.",
-        "  scope, must, passed: Every changed path is",
-        "    in the write scope.",
-        "  declared, must, passed: What changed is as",
-        "    declared.",
-        "  practices answered by the reviewer in",
-        "    round 1: 65; 64 held, 1 not held, 0 do",
-        "    not apply; a check holds 12 more",
-        "judged   P-12, not held: Functions stay",
-        "judged     small. In src/count.ts: count is",
-        "judged     40 lines.",
-        "judged    by forge skills/review, tier deep,",
-        "judged      for TD1 (The td1 mode counts",
-        "judged      what was added)",
-        "  interface files: 1 unchanged since the",
-        "    base, by hash",
-        "  rounds: 1 of at most 3; the reviewer had",
-        "    no findings",
-        "  the reviewer, in round 1, before the final",
-        "    proof:",
-        "judged   DOD-TD1-1 held by 2 cases",
-        "judged   no finding remains",
-        "judged    by forge skills/review, tier deep,",
-        "judged      for TD1 (The td1 mode counts",
-        "judged      what was added)",
-        "judged   the builder decided: TD1 counts in",
-        "judged     memory",
-        "judged    by forge skills/write-tests, tier",
-        "judged      balanced; forge",
-        "judged      skills/build-without-tests, tier",
-        "judged      balanced, for TD1 (The td1 mode",
-        "judged      counts what was added)",
-        "  TD2: The td2 mode counts what was added",
-        "  TD2 is left out: 1 must item failed. Its",
-        "    branches stay; the work and the tests",
-        "    are on forge/TD2-tests-1, the builder's",
-        "    work alone on forge/TD2",
-        "  DOD-TD2-1, must, failed: What was added is",
-        "    counted.",
-        "  why: the named tests fail on the head",
-        "  proof's reason: The named tests fail on",
-        "    the head.",
-        "  scope, must, passed: Every changed path is",
-        "    in the write scope.",
-        "  declared, must, passed: What changed is as",
-        "    declared.",
-        "  practices answered by the reviewer in",
-        "    round 1: 65; 64 held, 1 not held, 0 do",
-        "    not apply; a check holds 12 more",
-        "judged   P-12, not held: Functions stay",
-        "judged     small. In src/count.ts: count is",
-        "judged     40 lines.",
-        "judged    by forge skills/review, tier deep,",
-        "judged      for TD2 (The td2 mode counts",
-        "judged      what was added)",
-        "  interface files: 1 unchanged since the",
-        "    base, by hash",
-        "  rounds: 1 of at most 3; the reviewer had",
-        "    no findings",
-        "  the reviewer, in round 1, before the final",
-        "    proof:",
-        "judged   DOD-TD1-1 held by 2 cases",
-        "judged   no finding remains",
-        "judged    by forge skills/review, tier deep,",
-        "judged      for TD2 (The td2 mode counts",
-        "judged      what was added)",
-        "judged   the builder decided: TD2 counts in",
-        "judged     memory",
-        "judged    by forge skills/write-tests, tier",
-        "judged      balanced; forge",
-        "judged      skills/build-without-tests, tier",
-        "judged      balanced, for TD2 (The td2 mode",
-        "judged      counts what was added)",
-        "  the combined head: 3710c98 on",
-        "    forge/wave-1, with TD1 merged in plan",
-        "    order",
-        "  checks, must, passed: The checks and the",
-        "    whole test run pass.",
-        "  checks passed: typecheck, lint",
-        "  tests passed: 40",
-        "Unmarked lines were worked out by script.",
-        "You can:",
-        "  merge  Merge the combined head into the",
-        "         integration branch",
-        "  keep   Stop; every slice's branches stay",
-        "checked: 0 ran, 25 computed, 8 judged",
-      ].join("\n"),
-    );
-    assert.ok(text.split("\n").every((row) => Array.from(row).length <= widest));
   });
 
-  test("every failing slice is named with its reason, never only the first", () => {
+  test("every failing slice is named in problems with its reason, never only the first, and merge stays offered for the rest", () => {
     const three = [
       settled("TD1", ownFailed("TD1"), "1 must item failed."),
       settled("TD2", ownPassed("TD2"), "the builder stopped."),
       settled("TD3", ownPassed("TD3")),
     ];
-    const answer = waveAnswer(three, { ...combined, merged: ["TD3"] }, { checks: passedChecks });
-    assert.equal(
-      answer.words,
-      "Merge is offered for 1 of 3 slices: each passed its own proof, and the wave's checks passed on them " +
-        "combined; left out: TD1 (The td1 mode counts what was added) and TD2 (The td2 mode counts what was " +
-        "added), as their own proofs did not pass.",
+    assert.deepEqual(waveAnswer(three, { ...combined, merged: ["TD3"] }, { checks: passedChecks }), { offered: true });
+    const drawn = waveDrawn({ ...oneFailing, slices: three });
+    assert.deepEqual(
+      drawn.card.lines.filter((line) => line.section === "problems").map((line) => line.words),
+      [
+        "TD1 is left out: 1 must item failed. Its branches stay.",
+        "TD1: the must item DOD-TD1-1 failed, as the named tests fail on the head.",
+        "TD2 is left out: the builder stopped. Its branches stay.",
+      ],
     );
-    const words = waveDrawn({ ...oneFailing, slices: three }).card.lines.map((line) => line.words);
-    assert.ok(
-      words.includes(
-        "TD1 is left out: 1 must item failed. Its branches stay; the work and the tests are on forge/TD1-tests-1, " +
-          "the builder's work alone on forge/TD1",
-      ),
-    );
-    assert.ok(
-      words.includes(
-        "TD2 is left out: the builder stopped. Its branches stay; the work and the tests are on forge/TD2-tests-1, " +
-          "the builder's work alone on forge/TD2",
-      ),
-    );
+  });
+
+  test("no fact and no reason holds a slice's title or a planned item's words: the planner wrote them", () => {
+    const failing = settled("TD2", ownFailed("TD2"), "1 must item failed.");
+    const drawn = waveDrawn({ ...oneFailing, slices: [failing], joined: { kind: "nothing to join" } });
+    const said = [...drawn.card.lines.map((line) => line.words), drawn.card.withheld.merge ?? ""].join("\n");
+    assert.ok(!said.includes(failing.title), said);
+    assert.ok(!said.includes("What was added is counted."), said);
   });
 });
 
@@ -274,7 +307,6 @@ describe("the wave's answer", () => {
     const failing: WaveChecks = { ...passedChecks, proof: provedOf(checksFailed("checks", "x")) };
     assert.deepEqual(waveAnswer(two, combined, { checks: failing }), {
       offered: false,
-      words: "Merge is not offered: the wave's checks failed on the slices combined.",
       reason: "the wave's checks failed on the slices combined.",
     });
     const unknown: WaveChecks = { ...passedChecks, proof: { verdicts: [], size: [] } };
@@ -284,27 +316,22 @@ describe("the wave's answer", () => {
 
   test("a merge that does not apply names both slices, and no slice passing names that", () => {
     const conflict: Joined = { kind: "conflict", slice: "TD2", onto: ["TD1"], reason: "It conflicts in a.ts." };
-    assert.equal(
-      waveAnswer(two, conflict, { checks: { kind: "not asked" } }).words,
-      "Merge is not offered: TD2 (The td2 mode counts what was added) does not merge cleanly onto TD1 in the " +
-        "combined head.",
-    );
+    assert.deepEqual(waveAnswer(two, conflict, { checks: { kind: "not asked" } }), {
+      offered: false,
+      reason: "TD2 does not merge cleanly onto TD1 in the combined head.",
+    });
     const none = [settled("TD1", ownFailed("TD1"), "1 must item failed.")];
-    assert.equal(
-      waveAnswer(none, { kind: "nothing to join" }, { checks: { kind: "not asked" } }).words,
-      "Merge is not offered: no slice passed its own proof; left out: TD1 (The td1 mode counts what was added), " +
-        "as its own proof did not pass.",
-    );
-  });
-  test("a long title is shortened in the answer, both where a slice is left out and where it conflicts", () => {
-    const long = "The td3 mode counts what was added, removed and moved across every folder";
-    const third = { ...settled("TD3", ownFailed("TD3"), "1 must item failed."), title: long };
-    const conflict: Joined = { kind: "conflict", slice: "TD3", onto: ["TD1"], reason: "It conflicts in a.ts." };
-    assert.equal(
-      waveAnswer([...two, third], conflict, { checks: { kind: "not asked" } }).words,
-      "Merge is not offered: TD3 (The td3 mode counts what was added, remo...) does not merge cleanly onto TD1 " +
-        "in the combined head; left out: TD3 (The td3 mode counts what was added, remo...), as its own proof did " +
-        "not pass.",
+    assert.deepEqual(waveAnswer(none, { kind: "nothing to join" }, { checks: { kind: "not asked" } }), {
+      offered: false,
+      reason: "no slice passed its own proof; left out: TD1, as its own proof did not pass.",
+    });
+    const drawn = waveDrawn({ ...oneFailing, joined: conflict, checks: { kind: "not asked" } });
+    assert.ok(
+      drawn.card.lines.some(
+        (line) =>
+          line.section === "problems" &&
+          line.words === "TD2 does not merge cleanly onto TD1 in the combined head: It conflicts in a.ts.",
+      ),
     );
   });
 });

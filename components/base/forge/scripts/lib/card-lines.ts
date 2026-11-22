@@ -64,8 +64,12 @@ export function capitalized(text: string): string {
   return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 }
 
+const plainWord = /^[a-z']+[,:;]?$/;
+
 export function sentenced(text: string): string {
-  const said = capitalized(text.trim());
+  const trimmed = text.trim();
+  const [first = ""] = trimmed.split(" ");
+  const said = plainWord.test(first) ? capitalized(trimmed) : trimmed;
   return /[.?!]$/.test(said) ? said : `${said}.`;
 }
 

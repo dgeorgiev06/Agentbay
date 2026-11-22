@@ -116,13 +116,17 @@ export function roundLines(rounds: RoundsOnCard | undefined): readonly CardLine[
   return [computed("draw", ran), computed("draw", when), ...sentences];
 }
 
-export function builderLines(built: Built, step: string): readonly CardLine[] {
+export function builderWords(built: Built): readonly string[] {
   const stopped =
     built.outcome === "stopped"
       ? [`the builder stopped, saying ${lacksSaid[built.missing.lacks]} lacks ${built.missing.name}`]
       : [];
   const decided = (built.decisions ?? []).map((decision) => `the builder decided: ${decision}`);
-  return [...stopped, ...decided].map((words) => judged(step, words));
+  return [...stopped, ...decided];
+}
+
+export function builderLines(built: Built, step: string): readonly CardLine[] {
+  return builderWords(built).map((words) => judged(step, words));
 }
 
 function drawnLines(input: MergeCardInput, reason: string | undefined): readonly CardLine[] {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import type { CardLine } from "../scripts/lib/card-lines.ts";
+import type { CardLine, Fact } from "../scripts/lib/card-lines.ts";
 import { drawn, type MergeCardInput } from "../scripts/lib/merge-card.ts";
 import { provedOf } from "../scripts/lib/proof-answer.ts";
 import { sliceOf, type Slice } from "../scripts/lib/slice-form.ts";
@@ -9,7 +9,6 @@ import { waveTrials, type Result } from "../scripts/lib/tried-examples.ts";
 import type { Joined, WaveChecks } from "../scripts/lib/wave-answer.ts";
 import { waveDrawn } from "../scripts/lib/wave-card.ts";
 import { settledOf, type Settled } from "../scripts/lib/wave-standing.ts";
-import { printed } from "./printed-card.ts";
 import { addToTry, countToTry, emptyName } from "./tally-design.ts";
 
 const head = "e99522a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8";
@@ -78,6 +77,10 @@ function card(tried?: TriedBlock): ReturnType<typeof drawn> {
     ...(tried === undefined ? {} : { tried }),
   };
   return drawn(input);
+}
+
+function aboutWords(lines: readonly Fact[], about: string): readonly string[] {
+  return lines.filter((line) => line.about === about).map((line) => line.words);
 }
 
 function wordsOf(lines: readonly CardLine[]): readonly string[] {
@@ -281,11 +284,9 @@ describe("the wave's merge card, with the examples tried on the combined head", 
       must: [],
       tried: [],
     });
-    assert.ok(
-      wordsOf(drawnCard.card.lines).includes(
-        "the design's examples: not tried, since no combined head was proved to try them on",
-      ),
-    );
+    assert.deepEqual(aboutWords(drawnCard.card.lines, "the design's examples"), [
+      "The design's examples: not tried, since no combined head was proved to try them on.",
+    ]);
     assert.equal(settledOf({ examples: [{ action: "counting.add" }] }).carriesExamples, true);
     assert.equal(settledOf({ examples: [] }).carriesExamples, false);
   });
@@ -339,76 +340,24 @@ describe("the wave's merge card, with the examples tried on the combined head", 
     assert.equal(drawnCard.merge, false);
     assert.equal(drawnCard.card.withheld.merge, "1 of TB's examples answered otherwise.");
     assert.doesNotMatch(drawnCard.card.withheld.merge ?? "", /TA's examples/);
-    const words = wordsOf(drawnCard.card.lines);
-    const tbAt = words.findIndex((said) => said.startsWith("TB: The slice TB"));
-    const otherwise = words.findIndex((said) => said.startsWith("counting.count example 1: the design answers"));
-    assert.ok(tbAt > 0 && otherwise > tbAt, words.join("\n"));
-    const taBlock = words.slice(0, tbAt);
-    assert.ok(taBlock.includes("examples, must, passed: The design's examples answer as designed."));
-    assert.deepEqual(printed(drawnCard.card).split("\n"), [
-      "Merge wave 1 into integration?",
-      "  Merge is not offered: 1 of TB's examples",
-      "    answered otherwise.",
-      "  TA: The slice TA",
-      "  TA is in the combined head; the work and",
-      "    the tests are on forge/TA-tests-1, the",
-      "    builder's work alone on forge/TA",
-      "  DOD-TL1-1, must, passed: A name added is",
-      "    counted.",
-      "  scope, must, passed: Every changed path is",
-      "    in the write scope.",
-      "  declared, must, passed: What changed is as",
-      "    declared.",
-      "  examples, must, passed: The design's",
-      "    examples answer as designed.",
-      "  the design's examples: 4 tried by bay",
-      "    call, each in a fresh throwaway copy of",
-      "    e99522a, which limits where the calls",
-      "    write by convention only; 4 answered as",
-      "    the design says",
-      "  compared: an answer whole, as JSON; a",
-      "    refusal by its exact sentence; the",
-      "    earlier calls set up the state and are",
-      "    not compared",
-      "  practices: not judged, since the rounds",
-      "    ended with no review",
-      "  rounds: 1 of at most 3; the reviewer had",
-      "    no findings",
-      "  TB: The slice TB",
-      "  TB is in the combined head; the work and",
-      "    the tests are on forge/TB-tests-1, the",
-      "    builder's work alone on forge/TB",
-      "  DOD-TL1-1, must, passed: A name added is",
-      "    counted.",
-      "  scope, must, passed: Every changed path is",
-      "    in the write scope.",
-      "  declared, must, passed: What changed is as",
-      "    declared.",
-      "  examples, must, failed: The design's",
-      "    examples answer as designed.",
-      "  the design's examples: 1 tried by bay",
-      "    call, each in a fresh throwaway copy of",
-      "    e99522a, which limits where the calls",
-      "    write by convention only; 0 answered as",
-      "    the design says, 1 answered otherwise",
-      "  compared: an answer whole, as JSON; a",
-      "    refusal by its exact sentence; the",
-      "    earlier calls set up the state and are",
-      "    not compared",
-      "  counting.count example 1: the design",
-      '    answers {"count":1}; the built mode',
-      '    answered: "{\\"count\\":0}"',
-      "  practices: not judged, since the rounds",
-      "    ended with no review",
-      "  rounds: 1 of at most 3; the reviewer had",
-      "    no findings",
-      "  the combined head: e99522a on",
-      "    forge/wave-1, with TA, TB merged in plan",
-      "    order",
-      "  checks, must, passed: The checks pass",
-      "    combined.",
-      "All lines worked out by script.",
-      "checked: 0 ran, 24 computed, 0 judged",
-    ]);
+    const lines = drawnCard.card.lines;
+    const otherwise =
+      'counting.count example 1: the design answers {"count":1}; the built mode answered: ' +
+      JSON.stringify('{"count":0}');
+    assert.deepEqual(
+      lines.filter((line) => line.section === "problems").map((line) => line.words),
+      [`TB's ${otherwise}.`],
+    );
+    assert.ok(aboutWords(lines, "TB's examples").includes(`${otherwise}.`));
+    assert.ok(!aboutWords(lines, "TA's examples").some((words) => words.startsWith("counting.count")));
+    assert.equal(
+      aboutWords(lines, "TA's examples")[0],
+      "Examples, must, passed: The design's examples answer as designed.",
+    );
+    assert.equal(
+      aboutWords(lines, "TB's examples")[0],
+      "Examples, must, failed: The design's examples answer as designed.",
+    );
+    assert.ok(lines.some((line) => line.short === true && line.words === "Examples: 4 as designed, 1 otherwise."));
   });
 });

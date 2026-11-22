@@ -8,7 +8,7 @@ import {
   kitTemplate,
   listOf,
   modeGateTestsOfTheKit,
-  printedCard,
+  offeredOf,
   project,
   removeAll,
   scopePassed,
@@ -44,10 +44,6 @@ function wordsIn(waiting: Waiting, section: string): readonly string[] {
   return factsOf(waiting, section).map((fact) => fact.words);
 }
 
-function flowing(rows: readonly string[]): string {
-  return rows.join(" ").replace(/\s+/g, " ");
-}
-
 function combinedPassed(): Proved {
   const detail =
     "Every check passed (typecheck, lint), and so did the run of the 5 test files chosen from testsFrom: 9 tests. " +
@@ -78,13 +74,22 @@ describe("the gate a wave runs by", { concurrency: true }, () => {
     await playedSideBySide(root, start.id, wavePlayers(root));
     const card = waitingOf(await shown(root, start.id), "card");
     assert.deepEqual(testsFromAsked(await askedOf(root, "wave-1")), [[testPath("TD1"), ...modeGateTestsOfTheKit]]);
-    const said = flowing(await printedCard(root, card.id));
-    assert.ok(said.includes("gate: the mode's own tests and the fast checks of the whole project ran"), said);
-    assert.ok(said.includes("bay check on the head found no error"), said);
+    const short = factsOf(card, "checks")
+      .filter((fact) => fact.short)
+      .map((fact) => fact.words);
+    assert.ok(short.includes("Not run: tests outside the td1 mode."), short.join("\n"));
+    assert.ok(
+      wordsIn(card, "checks").includes(
+        "Gate: the mode's own tests and the fast checks of the whole project ran, since TD1 writes only inside " +
+          "components/modes/td1; the other tests were not run.",
+      ),
+    );
+    assert.ok(wordsIn(card, "checks").includes("Bay check on the head found no error."));
     const asked = (await askedOf(root, "wave-1"))[0] ?? null;
     const proof = fieldsOf(listOf(fieldsOf(fieldsOf(asked).slice ?? null).done)[0] ?? null).proof ?? null;
     assert.equal(fieldsOf(proof).bayCheck, true);
-    assert.ok(said.includes("Merge is offered for 1 of 1 slice"), said);
+    assert.deepEqual(offeredOf(card), ["merge", "keep"]);
+    assert.ok(wordsIn(card, "what").includes("In the combined head: 1 of 1 slice."));
   });
 
   test("a wave with a slice in a base mode's folder: the start card names the whole test run and why", async () => {

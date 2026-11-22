@@ -5,7 +5,7 @@ import { keptFromCard, type RoundsOnCard } from "./round-card.ts";
 
 const notJudged = "practices: not judged, since the rounds ended with no review";
 
-function judgedOf(rounds: RoundsOnCard | undefined): JudgedPractices | undefined {
+export function judgedOf(rounds: RoundsOnCard | undefined): JudgedPractices | undefined {
   return rounds?.judged?.practices;
 }
 
@@ -23,7 +23,7 @@ export function mustClause(ids: readonly string[]): readonly string[] {
   ];
 }
 
-function notHeldShown(practice: NotHeldPractice, must: readonly string[]): NotHeld {
+export function notHeldShown(practice: NotHeldPractice, must: readonly string[]): NotHeld {
   const shown = {
     id: practice.id,
     sentence: practice.sentence ?? keptFromCard,
@@ -33,7 +33,7 @@ function notHeldShown(practice: NotHeldPractice, must: readonly string[]): NotHe
   return must.includes(practice.id) ? { ...shown, level: "must" } : shown;
 }
 
-function practicesTallyWords(rounds: RoundsOnCard): string {
+export function practicesTallyWords(rounds: RoundsOnCard): string {
   const practices = judgedOf(rounds);
   if (rounds.judged === undefined || practices === undefined) {
     return notJudged;

@@ -74,7 +74,7 @@ const lightFacts: readonly Fact[] = [
   about(
     "rule add-todo, in module todo",
     by("what", "computed", "draw"),
-    "Takes request and todos (from todos); gives todos (into todos) and answer.",
+    "Takes the request and the stored todos; gives back the new todos to store and the answer.",
   ),
   about(
     "rule add-todo, in module todo",
@@ -84,7 +84,7 @@ const lightFacts: readonly Fact[] = [
   about(
     "rule mark-done, in module todo",
     by("what", "computed", "draw"),
-    "Takes request and todos (from todos); gives todos (into todos) and answer.",
+    "Takes the request and the stored todos; gives back the new todos to store and the answer.",
   ),
   about(
     "rule mark-done, in module todo",
@@ -94,7 +94,7 @@ const lightFacts: readonly Fact[] = [
   about(
     "rule remove-todo, in module todo",
     by("what", "computed", "draw"),
-    "Takes request and todos (from todos); gives todos (into todos) and answer.",
+    "Takes the request and the stored todos; gives back the new todos to store and the answer.",
   ),
   about("rule remove-todo, in module todo", by("what", "judged", "designs"), "Decides: Whether a todo may be removed."),
   about("interface todo", by("what", "computed", "draw"), "4 actions, 8 schema files."),
@@ -160,6 +160,7 @@ const lightFacts: readonly Fact[] = [
     "The designer was asked once; a second answer is asked only when the review step answers a practice not held or gives a finding.",
   ),
   about("findings of the review step", by("checks", "computed", "draw"), "No findings."),
+  short(by("open", "computed", "draw"), "The review step listed nothing the design leaves undecided."),
 ];
 
 function factsIn(drawn: DesignCard, section: string): readonly Fact[] {
@@ -186,6 +187,7 @@ async function lightInput(practices: readonly PracticeAnswer[]): Promise<DesignC
     asked: askedPractices,
     practices,
     findings: [],
+    undecided: [],
     said: [],
     differences: [],
   };
@@ -273,7 +275,9 @@ describe("the design's first card and the design card, for the todo mode", () =>
     const drawn = designCard(await lightInput(p52NotHeld));
     assert.deepEqual(drawn.offered, { approve: false });
     assert.deepEqual(drawn.card.withheld, {
-      approve: "The challenger answered P-52 not held, and a practice held by design must be held.",
+      approve:
+        "The review step answered that the design does not hold the practice P-52, named in words below. A " +
+        "practice held by design must be held before the design is committed.",
     });
     assert.deepEqual(factsIn(drawn, "problems"), [
       about(
@@ -290,6 +294,52 @@ describe("the design's first card and the design card, for the todo mode", () =>
     assert.equal(
       shortWords(drawn, "checks")[1],
       "A review by a model: 0 findings; 1 of the 3 practices it judged is not held.",
+    );
+  });
+
+  test("what the review step left undecided is a model's words under not decided, the first three on the short screen, each touch said in words with the id after", async () => {
+    const undecided = [
+      { sentence: "How 500 characters are counted.", touches: "O1-C4" },
+      { sentence: "Whether text is trimmed." },
+      { sentence: "What a refused add says next.", touches: "J1" },
+      { sentence: "Two adds at the same moment." },
+    ];
+    const drawn = designCard({ ...(await lightInput(allHeld)), undecided });
+    const asked = by("open", "judged", "challenge");
+    assert.deepEqual(factsIn(drawn, "open"), [
+      short(asked, "1. How 500 characters are counted. It touches a condition you signed (O1-C4)."),
+      short(asked, "2. Whether text is trimmed."),
+      short(asked, "3. What a refused add says next. It touches a requirement you signed for a person to judge (J1)."),
+      plain(asked, "4. Two adds at the same moment."),
+    ]);
+    assert.deepEqual(drawn.offered, { approve: true });
+  });
+
+  test("after a second pass, what is left undecided is the second review's", async () => {
+    const undecided = [{ sentence: "Whether text is trimmed." }];
+    const drawn = designCard({ ...(await lightInput(allHeld)), second: answeredP52, undecided });
+    assert.deepEqual(factsIn(drawn, "open"), [
+      short(by("open", "judged", "challenge-again"), "1. Whether text is trimmed."),
+    ]);
+  });
+
+  test("a practice not held is named by its first sentence whole, however long, and two are named apart", async () => {
+    const long =
+      "A rule of the work is a pure function that takes every value it decides from and gives every value written.";
+    const asked = [{ id: "P-52", says: `${long} More words.` }, ...askedPractices.slice(1)];
+    const both: readonly PracticeAnswer[] = [
+      { id: "P-52", answer: "not-held", sentence: "The add action decides the next id." },
+      { id: "P-35", answer: "not-held", sentence: "No interface is named first." },
+    ];
+    const drawn = designCard({ ...(await lightInput(both)), asked: [...asked] });
+    assert.equal(
+      factsIn(drawn, "problems")[0]?.words,
+      `The review step answered not held: ${long.replace(/\.$/, "")} (P-52).`,
+    );
+    assert.equal(
+      drawn.card.withheld.approve,
+      "The review step answered that the design does not hold the practices P-52 and P-35, each named in words " +
+        "below. A practice held by design must be held before the design is committed.",
     );
   });
 
@@ -333,8 +383,9 @@ describe("the design's first card and the design card, for the todo mode", () =>
     assert.deepEqual(drawn.offered, { approve: false });
     assert.equal(
       drawn.card.withheld.approve,
-      "The challenger answered P-52 not held, and a practice held by design must be held. The designer has " +
-        "answered the challenge once, which is the most a design run asks.",
+      "The review step answered that the design does not hold the practice P-52, named in words below. A " +
+        "practice held by design must be held before the design is committed. The designer has answered the " +
+        "review once, which is the most a design run asks.",
     );
     assert.deepEqual(
       factsIn(drawn, "problems").map((fact) => [fact.mark, fact.step, fact.words]),
@@ -348,7 +399,7 @@ describe("the design's first card and the design card, for the todo mode", () =>
         ],
       ],
     );
-    const finding = factsIn(drawn, "checks").find((fact) => fact.words.startsWith("In todo.add:"));
+    const finding = factsIn(drawn, "checks").find((fact) => fact.words.startsWith("Finding in todo.add:"));
     assert.deepEqual([finding?.mark, finding?.step, finding?.short], ["judged", "challenge-again", false]);
     assert.equal(
       shortWords(drawn, "checks")[1],
@@ -359,7 +410,7 @@ describe("the design's first card and the design card, for the todo mode", () =>
   test("a finding with every practice held is shown as judged by the challenger and withholds nothing, as on the plan card", async () => {
     const drawn = designCard({ ...(await lightInput(allHeld)), findings: [refusalExample] });
     assert.deepEqual(drawn.offered, { approve: true });
-    const finding = drawn.card.lines.find((line) => line.words.startsWith("In todo.add:"));
+    const finding = drawn.card.lines.find((line) => line.words.startsWith("Finding in todo.add:"));
     assert.deepEqual([finding?.mark, finding?.source], ["judged", { step: "challenge" }]);
   });
 
@@ -446,7 +497,7 @@ describe("the comparison and the challenger's answer", () => {
   });
 
   test("a challenge that leaves a practice out, answers one twice or one not given, or chooses what was not written, is sent back", () => {
-    const asked = { designs: 1, practices: ["P-32", "P-35", "P-52"] };
+    const asked = { designs: 1, practices: ["P-32", "P-35", "P-52"], touchable: [] };
     const answered = (id: string): Json => ({ id, answer: "held", sentence: "It holds." });
     const challenge = challengeOf({
       chosen: "second",
@@ -462,7 +513,7 @@ describe("the comparison and the challenger's answer", () => {
   });
 
   test("a merged choice needs a design, a design needs the merged choice, and a merged design that breaks a rule is sent back", () => {
-    const asked = { designs: 2, practices: [] };
+    const asked = { designs: 2, practices: [], touchable: [] };
     const merged = challengeOf({ chosen: "merged", because: "Both.", practices: [] });
     assert.deepEqual(refusedChallenge(merged, asked, []), [
       "The challenge chose merged but gave no design; give the merged design, or choose first or second.",
@@ -474,6 +525,21 @@ describe("the comparison and the challenger's answer", () => {
     const given = challengeOf({ chosen: "merged", design: todoDesign, because: "Both.", practices: [] });
     assert.deepEqual(refusedChallenge(given, asked, ["The action x has no example."]), [
       "The merged design is refused: The action x has no example.",
+    ]);
+  });
+
+  test("an undecided item that touches no condition or judged requirement of the requirements is sent back", () => {
+    const asked = { designs: 1, practices: [], touchable: ["O1-C1", "J1"] };
+    const touching = (touches: string): Json => ({ sentence: "Whether text is trimmed.", touches });
+    const challenge = challengeOf({
+      chosen: "first",
+      because: "One.",
+      practices: [],
+      undecided: [touching("O1-C1"), touching("J1"), touching("O9-C9"), { sentence: "Two adds at once." }],
+    });
+    assert.deepEqual(refusedChallenge(challenge, asked, []), [
+      "An undecided item touches O9-C9, which names no condition or judged requirement of the requirements; name " +
+        "a condition by its id, a judged requirement as J and its place, such as J1, or leave touches out.",
     ]);
   });
 

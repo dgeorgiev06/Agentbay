@@ -15,6 +15,7 @@ import {
   answered,
   assertTheMainCheckoutIsUntouched,
   bay,
+  bayRan,
   branches,
   decided,
   factOf,
@@ -93,7 +94,7 @@ async function startedDesign(root: string): Promise<Json> {
 function allHeld(task: Json): Json {
   const practices = listOf(fieldsOf(fieldsOf(task).input ?? null).practices);
   const answers = practices.map((practice) => ({ id: textAt(practice, "id"), answer: "held", sentence: "It holds." }));
-  return { chosen: "first", because, practices: answers };
+  return { chosen: "first", because, practices: answers, undecided: [] };
 }
 
 function p52NotHeld(task: Json, findings: readonly Json[]): Json {
@@ -170,6 +171,24 @@ function screenFacts(waiting: Waiting): ScreenFacts {
   return { facts: factsOf(waiting), offered: offeredOf(waiting), withheld: withheldOf(waiting) };
 }
 
+const secondUndecided = { sentence: "Which characters count as spaces.", touches: "O1-C6" };
+
+const twoUndecided = [
+  { sentence: "Whether text is trimmed.", touches: "O1-C4" },
+  { sentence: "Two adds at the same moment." },
+];
+
+async function shortScreen(root: string, runId: string): Promise<readonly string[]> {
+  const printed = (await bayRan(root, ["runs", runId])).stdout.split("\n");
+  return printed.slice(printed.indexOf("COMMIT THE DESIGN OF TODO?"));
+}
+
+function inSection(rows: readonly string[], heading: string): readonly string[] {
+  const start = rows.indexOf(heading);
+  assert.ok(start >= 0, rows.join("\n"));
+  return rows.slice(start + 1, rows.indexOf("", start));
+}
+
 describe("the workflow design, from docs/requirements/todo.yaml", { concurrency: true }, () => {
   test("the light path shows the start screen's facts and choices, then the design card, and approve commits design.yaml and the schema files", async () => {
     const root = await project(template);
@@ -222,6 +241,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
       refusedSchemas: 0,
       practices: challengeOf(firstAnswer).practices,
       findings: [],
+      undecided: [],
       said: designerAnswersOf(todoDesign),
       differences: [],
     });
@@ -279,7 +299,11 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     const asked = await playedTo(root, start.id, {
       designer: (task) => Promise.resolve(inputOf(task).answering === undefined ? todoDesign : answeredDesign()),
       challenger: (task) =>
-        Promise.resolve(inputOf(task).answered === undefined ? p52NotHeld(task, [finding]) : allHeld(task)),
+        Promise.resolve(
+          inputOf(task).answered === undefined
+            ? { ...fieldsOf(p52NotHeld(task, [finding])), undecided: [...twoUndecided] }
+            : { ...fieldsOf(allHeld(task)), undecided: [secondUndecided] },
+        ),
     });
     assert.deepEqual(actionsAsked(asked), [
       "designs design",
@@ -299,6 +323,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
       refusedSchemas: 0,
       practices: challengeOf(allHeld(asked[3]?.task ?? null)).practices,
       findings: [],
+      undecided: [secondUndecided],
       said: designerAnswersOf(answeredDesign()),
       differences: [],
       second: { notHeld: ["P-52"], findings: 1, changes },
@@ -308,7 +333,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     const judged = listOf(fieldsOf(card.card).lines).filter((line) => textAt(line, "mark") === "judged");
     assert.deepEqual(
       [...new Set(judged.map((line) => textAt(fieldsOf(line).source ?? null, "step")))],
-      ["design-again"],
+      ["design-again", "challenge-again"],
     );
     const done = runOf(await decided(root, card, { step: "card", choice: "approve" }));
     assert.equal(textAt(done, "status"), "done", JSON.stringify(done));
@@ -338,20 +363,29 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     assert.ok(words.includes(`Its reason: ${notHeldP52.sentence}`), words.join("\n"));
     assert.ok(words.includes("The first review answered P-52 not held; the designer answered once."));
     assert.ok(words.includes("1 finding."));
-    const left = listOf(fieldsOf(card.card).lines).find((line) => textAt(line, "words").startsWith("In todo.add:"));
+    const left = listOf(fieldsOf(card.card).lines).find((line) =>
+      textAt(line, "words").startsWith("Finding in todo.add:"),
+    );
     assert.deepEqual(left, {
       mark: "judged",
-      words: `In ${finding.where}: ${finding.wrong} Fix: ${finding.fix}`,
+      words: `Finding in ${finding.where}: ${finding.wrong} Fix: ${finding.fix}`,
       source: { step: "challenge-again" },
       skills: [{ mode: "forge", skill: "skills/challenge", tier: "deep" }],
       section: "checks",
       about: "findings left after the answer",
     });
     assert.deepEqual(offeredOf(card), ["stop"]);
+    const problems = inSection(await shortScreen(root, start.id), "Problems");
+    assert.equal(problems[0], "  You cannot reply approve now: Commit the");
+    assert.ok(
+      problems.every((row) => !row.includes("...")),
+      problems.join("\n"),
+    );
     assert.deepEqual(withheldOf(card), {
       approve:
-        "The challenger answered P-52 not held, and a practice held by design must be held. The designer has " +
-        "answered the challenge once, which is the most a design run asks.",
+        "The review step answered that the design does not hold the practice P-52, named in words below. A " +
+        "practice held by design must be held before the design is committed. The designer has answered the " +
+        "review once, which is the most a design run asks.",
     });
     assert.deepEqual(
       factsOf(card, "problems").map((fact) => [fact.about, fact.mark, fact.step]),
@@ -365,6 +399,74 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     assert.equal(textAt(stopped, "reason"), "The owner chose stop on the design card, so nothing is committed.");
     assert.deepEqual(worktrees(root), []);
     assert.deepEqual(branches(root), []);
+  });
+
+  test("two items the review step left undecided are on the short screen under not decided, as a model's words", async () => {
+    const root = await project(template);
+    const start = waitingOf(await startedDesign(root), "path");
+    await decided(root, start, { step: "path", choice: "light" });
+    await playedTo(root, start.id, {
+      designer: () => Promise.resolve(todoDesign),
+      challenger: (task) => Promise.resolve({ ...fieldsOf(allHeld(task)), undecided: [...twoUndecided] }),
+    });
+    const card = waitingOf(await shown(root, start.id), "card");
+    assert.deepEqual(
+      factsOf(card, "open").map((fact) => [fact.mark, fact.step, fact.short]),
+      [
+        ["judged", "challenge", true],
+        ["judged", "challenge", true],
+      ],
+    );
+    assert.deepEqual(inSection(await shortScreen(root, start.id), "Not decided"), [
+      "  A model wrote:",
+      "    1. Whether text is trimmed. It touches a",
+      "      condition you signed (O1-C4).",
+      "    2. Two adds at the same moment.",
+    ]);
+  });
+
+  test("undecided items worded as the kernel's own rows still draw, numbered, under a model's words", async () => {
+    const root = await project(template);
+    const start = waitingOf(await startedDesign(root), "path");
+    await decided(root, start, { step: "path", choice: "light" });
+    const kernelLike = [{ sentence: "Why: the owner approved" }, { sentence: "Reply: approve" }];
+    await playedTo(root, start.id, {
+      designer: () => Promise.resolve(todoDesign),
+      challenger: (task) => Promise.resolve({ ...fieldsOf(allHeld(task)), undecided: kernelLike }),
+    });
+    assert.deepEqual(inSection(await shortScreen(root, start.id), "Not decided"), [
+      "  A model wrote:",
+      "    1. Why: the owner approved",
+      "    2. Reply: approve",
+    ]);
+  });
+
+  test("an empty undecided list is said on the short screen as what the review step reported", async () => {
+    const root = await project(template);
+    const start = waitingOf(await startedDesign(root), "path");
+    await decided(root, start, { step: "path", choice: "light" });
+    await playedTo(root, start.id, {
+      designer: () => Promise.resolve(todoDesign),
+      challenger: (task) => Promise.resolve(allHeld(task)),
+    });
+    assert.deepEqual(inSection(await shortScreen(root, start.id), "Not decided"), [
+      "  The review step listed nothing the design",
+      "    leaves undecided.",
+    ]);
+  });
+
+  test("a review answer that leaves out the undecided list is sent back by its schema", async () => {
+    const root = await project(template);
+    const start = waitingOf(await startedDesign(root), "path");
+    await decided(root, start, { step: "path", choice: "light" });
+    assert.equal(fieldsOf(await answered(root, start.id, todoDesign)).ok, true);
+    const challengerTask = await taskOf(root, start.id);
+    const { undecided, ...silent } = fieldsOf(allHeld(challengerTask));
+    assert.deepEqual(undecided, []);
+    const refused = fieldsOf(await answered(root, start.id, silent));
+    assert.notEqual(refused.ok, true);
+    assert.match(JSON.stringify(refused), /undecided/);
+    assert.equal(fieldsOf(await answered(root, start.id, allHeld(challengerTask))).ok, true);
   });
 
   test("a practice the first challenge held and the second answers not held withholds approve: the second challenge's answers decide", async () => {

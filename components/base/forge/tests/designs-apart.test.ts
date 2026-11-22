@@ -82,7 +82,7 @@ function chosen(task: Json): Json {
       : { id, answer: "held", sentence: "It holds." };
   });
   const choice = input.answered === undefined ? "second" : "first";
-  return { chosen: choice, because: "It names the module for the list it keeps.", practices };
+  return { chosen: choice, because: "It names the module for the list it keeps.", practices, undecided: [] };
 }
 
 test("on the full path the second designer's task holds nothing of the first design, and no file holds it while the second works", async () => {
@@ -174,7 +174,12 @@ test("on the full path with nothing found, no designer is asked again and approv
         answer: "held",
         sentence: "It holds.",
       }));
-      return Promise.resolve({ chosen: "second", because: "It names the module for the list it keeps.", practices });
+      return Promise.resolve({
+        chosen: "second",
+        because: "It names the module for the list it keeps.",
+        practices,
+        undecided: [],
+      });
     },
   });
   assert.deepEqual(

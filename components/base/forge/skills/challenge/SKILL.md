@@ -29,6 +29,10 @@ As `schemas/challenge.json`, sent with `submit`:
       "where": "todo.add",
       "fix": "Add an example that lists the open todos after the refused add."
     }
+  ],
+  "undecided": [
+    { "sentence": "How a text is split into the characters a person sees.", "touches": "O1-C4" },
+    { "sentence": "Whether a refused add writes nothing at all." }
   ]
 }
 ```
@@ -42,6 +46,11 @@ As `schemas/challenge.json`, sent with `submit`:
 - [DOD-3] (must) What is wrong that no practice's answer says goes in `findings`, at most 10, each what is
   wrong, where in the design and what would fix it, one sentence each; none when there is nothing to correct.
   `because` says only why this design.
+- [DOD-4] (must) `undecided` lists what the design leaves open that a builder would otherwise decide
+  silently, at most 8, the most important first, or none. Each is one short sentence on one line, at most
+  120 characters, that a person who has not read the design understands, with `touches` naming the condition
+  or judged requirement it touches, when it touches one. `scripts/challenge-checked.ts` checks each
+  `touches`.
 
 ## Instructions
 
@@ -66,7 +75,15 @@ As `schemas/challenge.json`, sent with `submit`:
    practice whose answer changed only in its sentence, with no change in `changes` where it was not held, is
    judged on the design, not on the sentence; for P-52, `changes` names each rule added or removed and each
    rule whose takes or gives changed.
-6. Submit. If it comes back with feedback, correct each problem it names.
+6. List in `undecided` what the chosen design leaves open: behaviour a person would notice, or that touches
+   a condition or judged requirement the owner signed, which neither the design nor the requirements settle,
+   such as how characters are counted, whether a text is trimmed, or what a refused call writes. Leave out how
+   it is built, such as how a table is stored or what a function is called. Say it plainly, as something the
+   owner could decide, in a few words where you can: the owner's screen shows the first few whole. Name
+   a condition by its id, such as O1-C4, and a judged requirement as J and its place in the requirements'
+   `judged` list, such as J1 for the first. Give none when you find nothing open; the owner sees that you
+   listed nothing. On a second reading, list afresh what the answered design leaves open.
+7. Submit. If it comes back with feedback, correct each problem it names.
 
 ## Tools
 

@@ -67,6 +67,7 @@ export const run = defineScript(async (input, context) => {
     design: chosenDesign(asked, challenge),
     practices: challenge.practices.map((practice) => ({ ...practice })),
     findings: challenge.findings.map((finding) => ({ ...finding })),
+    undecided: challenge.undecided.map((item) => ({ ...item })),
     differences: [...compared],
     ...branchesSaid([], stayedOf(asked.stayed)),
   };

@@ -35,9 +35,9 @@ function callCounts(designers: number): Calls {
   return { calls, answered, most: answered * checkRounds };
 }
 
-function rangeWords(designers: number): string {
-  const { calls, most } = callCounts(designers);
-  return `${String(calls)} to ${String(most)}`;
+function usualWords(designers: number): string {
+  const { answered, most } = callCounts(designers);
+  return `usually ${String(answered)}, at most ${String(most)}`;
 }
 
 function callWords(designers: number): string {
@@ -62,7 +62,7 @@ function shortWhat(requirements: Requirements): readonly Fact[] {
   return shortFacts("what", [
     computed("start", `Your ${requirements.job} requirements, version ${String(requirements.version)}.`),
     computed("start", counts),
-    computed("start", `Model calls: light ${rangeWords(1)}, full ${rangeWords(2)}.`),
+    computed("start", `Model calls: light ${usualWords(1)}; full ${usualWords(2)}.`),
   ]);
 }
 

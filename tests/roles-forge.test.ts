@@ -156,7 +156,7 @@ test("forge's README names each skill with the role its step names and the tier 
 });
 
 test("the design's start screen says every model call runs at the tier of the designer, which is the challenger's too", () => {
-  const requirements = { job: "todo", version: 1, signedBy: "owner", outcomes: [], leftOut: 0 };
+  const requirements = { job: "todo", version: 1, signedBy: "owner", outcomes: [], leftOut: 0, judged: 0 };
   const facts = pathCard("docs/requirements/todo.yaml", requirements).lines;
   const tiersSaid = facts.flatMap((fact) => [...fact.words.matchAll(/model call is at the ([a-z]+) tier/g)]);
   assert.equal(

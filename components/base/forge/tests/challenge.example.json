@@ -675,6 +675,19 @@
         "where": "todo.add",
         "fix": "Add an example that lists the open todos after the refused add."
       }
+    ],
+    "undecided": [
+      {
+        "sentence": "How a text is split into the characters a person sees.",
+        "touches": "O1-C4"
+      },
+      {
+        "sentence": "Which characters count as spaces.",
+        "touches": "O1-C6"
+      },
+      {
+        "sentence": "Whether a refused call writes nothing or the same values."
+      }
     ]
   }
 }

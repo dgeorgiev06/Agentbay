@@ -14,7 +14,7 @@ const todoStartFacts: readonly Fact[] = (
   [
     ["what", true, "", "Your todo requirements, version 1."],
     ["what", true, "", "2 outcomes, 13 conditions."],
-    ["what", true, "", "Model calls: light 2 to 12, full 3 to 15."],
+    ["what", true, "", "Model calls: light usually 4, at most 12; full usually 5, at most 15."],
     ["what", false, "your requirements", "The file: docs/requirements/todo.yaml."],
     ["what", false, "your requirements", "Version 1, signed by owner."],
     ["what", false, "your requirements", "5 things left out on purpose."],

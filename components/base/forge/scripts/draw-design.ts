@@ -45,6 +45,7 @@ export const run = defineScript(async (input, context) => {
     asked: practicesOf(fields.practices),
     practices: deciding.practices,
     findings: deciding.findings,
+    undecided: deciding.undecided,
     said: designerAnswersOf(final),
     differences: textsOf(firstFields.differences),
     ...(answeredOf(again)

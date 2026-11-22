@@ -30,7 +30,7 @@ As `schemas/design.json`, sent with `submit`:
       "rules": [
         {
           "name": "add",
-          "decides": "Whether a text may be added, and the id the new todo gets.",
+          "decides": "Whether a text may be added, by its length as the requirements count it, and the id the new todo gets.",
           "takes": [
             { "name": "request", "schema": { "$ref": "schemas/todo/add-request.json" } },
             { "name": "todos", "store": "todos", "schema": { "type": "array" } },
@@ -51,7 +51,7 @@ As `schemas/design.json`, sent with `submit`:
       "actions": [
         {
           "name": "add",
-          "request": { "type": "object", "required": ["text"], "properties": { "text": { "type": "string", "maxLength": 500 } } },
+          "request": { "type": "object", "required": ["text"], "properties": { "text": { "type": "string" } } },
           "response": { "type": "object", "required": ["id"], "properties": { "id": { "type": "integer" } } },
           "serves": ["O1-C1"],
           "rule": "add",
@@ -86,25 +86,34 @@ As `schemas/design.json`, sent with `submit`:
 1. Read the conditions. Decide what is stored and which module owns it.
 2. Draw the modules by what each hides; give each the interface it offers.
 3. For each action write the request and response as JSON Schema, the conditions it serves, and examples:
-   `earlier` calls when the example needs them, the `input`, and the `answer` or the `refusal` sentence.
+   `earlier` calls when the example needs them, the `input`, and the `answer` or the `refusal` sentence. An
+   `earlier` call may be one the design refuses by its rule, when its input fits the action's request schema;
+   a refused call writes nothing, so the example answers as the same calls without it would.
 4. Write the rules of the work, what is allowed, what comes next, what a thing costs, as `rules` of the module
    that owns the data: each a pure function, with what it `takes` and what it `gives`, each value with its
    schema and, when it is read from or written to a table or file, its `store`. A rule's `$ref` names
    `schemas/<interface>/<action>-<side>.json`. Give each action that writes or refuses its `rule`, and in `reads`
    and `writes` what its thin function reads before the rule and writes after; it decides nothing itself. A
    rule takes the request when it has fields and gives the answer, and every value has a schema field by field.
+   A limit the requirements define, such as a length, belongs in the rule when the requirements count or trim
+   otherwise than a schema does, since a schema's `maxLength` counts Unicode code points and trims nothing;
+   put it in the request schema only where the schema counts exactly as the requirements do.
 5. When an example needs a long text, such as one at a length limit, say it by rule instead of typing it:
    `{"$text": [{"repeat": "a", "times": 500}]}`, or parts in order for mixed text, such as
    `{"$text": [{"repeat": "ü", "times": 250}, {"repeat": "🥛", "times": 250}]}`. A part is a text or a repeat;
-   at most 20 parts and 10,000 characters. A character is a Unicode code point, as a schema's `maxLength`
-   counts it, so 500 emoji are 500 characters. Forge spells it out before it checks the example and keeps it as
-   you wrote it. Name no field of a schema `$text`: an example could not tell it from a long text.
+   at most 20 parts and 10,000 characters. Here, and only for sizing this form, a character is a Unicode code
+   point: `times` repeats its text whole, and the 10,000 count code points. How the mode counts the
+   characters of a text, for example as a person sees them, is what the requirements decide, and the rule
+   counts as they say. Forge spells the form out before it checks the example and keeps it as you wrote it.
+   Name no field of a schema `$text`: an example could not tell it from a long text.
 6. Design so each practice given holds. For each, say in one sentence where in the design it holds, naming the
    module or action, or why it does not apply.
 7. When `answering` is given, correct what each practice not held and each finding names, keep the rest, and
    say for each such practice how the design now holds it. Where a practice was not held, change the design
    itself, not only its sentence: for P-52, the rules, what they take and give, and what each action reads and
-   writes. You answer once; the challenger judges the answer.
+   writes. Answer a finding by changing the design where it names. When no practice was failed, change the
+   design for each finding and keep `practices` as it is; there is no other text to write. You answer once; the
+   challenger judges the answer.
 8. Hold to your stance. Submit. If it comes back with feedback, correct each problem it names.
 
 ## Tools

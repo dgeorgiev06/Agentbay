@@ -402,7 +402,7 @@
         },
         {
           "mark": "computed",
-          "words": "Model calls: light 2 to 12, full 3 to 15.",
+          "words": "Model calls: light usually 4, at most 12; full usually 5, at most 15.",
           "source": {
             "step": "start"
           },

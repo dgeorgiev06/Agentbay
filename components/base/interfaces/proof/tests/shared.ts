@@ -36,6 +36,7 @@ type Verdict = {
   readonly verdict: string;
   readonly said: string;
   readonly cases: Value | undefined;
+  readonly printed: Value | undefined;
 };
 
 type Result = {
@@ -483,6 +484,10 @@ const failedRequest: Fields = {
           { bay: ["print", "src/main/name.txt"], stdout: "Ada\n", exitCode: 0 },
         ],
       }),
+      item("printed-pass", {
+        kind: "printed",
+        runs: [{ bay: ["print", "src/main/sum.txt"] }, { bay: ["print", "src/main/name.txt"] }],
+      }),
     ],
   ),
   base: "failed-base",
@@ -517,6 +522,10 @@ const inconclusiveRequest: Fields = {
         { bay: ["print", "src/value.txt"], stdout: "3\n", exitCode: 0 },
         { bay: ["print", "fixtures/sound.txt"], stdout: "stop\n", exitCode: 0 },
       ],
+    }),
+    item("printed-unknown", {
+      kind: "printed",
+      runs: [{ bay: ["print", "src/value.txt"] }, { bay: ["print", "fixtures/sound.txt"] }],
     }),
   ]),
   base: "inconclusive-base",
@@ -755,6 +764,7 @@ function verdictOf(value: Value): Verdict {
     verdict: textOf(fields.verdict),
     said,
     cases: fields.cases,
+    printed: fields.printed,
   };
 }
 
@@ -1140,6 +1150,24 @@ const cases: readonly Case[] = [
     run: async (proof) => {
       const result = await proof.proven("inconclusive");
       assertVerdict(result, "real-thing-unknown", { kind: "real-thing", verdict: "inconclusive" });
+    },
+  },
+  {
+    name: "printed: passed when every run in a fresh copy of the head ended, handing back the last run's exit code and what it printed",
+    run: async (proof) => {
+      const verdict = assertVerdict(await proof.proven("failed"), "printed-pass", {
+        kind: "printed",
+        verdict: "passed",
+      });
+      assert.deepEqual(verdict.printed, { exitCode: 0, stdout: "Ada\n" });
+    },
+  },
+  {
+    name: "printed: inconclusive, handing back nothing printed, when a run was stopped by a signal",
+    run: async (proof) => {
+      const result = await proof.proven("inconclusive");
+      const verdict = assertVerdict(result, "printed-unknown", { kind: "printed", verdict: "inconclusive" });
+      assert.equal(verdict.printed, undefined);
     },
   },
   {

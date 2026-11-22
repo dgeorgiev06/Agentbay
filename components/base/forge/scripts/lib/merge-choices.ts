@@ -15,6 +15,7 @@ export type Standing = {
   readonly leaked: boolean;
   readonly mustNotHeld: readonly string[];
   readonly interfaceChanges: readonly InterfaceChange[];
+  readonly examples?: readonly string[];
 };
 
 type Unmet = {
@@ -64,6 +65,7 @@ export function mergeReason(standing: Standing): string | undefined {
     ...(standing.leaked ? ["the builder's work holds text from the tests"] : []),
     ...unmetClause(unmet.failed, { one: "failed", many: "failed" }),
     ...unmetClause(unmet.notKnown, { one: "is not known", many: "are not known" }),
+    ...(standing.examples ?? []),
     ...mustClause(standing.mustNotHeld),
     ...interfaceClauses(standing.interfaceChanges),
   ];

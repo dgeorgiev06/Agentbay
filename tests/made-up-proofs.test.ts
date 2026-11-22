@@ -85,7 +85,7 @@ test("a made-up proof that reaches code only through the toolchain and worktrees
   const tested = ranFor(assay);
   assert.deepEqual(failedTests(tested.output), []);
   assert.equal(tested.status, 0, tested.output);
-  assert.match(tested.output, /^# pass 50$/m);
+  assert.match(tested.output, /^# pass 52$/m);
 });
 
 test("a made-up proof that reads an inconclusive check as passed fails the shared test's case on it", () => {

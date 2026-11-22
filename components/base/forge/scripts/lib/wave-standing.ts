@@ -3,7 +3,7 @@ import { stayedOf, type Stayed } from "./branch-endings.ts";
 import { bugsOnCard, type BugsOnCard } from "./bug-card.ts";
 import { builtOf, type Built } from "./builder-answer.ts";
 import { interfaceChanges, pinsOf, type Pins } from "./interface-pins.ts";
-import { numberOf, textOf } from "./json-values.ts";
+import { listOf, numberOf, textOf } from "./json-values.ts";
 import { mergeReason } from "./merge-choices.ts";
 import { mustNotHeld } from "./practices-block.ts";
 import { bugsOf } from "./planting.ts";
@@ -33,6 +33,7 @@ export type Settled = {
   readonly pins: Pins;
   readonly bugs: BugsOnCard;
   readonly stayed: readonly Stayed[];
+  readonly carriesExamples?: boolean;
   readonly reason?: string;
 };
 
@@ -86,6 +87,7 @@ export function settledOf(value: Json): Settled {
     pins: { base: pinsOf(fields.pinned), head: state?.pinnedAtHead ?? [] },
     bugs: bugsOnCard(bugsOf(fields.bugs), proof.verdicts, numberOf(fields.planted)),
     stayed: stayedOf(fields.stayed),
+    carriesExamples: listOf(fields.examples).length > 0,
     ...(typeof reason === "string" ? { reason } : {}),
   };
 }

@@ -133,6 +133,38 @@
             }
           },
           "description": "The rules of the committed design that the slice's actions apply, each a pure function with what it takes and gives and the actions that apply it; forge's plan adds them to each slice it hands on. Left out, the slice applies none the design names."
+        },
+        "examples": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["action", "examples"],
+            "properties": {
+              "action": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
+                "maxLength": 81,
+                "description": "The action of the design the slice builds, as <interface>.<action>, such as todo.add."
+              },
+              "mode": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*$",
+                "maxLength": 40,
+                "description": "The one module of the design that offers the action's interface, which is the mode called; left out when none or more than one does, and then its examples are not tried."
+              },
+              "examples": {
+                "type": "array",
+                "maxItems": 20,
+                "items": {
+                  "type": "object"
+                },
+                "description": "The action's worked examples as the committed design gives them, in its order: each an input, the earlier calls it starts from, and its answer or the sentence of its refusal; a long text may be said by rule."
+              }
+            }
+          },
+          "description": "The design's worked examples of each action the slice builds, by the request files it names; forge's plan adds them to each slice it hands on, and the merge card says what the built mode answered to each. Left out, none is tried."
         }
       }
     }

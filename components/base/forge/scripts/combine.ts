@@ -2,7 +2,7 @@ import { defineScript, fieldsOf, type Json, type ScriptContext } from "../../../
 import { branchesSaid, type Dropped, type Stayed } from "./lib/branch-endings.ts";
 import { answerOf } from "./lib/called.ts";
 import { cutAfresh, intoOf, removedThenDropped } from "./lib/drops.ts";
-import { textOf } from "./lib/json-values.ts";
+import { textOf, textsOf } from "./lib/json-values.ts";
 import { proving, slicesToJoin, type ToJoin, type WaveNamed } from "./lib/wave-join.ts";
 
 type Combining = {
@@ -59,12 +59,14 @@ export const run = defineScript(async (input, context) => {
   const fields = fieldsOf(input);
   const started = fieldsOf(fields.wave ?? null);
   const wave = { name: textOf(started.name), base: textOf(started.base) };
-  const included = slicesToJoin(fields.slices ?? null).filter((slice) => slice.included);
+  const settled = slicesToJoin(fields.slices ?? null);
+  const included = settled.filter((slice) => slice.included);
   if (included.length === 0) {
     const nothing = { branch: "", head: wave.base, merged: [], dropped: [], stayed: [] };
     return { joined: joinedOf(nothing, []), proving: { kind: "not asked" } };
   }
   const at = await combined(context, wave, included);
-  const asked = at.conflict === undefined ? proving(wave, included, at.head) : { kind: "not asked" };
+  const trying = { builtBefore: textsOf(started.builtBefore), slices: settled };
+  const asked = at.conflict === undefined ? proving(wave, included, { head: at.head, trying }) : { kind: "not asked" };
   return { joined: joinedOf(at, included), proving: asked, ...branchesSaid(at.dropped, at.stayed) };
 });

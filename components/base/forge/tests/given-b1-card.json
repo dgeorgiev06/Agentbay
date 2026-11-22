@@ -28,10 +28,11 @@
         }
       ]
     },
-    "base": "19ddcf0",
+    "base": "752a505",
     "bugs": [],
     "interface": ["components/base/interfaces/proof.yaml"],
     "rules": [],
+    "examples": [],
     "fixed": ["components/modes/b1/tests/quill.test.ts"],
     "card": {
       "title": "Build slice B1?",
@@ -45,7 +46,7 @@
         },
         {
           "mark": "computed",
-          "words": "kind mode; base 19ddcf0",
+          "words": "kind mode; base 752a505",
           "source": {
             "step": "slice"
           }
@@ -159,7 +160,7 @@
         },
         {
           "mark": "computed",
-          "words": "kind mode; base 19ddcf0",
+          "words": "kind mode; base 752a505",
           "source": {
             "step": "slice"
           }
@@ -234,7 +235,7 @@
   "cut": {
     "folder": ".forge/worktrees/B1",
     "branch": "forge/B1",
-    "commit": "19ddcf0c6d4a2e52e6e3ccae10ae0facb29ef404"
+    "commit": "752a50594b4cb5651f54ad65fb37e114232588fb"
   },
   "pin": {
     "pinned": [
@@ -256,16 +257,16 @@
     "round": 1,
     "stage": "proved",
     "done": false,
-    "base": "19ddcf0c6d4a2e52e6e3ccae10ae0facb29ef404",
+    "base": "752a50594b4cb5651f54ad65fb37e114232588fb",
     "built": {
       "outcome": "built"
     },
     "builder": {
       "branch": "forge/B1",
-      "commit": "542c043c8762566b1bb523d9197ee95e229df5ef"
+      "commit": "5433275ec342db34aa09efe085f6572382729fb4"
     },
     "builtAt": "round-1",
-    "head": "9e6c50f9a21120e6244c96180d32e72ae19527f3",
+    "head": "69a38f0ac1abd2ce805acdff7ab577d5edf4ffbc",
     "branch": "forge/B1-tests-1",
     "folder": ".forge/worktrees/B1-tests-1",
     "declared": {
@@ -322,15 +323,15 @@
     "round": 1,
     "stage": "reviewed",
     "done": false,
-    "base": "19ddcf0c6d4a2e52e6e3ccae10ae0facb29ef404",
+    "base": "752a50594b4cb5651f54ad65fb37e114232588fb",
     "built": {
       "outcome": "built"
     },
     "builder": {
       "branch": "forge/B1",
-      "commit": "542c043c8762566b1bb523d9197ee95e229df5ef"
+      "commit": "5433275ec342db34aa09efe085f6572382729fb4"
     },
-    "head": "9e6c50f9a21120e6244c96180d32e72ae19527f3",
+    "head": "69a38f0ac1abd2ce805acdff7ab577d5edf4ffbc",
     "branch": "forge/B1-tests-1",
     "declared": {
       "files": [
@@ -393,16 +394,16 @@
     "round": 2,
     "stage": "proved",
     "done": false,
-    "base": "19ddcf0c6d4a2e52e6e3ccae10ae0facb29ef404",
+    "base": "752a50594b4cb5651f54ad65fb37e114232588fb",
     "built": {
       "outcome": "built"
     },
     "builder": {
       "branch": "forge/B1-2",
-      "commit": "5d134b381aada081007dfa9d3b8cffa99cf676fa"
+      "commit": "4c114245ca61a2346063e5335963dc8602cd8c7e"
     },
     "builtAt": "round-2",
-    "head": "dae4afd06742a5b0bfe5543f97b668bc2d9d2e9f",
+    "head": "5fde6dec4b7e4ba97b144f43f8fd5efe6841a472",
     "branch": "forge/B1-tests-2",
     "folder": ".forge/worktrees/B1-tests-2",
     "declared": {
@@ -459,15 +460,15 @@
     "round": 2,
     "stage": "reviewed",
     "done": false,
-    "base": "19ddcf0c6d4a2e52e6e3ccae10ae0facb29ef404",
+    "base": "752a50594b4cb5651f54ad65fb37e114232588fb",
     "built": {
       "outcome": "built"
     },
     "builder": {
       "branch": "forge/B1-2",
-      "commit": "5d134b381aada081007dfa9d3b8cffa99cf676fa"
+      "commit": "4c114245ca61a2346063e5335963dc8602cd8c7e"
     },
-    "head": "dae4afd06742a5b0bfe5543f97b668bc2d9d2e9f",
+    "head": "5fde6dec4b7e4ba97b144f43f8fd5efe6841a472",
     "branch": "forge/B1-tests-2",
     "declared": {
       "files": [
@@ -530,16 +531,16 @@
     "round": 3,
     "stage": "proved",
     "done": false,
-    "base": "19ddcf0c6d4a2e52e6e3ccae10ae0facb29ef404",
+    "base": "752a50594b4cb5651f54ad65fb37e114232588fb",
     "built": {
       "outcome": "built"
     },
     "builder": {
       "branch": "forge/B1-3",
-      "commit": "5b1f864b9d2a90e2ae0065e7e09f6ea22764a831"
+      "commit": "3c639e61694595e6a69dd6df1e280ba8c31db51a"
     },
     "builtAt": "round-3",
-    "head": "5520c4cad4e692e4e8e5c3d84f63249042569abe",
+    "head": "41a1913b085408e39245764a63cfb89aa570c308",
     "branch": "forge/B1-tests-3",
     "folder": ".forge/worktrees/B1-tests-3",
     "declared": {
@@ -596,15 +597,15 @@
     "round": 3,
     "stage": "reviewed",
     "done": true,
-    "base": "19ddcf0c6d4a2e52e6e3ccae10ae0facb29ef404",
+    "base": "752a50594b4cb5651f54ad65fb37e114232588fb",
     "built": {
       "outcome": "built"
     },
     "builder": {
       "branch": "forge/B1-3",
-      "commit": "5b1f864b9d2a90e2ae0065e7e09f6ea22764a831"
+      "commit": "3c639e61694595e6a69dd6df1e280ba8c31db51a"
     },
-    "head": "5520c4cad4e692e4e8e5c3d84f63249042569abe",
+    "head": "41a1913b085408e39245764a63cfb89aa570c308",
     "branch": "forge/B1-tests-3",
     "declared": {
       "files": [
@@ -740,6 +741,12 @@
         "path": "components/modes/b1/scripts/quill.ts",
         "head": 1
       }
-    ]
+    ],
+    "tried": {
+      "setting": "must",
+      "head": "41a1913b085408e39245764a63cfb89aa570c308",
+      "carried": false,
+      "results": []
+    }
   }
 }

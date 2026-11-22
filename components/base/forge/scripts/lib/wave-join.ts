@@ -8,6 +8,7 @@ export type ToJoin = {
   readonly slice: Json;
   readonly declared: Json;
   readonly included: boolean;
+  readonly examples: Json;
 };
 
 export type WaveNamed = {
@@ -32,6 +33,7 @@ export function toJoinOf(settled: Json): ToJoin {
     slice: fields.slice ?? null,
     declared: fields.declared ?? null,
     included: typeof fields.reason !== "string",
+    examples: fields.examples ?? [],
   };
 }
 
@@ -72,11 +74,28 @@ function aloneRequest(wave: WaveNamed, joined: ToJoin): Json {
   return { kind: "asked", asked, keptOf: [joined.name], whenFailed: [] };
 }
 
-export function proving(wave: WaveNamed, joined: readonly ToJoin[], head: string): Json {
+export type Trying = {
+  readonly builtBefore: readonly string[];
+  readonly slices: readonly ToJoin[];
+};
+
+function tryingOf(joined: readonly ToJoin[], trying: Trying): Json {
+  const names = joined.map((each) => each.name);
+  const built = joined.flatMap((each) => listOf(each.examples).map((entry) => textOf(fieldsOf(entry).action)));
+  const slices = trying.slices.map((each) => ({
+    slice: each.name,
+    inHead: names.includes(each.name),
+    examples: each.examples,
+  }));
+  return { built: [...unionOf([trying.builtBefore, built])], slices };
+}
+
+export function proving(wave: WaveNamed, joined: readonly ToJoin[], at: { head: string; trying: Trying }): Json {
   return {
     kind: "asked",
-    asked: waveProofRequest(wave, joined, head),
+    asked: waveProofRequest(wave, joined, at.head),
     keptOf: joined.map((each) => each.name),
     whenFailed: joined.map((each) => aloneRequest(wave, each)),
+    trying: tryingOf(joined, at.trying),
   };
 }

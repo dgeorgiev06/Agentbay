@@ -34,7 +34,7 @@ const judgedRoom = cardWidth - "judged     ".length;
 
 const longestShown = 120;
 
-const unsafe = /[\p{Cc}\p{Cf}]/gu;
+const unsafe = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
 
 export function shortened(text: string, longest: number): string {
   const words = text

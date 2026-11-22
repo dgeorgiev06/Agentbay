@@ -261,6 +261,10 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "  DOD-A1-1, must, passed: A quill that was",
       "    added is counted.",
       "  DOD-A1-2, must, passed: The checks pass.",
+      "  the design's examples: none, since the",
+      "    slice's request carries none of a",
+      "    design's examples; nothing is withheld",
+      "    for them",
       "  practices answered by the reviewer in",
       "    round 2: 65; 65 held, 0 not held, 0 do",
       "    not apply; a check holds 12 more",
@@ -287,7 +291,7 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "  discard    Stop; the worktrees go",
       "             why: Discarding comes with",
       "             slice WD1.",
-      "checked: 0 ran, 8 computed, 3 judged",
+      "checked: 0 ran, 9 computed, 3 judged",
     ]);
     await decided(root, card, { step: "card", choice: "merge" });
     assert.deepEqual(branches(root), []);
@@ -515,6 +519,6 @@ test("the tests' text and the builder's code are in no file a later step could r
     "    toolchain's checks, such as types, lint,",
     "    format and dead code, and its whole test",
     "    run pass.",
-    "  practices answered by the reviewer in",
+    "  the design's examples: none, since the",
   ]);
 });

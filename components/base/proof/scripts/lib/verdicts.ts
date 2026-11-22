@@ -3,8 +3,11 @@ import type { Cases } from "./toolchain.ts";
 
 type Broken = { readonly verdict: "failed"; readonly detail: string; readonly cases?: Cases };
 
-export type Part =
-  { readonly verdict: "passed" } | Broken | { readonly verdict: "inconclusive"; readonly reason: string };
+export type Printed = { readonly exitCode: number; readonly stdout: string };
+
+type Held = { readonly verdict: "passed"; readonly printed?: Printed };
+
+export type Part = Held | Broken | { readonly verdict: "inconclusive"; readonly reason: string };
 
 export type Parts = {
   readonly parts: readonly [Part, ...Part[]];
@@ -12,7 +15,13 @@ export type Parts = {
 };
 
 export type Verdict =
-  | { readonly item: string; readonly kind: KindName; readonly verdict: "passed"; readonly detail: string }
+  | {
+      readonly item: string;
+      readonly kind: KindName;
+      readonly verdict: "passed";
+      readonly detail: string;
+      readonly printed?: Printed;
+    }
   | {
       readonly item: string;
       readonly kind: KindName;
@@ -32,12 +41,25 @@ export function brokenWithCases(detail: string, cases: Cases): Part {
   return { verdict: "failed", detail, cases };
 }
 
+export function heldWith(printed: Printed): Part {
+  return { verdict: "passed", printed };
+}
+
 function isBroken(part: Part): part is Broken {
   return part.verdict === "failed";
 }
 
 export function unknown(reason: string): Part {
   return { verdict: "inconclusive", reason };
+}
+
+function printedIn(parts: readonly Part[]): Printed | undefined {
+  for (const part of parts) {
+    if (part.verdict === "passed" && part.printed !== undefined) {
+      return part.printed;
+    }
+  }
+  return undefined;
 }
 
 export function verdictOf(item: string, kind: KindName, found: Parts): Verdict {
@@ -53,7 +75,9 @@ export function verdictOf(item: string, kind: KindName, found: Parts): Verdict {
       ? { item, kind, verdict: "failed", detail }
       : { item, kind, verdict: "failed", detail, cases };
   }
-  return { item, kind, verdict: "passed", detail: found.whenPassed };
+  const printed = printedIn(found.parts);
+  const passed = { item, kind, verdict: "passed", detail: found.whenPassed } as const;
+  return printed === undefined ? passed : { ...passed, printed };
 }
 
 export function counted(count: number, one: string, many: string): string {

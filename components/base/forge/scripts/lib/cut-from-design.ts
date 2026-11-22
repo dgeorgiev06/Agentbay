@@ -1,4 +1,5 @@
 import { joined } from "./card-lines.ts";
+import { exampleFilePattern, isExampleFile } from "./example-files.ts";
 import { committedFiles, modulesReached, type DesignSummary } from "./design-summary.ts";
 import type { Plan, PlannedSlice } from "./plan.ts";
 
@@ -24,6 +25,13 @@ export type CutProblem =
       readonly level: "error";
       readonly slice: string;
       readonly conditions: readonly string[];
+      readonly sentence: string;
+    }
+  | {
+      readonly kind: "test is an example file";
+      readonly level: "error";
+      readonly slice: string;
+      readonly file: string;
       readonly sentence: string;
     };
 
@@ -98,12 +106,21 @@ const requestFilesLeftOut: Rule = (slice, design) => {
   return [{ kind: "no request file", level: "error", slice: slice.name, conditions, sentence }];
 };
 
+const testIsAnExampleFile: Rule = (slice) =>
+  slice.tests.filter(isExampleFile).map((file) => {
+    const sentence =
+      `${slice.name} names ${file} among its tests, but a file named ${exampleFilePattern} is the example of an ` +
+      "action, which its builder writes and bay check reads, not a test. Name a .test.ts file in its place.";
+    return { kind: "test is an example file", level: "error", slice: slice.name, file, sentence };
+  });
+
 const rules: readonly Rule[] = [
   namesNoInterface,
   interfaceNotCommitted,
   crossesModules,
   notVertical,
   requestFilesLeftOut,
+  testIsAnExampleFile,
 ];
 
 export function cutFromDesignProblems(plan: Plan, design: DesignSummary): readonly CutProblem[] {

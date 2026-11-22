@@ -145,6 +145,34 @@ describe("a slice cut from its design", () => {
   });
 });
 
+describe("an example file named as a test", () => {
+  test("a slice whose fails-first tests name an action's example file is told to name a test file", () => {
+    const named = [`${schemas}/add-request.json`];
+    const tests = ["todo/tests/todo.test.ts", "todo/tests/add.example.json"];
+    const sliced = plan([slice("todo", { meets: ["O1-C1"], interface: named, tests })]);
+    assert.deepEqual(cutFromDesignProblems(sliced, todoSummary()), [
+      {
+        kind: "test is an example file",
+        level: "error",
+        slice: "todo",
+        file: "todo/tests/add.example.json",
+        sentence:
+          "todo names todo/tests/add.example.json among its tests, but a file named tests/<action>.example.json is " +
+          "the example of an action, which its builder writes and bay check reads, not a test. Name a .test.ts " +
+          "file in its place.",
+      },
+    ]);
+  });
+
+  test("a file outside a tests folder whose name ends in .example.json is not an action's example", () => {
+    const named = [`${schemas}/add-request.json`];
+    const sliced = plan([
+      slice("todo", { meets: ["O1-C1"], interface: named, tests: ["todo/fixtures/add.example.json"] }),
+    ]);
+    assert.deepEqual(cutFromDesignProblems(sliced, todoSummary()), []);
+  });
+});
+
 describe("fixed files made first", () => {
   const owner = slice("A", { tests: ["A/a.test.ts"], interface: ["d/a-request.json"] });
 

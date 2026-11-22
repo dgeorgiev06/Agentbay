@@ -303,6 +303,19 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["kind", "level", "slice", "file", "sentence"],
+          "description": "With a design named, a slice names among its tests a file named as an action's example, tests/<action>.example.json, which its builder writes.",
+          "properties": {
+            "kind": { "const": "test is an example file" },
+            "level": { "const": "error" },
+            "slice": { "type": "string" },
+            "file": { "type": "string" },
+            "sentence": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "required": ["kind", "level", "slice", "owner", "file", "sentence"],
           "description": "A slice changes a test or an interface file of another slice that it does not come after.",
           "properties": {

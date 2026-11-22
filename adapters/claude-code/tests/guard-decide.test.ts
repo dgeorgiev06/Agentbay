@@ -268,6 +268,19 @@ test("agentbay's own files and secrets are closed to steps even inside a read ro
   assertAllowed(ask(survey, "Read", { file_path: "/k/components/mail/mode.yaml" }));
 });
 
+test("a git worktree's .git pointer inside a step's write root is closed to its reads, writes and searches", () => {
+  const pointer = "/p/out/wt/.git";
+  assertDenied(ask(digest, "Read", { file_path: pointer }), ".git is closed");
+  assertDenied(ask(digest, "Write", { file_path: pointer, content: "gitdir: /p/x\n" }), ".git is closed");
+  assertDenied(ask(digest, "Edit", { file_path: pointer, old_string: "a", new_string: "b" }), ".git is closed");
+  assertDenied(ask(digest, "MultiEdit", { file_path: pointer, edits: [] }), ".git is closed");
+  assertDenied(ask(digest, "Write", { file_path: "/p/out/wt/.GIT", content: "" }), ".git is closed");
+  assertDenied(ask(digest, "Write", { file_path: "/p/out/wt/sub/.git/config", content: "" }), ".git is closed");
+  assertDenied(ask(digest, "Grep", { pattern: "x", path: "/p/out/wt" }), `it holds ${pointer}, which is closed`);
+  assertAllowed(ask(digest, "Write", { file_path: "/p/out/wt/a.ts", content: "" }));
+  assertAllowed(ask(digest, "Read", { file_path: "/p/out/wt/a.ts" }));
+});
+
 test("a step reads kit folders only inside its read roots, and writes them only through a root inside them", () => {
   const forge = "agentbay-forge-extend";
   const wide = "agentbay-wide-everything";

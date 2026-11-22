@@ -6,8 +6,10 @@ import { basename, dirname, join } from "node:path";
 import { test } from "node:test";
 import { parse, stringify } from "yaml";
 import { isRecord } from "../bay/json.ts";
+import { addMode, failedTests, modeTestFile, modeTestRan } from "./kit-copy.ts";
+import { parrot, parrotFiles } from "./made-up-modes.ts";
 import { kit, makeProject, type Project } from "./project-fixture.ts";
-import { commandLineIn, openModeProject, type ModeProject, type Run } from "./test-toolbox.ts";
+import { commandLineIn, copyOfTheKit, openModeProject, type ModeProject, type Run } from "./test-toolbox.ts";
 
 const toolboxFile = new URL("./test-toolbox.ts", import.meta.url);
 
@@ -194,10 +196,59 @@ test("a project whose mode does not load is refused with the kernel's sentence o
 });
 
 test("a folder that is in no project is refused with a reason", async () => {
-  await assert.rejects(
-    openModeProject(config, { project: tmpdir() }),
-    /no folder at or above the one given holds agentbay.config.yaml/,
-  );
+  await assert.rejects(openModeProject(config, { project: tmpdir() }), {
+    message: `No folder at or above ${tmpdir()} holds agentbay.config.yaml, so it is in no project.`,
+  });
+});
+
+const sheetsCall = "openModeProject(config, { project: import.meta.dirname })";
+
+const sheetOnModeTests = "components/base/forge/skills/kit-for-a-mode.md";
+
+const parrotOpenedBothWays = [
+  'import assert from "node:assert/strict";',
+  'import { readFile } from "node:fs/promises";',
+  'import { join } from "node:path";',
+  'import { test } from "node:test";',
+  'import { openModeProject, type ModeProject } from "../../../../tests/test-toolbox.ts";',
+  "",
+  'const config: Parameters<typeof openModeProject>[0] = { bindings: {}, adapter: "claude-code", modes: ["parrot"] };',
+  "",
+  "async function seen(project: ModeProject): Promise<readonly unknown[]> {",
+  "  try {",
+  '    const written = await readFile(join(project.root, "agentbay.config.yaml"), "utf8");',
+  '    return [await project.output("parrot.repeat", { text: "hello" }), written];',
+  "  } finally {",
+  "    await project.close();",
+  "  }",
+  "}",
+  "",
+  'test("parrot, a mode of the kit, opened with the folder of its test says the text back twice", async () => {',
+  `  const [output] = await seen(await ${sheetsCall});`,
+  '  assert.deepEqual(output, { text: "hello hello" });',
+  "});",
+  "",
+  'test("parrot opened with the folder of its test and without it gives the same output and the same config", async () => {',
+  `  assert.deepEqual(await seen(await ${sheetsCall}), await seen(await openModeProject(config)));`,
+  "});",
+  "",
+].join("\n");
+
+test("a mode of the kit whose test opens its project with the folder of the test, as the sheet says, loads and runs", async () => {
+  const sheet = await readFile(join(kit, sheetOnModeTests), "utf8");
+  assert.ok(sheet.includes(`\`${sheetsCall}\``), "the sheet on a mode's tests gives the call this case makes");
+  const copy = await copyOfTheKit("toolbox-kit-mode");
+  try {
+    await addMode(copy, join("components/modes", parrot), {
+      ...parrotFiles,
+      "tests/parrot.test.ts": parrotOpenedBothWays,
+    });
+    const tested = await modeTestRan(copy, modeTestFile("components/modes", parrot), "every case");
+    assert.deepEqual(failedTests(tested.output), [], tested.output);
+    assert.match(tested.output, /^# pass 2$/m, tested.output);
+  } finally {
+    await rm(copy, { recursive: true, force: true });
+  }
 });
 
 async function suiteEntriesIn(folder: string): Promise<readonly string[]> {
@@ -229,7 +280,9 @@ test("a project that fails to load and a folder in no project leave no folder be
       const before = await suiteEntriesIn(folder);
       assert.deepEqual(before, [basename(beside.root)]);
       await assert.rejects(openModeProject(config, { project: beside.root }), /Two modes are named store/);
-      await assert.rejects(openModeProject(config, { project: folder }), /no folder at or above the one given holds/);
+      await assert.rejects(openModeProject(config, { project: folder }), {
+        message: /^No folder at or above .+ holds agentbay.config.yaml/,
+      });
       assert.deepEqual(await suiteEntriesIn(folder), before);
     } finally {
       await beside.remove();

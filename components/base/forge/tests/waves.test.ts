@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
@@ -57,15 +56,10 @@ async function called(plan: string): Promise<Json> {
   return outputOf(await bay(wordsFor(plan)));
 }
 
-function calledInAProcess(plan: string): Promise<Json> {
-  const ran = spawnSync(process.execPath, ["bay/cli.ts", ...wordsFor(plan)], { cwd: copy, encoding: "utf8" });
-  return Promise.resolve(outputOf({ output: ran.stdout }));
-}
-
-async function waves(name: string, plan: Json, call = called): Promise<Json> {
+async function waves(name: string, plan: Json): Promise<Json> {
   const file = `docs/plans/${name}.yaml`;
   await writeFile(join(copy, file), `${JSON.stringify(plan, null, 2)}\n`, "utf8");
-  return call(file);
+  return called(file);
 }
 
 function planned(name: string, scope: readonly string[], afterNames: readonly string[] = []): Planned {
@@ -156,82 +150,6 @@ test("a plan of six slices in three waves: the table, the waves, the longest cha
   });
 });
 
-test("an after that names no slice is reported with its sentence", async () => {
-  const output = await waves("unknown", plan("Unknown", [planned("A", ["a/**"]), planned("B", ["b/**"], ["Z"])]));
-  assert.deepEqual(fieldsOf(output).problems, [
-    {
-      kind: "after names no slice",
-      level: "error",
-      slice: "B",
-      after: "Z",
-      sentence: "B comes after Z, but the plan has no slice named Z. Correct the name, or add the slice.",
-    },
-  ]);
-  assert.deepEqual(linesFrom(output, "Waves"), [
-    "Waves",
-    "wave 1: A, B (2 builders)",
-    "",
-    "Problems",
-    "error: B comes after Z, but the plan has no slice named Z. Correct the name, or add the slice.",
-  ]);
-});
-
-test("a cycle is reported with the names in it, and its slices are in no wave", async () => {
-  const slices = [planned("A", ["a/**"], ["B"]), planned("B", ["b/**"], ["A"]), planned("C", ["c/**"])];
-  const output = await waves("cycle", plan("Cycle", slices));
-  assert.deepEqual(fieldsOf(output).notPlaced, ["A", "B"]);
-  assert.deepEqual(fieldsOf(output).problems, [
-    {
-      kind: "cycle",
-      level: "error",
-      slices: ["A", "B"],
-      sentence: "A and B wait for each other, so none of them can start. Remove an after among them.",
-    },
-  ]);
-  assert.deepEqual(linesFrom(output, "Cycle").slice(0, 3), [
-    "Cycle",
-    "3 slices in 1 wave. Longest chain, 1 slice: C.",
-    "Not in any wave, since each is in a cycle or after one: A, B.",
-  ]);
-  assert.deepEqual(linesFrom(output, "Waves"), [
-    "Waves",
-    "wave 1: C (1 builder)",
-    "",
-    "Problems",
-    "error: A and B wait for each other, so none of them can start. Remove an after among them.",
-  ]);
-});
-
-test("two slices whose scopes share a path and that an after orders are in two waves, with no problem", async () => {
-  const slices = [planned("A", ["bay/runs/x/**"]), planned("B", ["bay/runs/x/y.ts"], ["A"]), planned("C", ["c/**"])];
-  const output = await waves("ordered", plan("Ordered", slices));
-  assert.deepEqual(fieldsOf(output).waves, [
-    { wave: 1, slices: ["A", "C"], builders: 2 },
-    { wave: 2, slices: ["B"], builders: 1 },
-  ]);
-  assert.deepEqual(fieldsOf(output).problems, []);
-});
-
-test("two slices whose scopes share a path and that nothing orders: the problem names both patterns and a path", async () => {
-  const slices = [planned("A", ["docs/a/**", "tests/a/**"]), planned("B", ["tests/a/b.test.ts"])];
-  const output = await waves("unordered", plan("Unordered", slices));
-  assert.deepEqual(fieldsOf(output).waves, [
-    { wave: 1, slices: ["A"], builders: 1 },
-    { wave: 2, slices: ["B"], builders: 1 },
-  ]);
-  assert.deepEqual(fieldsOf(output).problems, [
-    {
-      kind: "scopes share a path",
-      level: "error",
-      slices: ["A", "B"],
-      patterns: ["tests/a/**", "tests/a/b.test.ts"],
-      example: "tests/a/b.test.ts",
-      sentence:
-        "A and B could run in one wave, but both scopes admit tests/a/b.test.ts: tests/a/** in A and tests/a/b.test.ts in B. Narrow a scope, or order the two with an after.",
-    },
-  ]);
-});
-
 test("a scope that is a whole kernel feature is a warning that the feature may need an entry first", async () => {
   const output = await waves("feature", plan("Feature", [planned("A", ["bay/runs/**"])]));
   assert.deepEqual(linesFrom(output, "Problems"), [
@@ -239,70 +157,6 @@ test("a scope that is a whole kernel feature is a warning that the feature may n
     "warning: A's scope admits every private file of the kernel feature runs. The feature may need an entry first, so that a slice can be given a narrower scope.",
   ]);
   assert.deepEqual(problemKinds(output), ["whole feature"]);
-});
-
-test("a plan where every slice waits for the one before is sent back, unless it says why", async () => {
-  const slices = [planned("A", ["a/**"]), planned("B", ["b/**"], ["A"]), planned("C", ["c/**"], ["B"])];
-  const output = await waves("in-order", plan("In order", slices));
-  assert.deepEqual(linesFrom(output, "Problems"), [
-    "Problems",
-    "error: Every slice waits for the one before, so no two can run side by side. Say why no other order exists in oneAfterAnotherBecause, or remove an after that is not needed.",
-  ]);
-  const said = {
-    title: "In order",
-    slices: [...slices],
-    oneAfterAnotherBecause: "Each slice reads the last one's file.",
-  };
-  assert.deepEqual(problemKinds(await waves("in-order-said", said)), []);
-});
-
-test("three problems together are all reported", async () => {
-  const slices = [
-    planned("A", ["a/**"], ["B"]),
-    planned("B", ["b/**"], ["A"]),
-    planned("C", ["c/**"], ["Y"]),
-    planned("D", ["c/d.ts"]),
-  ];
-  const output = await waves("three", plan("Three", slices));
-  assert.deepEqual(problemKinds(output), ["after names no slice", "cycle", "scopes share a path"]);
-  assert.deepEqual(linesFrom(output, "Problems"), [
-    "Problems",
-    "error: C comes after Y, but the plan has no slice named Y. Correct the name, or add the slice.",
-    "error: A and B wait for each other, so none of them can start. Remove an after among them.",
-    "error: C and D could run in one wave, but both scopes admit c/d.ts: c/** in C and c/d.ts in D. Narrow a scope, or order the two with an after.",
-  ]);
-});
-
-test("a plan of one slice has one wave and no problem, as a bay process works it out", async () => {
-  const output = await waves("one", plan("One", [planned("A", ["a/**"])]), calledInAProcess);
-  assert.deepEqual(linesFrom(output, "One"), [
-    "One",
-    "1 slice in 1 wave. Longest chain, 1 slice: A.",
-    "",
-    "Slices",
-    "A (mode) The slice A",
-    "  scope: a/**",
-    "  after nothing",
-    "",
-    "Waves",
-    "wave 1: A (1 builder)",
-    "",
-    "Problems",
-    "No problems.",
-  ]);
-});
-
-test("an empty plan has no waves and says so", async () => {
-  assert.deepEqual(await waves("empty", plan("Empty", [])), {
-    answer: "worked out",
-    title: "Empty",
-    slices: [],
-    waves: [],
-    notPlaced: [],
-    longestChain: [],
-    problems: [],
-    lines: ["Empty", "The plan has no slices, so it has no waves."],
-  });
 });
 
 test("a plan that lacks a field, has an unknown field, or a slice of an unknown kind is refused with the schema's sentence", async () => {

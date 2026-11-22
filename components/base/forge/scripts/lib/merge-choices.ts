@@ -1,5 +1,5 @@
 import type { Built } from "./builder-answer.ts";
-import { counted, joined } from "./card-lines.ts";
+import { capitalized, counted, joined } from "./card-lines.ts";
 import { interfaceClauses, type InterfaceChange } from "./interface-pins.ts";
 import { addedIds } from "./item-lines.ts";
 import { mustClause } from "./practices-block.ts";
@@ -80,11 +80,7 @@ export function answerWords(reason: string | undefined): string {
     : `Merge is not offered: ${reason}`;
 }
 
-export function sentenceOf(clause: string): string {
-  return `${clause.charAt(0).toUpperCase()}${clause.slice(1)}`;
-}
-
 export function withheldReasons(reason: string | undefined): Partial<Record<WithheldChoice, string>> {
   const withheld = { "send-back": sendBackReason, discard: discardReason };
-  return reason === undefined ? withheld : { merge: sentenceOf(reason), ...withheld };
+  return reason === undefined ? withheld : { merge: capitalized(reason), ...withheld };
 }

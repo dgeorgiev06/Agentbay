@@ -14,6 +14,7 @@ export const kernelWords = {
   scriptWorked: "A script worked this out",
   toolRan: "A tool ran",
   reported: "reported:",
+  notAvailable: "Not available now",
   cannotReply: "You cannot reply",
   why: "Why:",
   eachReply: "What each reply does",

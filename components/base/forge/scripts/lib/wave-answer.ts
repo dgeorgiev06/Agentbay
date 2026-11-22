@@ -1,5 +1,5 @@
 import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
-import { counted, joined, shortened } from "./card-lines.ts";
+import { joined } from "./card-lines.ts";
 import { textOf, textsOf } from "./json-values.ts";
 import type { Proved } from "./proof-answer.ts";
 import type { Slice } from "./slice-form.ts";
@@ -23,11 +23,7 @@ export type Alone = Checked & {
 
 export type ChecksVerdict = "passed" | "failed" | "not known";
 
-export type WaveAnswer = {
-  readonly offered: boolean;
-  readonly words: string;
-  readonly reason?: string;
-};
+export type WaveAnswer = { readonly offered: true } | { readonly offered: false; readonly reason: string };
 
 export function joinedOf(value: Json | undefined): Joined {
   const fields = fieldsOf(value ?? null);
@@ -55,24 +51,12 @@ export function checksVerdict(checked: Checked): ChecksVerdict {
   return passed === ids.length && ids.length > 0 ? "passed" : "not known";
 }
 
-const titleShown = 40;
-
-function titled(slice: Settled): string {
-  return `${slice.name} (${shortened(slice.title, titleShown)})`;
-}
-
-function titledName(slices: readonly Settled[], name: string): string {
-  const slice = slices.find((each) => each.name === name);
-  return slice === undefined ? name : titled(slice);
-}
-
-function joinReason(slices: readonly Settled[], joinedHead: Joined): string | undefined {
+function joinReason(joinedHead: Joined): string | undefined {
   switch (joinedHead.kind) {
     case "nothing to join":
       return "no slice passed its own proof";
     case "conflict": {
-      const conflicting = titledName(slices, joinedHead.slice);
-      return `${conflicting} does not merge cleanly onto ${joined(joinedHead.onto)} in the combined head`;
+      return `${joinedHead.slice} does not merge cleanly onto ${joined(joinedHead.onto)} in the combined head`;
     }
     case "combined":
       return undefined;
@@ -94,7 +78,7 @@ function checksReason(checks: WaveChecks): string | undefined {
 }
 
 function leftOutClause(slices: readonly Settled[]): string {
-  const left = slices.filter((slice) => !isIncluded(slice)).map(titled);
+  const left = slices.filter((slice) => !isIncluded(slice)).map((slice) => slice.name);
   if (left.length === 0) {
     return "";
   }
@@ -116,17 +100,8 @@ function provedReason(proved: HeadProved): string | undefined {
 }
 
 export function waveAnswer(slices: readonly Settled[], joinedHead: Joined, proved: HeadProved): WaveAnswer {
-  const because = joinReason(slices, joinedHead) ?? provedReason(proved);
-  const left = leftOutClause(slices);
-  if (because !== undefined) {
-    const reason = `${because}${left}.`;
-    return { offered: false, words: `Merge is not offered: ${reason}`, reason };
-  }
-  const included = slices.filter(isIncluded).length;
-  const words =
-    `Merge is offered for ${String(included)} of ${counted(slices.length, "slice")}: each passed its own ` +
-    `proof, and the wave's checks passed on them combined${left}.`;
-  return { offered: true, words };
+  const because = joinReason(joinedHead) ?? provedReason(proved);
+  return because === undefined ? { offered: true } : { offered: false, reason: `${because}${leftOutClause(slices)}.` };
 }
 
 export function aloneWords(alone: readonly Alone[]): readonly string[] {

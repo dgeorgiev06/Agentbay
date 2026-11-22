@@ -1,10 +1,10 @@
 {
   "commits": {
-    "integration": "77e4b45a31b6d0fba4d777d54094a26c278e4fcb",
-    "forge/CA": "defced813cf363181492796aebd905b6aea470fd",
-    "forge/CA-tests-1": "e1c8e0cd351acd60e44b875373aa22ffe0b6eaf1",
-    "forge/CB": "cc5955810ee5a220f2719a1547708189615e6788",
-    "forge/CB-tests-1": "b11e3ebc1d86472c58a250b046a784d80ee20866"
+    "integration": "46361b309886c2b0abd34669d82d19cbd986bba8",
+    "forge/CA": "6c54a9a333f5d699fee7f5419e312b70cb91dbd9",
+    "forge/CA-tests-1": "95cee75c3ef92fd865352a002d764d89d7c8bfe6",
+    "forge/CB": "b0df9c312de5c190134676dc4a7533e59ad006b3",
+    "forge/CB-tests-1": "e88f334ca3c04fda49c97907d558a82dd99bd5df"
   },
   "given": {
     "wave": {
@@ -12,83 +12,202 @@
       "plan": "docs/plans/0099-wave.yaml",
       "wave": 1,
       "into": "integration",
-      "base": "77e4b45a31b6d0fba4d777d54094a26c278e4fcb",
+      "base": "46361b309886c2b0abd34669d82d19cbd986bba8",
       "card": {
-        "title": "Build wave 1 of 0099-wave.yaml?",
+        "title": "Build wave 1 of 1 of plan 0099-wave.yaml?",
         "lines": [
           {
             "mark": "computed",
-            "words": "2 slices of wave 1 of 1 in docs/plans/0099-wave.yaml",
+            "words": "2 slices: CA and CB.",
             "source": {
               "step": "wave"
-            }
+            },
+            "section": "what",
+            "short": true
           },
           {
             "mark": "computed",
-            "words": "base 77e4b45, the head of integration",
+            "words": "They meet none of your conditions.",
             "source": {
               "step": "wave"
-            }
+            },
+            "section": "what",
+            "short": true
           },
           {
             "mark": "computed",
-            "words": "CA: The ca mode counts what was added",
+            "words": "At most 54 model calls.",
             "source": {
               "step": "wave"
-            }
+            },
+            "section": "what",
+            "short": true
           },
           {
             "mark": "computed",
-            "words": "CA, scope components/modes/ca/**; meets no condition; 1 interface file",
+            "words": "The plan you approved describes it: docs/plans/0099-wave.yaml, slices CA and CB.",
             "source": {
               "step": "wave"
-            }
+            },
+            "section": "what",
+            "about": "the plan"
           },
           {
             "mark": "computed",
-            "words": "CB: The cb mode counts what was added",
+            "words": "This is wave 1 of 1 of that plan.",
             "source": {
               "step": "wave"
-            }
+            },
+            "section": "what",
+            "about": "the plan"
           },
           {
             "mark": "computed",
-            "words": "CB, scope components/modes/cb/**; meets no condition; 1 interface file",
+            "words": "The plan was read at commit 46361b309886c2b0abd34669d82d19cbd986bba8, the head of integration; each slice is cut from that commit.",
             "source": {
               "step": "wave"
-            }
+            },
+            "section": "what",
+            "about": "the plan"
           },
           {
             "mark": "computed",
-            "words": "side by side: at most 3 builders, the setting sideBySide",
+            "words": "CA builds the mode ca; it writes only inside components/modes/ca.",
             "source": {
               "step": "wave"
-            }
+            },
+            "section": "what",
+            "about": "slice CA"
           },
           {
             "mark": "computed",
-            "words": "cost: at most 27 model calls a slice, 54 for the wave",
+            "words": "It meets none of your conditions.",
             "source": {
               "step": "wave"
-            }
+            },
+            "section": "what",
+            "about": "slice CA"
           },
           {
             "mark": "computed",
-            "words": "each slice's own proof leaves out the checks; they go once, on the slices combined",
+            "words": "It names 1 interface file.",
             "source": {
               "step": "wave"
-            }
+            },
+            "section": "what",
+            "about": "slice CA"
           },
           {
             "mark": "computed",
-            "words": "gate: the whole test run, since the slices write inside more than one mode's folder (components/modes/ca and components/modes/cb)",
+            "words": "The file components/base/interfaces/proof.yaml.",
             "source": {
               "step": "wave"
-            }
+            },
+            "section": "what",
+            "about": "slice CA"
+          },
+          {
+            "mark": "computed",
+            "words": "CB builds the mode cb; it writes only inside components/modes/cb.",
+            "source": {
+              "step": "wave"
+            },
+            "section": "what",
+            "about": "slice CB"
+          },
+          {
+            "mark": "computed",
+            "words": "It meets none of your conditions.",
+            "source": {
+              "step": "wave"
+            },
+            "section": "what",
+            "about": "slice CB"
+          },
+          {
+            "mark": "computed",
+            "words": "It names 1 interface file.",
+            "source": {
+              "step": "wave"
+            },
+            "section": "what",
+            "about": "slice CB"
+          },
+          {
+            "mark": "computed",
+            "words": "The file components/base/interfaces/proof.yaml.",
+            "source": {
+              "step": "wave"
+            },
+            "section": "what",
+            "about": "slice CB"
+          },
+          {
+            "mark": "computed",
+            "words": "At most 3 builders at once, by the setting sideBySide.",
+            "source": {
+              "step": "wave"
+            },
+            "section": "what",
+            "about": "side by side"
+          },
+          {
+            "mark": "computed",
+            "words": "At most 27 model calls a slice, 54 for the wave.",
+            "source": {
+              "step": "wave"
+            },
+            "section": "what",
+            "about": "model calls"
+          },
+          {
+            "mark": "computed",
+            "words": "A slice's calls: declare 3, write-tests 9, build-without-tests 3, review 9, plant 3.",
+            "source": {
+              "step": "wave"
+            },
+            "section": "what",
+            "about": "model calls"
+          },
+          {
+            "mark": "computed",
+            "words": "A step whose answer a check may send back counts 3 calls.",
+            "source": {
+              "step": "wave"
+            },
+            "section": "what",
+            "about": "model calls"
+          },
+          {
+            "mark": "computed",
+            "words": "At the end: the checks and every test of the project, on the slices combined.",
+            "source": {
+              "step": "wave"
+            },
+            "section": "checks",
+            "short": true
+          },
+          {
+            "mark": "computed",
+            "words": "Gate: the whole test run, since the slices write inside more than one mode's folder (components/modes/ca and components/modes/cb).",
+            "source": {
+              "step": "wave"
+            },
+            "section": "checks",
+            "about": "the gate"
+          },
+          {
+            "mark": "computed",
+            "words": "Each slice's own proof leaves out the checks; they run once, on the slices combined.",
+            "source": {
+              "step": "wave"
+            },
+            "section": "checks",
+            "about": "the gate"
           }
         ],
         "withheld": {
-          "build-over": "No earlier run left a branch of this wave."
+          "build-over": "Nothing is left over from an earlier build, so there is nothing to build over."
         }
       },
       "offered": {
@@ -127,7 +246,7 @@
               ]
             }
           },
-          "base": "77e4b45a31b6d0fba4d777d54094a26c278e4fcb",
+          "base": "46361b309886c2b0abd34669d82d19cbd986bba8",
           "bugs": [],
           "interface": ["components/base/interfaces/proof.yaml"]
         },
@@ -160,7 +279,7 @@
               ]
             }
           },
-          "base": "77e4b45a31b6d0fba4d777d54094a26c278e4fcb",
+          "base": "46361b309886c2b0abd34669d82d19cbd986bba8",
           "bugs": [],
           "interface": ["components/base/interfaces/proof.yaml"]
         }
@@ -178,81 +297,200 @@
     "start": {
       "choice": "build",
       "content": {
-        "title": "Build wave 1 of 0099-wave.yaml?",
+        "title": "Build wave 1 of 1 of plan 0099-wave.yaml?",
         "lines": [
           {
             "mark": "computed",
-            "words": "2 slices of wave 1 of 1 in docs/plans/0099-wave.yaml",
+            "words": "2 slices: CA and CB.",
             "source": {
               "step": "wave"
-            }
+            },
+            "section": "what",
+            "short": true
           },
           {
             "mark": "computed",
-            "words": "base 77e4b45, the head of integration",
+            "words": "They meet none of your conditions.",
             "source": {
               "step": "wave"
-            }
+            },
+            "section": "what",
+            "short": true
           },
           {
             "mark": "computed",
-            "words": "CA: The ca mode counts what was added",
+            "words": "At most 54 model calls.",
             "source": {
               "step": "wave"
-            }
+            },
+            "section": "what",
+            "short": true
           },
           {
             "mark": "computed",
-            "words": "CA, scope components/modes/ca/**; meets no condition; 1 interface file",
+            "words": "The plan you approved describes it: docs/plans/0099-wave.yaml, slices CA and CB.",
             "source": {
               "step": "wave"
-            }
+            },
+            "section": "what",
+            "about": "the plan"
           },
           {
             "mark": "computed",
-            "words": "CB: The cb mode counts what was added",
+            "words": "This is wave 1 of 1 of that plan.",
             "source": {
               "step": "wave"
-            }
+            },
+            "section": "what",
+            "about": "the plan"
           },
           {
             "mark": "computed",
-            "words": "CB, scope components/modes/cb/**; meets no condition; 1 interface file",
+            "words": "The plan was read at commit 46361b309886c2b0abd34669d82d19cbd986bba8, the head of integration; each slice is cut from that commit.",
             "source": {
               "step": "wave"
-            }
+            },
+            "section": "what",
+            "about": "the plan"
           },
           {
             "mark": "computed",
-            "words": "side by side: at most 3 builders, the setting sideBySide",
+            "words": "CA builds the mode ca; it writes only inside components/modes/ca.",
             "source": {
               "step": "wave"
-            }
+            },
+            "section": "what",
+            "about": "slice CA"
           },
           {
             "mark": "computed",
-            "words": "cost: at most 27 model calls a slice, 54 for the wave",
+            "words": "It meets none of your conditions.",
             "source": {
               "step": "wave"
-            }
+            },
+            "section": "what",
+            "about": "slice CA"
           },
           {
             "mark": "computed",
-            "words": "each slice's own proof leaves out the checks; they go once, on the slices combined",
+            "words": "It names 1 interface file.",
             "source": {
               "step": "wave"
-            }
+            },
+            "section": "what",
+            "about": "slice CA"
           },
           {
             "mark": "computed",
-            "words": "gate: the whole test run, since the slices write inside more than one mode's folder (components/modes/ca and components/modes/cb)",
+            "words": "The file components/base/interfaces/proof.yaml.",
             "source": {
               "step": "wave"
-            }
+            },
+            "section": "what",
+            "about": "slice CA"
+          },
+          {
+            "mark": "computed",
+            "words": "CB builds the mode cb; it writes only inside components/modes/cb.",
+            "source": {
+              "step": "wave"
+            },
+            "section": "what",
+            "about": "slice CB"
+          },
+          {
+            "mark": "computed",
+            "words": "It meets none of your conditions.",
+            "source": {
+              "step": "wave"
+            },
+            "section": "what",
+            "about": "slice CB"
+          },
+          {
+            "mark": "computed",
+            "words": "It names 1 interface file.",
+            "source": {
+              "step": "wave"
+            },
+            "section": "what",
+            "about": "slice CB"
+          },
+          {
+            "mark": "computed",
+            "words": "The file components/base/interfaces/proof.yaml.",
+            "source": {
+              "step": "wave"
+            },
+            "section": "what",
+            "about": "slice CB"
+          },
+          {
+            "mark": "computed",
+            "words": "At most 3 builders at once, by the setting sideBySide.",
+            "source": {
+              "step": "wave"
+            },
+            "section": "what",
+            "about": "side by side"
+          },
+          {
+            "mark": "computed",
+            "words": "At most 27 model calls a slice, 54 for the wave.",
+            "source": {
+              "step": "wave"
+            },
+            "section": "what",
+            "about": "model calls"
+          },
+          {
+            "mark": "computed",
+            "words": "A slice's calls: declare 3, write-tests 9, build-without-tests 3, review 9, plant 3.",
+            "source": {
+              "step": "wave"
+            },
+            "section": "what",
+            "about": "model calls"
+          },
+          {
+            "mark": "computed",
+            "words": "A step whose answer a check may send back counts 3 calls.",
+            "source": {
+              "step": "wave"
+            },
+            "section": "what",
+            "about": "model calls"
+          },
+          {
+            "mark": "computed",
+            "words": "At the end: the checks and every test of the project, on the slices combined.",
+            "source": {
+              "step": "wave"
+            },
+            "section": "checks",
+            "short": true
+          },
+          {
+            "mark": "computed",
+            "words": "Gate: the whole test run, since the slices write inside more than one mode's folder (components/modes/ca and components/modes/cb).",
+            "source": {
+              "step": "wave"
+            },
+            "section": "checks",
+            "about": "the gate"
+          },
+          {
+            "mark": "computed",
+            "words": "Each slice's own proof leaves out the checks; they run once, on the slices combined.",
+            "source": {
+              "step": "wave"
+            },
+            "section": "checks",
+            "about": "the gate"
           }
         ],
         "withheld": {
-          "build-over": "No earlier run left a branch of this wave."
+          "build-over": "Nothing is left over from an earlier build, so there is nothing to build over."
         }
       }
     },
@@ -264,8 +502,8 @@
       {
         "name": "CA",
         "title": "The ca mode counts what was added",
-        "base": "77e4b45a31b6d0fba4d777d54094a26c278e4fcb",
-        "head": "e1c8e0cd351acd60e44b875373aa22ffe0b6eaf1",
+        "base": "46361b309886c2b0abd34669d82d19cbd986bba8",
+        "head": "95cee75c3ef92fd865352a002d764d89d7c8bfe6",
         "work": "forge/CA-tests-1",
         "builder": "forge/CA",
         "slice": {
@@ -326,15 +564,15 @@
           "round": 1,
           "stage": "reviewed",
           "done": true,
-          "base": "77e4b45a31b6d0fba4d777d54094a26c278e4fcb",
+          "base": "46361b309886c2b0abd34669d82d19cbd986bba8",
           "built": {
             "outcome": "built"
           },
           "builder": {
             "branch": "forge/CA",
-            "commit": "defced813cf363181492796aebd905b6aea470fd"
+            "commit": "6c54a9a333f5d699fee7f5419e312b70cb91dbd9"
           },
-          "head": "e1c8e0cd351acd60e44b875373aa22ffe0b6eaf1",
+          "head": "95cee75c3ef92fd865352a002d764d89d7c8bfe6",
           "branch": "forge/CA-tests-1",
           "declared": {
             "files": ["components/modes/ca/scripts/ca.ts", "components/modes/ca/tests/ca.test.ts"],
@@ -432,8 +670,8 @@
       {
         "name": "CB",
         "title": "The cb mode counts what was added",
-        "base": "77e4b45a31b6d0fba4d777d54094a26c278e4fcb",
-        "head": "b11e3ebc1d86472c58a250b046a784d80ee20866",
+        "base": "46361b309886c2b0abd34669d82d19cbd986bba8",
+        "head": "e88f334ca3c04fda49c97907d558a82dd99bd5df",
         "work": "forge/CB-tests-1",
         "builder": "forge/CB",
         "slice": {
@@ -494,15 +732,15 @@
           "round": 1,
           "stage": "reviewed",
           "done": true,
-          "base": "77e4b45a31b6d0fba4d777d54094a26c278e4fcb",
+          "base": "46361b309886c2b0abd34669d82d19cbd986bba8",
           "built": {
             "outcome": "built"
           },
           "builder": {
             "branch": "forge/CB",
-            "commit": "cc5955810ee5a220f2719a1547708189615e6788"
+            "commit": "b0df9c312de5c190134676dc4a7533e59ad006b3"
           },
-          "head": "b11e3ebc1d86472c58a250b046a784d80ee20866",
+          "head": "e88f334ca3c04fda49c97907d558a82dd99bd5df",
           "branch": "forge/CB-tests-1",
           "declared": {
             "files": ["components/modes/cb/scripts/cb.ts", "components/modes/cb/tests/cb.test.ts"],

@@ -7,18 +7,20 @@ import {
   askedOf,
   branches,
   decided,
+  factsOf,
   git,
   into,
   kitTemplate,
   listOf,
-  printedCard,
   project,
   removeAll,
   runOf,
   shown,
   textAt,
   waitingOf,
+  withheldOf,
   worktrees,
+  type Waiting,
 } from "./kit-copy.ts";
 import { givenIn, partStarted, withCommits } from "./part-run.ts";
 import { playedSideBySide } from "./side-by-side-play.ts";
@@ -82,8 +84,8 @@ function kindsAsked(requests: readonly Json[]): readonly string[] {
   return [...new Set(kinds)].sort();
 }
 
-function flowing(rows: readonly string[]): string {
-  return rows.join(" ").replace(/\s+/g, " ");
+function wordsIn(waiting: Waiting, section: string): readonly string[] {
+  return factsOf(waiting, section).map((fact) => fact.words);
 }
 
 test("given a wave's slices built and each passing its own proof, the combined head fails the checks, each slice is proved alone, the breaker is named, and keep leaves no worktree", async () => {
@@ -109,18 +111,29 @@ test("given a wave's slices built and each passing its own proof, the combined h
   const trigger = { plan: "docs/plans/0099-wave.yaml", wave: 1 };
   const runId = await partStarted(root, "forge:workflows/wave.yaml", { trigger, part: { given } });
   const card = waitingOf(await shown(root, runId), "card");
-  assert.equal(textAt(listOf(card.choices)[0] ?? null, "status"), "withheld");
-  const rows = await printedCard(root, card.id);
-  const printed = flowing(rows);
-  assert.ok(printed.includes("Merge is not offered: the wave's checks failed on the slices combined."), printed);
-  assert.ok(printed.includes("CA proved alone with the checks: DOD-CA-2, must, passed"), printed);
-  assert.ok(printed.includes("CB fails the checks alone, so its work breaks the suite"), printed);
-  assert.ok(printed.includes("on forge/wave-1, with CA, CB merged in plan order"), printed);
-  assert.ok(rows.includes("judged   DOD-CA-1 held by 1 case"), printed);
-  assert.ok(rows.includes("judged   DOD-CB-2 held by 1 case"), printed);
-  assert.ok(rows.includes("checked: 0 ran, 35 computed, 6 judged"), printed);
-  assert.ok(printed.includes("gate: the whole test run, since the slices write inside more than one mode's folder"));
-  assert.ok(printed.includes("CA proved alone with the checks: DOD-CA-2, must, passed: The checks pass."), printed);
+  assert.deepEqual(withheldOf(card), { merge: "The wave's checks failed on the slices combined." });
+  assert.deepEqual(wordsIn(card, "problems"), [
+    "The checks on the slices combined: the must item checks failed, as a check or the test run failed.",
+    "CB fails the checks alone, so its work breaks the suite.",
+  ]);
+  const alone = factsOf(card).filter((fact) => fact.about === "CA alone with the checks");
+  assert.equal(alone[0]?.words, "The must item DOD-CA-2 passed.");
+  assert.ok(
+    wordsIn(card, "what").some((words) => words.endsWith("on forge/wave-1, with CA, CB merged in plan order.")),
+  );
+  const judged = factsOf(card)
+    .filter((fact) => fact.mark === "judged")
+    .map((fact) => fact.words);
+  assert.ok(
+    judged.includes("DOD-CA-1 held by 1 case.") && judged.includes("DOD-CB-2 held by 1 case."),
+    judged.join("\n"),
+  );
+  assert.ok(
+    wordsIn(card, "checks").includes(
+      "Gate: the whole test run, since the slices write inside more than one mode's folder " +
+        "(components/modes/ca and components/modes/cb).",
+    ),
+  );
   assert.equal((await askedOf(root, "wave-1")).length, 1);
   assert.deepEqual(kindsAsked((await askedOf(root, "CA")).slice(-1)), ["checks"]);
   const kept = runOf(await decided(root, card, { step: "card", choice: "keep" }));
@@ -196,14 +209,19 @@ test("given a wave whose slice requests carry the design's examples, settle and 
   const card = waitingOf(await shown(root, runId), "card");
   assert.equal(textAt(listOf(card.choices)[0] ?? null, "reason"), "1 of CB's examples answered otherwise.");
   assert.deepEqual(await calledModes(root), [[], ["tally.add"], ["tally.add", "tally.count"]]);
-  const rows = await printedCard(root, card.id);
-  const printed = flowing(rows);
-  const cbAt = printed.indexOf("CB: The cb mode counts");
-  const caPassed = printed.indexOf("examples, must, passed: The design's examples answer as designed.");
-  const cbFailed = printed.indexOf("examples, must, failed: The design's examples answer as designed.");
-  assert.ok(caPassed > 0 && caPassed < cbAt && cbFailed > cbAt, printed);
+  const otherwise = 'counting.count example 1: the design answers {"count":1}; the built mode answered:';
   assert.ok(
-    printed.includes('counting.count example 1: the design answers {"count":1}; the built mode answered:'),
-    printed,
+    wordsIn(card, "problems").some((words) => words.startsWith(`CB's ${otherwise}`)),
+    wordsIn(card, "problems").join("\n"),
+  );
+  const examples = (name: string): readonly string[] =>
+    factsOf(card)
+      .filter((fact) => fact.about === `${name}'s examples`)
+      .map((fact) => fact.words);
+  assert.equal(examples("CA")[0], "Examples, must, passed: The design's examples answer as designed.");
+  assert.equal(examples("CB")[0], "Examples, must, failed: The design's examples answer as designed.");
+  assert.ok(
+    examples("CB").some((words) => words.startsWith(otherwise)),
+    examples("CB").join("\n"),
   );
 });

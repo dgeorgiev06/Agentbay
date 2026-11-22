@@ -1,5 +1,5 @@
 import { defineScript, fieldsOf, type Json } from "../../../../bay/sdk.ts";
-import { stayedOf, withStayedLines } from "./lib/branch-endings.ts";
+import { stayedOf } from "./lib/branch-endings.ts";
 import { gateOfRequests } from "./lib/gate.ts";
 import { gateShownOf } from "./lib/start-card.ts";
 import { listOf, numberOf, textOf, textsOf } from "./lib/json-values.ts";
@@ -40,6 +40,7 @@ export const run = defineScript((input, context) => {
     must: textsOf(context.settings.mustPractices),
     tried: slicesTriedOf(fieldsOf(fields.proved ?? null).tried),
     gate: gateShownOf(gateOfRequests(wave.requests), context.settings.modeGateTests),
+    stayed: stayedOf(combined.stayed),
   });
-  return Promise.resolve(withStayedLines(drawn, stayedOf(combined.stayed)));
+  return Promise.resolve(drawn);
 });

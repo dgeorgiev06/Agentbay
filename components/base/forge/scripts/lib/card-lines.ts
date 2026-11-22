@@ -60,6 +60,19 @@ export function counted(count: number, noun: string): string {
   return `${String(count)} ${noun}${count === 1 ? "" : "s"}`;
 }
 
+export function capitalized(text: string): string {
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+}
+
+const plainWord = /^[a-z']+[,:;]?$/;
+
+export function sentenced(text: string): string {
+  const trimmed = text.trim();
+  const [first = ""] = trimmed.split(" ");
+  const said = plainWord.test(first) ? capitalized(trimmed) : trimmed;
+  return /[.?!]$/.test(said) ? said : `${said}.`;
+}
+
 export function grouped(count: number): string {
   return String(count).replace(/\B(?=(\d{3})+$)/g, ",");
 }
@@ -106,6 +119,14 @@ export function computed(step: ComputedBy, words: string): CardLine {
 
 export function judged(step: string, words: string): CardLine {
   return { mark: "judged", words: fitted(words, judgedRoom), source: { step } };
+}
+
+export function computedWhole(step: ComputedBy, words: string): CardLine {
+  return { mark: "computed", words: shortened(words, Number.MAX_SAFE_INTEGER), source: { step } };
+}
+
+export function judgedWhole(step: string, words: string): CardLine {
+  return { mark: "judged", words: shortened(words, Number.MAX_SAFE_INTEGER), source: { step } };
 }
 
 export function inItem(item: number, lines: readonly CardLine[]): readonly CardLine[] {

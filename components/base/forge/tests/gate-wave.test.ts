@@ -4,10 +4,11 @@ import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
 import {
   askedOf,
   decided,
+  factsOf,
   kitTemplate,
   listOf,
   modeGateTestsOfTheKit,
-  printedCard,
+  offeredOf,
   project,
   removeAll,
   scopePassed,
@@ -15,6 +16,7 @@ import {
   testsFromAsked,
   waitingOf,
   type Proved,
+  type Waiting,
 } from "./kit-copy.ts";
 import { playedSideBySide } from "./side-by-side-play.ts";
 import {
@@ -38,8 +40,8 @@ after(async () => {
   await removeAll();
 });
 
-function flowing(rows: readonly string[]): string {
-  return rows.join(" ").replace(/\s+/g, " ");
+function wordsIn(waiting: Waiting, section: string): readonly string[] {
+  return factsOf(waiting, section).map((fact) => fact.words);
 }
 
 function combinedPassed(): Proved {
@@ -63,34 +65,42 @@ describe("the gate a wave runs by", { concurrency: true }, () => {
     await provedAs(root, "TD1", ownPassed("TD1"));
     await provedAs(root, "wave-1.checks", combinedPassed());
     const start = await waveStarted(root);
-    const startSaid = flowing(await printedCard(root, start.id, "Build "));
     const gate =
-      "gate: the mode's own tests and the fast checks of the whole project, since TD1 writes only inside " +
-      "components/modes/td1; the other tests are not run";
-    assert.ok(startSaid.includes(gate), startSaid);
-    assert.ok(!startSaid.includes("whole test run"), startSaid);
+      "Gate: the mode's own tests and the fast checks of the whole project, since TD1 writes only inside " +
+      "components/modes/td1; the other tests are not run.";
+    assert.ok(wordsIn(start, "checks").includes(gate), wordsIn(start, "checks").join("\n"));
+    assert.ok(!wordsIn(start, "checks").some((words) => words.includes("whole test run")));
     await decided(root, start, { step: "start", choice: "build" });
     await playedSideBySide(root, start.id, wavePlayers(root));
     const card = waitingOf(await shown(root, start.id), "card");
     assert.deepEqual(testsFromAsked(await askedOf(root, "wave-1")), [[testPath("TD1"), ...modeGateTestsOfTheKit]]);
-    const said = flowing(await printedCard(root, card.id));
-    assert.ok(said.includes("gate: the mode's own tests and the fast checks of the whole project ran"), said);
-    assert.ok(said.includes("bay check on the head found no error"), said);
+    const short = factsOf(card, "checks")
+      .filter((fact) => fact.short)
+      .map((fact) => fact.words);
+    assert.ok(short.includes("Not run: tests outside the td1 mode."), short.join("\n"));
+    assert.ok(
+      wordsIn(card, "checks").includes(
+        "Gate: the mode's own tests and the fast checks of the whole project ran, since TD1 writes only inside " +
+          "components/modes/td1; the other tests were not run.",
+      ),
+    );
+    assert.ok(wordsIn(card, "checks").includes("Bay check on the head found no error."));
     const asked = (await askedOf(root, "wave-1"))[0] ?? null;
     const proof = fieldsOf(listOf(fieldsOf(fieldsOf(asked).slice ?? null).done)[0] ?? null).proof ?? null;
     assert.equal(fieldsOf(proof).bayCheck, true);
-    assert.ok(said.includes("Merge is offered for 1 of 1 slice"), said);
+    assert.deepEqual(offeredOf(card), ["merge", "keep"]);
+    assert.ok(wordsIn(card, "what").includes("In the combined head: 1 of 1 slice."));
   });
 
   test("a wave with a slice in a base mode's folder: the start card names the whole test run and why", async () => {
     const root = await project(template);
     await slicesPlannedOnInto(root, [plannedSlice("TD1"), inBase("TB")]);
     const start = await waveStarted(root);
-    const said = flowing(await printedCard(root, start.id, "Build "));
+    const checks = wordsIn(start, "checks");
     assert.ok(
-      said.includes("gate: the whole test run, since TB writes outside a mode's folder (components/base/tb/**)"),
-      said,
+      checks.includes("Gate: the whole test run, since TB writes outside a mode's folder (components/base/tb/**)."),
+      checks.join("\n"),
     );
-    assert.ok(!said.includes("the mode's own tests"), said);
+    assert.ok(!checks.some((words) => words.includes("the mode's own tests")), checks.join("\n"));
   });
 });

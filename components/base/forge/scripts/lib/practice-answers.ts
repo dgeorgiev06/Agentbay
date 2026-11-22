@@ -177,11 +177,15 @@ export function tallyWords(who: string, tally: Tally): string {
   );
 }
 
-export function notHeldLine(step: string, practice: NotHeld): CardLine {
+export function notHeldWords(practice: NotHeld): string {
   const level = practice.level === undefined ? "" : `, ${practice.level}`;
   const says = practice.says === undefined ? "" : ` ${shortened(practice.says, saysShown)}`;
   const place = practice.path === undefined ? "" : ` In ${practice.path}:`;
-  return judged(step, `${practice.id}${level}, not held:${says}${place} ${practice.sentence}`);
+  return `${practice.id}${level}, not held:${says}${place} ${practice.sentence}`;
+}
+
+export function notHeldLine(step: string, practice: NotHeld): CardLine {
+  return judged(step, notHeldWords(practice));
 }
 
 export function practiceLines(block: PracticeBlock): readonly CardLine[] {

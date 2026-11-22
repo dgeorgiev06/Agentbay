@@ -23,7 +23,7 @@ const leftSaid = "An earlier run left branches of this slice; build over them or
 
 const notLeftSaid = "No earlier run left a branch of this slice.";
 
-const waveNotLeftSaid = "No earlier run left a branch of this wave.";
+const waveNotLeftSaid = "Nothing is left over from an earlier build, so there is nothing to build over.";
 
 const namedSaid = "The slice names its interface files.";
 

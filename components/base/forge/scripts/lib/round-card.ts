@@ -3,10 +3,17 @@ import type { Condition } from "./review.ts";
 import type { JudgedPractices } from "./reviewer-practices.ts";
 import { lastRound, type Remaining, type RoundsState } from "./rounds.ts";
 
+export type Reviewed = {
+  readonly held: number;
+  readonly notHeld: number;
+  readonly remaining: number;
+};
+
 type JudgedLines = {
   readonly step: string;
   readonly round: number;
   readonly sentences: readonly string[];
+  readonly reviewed?: Reviewed;
   readonly practices?: JudgedPractices;
 };
 
@@ -68,5 +75,7 @@ export function roundsOnCard(state: RoundsState): RoundsOnCard {
   const sentences = [...state.conditions.map(conditionSentence), ...remainingSentences(state.remaining)];
   const round = Number(reviewStep.exec(state.reviewedAt)?.[1] ?? state.round);
   const practices = state.practices === undefined ? {} : { practices: state.practices };
-  return { ...count, judged: { step: state.reviewedAt, round, sentences, ...practices } };
+  const held = state.conditions.filter((condition) => condition.held).length;
+  const reviewed = { held, notHeld: state.conditions.length - held, remaining: state.remaining.length };
+  return { ...count, judged: { step: state.reviewedAt, round, sentences, reviewed, ...practices } };
 }

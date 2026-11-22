@@ -1,9 +1,21 @@
 import type { Dropped } from "./branch-endings.ts";
-import { computed, counted, joined, shortened, type Card } from "./card-lines.ts";
-import { modulesReached, type DesignSummary } from "./design-summary.ts";
-import { gateWords, leftoverWords, type GateShown } from "./start-card.ts";
+import {
+  computedWhole,
+  counted,
+  facts,
+  joined,
+  sentenced,
+  shortFacts,
+  type CardLine,
+  type Fact,
+  type Screen,
+} from "./card-lines.ts";
+import { actionsBuiltBy, modulesReached, type DesignSummary } from "./design-summary.ts";
+import { gateOf, type Gate } from "./gate.ts";
+import { fastChecksLine, gateLine } from "./gate-words.ts";
 import type { PlannedSlice } from "./plan.ts";
 import { lastRound } from "./rounds.ts";
+import type { GateShown } from "./start-card.ts";
 
 export type WaveStart = {
   readonly plan: string;
@@ -15,7 +27,7 @@ export type WaveStart = {
   readonly design?: DesignSummary;
   readonly sideBySide: number;
   readonly leftovers: readonly Dropped[];
-  readonly gate?: GateShown;
+  readonly gate: GateShown;
 };
 
 type SkillSteps = {
@@ -34,60 +46,225 @@ const skillStepsOfASlice: readonly SkillSteps[] = [
   { skill: "plant", steps: 1, checked: true },
 ];
 
-const titleShown = 60;
+const designName = /^[a-z][a-z0-9-]*$/;
+
+const plainFile = /^[A-Za-z0-9_.-]+$/;
+
+function callsOf(skill: SkillSteps): number {
+  return skill.steps * (skill.checked ? answersOfACheckedStep : 1);
+}
 
 export function modelCallsOfASlice(): number {
-  return skillStepsOfASlice.reduce((sum, skill) => sum + skill.steps * (skill.checked ? answersOfACheckedStep : 1), 0);
+  return skillStepsOfASlice.reduce((sum, skill) => sum + callsOf(skill), 0);
 }
 
-function whereWords(slice: PlannedSlice, design: DesignSummary | undefined): string {
-  const modules = design === undefined ? [] : modulesReached(slice, design);
-  return modules.length === 0 ? `scope ${joined([...slice.scope])}` : `module ${joined(modules)}`;
+function said(words: string): CardLine {
+  return computedWhole("wave", sentenced(words));
 }
 
-function sliceWords(slice: PlannedSlice, design: DesignSummary | undefined): readonly string[] {
-  const meets = slice.meets ?? [];
-  const met = meets.length === 0 ? "meets no condition" : `meets ${meets.join(", ")}`;
-  const files = counted((slice.interface ?? []).length, "interface file");
-  return [
-    `${slice.name}: ${shortened(slice.title, titleShown)}`,
-    `${slice.name}, ${whereWords(slice, design)}; ${met}; ${files}`,
-  ];
+function modeOf(slices: readonly PlannedSlice[]): Extract<Gate, { readonly gate: "mode" }> | undefined {
+  const gate = gateOf(slices);
+  return gate.gate === "mode" ? gate : undefined;
 }
 
-function sideBySideWords(start: WaveStart): readonly string[] {
-  const names = start.slices.map((slice) => slice.name);
-  const said = `side by side: at most ${String(start.sideBySide)} builders, the setting sideBySide`;
-  const later = names.slice(start.sideBySide);
-  if (later.length === 0) {
-    return [said];
+function sliceNames(slices: readonly PlannedSlice[]): string {
+  return joined(slices.map((slice) => slice.name));
+}
+
+function conditionsMet(slices: readonly PlannedSlice[]): readonly string[] {
+  return [...new Set(slices.flatMap((slice) => slice.meets ?? []))];
+}
+
+function branchesWord(count: number): string {
+  return count === 1 ? "1 branch is" : `${String(count)} branches are`;
+}
+
+function titleOf(start: WaveStart): string {
+  const mode = modeOf(start.slices);
+  const file = start.plan.split("/").at(-1) ?? "";
+  const plan = plainFile.test(file) ? `plan ${file}` : "the plan";
+  if (mode !== undefined && start.waves === 1) {
+    return `Build the ${mode.mode} mode?`;
   }
-  const starts = later.length === 1 ? "which starts" : "each starting";
-  const first = joined(names.slice(0, start.sideBySide));
-  return [said, `first ${first}; then ${joined(later)}, ${starts} as soon as a slice ends`];
+  const wave = `wave ${String(start.wave)} of ${String(start.waves)}`;
+  return mode === undefined ? `Build ${wave} of ${plan}?` : `Build ${wave} of the ${mode.mode} mode?`;
 }
 
-function costWords(start: WaveStart): string {
-  const each = modelCallsOfASlice();
-  return `cost: at most ${String(each)} model calls a slice, ${String(each * start.slices.length)} for the wave`;
+function problemFacts(leftovers: readonly Dropped[]): readonly Fact[] {
+  if (leftovers.length === 0) {
+    return [];
+  }
+  const words =
+    `${branchesWord(leftovers.length)} left from an earlier build of this wave. Building over drops them; ` +
+    "each branch and its full commit are in the details, so their work can be found again.";
+  return facts("problems", [said(words)]);
 }
 
-export function waveStartCard(start: WaveStart): Card {
-  const file = start.plan.split("/").at(-1) ?? start.plan;
-  const words = [
-    `${counted(start.slices.length, "slice")} of wave ${String(start.wave)} of ${String(start.waves)} in ${start.plan}`,
-    `base ${start.base}, the head of ${start.into}`,
-    ...start.slices.flatMap((slice) => sliceWords(slice, start.design)),
-    ...sideBySideWords(start),
-    costWords(start),
-    "each slice's own proof leaves out the checks; they go once, on the slices combined",
-    ...(start.gate === undefined
-      ? []
-      : gateWords(
-          start.gate,
-          start.slices.map((slice) => slice.name),
-        )),
-    ...leftoverWords(start.leftovers),
+function builtWords(slices: readonly PlannedSlice[]): string {
+  const mode = modeOf(slices);
+  if (mode === undefined) {
+    return `${counted(slices.length, "slice")}: ${sliceNames(slices)}`;
+  }
+  const verb = slices.length === 1 ? "builds" : "build";
+  return `${sliceNames(slices)} ${verb} the mode ${mode.mode}`;
+}
+
+function meetsWords(slices: readonly PlannedSlice[]): string {
+  const met = conditionsMet(slices).length;
+  const subject = slices.length === 1 ? "It meets" : "They meet";
+  return met === 0 ? `${subject} none of your conditions` : `${subject} ${String(met)} of your conditions`;
+}
+
+function shortWhat(start: WaveStart): readonly Fact[] {
+  const calls = modelCallsOfASlice() * start.slices.length;
+  return shortFacts("what", [
+    said(builtWords(start.slices)),
+    said(meetsWords(start.slices)),
+    said(`At most ${String(calls)} model calls`),
+  ]);
+}
+
+function planFacts(start: WaveStart): readonly Fact[] {
+  const named = start.slices.length === 1 ? "slice" : "slices";
+  return facts(
+    "what",
+    [
+      said(`The plan you approved describes it: ${start.plan}, ${named} ${sliceNames(start.slices)}`),
+      said(`This is wave ${String(start.wave)} of ${String(start.waves)} of that plan`),
+      said(`The plan was read at commit ${start.base}, the head of ${start.into}; each slice is cut from that commit`),
+    ],
+    "the plan",
+  );
+}
+
+function whereWords(slice: PlannedSlice): string {
+  const mode = modeOf([slice]);
+  if (mode !== undefined) {
+    return `${slice.name} builds the mode ${mode.mode}; it writes only inside ${mode.folder}`;
+  }
+  const scope = slice.scope.length === 0 ? "it names no write scope" : `it writes in ${joined([...slice.scope])}`;
+  return `${slice.name} is a slice of kind ${slice.kind}; ${scope}`;
+}
+
+function actionName(action: string): string | undefined {
+  const parts = action.split(".");
+  const [, name] = parts;
+  return parts.length === 2 && parts.every((part) => designName.test(part)) ? name : undefined;
+}
+
+function designWords(slice: PlannedSlice, design: DesignSummary | undefined): readonly string[] {
+  if (design === undefined) {
+    return [];
+  }
+  const named = actionsBuiltBy(slice.interface ?? [], design).map((action) => actionName(action.action));
+  const actions = named.filter((name) => name !== undefined);
+  const modules = modulesReached(slice, design).filter((name) => designName.test(name));
+  const from = `from the design ${design.file}`;
+  return [
+    ...(actions.length === 0 ? [] : [`Its actions, ${from}: ${joined(actions)}`]),
+    ...(modules.length === 0 ? [] : [`In the design, it reaches the module ${joined(modules)}`]),
   ];
-  return { title: `Build wave ${String(start.wave)} of ${file}?`, lines: words.map((said) => computed("wave", said)) };
+}
+
+const idsAFact = 20;
+
+function inGroups(ids: readonly string[]): readonly string[] {
+  const groups: string[] = [];
+  for (let at = 0; at < ids.length; at += idsAFact) {
+    groups.push(ids.slice(at, at + idsAFact).join(", "));
+  }
+  return groups;
+}
+
+function conditionWords(slice: PlannedSlice): readonly string[] {
+  const meets = slice.meets ?? [];
+  if (meets.length === 0) {
+    return ["It meets none of your conditions"];
+  }
+  return [`It meets ${String(meets.length)} of your conditions, by id`, ...inGroups(meets)];
+}
+
+function interfaceWords(slice: PlannedSlice): readonly string[] {
+  const files = slice.interface ?? [];
+  if (files.length === 0) {
+    return ["It names no interface file, so the test writer and the builder get no agreed shape"];
+  }
+  return [`It names ${counted(files.length, "interface file")}`, ...files.map((file) => `The file ${file}`)];
+}
+
+function sliceFacts(slice: PlannedSlice, design: DesignSummary | undefined): readonly Fact[] {
+  const words = [whereWords(slice), ...designWords(slice, design), ...conditionWords(slice), ...interfaceWords(slice)];
+  return facts("what", words.map(said), `slice ${slice.name}`);
+}
+
+function sideBySideFacts(start: WaveStart): readonly Fact[] {
+  const names = start.slices.map((slice) => slice.name);
+  const most = `At most ${counted(start.sideBySide, "builder")} at once, by the setting sideBySide`;
+  const later = names.slice(start.sideBySide);
+  const starts = later.length === 1 ? "which starts" : "each starting";
+  const order =
+    later.length === 0
+      ? []
+      : [`First ${joined(names.slice(0, start.sideBySide))}; then ${joined(later)}, ${starts} as soon as a slice ends`];
+  return facts("what", [most, ...order].map(said), "side by side");
+}
+
+function callFacts(start: WaveStart): readonly Fact[] {
+  const each = modelCallsOfASlice();
+  const parts = skillStepsOfASlice.map((skill) => `${skill.skill} ${String(callsOf(skill))}`);
+  return facts(
+    "what",
+    [
+      said(`At most ${String(each)} model calls a slice, ${String(each * start.slices.length)} for the wave`),
+      said(`A slice's calls: ${parts.join(", ")}`),
+      said(`A step whose answer a check may send back counts ${String(answersOfACheckedStep)} calls`),
+    ],
+    "model calls",
+  );
+}
+
+function leftoverFacts(leftovers: readonly Dropped[]): readonly Fact[] {
+  if (leftovers.length === 0) {
+    return [];
+  }
+  const each = leftovers.map((left) => said(`The branch ${left.branch}, at commit ${left.commit}`));
+  return facts(
+    "what",
+    [...each, said("Building over drops them; with these commits their work can be found again")],
+    "branches an earlier run left",
+  );
+}
+
+function atTheEnd(gate: Gate): string {
+  if (gate.gate === "whole") {
+    return "At the end: the checks and every test of the project, on the slices combined";
+  }
+  return `At the end: the ${gate.mode} mode's tests, the fast checks and bay check; not the other tests`;
+}
+
+function checkFacts(start: WaveStart): readonly Fact[] {
+  const { gate, alsoRun } = start.gate;
+  const names = start.slices.map((slice) => slice.name);
+  const gateWords = [gateLine(gate, names, "before"), ...fastChecksLine(gate, alsoRun)];
+  const once = "Each slice's own proof leaves out the checks; they run once, on the slices combined";
+  return [
+    ...shortFacts("checks", [said(atTheEnd(gate))]),
+    ...facts("checks", [...gateWords, once].map(said), "the gate"),
+  ];
+}
+
+export function waveStartCard(start: WaveStart): Screen {
+  return {
+    title: titleOf(start),
+    lines: [
+      ...problemFacts(start.leftovers),
+      ...shortWhat(start),
+      ...planFacts(start),
+      ...start.slices.flatMap((slice) => sliceFacts(slice, start.design)),
+      ...sideBySideFacts(start),
+      ...callFacts(start),
+      ...leftoverFacts(start.leftovers),
+      ...checkFacts(start),
+    ],
+  };
 }

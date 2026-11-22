@@ -108,12 +108,6 @@ export type ItemsShown = {
   readonly provedBy: ComputedBy;
 };
 
-const verdictSaid: Readonly<Record<Verdict["verdict"], string>> = {
-  passed: "passed",
-  failed: "failed",
-  inconclusive: "not known",
-};
-
 function knownSaid(known: readonly Known[], sentence: string): string | undefined {
   for (const each of known) {
     const found = each.matches.exec(sentence);
@@ -130,23 +124,67 @@ function failedReason(kind: ProofKind, detail: string): string {
   return known.length === said.length && known.length > 0 ? known.join("; ") : failedSaid[kind];
 }
 
-function testsPassedWords(tests: string, files: string | undefined): string {
-  const among = files === undefined ? "" : `, in ${counted(Number(files), "test file")} chosen by the gate`;
-  return `tests passed: ${grouped(Number(tests))}${among}`;
-}
+export type PassedCounts = {
+  readonly checks: readonly string[];
+  readonly tests: number;
+  readonly files?: number;
+  readonly bayCheck: boolean;
+};
 
-function checksWords(verdict: Verdict): readonly string[] {
+export type CasesSaid = {
+  readonly named: readonly FailingCase[];
+  readonly more: number;
+  readonly notLoaded: number;
+};
+
+export type Said = "passed" | "failed" | "not known" | "for you to judge";
+
+export type ItemSaid = {
+  readonly id: string;
+  readonly level: Level;
+  readonly says: string;
+  readonly added: boolean;
+  readonly said: Said;
+  readonly drawn: boolean;
+  readonly passed?: PassedCounts;
+  readonly why?: string;
+  readonly reason?: string;
+  readonly cases?: CasesSaid;
+};
+
+export function passedCounts(verdict: Verdict): PassedCounts | undefined {
   const found = verdict.verdict === "passed" ? checksPassed.exec(verdict.detail) : null;
   if (found === null) {
-    return [];
+    return undefined;
   }
   const [, listed = "", files, tests = "", bay] = found;
-  const names = listed.split(", ");
-  if (!names.every((name) => checkName.test(name))) {
+  const checks = listed.split(", ");
+  if (!checks.every((name) => checkName.test(name))) {
+    return undefined;
+  }
+  const counts = { checks, tests: Number(tests), bayCheck: bay !== undefined };
+  return files === undefined ? counts : { ...counts, files: Number(files) };
+}
+
+function testsPassedWords(counts: PassedCounts): string {
+  const among = counts.files === undefined ? "" : `, in ${counted(counts.files, "test file")} chosen by the gate`;
+  return `tests passed: ${grouped(counts.tests)}${among}`;
+}
+
+function passedWords(counts: PassedCounts | undefined): readonly string[] {
+  if (counts === undefined) {
     return [];
   }
-  const bayWords = bay === undefined ? [] : ["bay check on the head found no error"];
-  return [`checks passed: ${names.join(", ")}`, ...bayWords, testsPassedWords(tests, files)];
+  const bayWords = counts.bayCheck ? ["bay check on the head found no error"] : [];
+  return [`checks passed: ${counts.checks.join(", ")}`, ...bayWords, testsPassedWords(counts)];
+}
+
+function casesSaid(cases: FailingCases | undefined): CasesSaid | undefined {
+  if (cases === undefined) {
+    return undefined;
+  }
+  const named = cases.cases.slice(0, casesNamed);
+  return { named, more: cases.cases.length - named.length + cases.notListed, notLoaded: cases.notLoaded };
 }
 
 function namedCaseWords(failing: FailingCase, messages: CaseMessages): readonly string[] {
@@ -154,35 +192,36 @@ function namedCaseWords(failing: FailingCase, messages: CaseMessages): readonly 
   return messages === "filtered" && failing.message !== "" ? [named, `its message: ${failing.message}`] : [named];
 }
 
-function caseWords(cases: FailingCases | undefined, messages: CaseMessages): readonly string[] {
+function caseWords(cases: CasesSaid | undefined, messages: CaseMessages): readonly string[] {
   if (cases === undefined) {
     return [];
   }
-  const shown = cases.cases.slice(0, casesNamed);
-  const named = shown.flatMap((failing) => namedCaseWords(failing, messages));
-  const more = cases.cases.length - shown.length + cases.notListed;
-  const rest = more === 0 ? [] : [`and ${counted(more, "more failing case")}`];
+  const named = cases.named.flatMap((failing) => namedCaseWords(failing, messages));
+  const rest = cases.more === 0 ? [] : [`and ${counted(cases.more, "more failing case")}`];
   const notLoaded = cases.notLoaded === 0 ? [] : [`${counted(cases.notLoaded, "test file")} did not load`];
   return [...named, ...rest, ...notLoaded];
 }
 
-function proofsWords(said: string): readonly string[] {
+function proofsReason(said: string): { readonly reason?: string } {
   const reason = shortened(said, longestReason);
-  return reason === "" ? [] : [`proof's reason: ${reason}`];
+  return reason === "" ? {} : { reason };
 }
 
-function verdictWords(verdict: Verdict, messages: CaseMessages): readonly string[] {
+function verdictSaid(verdict: Verdict): Omit<ItemSaid, keyof ShownItem | "added" | "drawn"> {
   switch (verdict.verdict) {
-    case "passed":
-      return checksWords(verdict);
-    case "failed":
-      return [
-        `why: ${failedReason(verdict.kind, verdict.detail)}`,
-        ...proofsWords(verdict.detail),
-        ...caseWords(verdict.cases, messages),
-      ];
-    case "inconclusive":
-      return [`why: ${knownSaid(notKnownStarts, verdict.reason) ?? notKnownSaid}`, ...proofsWords(verdict.reason)];
+    case "passed": {
+      const passed = passedCounts(verdict);
+      return passed === undefined ? { said: "passed" } : { said: "passed", passed };
+    }
+    case "failed": {
+      const cases = casesSaid(verdict.cases);
+      const failed = { said: "failed" as const, why: failedReason(verdict.kind, verdict.detail) };
+      return { ...failed, ...proofsReason(verdict.detail), ...(cases === undefined ? {} : { cases }) };
+    }
+    case "inconclusive": {
+      const why = knownSaid(notKnownStarts, verdict.reason) ?? notKnownSaid;
+      return { said: "not known", why, ...proofsReason(verdict.reason) };
+    }
   }
 }
 
@@ -199,24 +238,75 @@ function shownItems(slice: Slice, verdicts: readonly Verdict[]): readonly ShownI
   return [...planned, ...added];
 }
 
-function openingWords(item: ShownItem, said: string): string {
-  const opening = `${item.id}, ${item.level}, ${said}`;
+function itemSaid(item: ShownItem, verdicts: readonly Verdict[], planned: boolean): ItemSaid {
+  const verdict = verdicts.find((each) => each.item === item.id);
+  const shown = { id: item.id, level: item.level, says: item.says, added: !planned };
+  if (verdict === undefined && item.judgement) {
+    return { ...shown, said: "for you to judge", drawn: true };
+  }
+  if (verdict === undefined) {
+    return { ...shown, said: "not known", drawn: false, why: noVerdictSaid };
+  }
+  return { ...shown, drawn: false, ...verdictSaid(verdict) };
+}
+
+export function itemsSaid(slice: Slice, verdicts: readonly Verdict[]): readonly ItemSaid[] {
+  const planned = slice.done.map((item) => item.id);
+  return shownItems(slice, verdicts).map((item) => itemSaid(item, verdicts, planned.includes(item.id)));
+}
+
+function openingWords(item: ItemSaid): string {
+  const opening = `${item.id}, ${item.level}, ${item.said}`;
   return item.says === "" ? opening : `${opening}: ${item.says}`;
 }
 
-function itemLines(item: ShownItem, verdicts: readonly Verdict[], shown: ItemsShown): readonly CardLine[] {
-  const verdict = verdicts.find((each) => each.item === item.id);
-  const { provedBy } = shown;
-  if (verdict === undefined && item.judgement) {
-    return [computed("draw", openingWords(item, "for you to judge"))];
+function itemWords(item: ItemSaid, messages: CaseMessages): readonly string[] {
+  return [
+    openingWords(item),
+    ...passedWords(item.passed),
+    ...(item.why === undefined ? [] : [`why: ${item.why}`]),
+    ...(item.reason === undefined ? [] : [`proof's reason: ${item.reason}`]),
+    ...caseWords(item.cases, messages),
+  ];
+}
+
+function itemLines(item: ItemSaid, shown: ItemsShown): readonly CardLine[] {
+  const step = item.drawn ? "draw" : shown.provedBy;
+  return itemWords(item, shown.messages).map((words) => computed(step, words));
+}
+
+function screenCaseWords(cases: CasesSaid | undefined): readonly string[] {
+  if (cases === undefined) {
+    return [];
   }
-  if (verdict === undefined) {
-    return [computed(provedBy, openingWords(item, "not known")), computed(provedBy, `why: ${noVerdictSaid}`)];
-  }
-  const said = [openingWords(item, verdictSaid[verdict.verdict]), ...verdictWords(verdict, shown.messages)];
-  return said.map((words) => computed(provedBy, words));
+  const named = cases.named.flatMap((failing) => namedCaseWords(failing, "filtered"));
+  const more = cases.more === 0 ? [] : [`${counted(cases.more, "more failing case")} not named here`];
+  const notLoaded = cases.notLoaded === 0 ? [] : [`${counted(cases.notLoaded, "test file")} did not load`];
+  return [...named, ...more, ...notLoaded];
+}
+
+const saidAsVerb: Readonly<Record<Said, string>> = {
+  passed: "passed",
+  failed: "failed",
+  "not known": "is not known",
+  "for you to judge": "is for you to judge",
+};
+
+export function itemOpening(item: ItemSaid): string {
+  const opening = `the ${item.level} item ${item.id} ${saidAsVerb[item.said]}`;
+  return item.added && item.says !== "" ? `${opening}: ${item.says}` : opening;
+}
+
+export function screenItemWords(item: ItemSaid): readonly string[] {
+  return [
+    itemOpening(item),
+    ...passedWords(item.passed),
+    ...(item.why === undefined ? [] : [`the reason: ${item.why}`]),
+    ...(item.reason === undefined ? [] : [`proof's reason: ${item.reason}`]),
+    ...screenCaseWords(item.cases),
+  ];
 }
 
 export function verdictLines(slice: Slice, verdicts: readonly Verdict[], shown: ItemsShown): readonly CardLine[] {
-  return shownItems(slice, verdicts).flatMap((item) => itemLines(item, verdicts, shown));
+  return itemsSaid(slice, verdicts).flatMap((item) => itemLines(item, shown));
 }

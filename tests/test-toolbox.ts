@@ -318,7 +318,7 @@ function projectRootAbove(folder: string): string | undefined {
 async function projectToCopy(given: string): Promise<string | undefined> {
   const root = projectRootAbove(resolve(given));
   if (root === undefined) {
-    assert.fail(`No folder at or above ${given} holds ${configFile}, so it is in no project and not in the kit.`);
+    assert.fail(`No folder at or above ${given} holds ${configFile}, so it is in no project.`);
   }
   return projectBesideTheKit(await realpath(root), await realpath(kit));
 }

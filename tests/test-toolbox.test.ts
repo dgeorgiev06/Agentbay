@@ -197,7 +197,7 @@ test("a project whose mode does not load is refused with the kernel's sentence o
 
 test("a folder that is in no project is refused with a reason", async () => {
   await assert.rejects(openModeProject(config, { project: tmpdir() }), {
-    message: `No folder at or above ${tmpdir()} holds agentbay.config.yaml, so it is in no project and not in the kit.`,
+    message: `No folder at or above ${tmpdir()} holds agentbay.config.yaml, so it is in no project.`,
   });
 });
 

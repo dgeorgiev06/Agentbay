@@ -69,9 +69,9 @@ test("the sound fixture is a project that bay check finds no error or warning in
   assert.deepEqual({ status, errors, warnings }, { status: 0, errors: 0, warnings: 0 });
 });
 
-test("the sound fixture with broken-overlay over it fails bay check with 67 errors; the forge it lists brings proof, git-worktrees and requirements and no toolchain", async () => {
+test("the sound fixture with broken-overlay over it fails bay check with 68 errors; the forge it lists brings proof, git-worktrees and requirements and no toolchain, which it requires", async () => {
   const { status, errors, warnings } = checked({ kit, project: await soundProjectWith("broken-overlay") });
-  assert.deepEqual({ status, errors, warnings }, { status: 1, errors: 67, warnings: 42 });
+  assert.deepEqual({ status, errors, warnings }, { status: 1, errors: 68, warnings: 42 });
 });
 
 test("the sound fixture with grants-overlay over it fails bay check with one error, in the mode grantbad", async () => {

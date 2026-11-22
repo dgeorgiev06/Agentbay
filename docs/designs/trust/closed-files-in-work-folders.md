@@ -80,9 +80,59 @@ used them. The pointer to elsewhere stays closed, so a granted folder cannot car
 to a git folder outside the project's own worktrees. A project that is itself a linked worktree keeps its forge
 worktrees closed, since their pointers lead to the main repository's `.git/worktrees/`: closed, not widened.
 
-## 4. What needs the owner
+## 4. The owner's decision
 
-(a) needs no decision and is built. It does not make `bay check` pass in this kit while a worktree is open: the
-checked-out `agentbay.config.yaml` and the two fixture configs are still closed entries, and two to four open
-worktrees of the kit (about 1,600 entries each) pass the scan's bound of 5,000 entries. Letting any copied closed
-file through is a widening beyond the pointer, so it is the owner's decision, not this slice's.
+(a) needed no decision and was built first. It did not make `bay check` pass while a worktree is open: the
+checked-out `agentbay.config.yaml` copies stayed closed, and three or four open worktrees of the kit (about 1,600
+entries each) passed the scan's bound of 5,000 entries. On 22 November 2026 the owner was asked: "A forge work
+folder is a full checkout, so it holds a copy of agentbay.config.yaml, which the closed-file rule forbids in any
+folder granted to an agent. That makes bay check fail during every forge build. How should it be resolved?" He
+chose "Allow tracked copies (Recommended)", put to him as: "Inside a work folder this project owns, a file git
+already tracks is a copy and is allowed. Untracked files such as a real .env stay refused. The scope check and
+your merge approval still catch any change to a copy."
+
+## 5. The rule as built
+
+One rule, `adapters/claude-code/root-scan.ts` with `worktree-copies.ts`, run by `bay build` and `bay check`.
+
+- **A worktree of this project** is a folder, under a granted folder, whose `.git` is the pointer of (a): a
+  regular file, one line `gitdir: <project's real path>/.git/worktrees/<one name>`. Any other folder is
+  ordinary: a closed name in it refuses, as before.
+- **Inside a worktree**, an entry whose path below the worktree has no closed segment passes. One with a closed
+  segment passes only when it is a copy:
+  - a regular file that git tracks at stage 0 with mode `100644` or `100755`, at that very path; or
+  - a folder that holds such a file somewhere below it.
+- **Never a copy**, tracked or not: any segment named `.git` other than the worktree's own pointer, so a nested
+  repository or a worktree inside a worktree refuses; and `.env` or `.env.*`, except a name that ends in
+  `.example`, `.sample` or `.template`, in any case. A project that commits its `.env` still has a secret in it.
+- **Refused**, in the sentence of today ("the step … is granted …, which holds …"): an untracked file or an
+  empty folder with a closed name (a real `.env`, an `agentbay.config.yaml` or `CLAUDE.md` written later,
+  `.agentbay/`, `.claude/`, `.mcp.json`), a tracked link (mode `120000`), a tracked copy swapped on disk for a
+  link, a conflicted entry, a submodule's folder, a pointer that leads elsewhere.
+- **How "tracked" is known.** The rule asks git, through the kernel's process port, by an argument array with no
+  shell: `git --git-dir=<the pointer's folder> --work-tree=<worktree> -c core.fsmonitor=false
+  --no-optional-locks ls-files --stage -z`, with only `PATH` and no global or system git config, 30 seconds at
+  most. Nothing from a mode reaches the words: the paths are the accepted pointer's and the worktree's. Git reads
+  its own index (versions 2 to 4, split and sparse indexes, SHA-256); a parser here would be a second, weaker
+  reader of a binary format. Git is asked once per worktree, and only when the worktree holds a closed name.
+  When git does not answer whole and plainly (does not start, fails, times out, is stopped, an output cut short,
+  a record not of the form `mode object stage<TAB>path`), every closed name in that worktree refuses.
+- **The scan bound.** Each worktree of this project is walked with its own bound of 5,000 entries and 12 levels,
+  counted from its top; an ordinary folder keeps the bound. Every entry is still looked at: `git ls-files` does
+  not list names under `.git`, so it cannot stand in for the walk. The work grows with the number of worktrees,
+  each a real checkout of this project.
+
+## 6. What is allowed now, and what a step can still do
+
+- `bay check` and `bay build` pass while forge's worktrees are open, with their tracked config, `CLAUDE.md`,
+  `.claude/` and `.env.example` copies. They still refuse when one holds an untracked closed file.
+- With the hook, nothing changes for a step: it is denied reading and writing every closed segment at any depth,
+  the copies and the pointer included (`adapters/claude-code/tests/guard-decide.test.ts`). It is defence in depth,
+  not isolation: a step whose mode lists a command that runs code is not confined by it.
+- Where the hook is not active, as in this kit (`without-the-hook`), a builder step is not confined. Its file tools
+  can read and write the copies, the pointer, the owner's real `agentbay.config.yaml`, `.git/` and any `.env` on
+  the machine. A change to a tracked copy shows in the slice's diff, where proof's `in-scope` kind and the owner's
+  merge card catch it; a change to the pointer, to an untracked file or to anything outside the worktree does not
+  show there. The build-time rule sees only what is on disk when it runs.
+- The broker still does not refuse closed names at run time (pm-mode design 3.6). A script of a mode granted a
+  folder that holds a worktree can read a tracked copy through it, as it could read any file the folder held.

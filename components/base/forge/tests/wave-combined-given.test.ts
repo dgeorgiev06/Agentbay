@@ -118,7 +118,9 @@ test("given a wave's slices built and each passing its own proof, the combined h
   assert.ok(printed.includes("on forge/wave-1, with CA, CB merged in plan order"), printed);
   assert.ok(rows.includes("judged   DOD-CA-1 held by 1 case"), printed);
   assert.ok(rows.includes("judged   DOD-CB-2 held by 1 case"), printed);
-  assert.ok(rows.includes("checked: 0 ran, 34 computed, 6 judged"), printed);
+  assert.ok(rows.includes("checked: 0 ran, 35 computed, 6 judged"), printed);
+  assert.ok(printed.includes("gate: the whole test run, since the slices write inside more than one mode's folder"));
+  assert.ok(printed.includes("CA proved alone with the checks: DOD-CA-2, must, passed: The checks pass."), printed);
   assert.equal((await askedOf(root, "wave-1")).length, 1);
   assert.deepEqual(kindsAsked((await askedOf(root, "CA")).slice(-1)), ["checks"]);
   const kept = runOf(await decided(root, card, { step: "card", choice: "keep" }));

@@ -19,6 +19,7 @@ import {
   runOf,
   shown,
   actionOutputs,
+  testsFromAsked,
   textAt,
   waitingOf,
   worktrees,
@@ -117,6 +118,8 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     assert.ok(!judged.includes(" in item "), judged);
     assert.deepEqual(kindsAsked(await askedOf(root, "wave-1")), ["checks"]);
     assert.equal((await askedOf(root, "wave-1")).length, 1);
+    assert.deepEqual(testsFromAsked(await askedOf(root, "wave-1")), [[]]);
+    assert.ok(said.includes("gate: the whole test run, since the slices write inside more than one mode's folder"));
     for (const name of ["TD1", "TD10", "TD2"]) {
       assert.ok(!kindsAsked(await askedOf(root, name)).includes("checks"), name);
     }

@@ -125,10 +125,17 @@ export async function checkRun(step: ProofStep, folder: string, checks: number):
   return { ran: "ended", verdicts: verdicts.map(verdictOfCheck) };
 }
 
-export async function checkCount(step: ProofStep): Promise<number | undefined> {
+export type Described = {
+  readonly checks: number;
+  readonly testFiles: readonly string[];
+};
+
+export async function describedToolchain(step: ProofStep): Promise<Described | undefined> {
   const described = await step.called("toolchain.describe", {});
   if (!described.ok) {
     return undefined;
   }
-  return listOf(fieldsOf(described.value).checks).length;
+  const fields = fieldsOf(described.value);
+  const testFiles = listOf(fields.testFiles).filter((pattern) => typeof pattern === "string");
+  return { checks: listOf(fields.checks).length, testFiles };
 }

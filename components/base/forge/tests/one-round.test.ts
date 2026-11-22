@@ -39,6 +39,7 @@ import {
   worktrees,
   type Handed,
   type Waiting,
+  modeGateTestsOfTheKit,
 } from "./kit-copy.ts";
 
 const noNames = { gained: [], lost: [], changed: [] };
@@ -193,10 +194,24 @@ describe(
         declared: { files: [codeOf("R1"), testPath("R1", "quill.test.ts")], names: noNames },
         bugs: [],
       };
-      const lessChecks = { ...fieldsOf(whole), done: listOf(fieldsOf(whole).done).slice(0, 1) };
+      const [first] = listOf(fieldsOf(whole).done);
+      const lessChecks = { ...fieldsOf(whole), done: [first ?? null] };
+      const gatedChecks = {
+        id: "DOD-R1-2",
+        says:
+          "The toolchain's checks of the whole project, bay check on the head and the mode gate's tests, those " +
+          "under components/modes/r1 and those the setting modeGateTests adds, pass; the project's other tests " +
+          "are not run.",
+        level: "must",
+        proof: {
+          kind: "checks",
+          testsFrom: [testPath("R1", "quill.test.ts"), ...modeGateTestsOfTheKit],
+          bayCheck: true,
+        },
+      };
       assert.deepEqual(await askedOf(root, "R1"), [
         { slice: lessChecks, ...proved },
-        { slice: whole, ...proved },
+        { slice: { ...fieldsOf(whole), done: [first ?? null, gatedChecks] }, ...proved },
       ]);
       assert.equal(git(root, ["show", `${head}:${testPath("R1", "quill.test.ts")}`]), tests[0]?.text);
       assert.equal(git(root, ["show", `${head}:${codeOf("R1")}`]), "Written by the builder in .forge/worktrees/R1.\n");
@@ -362,7 +377,7 @@ describe(
         "                    with no agreed interface",
         "                    why: The slice names its",
         "                    interface files.",
-        "checked: 0 ran, 13 computed, 0 judged",
+        "checked: 0 ran, 15 computed, 0 judged",
       ]);
       assert.deepEqual(branches(root), ["forge/R4", "forge/R4-tests-1"]);
       const building = runOf(await decided(root, again, { step: "start", choice: "build-over" }));
@@ -418,7 +433,7 @@ describe(
         "                    with no agreed interface",
         "                    why: No earlier run left",
         "                    a branch of this slice.",
-        "checked: 0 ran, 11 computed, 0 judged",
+        "checked: 0 ran, 13 computed, 0 judged",
       ]);
       const stopped = runOf(await decided(root, start, { step: "start", choice: "stop" }));
       assert.equal(textAt(stopped, "status"), "failed");

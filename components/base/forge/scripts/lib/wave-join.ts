@@ -1,6 +1,7 @@
-import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
+import { fieldsOf, type Json, type JsonFields } from "../../../../../bay/sdk.ts";
 import { listOf, textOf, textsOf } from "./json-values.ts";
-import { onlyChecks } from "./tool-checks.ts";
+import type { Gate, Gated } from "./gate.ts";
+import { onlyChecks, withGateSaid } from "./tool-checks.ts";
 
 export type ToJoin = {
   readonly name: string;
@@ -14,6 +15,8 @@ export type ToJoin = {
 export type WaveNamed = {
   readonly name: string;
   readonly base: string;
+  readonly gate: Gate;
+  readonly gatedBy: readonly Gated[];
 };
 
 const waveChecksItem = {
@@ -60,18 +63,23 @@ export function waveProofRequest(wave: WaveNamed, joined: readonly ToJoin[], hea
   const scope = unionOf(joined.map((each) => textsOf(fieldsOf(each.slice).scope)));
   const kind = textOf(fieldsOf(joined[0]?.slice ?? null).kind);
   const slice = { name: wave.name, kind, scope: [...scope], after: [], done: [waveChecksItem] };
-  return { slice, base: wave.base, head, declared: declaredOf(joined), bugs: [] };
+  return { slice: withGateSaid(slice, wave.gate), base: wave.base, head, declared: declaredOf(joined), bugs: [] };
+}
+
+function gateHanded(wave: WaveNamed): JsonFields {
+  const gatedBy = wave.gatedBy.map((slice) => ({ ...slice, scope: [...slice.scope] }));
+  return { gate: wave.gate, gatedBy };
 }
 
 function aloneRequest(wave: WaveNamed, joined: ToJoin): Json {
   const asked = {
-    slice: onlyChecks(joined.slice),
+    slice: withGateSaid(onlyChecks(joined.slice), wave.gate),
     base: wave.base,
     head: joined.head,
     declared: joined.declared,
     bugs: [],
   };
-  return { kind: "asked", asked, keptOf: [joined.name], whenFailed: [] };
+  return { kind: "asked", asked, ...gateHanded(wave), keptOf: [joined.name], whenFailed: [] };
 }
 
 export type Trying = {
@@ -94,6 +102,7 @@ export function proving(wave: WaveNamed, joined: readonly ToJoin[], at: { head: 
   return {
     kind: "asked",
     asked: waveProofRequest(wave, joined, at.head),
+    ...gateHanded(wave),
     keptOf: joined.map((each) => each.name),
     whenFailed: joined.map((each) => aloneRequest(wave, each)),
     trying: tryingOf(joined, at.trying),

@@ -351,6 +351,29 @@ test("two slices with one name are refused, since an after names a slice by it",
   ]);
 });
 
+test("a plan cannot choose the gate: a checks item that names testsFrom, or a slice with a gate field, is refused", async () => {
+  const checks = {
+    id: "DOD-A",
+    says: "The checks pass.",
+    level: "must",
+    proof: { kind: "checks", testsFrom: ["a.test.ts"] },
+  };
+  const named = planned("A", ["components/modes/a/**"]);
+  const claiming = { ...named, slice: { ...fieldsOf(named.slice), done: [checks] } };
+  assert.deepEqual(fieldsOf(await waves("claims-tests", plan("Claims", [claiming]))).lines, [
+    "docs/plans/claims-tests.yaml is not a plan forge can read, for 1 reason:",
+    "line 13: Slice A's checks item DOD-A names testsFrom or bayCheck, which forge alone sets, deciding the gate " +
+      "from the slices' kinds and scopes; leave them out.",
+  ]);
+  const gated = { ...named, slice: { ...fieldsOf(named.slice), gate: "mode" } };
+  assert.deepEqual(fieldsOf(await waves("claims-gate", plan("Claims", [gated]))).problems, [
+    {
+      at: "/slices/0/slice/gate",
+      sentence: "slices.0.slice has the field gate, which is not allowed here. Remove gate or correct its spelling.",
+    },
+  ]);
+});
+
 test("text that is not YAML is refused with the line the reader names", async () => {
   await writeFile(join(copy, "docs/plans/broken.yaml"), "title: [a\nslices: []\n", "utf8");
   assert.deepEqual(fieldsOf(await called("docs/plans/broken.yaml")).lines, [

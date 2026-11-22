@@ -1,9 +1,11 @@
-import { defineScript, fieldsOf, type Json, type JsonFields } from "../../../../bay/sdk.ts";
+import { defineScript, fail, fieldsOf, type Json, type JsonFields } from "../../../../bay/sdk.ts";
+import { gateOf, type Gate } from "./lib/gate.ts";
+import { claimSentence } from "./lib/gate-words.ts";
 import { namedTests } from "./lib/handed-tests.ts";
 import { sliceOf, type Slice } from "./lib/slice-form.ts";
-import { startCard, type InterfaceFiles } from "./lib/start-card.ts";
+import { gateShownOf, startCard, type GateShown, type InterfaceFiles } from "./lib/start-card.ts";
 import { startChoices } from "./lib/start-choices.ts";
-import { withToolChecks } from "./lib/tool-checks.ts";
+import { gatedFieldsNamed, withGateSaid, withToolChecks } from "./lib/tool-checks.ts";
 import { droppedOf, type Dropped } from "./lib/branch-endings.ts";
 
 type Asked = {
@@ -19,6 +21,7 @@ type Starting = {
   readonly bugs: readonly string[];
   readonly interface: readonly string[];
   readonly leftovers: readonly Dropped[];
+  readonly gate: GateShown;
 };
 
 function askedOf(input: Json): Asked {
@@ -49,23 +52,49 @@ function roundsCard(starting: Starting, slice: Json): JsonFields {
   return { card: { ...card, withheld: choices.withheld }, offered: choices.offered, proved: withToolChecks(slice) };
 }
 
-export const run = defineScript((input) => {
-  const { request, planter, leftovers } = askedOf(input);
+function gatedOf(slice: Json): { readonly gate: Gate; readonly said: Json } {
+  const form = sliceOf(slice);
+  const claimed = gatedFieldsNamed(slice);
+  if (claimed.length > 0) {
+    return fail(claimSentence(form.name, claimed));
+  }
+  const gate = gateOf([form]);
+  return { gate, said: withGateSaid(slice, gate) };
+}
+
+function startingOf(asked: Asked, said: Json, gate: GateShown): Starting {
+  const { request, leftovers } = asked;
   const planned = fieldsOf(request.planned ?? null);
-  const slice = planned.slice ?? null;
-  const base = typeof request.base === "string" ? request.base : "";
-  const starting = {
-    slice: sliceOf(slice),
+  return {
+    slice: sliceOf(said),
     title: typeof planned.title === "string" ? planned.title : "",
-    base,
+    base: typeof request.base === "string" ? request.base : "",
     bugs: bugNames(request.bugs),
     interface: pathsOf(request.interface),
     leftovers,
+    gate,
   };
+}
+
+export const run = defineScript((input, context) => {
+  const asked = askedOf(input);
+  const { request, planter } = asked;
+  const slice = fieldsOf(request.planned ?? null).slice ?? null;
+  const { gate, said } = gatedOf(slice);
+  const starting = startingOf(asked, said, gateShownOf(gate, context.settings.modeGateTests));
+  const { base } = starting;
   const shown = planter ? roundsCard(starting, slice) : oneSliceCard(starting);
   const fixed = namedTests(starting.slice);
   const bugs = request.bugs ?? [];
   const { rules = [], examples = [] } = request;
-  const handed = { slice, base, bugs, interface: [...starting.interface], rules, examples, fixed };
+  const handed = {
+    slice,
+    base,
+    bugs,
+    interface: [...starting.interface],
+    rules,
+    examples,
+    fixed,
+  };
   return Promise.resolve({ ...handed, ...shown });
 });

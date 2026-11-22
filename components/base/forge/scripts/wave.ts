@@ -12,7 +12,9 @@ import { lastRound } from "./lib/rounds.ts";
 import { waveChoices } from "./lib/start-choices.ts";
 import { builtBefore, testsToLookFor, waveOf, type PlanFound, type WaveAsked } from "./lib/wave-plan.ts";
 import { sideBySideOf } from "./lib/side-by-side.ts";
+import { gateOf } from "./lib/gate.ts";
 import { waveStartCard } from "./lib/wave-start-card.ts";
+import { gateShownOf } from "./lib/start-card.ts";
 
 type Read = {
   readonly commit: string;
@@ -99,7 +101,8 @@ export const run = defineScript(async (input, context) => {
   );
   const shown = { ...asked, waves: wave.waves, base: shortCommit(base), slices: wave.slices, sideBySide, ...design };
   const choices = waveChoices(leftovers);
-  const card = waveStartCard({ ...shown, leftovers });
+  const gate = gateOf(wave.slices);
+  const card = waveStartCard({ ...shown, leftovers, gate: gateShownOf(gate, context.settings.modeGateTests) });
   return {
     name,
     plan: asked.plan,
@@ -113,5 +116,6 @@ export const run = defineScript(async (input, context) => {
     requests: [...wave.requests],
     builtBefore: [...builtBefore(found, asked.wave)],
     sideBySide,
+    gate,
   };
 });

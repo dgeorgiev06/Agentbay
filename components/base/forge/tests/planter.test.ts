@@ -29,6 +29,7 @@ import {
   type Handed,
   type Proved,
   printedCard,
+  scopePassed,
 } from "./kit-copy.ts";
 
 const sample = "PLANTERNEVERSAWTHISSAMPLE";
@@ -106,6 +107,7 @@ function provedWith(name: string, bugsCaught: Json): Proved {
       { item: `DOD-${name}-1`, kind: "fails-first", verdict: "passed", detail: "It held." },
       { item: `DOD-${name}-2`, kind: "bugs-caught", ...fieldsOf(bugsCaught) },
       { item: "checks", kind: "checks", verdict: "passed", detail: "It held." },
+      scopePassed,
     ],
     judgement: [],
     size: [{ path: codeOf(name), head: 1 }],

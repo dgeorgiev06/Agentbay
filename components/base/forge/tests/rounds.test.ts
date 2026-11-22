@@ -7,6 +7,7 @@ import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
 import {
   allHeld,
   askedOf,
+  bay,
   branches,
   builderWrites,
   decided,
@@ -33,6 +34,9 @@ import {
   type Handed,
   type Proved,
   printedCard,
+  modeGateTestsOfTheKit,
+  scopePassed,
+  testsFromAsked,
 } from "./kit-copy.ts";
 
 const alphabet = Array.from({ length: 26 }, (_, at) => String.fromCharCode(65 + at)).join("");
@@ -99,6 +103,7 @@ function passed(name: string): Proved {
     verdicts: [
       { item: `DOD-${name}-1`, kind: "fails-first", verdict: "passed", detail: "It held." },
       { item: `DOD-${name}-2`, kind: "checks", verdict: "passed", detail: "It held." },
+      scopePassed,
     ],
     judgement: [],
     size: [{ path: codeOf(name), head: 1 }],
@@ -124,6 +129,7 @@ function failed(name: string): Proved {
         },
       },
       { item: `DOD-${name}-2`, kind: "checks", verdict: "passed", detail: "It held." },
+      scopePassed,
     ],
     judgement: [],
     size: [{ path: codeOf(name), head: 1 }],
@@ -260,7 +266,28 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "    proof judged passed.",
       "  DOD-A1-1, must, passed: A quill that was",
       "    added is counted.",
-      "  DOD-A1-2, must, passed: The checks pass.",
+      "  DOD-A1-2, must, passed: The toolchain's",
+      "    checks of the whole project, bay check",
+      "    on the head and the mode gate's tests,",
+      "    those under components/modes/a1 and",
+      "    those the setting modeGateTests adds,",
+      "    pass; the project's other tests are not",
+      "    run.",
+      "  scope, must, passed: Every changed path is",
+      "    in the write scope.",
+      "  gate: the mode gate was asked for, since",
+      "    A1 writes only inside",
+      "    components/modes/a1; proof's answer does",
+      "    not say which tests ran",
+      "  the mode gate: every test file under",
+      "    components/modes/a1 at the head, the",
+      "    toolchain's checks of the whole project,",
+      "    bay check on the head, and",
+      "    tests/kit-check.test.ts,",
+      "    tests/feature-map.test.ts,",
+      "    tests/build.test.ts and",
+      "    tests/readme-references.test.ts, which",
+      "    the setting modeGateTests adds",
       "  the design's examples: none, since the",
       "    slice's request carries none of a",
       "    design's examples; nothing is withheld",
@@ -291,7 +318,7 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
       "  discard    Stop; the worktrees go",
       "             why: Discarding comes with",
       "             slice WD1.",
-      "checked: 0 ran, 9 computed, 3 judged",
+      "checked: 0 ran, 12 computed, 3 judged",
     ]);
     await decided(root, card, { step: "card", choice: "merge" });
     assert.deepEqual(branches(root), []);
@@ -478,6 +505,31 @@ describe("a slice's rounds, two and three, with the reviewer", { concurrency: tr
   });
 });
 
+test("a rounds request whose checks item names testsFrom or bayCheck, or whose slice names a gate, ends before anything is cut", async () => {
+  const root = await project(template);
+  const plain = fieldsOf(sliceOf("G1"));
+  const checks = { id: "DOD-G1-2", says: "The checks pass.", level: "must" };
+  const requests = [
+    { ...plain, done: [{ ...checks, proof: { kind: "checks", testsFrom: [testPath("G1")] } }] },
+    { ...plain, done: [{ ...checks, proof: { kind: "checks", bayCheck: true } }] },
+    { ...plain, gate: "mode" },
+  ];
+  const said = [
+    /names testsFrom or bayCheck, which forge alone sets/,
+    /names testsFrom or bayCheck/,
+    /gate, which is not allowed here/,
+  ];
+  for (const [at, slice] of requests.entries()) {
+    const trigger = { planned: { title: "G1", slice }, base: shortHead(root), bugs: [] };
+    const answer = JSON.stringify(
+      await bay(root, ["call", "--workflow", "forge:workflows/rounds.yaml", JSON.stringify(trigger)]),
+    );
+    assert.match(answer, said[at] ?? /never/, answer);
+  }
+  assert.deepEqual(branches(root), []);
+  assert.deepEqual(worktrees(root), []);
+});
+
 test("the tests' text and the builder's code are in no file a later step could read as text: the kernel keeps the reviewer's task packed; forge adds a checks item the plan does not list", async () => {
   const root = await project(template);
   const name = "E1";
@@ -491,7 +543,7 @@ test("the tests' text and the builder's code are in no file a later step could r
   await declared(root, start, [codeOf(name)]);
   const [failsFirst] = passed(name).verdicts;
   const checks = { item: "checks", kind: "checks", verdict: "passed", detail: "It held." };
-  await provedIn(root, name, { ...passed(name), verdicts: [failsFirst ?? null, checks] });
+  await provedIn(root, name, { ...passed(name), verdicts: [failsFirst ?? null, checks, scopePassed] });
   let atReview: readonly string[] = [];
   await playedTo(root, start.id, {
     tests: () => Promise.resolve({ tests }),
@@ -512,13 +564,12 @@ test("the tests' text and the builder's code are in no file a later step could r
   );
   assert.deepEqual(proofs, [["DOD-E1-1"], ["DOD-E1-1", "checks"]]);
   const printed = await printedCard(root, start.id);
-  const added = printed.indexOf("  checks, must, passed: Added by forge, as");
-  assert.deepEqual(printed.slice(added, added + 6), [
-    "  checks, must, passed: Added by forge, as",
-    "    the plan lists no checks item: the",
-    "    toolchain's checks, such as types, lint,",
-    "    format and dead code, and its whole test",
-    "    run pass.",
-    "  the design's examples: none, since the",
+  const added = printed.indexOf("  checks, must, passed: The toolchain's");
+  assert.deepEqual(printed.slice(added, added + 4), [
+    "  checks, must, passed: The toolchain's",
+    "    checks of the whole project, bay check",
+    "    on the head and the mode gate's tests,",
+    "    those under components/modes/e1 and",
   ]);
+  assert.deepEqual(testsFromAsked(await askedOf(root, name)), [[], [testPath(name), ...modeGateTestsOfTheKit]]);
 });

@@ -31,10 +31,15 @@ steps:
     action: worktrees.set-aside
     input:
       folder: $steps.cut.output.folder
+  - id: gate
+    action: gate-checks
+    input:
+      slice: $steps.slice.output.slice
+      head: $steps.keep-work.output.commit
   - id: prove
     action: proof.prove
     input:
-      slice: $steps.slice.output.slice
+      slice: $steps.gate.output.slice
       base: $steps.cut.output.commit
       head: $steps.keep-work.output.commit
       declared: $steps.declare.output

@@ -1,10 +1,23 @@
 import type { Dropped } from "./branch-endings.ts";
 import { computed, counted, joined, shortCommit, type Card } from "./card-lines.ts";
+import type { Json } from "../../../../../bay/sdk.ts";
+import type { Gate } from "./gate.ts";
+import { textsOf } from "./json-values.ts";
+import { fastChecksLine, gateLine } from "./gate-words.ts";
 import type { Item, Proof, Slice } from "./slice-form.ts";
 
 export type Planter = "runs" | "none";
 
 export type InterfaceFiles = "named" | "none" | "not asked";
+
+export type GateShown = {
+  readonly gate: Gate;
+  readonly alsoRun: readonly string[];
+};
+
+export function gateShownOf(gate: Gate, setting: Json | undefined): GateShown {
+  return { gate, alsoRun: textsOf(setting) };
+}
 
 export type StartCardInput = {
   readonly slice: Slice;
@@ -14,6 +27,7 @@ export type StartCardInput = {
   readonly planter: Planter;
   readonly interface: InterfaceFiles;
   readonly leftovers?: readonly Dropped[];
+  readonly gate?: GateShown;
 };
 
 const heldSaid: Readonly<Record<Proof["kind"], string>> = {
@@ -97,6 +111,15 @@ function bugsWords(input: StartCardInput): readonly string[] {
     : [`bugs: none named, so ${joined(asking)} will not be known`];
 }
 
+export function gateWords(shown: GateShown, slices: readonly string[]): readonly string[] {
+  return [gateLine(shown.gate, slices, "before"), ...fastChecksLine(shown.gate, shown.alsoRun)];
+}
+
+function checksGateWords(input: StartCardInput): readonly string[] {
+  const proved = input.planter === "runs" || input.slice.done.some((item) => item.proof?.kind === "checks");
+  return proved && input.gate !== undefined ? gateWords(input.gate, [input.slice.name]) : [];
+}
+
 export function leftoverWords(leftovers: readonly Dropped[]): readonly string[] {
   if (leftovers.length === 0) {
     return [];
@@ -115,6 +138,7 @@ export function startCard(input: StartCardInput): Card {
     ...interfaceWords(input.interface),
     ...(afters.length === 0 ? ["after no other slice"] : afters),
     ...slice.done.flatMap(itemWords),
+    ...checksGateWords(input),
     ...bugsWords(input),
     ...leftoverWords(input.leftovers ?? []),
   ];

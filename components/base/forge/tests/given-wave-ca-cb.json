@@ -1,10 +1,10 @@
 {
   "commits": {
-    "integration": "6a73bd57a7609816c9ecf59c7acc432ff7792f04",
-    "forge/CA": "1f07f38e9ea35ddf3da7188bd9092e93661666a7",
-    "forge/CA-tests-1": "c5f28e46a05ac32087c7800f47c54c8dcf74c057",
-    "forge/CB": "602adf6a84d4349e490e74e2bae022bf08995662",
-    "forge/CB-tests-1": "da3ea00b40506672d93377baa63aaaeab5bbc59c"
+    "integration": "77e4b45a31b6d0fba4d777d54094a26c278e4fcb",
+    "forge/CA": "defced813cf363181492796aebd905b6aea470fd",
+    "forge/CA-tests-1": "e1c8e0cd351acd60e44b875373aa22ffe0b6eaf1",
+    "forge/CB": "cc5955810ee5a220f2719a1547708189615e6788",
+    "forge/CB-tests-1": "b11e3ebc1d86472c58a250b046a784d80ee20866"
   },
   "given": {
     "wave": {
@@ -12,7 +12,7 @@
       "plan": "docs/plans/0099-wave.yaml",
       "wave": 1,
       "into": "integration",
-      "base": "6a73bd57a7609816c9ecf59c7acc432ff7792f04",
+      "base": "77e4b45a31b6d0fba4d777d54094a26c278e4fcb",
       "card": {
         "title": "Build wave 1 of 0099-wave.yaml?",
         "lines": [
@@ -25,7 +25,7 @@
           },
           {
             "mark": "computed",
-            "words": "base 6a73bd5, the head of integration",
+            "words": "base 77e4b45, the head of integration",
             "source": {
               "step": "wave"
             }
@@ -74,7 +74,14 @@
           },
           {
             "mark": "computed",
-            "words": "each slice's own proof leaves out the checks; they and the whole test run go once, on the slices combined",
+            "words": "each slice's own proof leaves out the checks; they go once, on the slices combined",
+            "source": {
+              "step": "wave"
+            }
+          },
+          {
+            "mark": "computed",
+            "words": "gate: the whole test run, since the slices write inside more than one mode's folder (components/modes/ca and components/modes/cb)",
             "source": {
               "step": "wave"
             }
@@ -120,7 +127,7 @@
               ]
             }
           },
-          "base": "6a73bd57a7609816c9ecf59c7acc432ff7792f04",
+          "base": "77e4b45a31b6d0fba4d777d54094a26c278e4fcb",
           "bugs": [],
           "interface": ["components/base/interfaces/proof.yaml"]
         },
@@ -153,13 +160,20 @@
               ]
             }
           },
-          "base": "6a73bd57a7609816c9ecf59c7acc432ff7792f04",
+          "base": "77e4b45a31b6d0fba4d777d54094a26c278e4fcb",
           "bugs": [],
           "interface": ["components/base/interfaces/proof.yaml"]
         }
       ],
       "builtBefore": [],
-      "sideBySide": 3
+      "sideBySide": 3,
+      "gate": {
+        "gate": "whole",
+        "because": {
+          "why": "several modes",
+          "folders": ["components/modes/ca", "components/modes/cb"]
+        }
+      }
     },
     "start": {
       "choice": "build",
@@ -175,7 +189,7 @@
           },
           {
             "mark": "computed",
-            "words": "base 6a73bd5, the head of integration",
+            "words": "base 77e4b45, the head of integration",
             "source": {
               "step": "wave"
             }
@@ -224,7 +238,14 @@
           },
           {
             "mark": "computed",
-            "words": "each slice's own proof leaves out the checks; they and the whole test run go once, on the slices combined",
+            "words": "each slice's own proof leaves out the checks; they go once, on the slices combined",
+            "source": {
+              "step": "wave"
+            }
+          },
+          {
+            "mark": "computed",
+            "words": "gate: the whole test run, since the slices write inside more than one mode's folder (components/modes/ca and components/modes/cb)",
             "source": {
               "step": "wave"
             }
@@ -243,8 +264,8 @@
       {
         "name": "CA",
         "title": "The ca mode counts what was added",
-        "base": "6a73bd57a7609816c9ecf59c7acc432ff7792f04",
-        "head": "c5f28e46a05ac32087c7800f47c54c8dcf74c057",
+        "base": "77e4b45a31b6d0fba4d777d54094a26c278e4fcb",
+        "head": "e1c8e0cd351acd60e44b875373aa22ffe0b6eaf1",
         "work": "forge/CA-tests-1",
         "builder": "forge/CA",
         "slice": {
@@ -305,15 +326,15 @@
           "round": 1,
           "stage": "reviewed",
           "done": true,
-          "base": "6a73bd57a7609816c9ecf59c7acc432ff7792f04",
+          "base": "77e4b45a31b6d0fba4d777d54094a26c278e4fcb",
           "built": {
             "outcome": "built"
           },
           "builder": {
             "branch": "forge/CA",
-            "commit": "1f07f38e9ea35ddf3da7188bd9092e93661666a7"
+            "commit": "defced813cf363181492796aebd905b6aea470fd"
           },
-          "head": "c5f28e46a05ac32087c7800f47c54c8dcf74c057",
+          "head": "e1c8e0cd351acd60e44b875373aa22ffe0b6eaf1",
           "branch": "forge/CA-tests-1",
           "declared": {
             "files": ["components/modes/ca/scripts/ca.ts", "components/modes/ca/tests/ca.test.ts"],
@@ -411,8 +432,8 @@
       {
         "name": "CB",
         "title": "The cb mode counts what was added",
-        "base": "6a73bd57a7609816c9ecf59c7acc432ff7792f04",
-        "head": "da3ea00b40506672d93377baa63aaaeab5bbc59c",
+        "base": "77e4b45a31b6d0fba4d777d54094a26c278e4fcb",
+        "head": "b11e3ebc1d86472c58a250b046a784d80ee20866",
         "work": "forge/CB-tests-1",
         "builder": "forge/CB",
         "slice": {
@@ -473,15 +494,15 @@
           "round": 1,
           "stage": "reviewed",
           "done": true,
-          "base": "6a73bd57a7609816c9ecf59c7acc432ff7792f04",
+          "base": "77e4b45a31b6d0fba4d777d54094a26c278e4fcb",
           "built": {
             "outcome": "built"
           },
           "builder": {
             "branch": "forge/CB",
-            "commit": "602adf6a84d4349e490e74e2bae022bf08995662"
+            "commit": "cc5955810ee5a220f2719a1547708189615e6788"
           },
-          "head": "da3ea00b40506672d93377baa63aaaeab5bbc59c",
+          "head": "b11e3ebc1d86472c58a250b046a784d80ee20866",
           "branch": "forge/CB-tests-1",
           "declared": {
             "files": ["components/modes/cb/scripts/cb.ts", "components/modes/cb/tests/cb.test.ts"],

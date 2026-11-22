@@ -3,7 +3,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { appendFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { addMode, copyOfTheKit, failedTests, type ModeFiles } from "./kit-copy.ts";
+import { addMode, failedTests, type ModeFiles } from "./kit-copy.ts";
+import { copyOfTheKit } from "./test-toolbox.ts";
 import { forgetfulStore, memoryStore, memoryStoreFiles, parrot, parrotFiles } from "./made-up-modes.ts";
 
 type Ran = {

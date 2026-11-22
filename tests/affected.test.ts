@@ -27,6 +27,7 @@ function affected(changed: readonly string[]): ReturnType<typeof affectedTests> 
 
 const markersOfATestThatOpensTheKit: readonly RegExp[] = [
   /copyOfTheKit\(/,
+  /copyKitInto\(/,
   /\["ls-files"[^\]]*\][^)]*cwd: kit\b/s,
   /\[join\(kit, "bay", "cli\.ts"\), "(check|build)"/,
   /Folders = \[[^\]]*"components"/,

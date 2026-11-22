@@ -5,13 +5,13 @@ import { after, before, test } from "node:test";
 import {
   addMode,
   assertFailsOnlyTheChosenCases,
-  copyOfTheKit,
   failedTests,
   modeTestFile,
   modeTestRan,
   nodeRanIn,
   type ModeTestRun,
 } from "./kit-copy.ts";
+import { copyOfTheKit } from "./test-toolbox.ts";
 import { casesCaughtByEachVariant, checklist, checklistFiles, type ChecklistVariant } from "./made-up-requirements.ts";
 
 type WrongVariant = keyof typeof casesCaughtByEachVariant;

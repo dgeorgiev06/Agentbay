@@ -5,12 +5,12 @@ import { after, before, test } from "node:test";
 import {
   addMode,
   assertFailsOnlyTheChosenCases,
-  copyOfTheKit,
   failedTests,
   modeTestFile,
   modeTestRan,
   type ModeTestRun,
 } from "./kit-copy.ts";
+import { copyOfTheKit } from "./test-toolbox.ts";
 import { almanac, almanacFiles, wrongAlmanac } from "./made-up-sources.ts";
 
 const modesFolder = "components/modes";

@@ -1,0 +1,53 @@
+title: 'Forge, whole: what remains after the first eleven slices; rounds, the planter, the leak check and the cards, then requirements, design, planning and waves'
+slices:
+- title: The todo mode is built through forge, slice TD1 then TD2 of plan 0023, with the owner stopped at each card
+  slice:
+    name: TDX
+    kind: mode
+    scope:
+    - components/modes/todo/**
+    - docs/plans/0023-todo-mode.yaml
+    after: []
+    done:
+    - id: DOD-TDX-1
+      says: TD1 and TD2 are each merged from their merge card, every must item passed, with no file of the todo mode written by hand.
+      level: must
+    - id: DOD-TDX-2
+      says: The kit's checks and its whole test run pass with the todo mode in it.
+      level: must
+      proof:
+        kind: checks
+- title: 'The todo mode''s next outcome through the whole forge: requirements, design, plan and slices, the owner stopped at each card'
+  slice:
+    name: TDW
+    kind: mode
+    scope:
+    - components/modes/todo/**
+    - docs/requirements/todo.yaml
+    - docs/designs/todo/**
+    - docs/plans/0024-todo-due-dates.yaml
+    after:
+    - slice: TDX
+      because: It adds to the todo mode TDX makes.
+    done:
+    - id: DOD-TDW-1
+      says: The design, plan and merge cards were each shown and answered, and the outcome works in a fresh project.
+      level: must
+    - id: DOD-TDW-2
+      says: The kit's checks and its whole test run pass.
+      level: must
+      proof:
+        kind: checks
+- title: A TypeScript project that is not the kit gets one slice built through forge, with proof's real-thing item running the project's own command
+  slice:
+    name: EX1
+    kind: mode
+    scope:
+    - docs/research/forge-outside-the-kit.md
+    after:
+    - slice: TDX
+      because: Forge is first proved on the todo mode in the kit.
+    done:
+    - id: DOD-EX1-1
+      says: In a fresh TypeScript project with forge, proof, git-worktrees and typescript active, one slice ran from the start card to a merge, and the note records each card as printed.
+      level: must

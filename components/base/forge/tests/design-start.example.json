@@ -380,56 +380,151 @@
       ]
     },
     "card": {
-      "title": "Which path for the design of todo?",
+      "title": "How should the todo design be written?",
       "lines": [
         {
           "mark": "computed",
-          "words": "requirements: docs/requirements/todo.yaml, version 1, signed by owner",
+          "words": "Your todo requirements, version 1.",
           "source": {
             "step": "start"
-          }
+          },
+          "section": "what",
+          "short": true
         },
         {
           "mark": "computed",
-          "words": "O1, 7 conditions: A person adds a todo and sees it among the open ones.",
+          "words": "2 outcomes, 13 conditions.",
           "source": {
             "step": "start"
-          }
+          },
+          "section": "what",
+          "short": true
         },
         {
           "mark": "computed",
-          "words": "O2, 6 conditions: A person marks a todo done, or removes it.",
+          "words": "Model calls: light usually 4, at most 12; full usually 5, at most 15.",
           "source": {
             "step": "start"
-          }
+          },
+          "section": "what",
+          "short": true
         },
         {
           "mark": "computed",
-          "words": "in all: 2 outcomes, 13 conditions; 5 left out on purpose",
+          "words": "The file: docs/requirements/todo.yaml.",
           "source": {
             "step": "start"
-          }
+          },
+          "section": "what",
+          "about": "your requirements"
         },
         {
           "mark": "computed",
-          "words": "light: one designer, then a challenger who answers the practices held by design: 2 calls at tier deep, 4 when the designer answers the challenger once, up to 12 when checks send them back",
+          "words": "Version 1, signed by owner.",
           "source": {
             "step": "start"
-          }
+          },
+          "section": "what",
+          "about": "your requirements"
         },
         {
           "mark": "computed",
-          "words": "full: two designers who write apart, then a challenger who compares the two and chooses: 3 calls at tier deep, 5 when the designer answers the challenger once, up to 15 when checks send them back",
+          "words": "5 things left out on purpose.",
           "source": {
             "step": "start"
-          }
+          },
+          "section": "what",
+          "about": "your requirements"
         },
         {
           "mark": "computed",
-          "words": "either path writes each action's request and response as schema files",
+          "words": "The outcome: A person adds a todo and sees it among the open ones.",
           "source": {
             "step": "start"
-          }
+          },
+          "section": "what",
+          "about": "outcome O1"
+        },
+        {
+          "mark": "computed",
+          "words": "7 conditions.",
+          "source": {
+            "step": "start"
+          },
+          "section": "what",
+          "about": "outcome O1"
+        },
+        {
+          "mark": "computed",
+          "words": "The outcome: A person marks a todo done, or removes it.",
+          "source": {
+            "step": "start"
+          },
+          "section": "what",
+          "about": "outcome O2"
+        },
+        {
+          "mark": "computed",
+          "words": "6 conditions.",
+          "source": {
+            "step": "start"
+          },
+          "section": "what",
+          "about": "outcome O2"
+        },
+        {
+          "mark": "computed",
+          "words": "One designer writes the design; then a review step says which practices it holds.",
+          "source": {
+            "step": "start"
+          },
+          "section": "what",
+          "about": "the light path"
+        },
+        {
+          "mark": "computed",
+          "words": "2 model calls; 4 when the designer answers the review step once; up to 12 when checks send answers back to be written again.",
+          "source": {
+            "step": "start"
+          },
+          "section": "what",
+          "about": "the light path"
+        },
+        {
+          "mark": "computed",
+          "words": "Two designers write apart; then a review step compares the two and chooses one, or merges them.",
+          "source": {
+            "step": "start"
+          },
+          "section": "what",
+          "about": "the full path"
+        },
+        {
+          "mark": "computed",
+          "words": "3 model calls; 5 when the designer answers the review step once; up to 15 when checks send answers back to be written again.",
+          "source": {
+            "step": "start"
+          },
+          "section": "what",
+          "about": "the full path"
+        },
+        {
+          "mark": "computed",
+          "words": "Every model call is at the deep tier, the strongest of the three model tiers.",
+          "source": {
+            "step": "start"
+          },
+          "section": "what",
+          "about": "either path"
+        },
+        {
+          "mark": "computed",
+          "words": "Each action's request and response are written as schema files.",
+          "source": {
+            "step": "start"
+          },
+          "section": "what",
+          "about": "either path"
         }
       ]
     }

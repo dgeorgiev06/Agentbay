@@ -26,7 +26,6 @@ import {
   kitTemplate,
   offeredOf,
   playedTo,
-  printedCard,
   processProject,
   project,
   removeAll,
@@ -41,7 +40,6 @@ import {
   type Fact,
   type Waiting,
 } from "./kit-copy.ts";
-import { printed } from "./printed-card.ts";
 import { todoDesign, todoHides } from "./todo-design.ts";
 
 const file = "docs/requirements/todo.yaml";
@@ -173,10 +171,6 @@ function screenFacts(waiting: Waiting): ScreenFacts {
   return { facts: factsOf(waiting), offered: offeredOf(waiting), withheld: withheldOf(waiting) };
 }
 
-function choiceRows(names: readonly (readonly [string, string])[]): readonly { name: string; does: string }[] {
-  return names.map(([name, does]) => ({ name, does }));
-}
-
 const secondUndecided = { sentence: "Which characters count as spaces.", touches: "O1-C6" };
 
 const twoUndecided = [
@@ -196,19 +190,23 @@ function inSection(rows: readonly string[], heading: string): readonly string[] 
 }
 
 describe("the workflow design, from docs/requirements/todo.yaml", { concurrency: true }, () => {
-  test("the light path shows the first card and the design card as printed, and approve commits design.yaml and the schema files", async () => {
+  test("the light path shows the start screen's facts and choices, then the design card, and approve commits design.yaml and the schema files", async () => {
     const root = await project(template);
     const requirements = await requirementsIn(root);
     const start = waitingOf(await startedDesign(root), "path");
-    const pathChoices = choiceRows([
-      ["light", "One designer, then a challenger"],
-      ["full", "Two designers apart, then a comparison"],
-      ["stop", "Stop; nothing is designed"],
-    ]);
     assert.deepEqual(
-      await printedCard(root, start.id, "Which path"),
-      printed(pathCard(file, requirements), pathChoices).split("\n"),
+      factsOf(start),
+      pathCard(file, requirements).lines.map((line) => factOf({ ...line })),
     );
+    assert.deepEqual(
+      listOf(start.choices).map((choice) => [textAt(choice, "name"), textAt(choice, "does")]),
+      [
+        ["light", "One designer, then a review step"],
+        ["full", "Two designers apart, then a comparison"],
+        ["stop", "Stop; nothing is designed"],
+      ],
+    );
+    assert.deepEqual(offeredOf(start), ["light", "full", "stop"]);
     await decided(root, start, { step: "path", choice: "light" });
     const designerTasks: Json[] = [];
     const challengerTasks: Json[] = [];

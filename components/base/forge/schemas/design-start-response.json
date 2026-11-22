@@ -39,14 +39,14 @@
           "items": {
             "type": "object"
           },
-          "description": "One line for each thing the card says, wrapped by the kernel to 44 columns."
+          "description": "One fact for each thing the approval screen says, each with its section and, when it belongs on the short screen, short; the kernel lays them out."
         },
         "withheld": {
           "type": "object",
           "description": "The reason for each choice that is not offered."
         }
       },
-      "description": "The first card: the requirements' outcomes and the count of conditions, and what each path costs."
+      "description": "The first approval screen, as facts the kernel draws: the requirements' outcomes and the count of conditions, and what each path costs."
     }
   }
 }

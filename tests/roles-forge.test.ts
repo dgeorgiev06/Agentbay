@@ -155,15 +155,18 @@ test("forge's README names each skill with the role its step names and the tier 
   assert.deepEqual([...new Set(said)].sort(), [...expected].sort());
 });
 
-test("the design's first card counts its calls at the tier of the designer, which is the challenger's too", () => {
+test("the design's start screen says every model call runs at the tier of the designer, which is the challenger's too", () => {
   const requirements = { job: "todo", version: 1, signedBy: "owner", outcomes: [], leftOut: 0, judged: 0 };
-  const counted = JSON.stringify(pathCard("docs/requirements/todo.yaml", requirements).lines);
-  const tiersSaid = [...counted.matchAll(/calls at tier ([a-z]+)/g)].map(([, tier]) => tier);
+  const facts = pathCard("docs/requirements/todo.yaml", requirements).lines;
+  const tiersSaid = facts.flatMap((fact) => [...fact.words.matchAll(/model call is at the ([a-z]+) tier/g)]);
   assert.equal(
     tierOfRole("challenger"),
     tierOfRole("designer"),
-    "The design's first card counts the designer's and the challenger's calls as calls at one tier; " +
-      "now that the two roles run at different tiers, reword the card in components/base/forge/scripts/lib/path-card.ts.",
+    "The design's start screen says every model call runs at one tier; now that the designer and the challenger " +
+      "run at different tiers, reword the screen in components/base/forge/scripts/lib/path-card.ts.",
   );
-  assert.deepEqual(tiersSaid, [tierOfRole("designer"), tierOfRole("designer")]);
+  assert.deepEqual(
+    tiersSaid.map(([, tier]) => tier),
+    [tierOfRole("designer")],
+  );
 });

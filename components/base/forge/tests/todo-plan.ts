@@ -1,14 +1,22 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import assert from "node:assert/strict";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { Json } from "../../../../bay/sdk.ts";
+import { readYaml, type Json } from "../../../../bay/sdk.ts";
 import type { Written } from "../scripts/lib/commit-files.ts";
 import { designFiles } from "../scripts/lib/design-files.ts";
 import { designOf } from "../scripts/lib/design-form.ts";
+import { requirementsOf, type Requirements } from "../scripts/lib/requirements-form.ts";
 import { todoDesign } from "./todo-design.ts";
 
 export const requirementsFile = "docs/requirements/todo.yaml";
 
 export const todoVersionOne = join(import.meta.dirname, "..", "..", "..", "..", "tests", "fixtures", "todo-v1.yaml");
+
+export async function todoRequirements(): Promise<Requirements> {
+  const read = readYaml(await readFile(todoVersionOne, "utf8"));
+  assert.ok(read.ok);
+  return requirementsOf(read.value);
+}
 
 export const designFile = "docs/designs/todo/design.yaml";
 

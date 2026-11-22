@@ -10,24 +10,16 @@ import { answerChanges, differences } from "../scripts/lib/design-compare.ts";
 import { problemsByCheck } from "../scripts/lib/design-rules.ts";
 import { designOf } from "../scripts/lib/design-form.ts";
 import { listOf } from "../scripts/lib/json-values.ts";
-import { pathCard } from "../scripts/lib/path-card.ts";
 import { designerPracticeProblems, type PracticeAnswer } from "../scripts/lib/practice-answers.ts";
 import type { Practice } from "../scripts/lib/practices.ts";
-import { conditionsOf, requirementsOf, type Requirements } from "../scripts/lib/requirements-form.ts";
+import { conditionsOf } from "../scripts/lib/requirements-form.ts";
 import { factOf, type Fact } from "./kit-copy.ts";
-import { printed } from "./printed-card.ts";
 import { todoDesign, todoHides } from "./todo-design.ts";
-import { todoVersionOne } from "./todo-plan.ts";
+import { todoRequirements } from "./todo-plan.ts";
 
 const file = "docs/requirements/todo.yaml";
 
 const checksRun = problemsByCheck({ job: "todo", file, conditions: [], design: designOf(todoDesign) }).length;
-
-const pathChoices = [
-  { name: "light", does: "One designer, then a challenger" },
-  { name: "full", does: "Two designers apart, then a comparison" },
-  { name: "stop", does: "Stop; nothing is designed" },
-];
 
 const askedPractices: readonly Practice[] = [
   { id: "P-52", says: "The rules of the work are pure functions. Reading and writing happen around them." },
@@ -45,13 +37,6 @@ const p52NotHeld: readonly PracticeAnswer[] = [
   { id: "P-52", answer: "not-held", sentence: "The add action decides the next id and writes it in one script." },
   ...allHeld.slice(1),
 ];
-
-async function todoRequirements(): Promise<Requirements> {
-  const text = await readFile(todoVersionOne, "utf8");
-  const read = readYaml(text);
-  assert.ok(read.ok);
-  return requirementsOf(read.value);
-}
 
 type Kind = { readonly section: string; readonly mark: string; readonly step: string };
 
@@ -225,36 +210,6 @@ const refusalExample: Finding = {
   fix: "Add an example that lists the open todos after the refused add.",
 };
 
-const firstCard = `Which path for the design of todo?
-  requirements: docs/requirements/todo.yaml,
-    version 1, signed by owner
-  O1, 7 conditions: A person adds a todo and
-    sees it among the open ones.
-  O2, 6 conditions: A person marks a todo
-    done, or removes it.
-  in all: 2 outcomes, 13 conditions; 5 left
-    out on purpose
-  light: one designer, then a challenger who
-    answers the practices held by design: 2
-    calls at tier deep, 4 when the designer
-    answers the challenger once, up to 12
-    when checks send them back
-  full: two designers who write apart, then
-    a challenger who compares the two and
-    chooses: 3 calls at tier deep, 5 when
-    the designer answers the challenger
-    once, up to 15 when checks send them
-    back
-  either path writes each action's request
-    and response as schema files
-All lines worked out by script.
-You can:
-  light  One designer, then a challenger
-  full   Two designers apart, then a
-         comparison
-  stop   Stop; nothing is designed
-checked: 0 ran, 7 computed, 0 judged`;
-
 function renamed(design: Json): Json {
   const fields = fieldsOf(design);
   const [module = null] = listOf(fields.modules);
@@ -263,10 +218,6 @@ function renamed(design: Json): Json {
 }
 
 describe("the design's first card and the design card, for the todo mode", () => {
-  test("the first card shows the outcomes, the count of conditions and what each path costs, as printed", async () => {
-    assert.equal(printed(pathCard(file, await todoRequirements()), pathChoices), firstCard);
-  });
-
   test("the mode's design and challenge steps name the designer and the challenger, whose tier deep the first card names", async () => {
     const read = readYaml(await readFile(new URL("../mode.yaml", import.meta.url), "utf8"));
     assert.ok(read.ok);

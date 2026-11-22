@@ -7,7 +7,7 @@
   "required": ["choice", "slices"],
   "properties": {
     "choice": {
-      "const": "build"
+      "description": "The go-ahead as wave-begin answered it, whose response schema defines it; forget-wave reads only the slices."
     },
     "slices": {
       "type": "array",

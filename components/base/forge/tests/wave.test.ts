@@ -184,7 +184,7 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     assert.deepEqual(keptRows(root), []);
   });
 
-  test("a wave stopped after a slice failed as a run forgets every kept test", async () => {
+  test("a wave stopped after a slice failed as a run forgets every kept test, also when it was built over an earlier run, and leaves what it made", async () => {
     const root = await processProject(template);
     await planOnInto(root, ["SA"]);
     const start = await waveStarted(root);
@@ -206,5 +206,13 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     assert.deepEqual(await actionOutputs(root, again.id, "wave-begin"), [{ choice: "build-over", slices: ["SA"] }]);
     assert.deepEqual(await actionOutputs(root, again.id, "attempt"), [{ dropped: left }]);
     assert.deepEqual(branches(root), ["forge/SA"]);
+    await playedSideBySide(root, again.id, wavePlayers(root));
+    assert.deepEqual(keptSlices(root), ["SA"]);
+    const stoppedAgain = runOf(await ownerAnswered(root, again.id, "--stop"));
+    assert.equal(textAt(stoppedAgain, "status"), "undone", JSON.stringify(stoppedAgain));
+    assert.deepEqual(fieldsOf(fieldsOf(stoppedAgain).undo ?? null).failed, [], JSON.stringify(stoppedAgain));
+    assert.deepEqual(keptRows(root), []);
+    assert.deepEqual(branches(root), ["forge/SA", "forge/SA-tests-1"]);
+    assert.deepEqual(worktrees(root), [".forge/worktrees/SA-tests-1"]);
   });
 });

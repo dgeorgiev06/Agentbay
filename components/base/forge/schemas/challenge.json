@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Challenge",
-  "description": "The challenger's answer: the design chosen, or a merged one, why, an answer for each practice held by design, and findings that are not a practice's answer.",
+  "description": "The challenger's answer: the design chosen, or a merged one, why, an answer for each practice held by design, findings that are not a practice's answer, and what the design leaves undecided.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["chosen", "because", "practices"],
+  "required": ["chosen", "because", "practices", "undecided"],
   "properties": {
     "chosen": {
       "enum": ["first", "second", "merged"],
@@ -76,6 +76,30 @@
         }
       },
       "description": "What is wrong with the design that is not a practice's answer, at most 10, each what is wrong, where and what would fix it. Left out or empty when there is none."
+    },
+    "undecided": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sentence"],
+        "properties": {
+          "sentence": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[^\\n\\r]+$",
+            "description": "What the design leaves open, in one plain sentence on one line that a person who has not read the design understands."
+          },
+          "touches": {
+            "type": "string",
+            "pattern": "^(O[1-9][0-9]*-C[1-9][0-9]*|J[1-9][0-9]*)$",
+            "description": "The condition it touches, by id, such as O1-C4, or the judged requirement, as J and its place in the requirements' judged list, such as J1; left out when it touches neither."
+          }
+        }
+      },
+      "description": "What the design leaves open that a builder would otherwise decide silently: behaviour a person would notice or that touches a signed requirement, never how it is built. At most 8, the most important first; empty when the review finds nothing open."
     }
   }
 }

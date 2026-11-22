@@ -1,4 +1,4 @@
-import type { Chosen, Finding } from "./challenge-answer.ts";
+import type { Chosen, Finding, Undecided } from "./challenge-answer.ts";
 import {
   computed,
   counted,
@@ -26,7 +26,7 @@ import {
 import { examplesSpelled } from "./design-examples.ts";
 import { heldByRules } from "./design-rules.ts";
 import type { DesignPath } from "./path-card.ts";
-import { tallyOf, withheldAfterAnswer, type FirstFound, type PracticeAnswer } from "./practice-answers.ts";
+import { tallyOf, type FirstFound, type PracticeAnswer } from "./practice-answers.ts";
 import type { Practice } from "./practices.ts";
 import { conditionsOf, type Requirements } from "./requirements-form.ts";
 
@@ -43,6 +43,7 @@ export type DesignCardInput = {
   readonly asked: readonly Practice[];
   readonly practices: readonly PracticeAnswer[];
   readonly findings: readonly Finding[];
+  readonly undecided: readonly Undecided[];
   readonly said: readonly DesignerAnswer[];
   readonly differences: readonly string[];
   readonly second?: SecondPass;
@@ -68,7 +69,9 @@ const secondChallenger = "challenge-again";
 
 const storeShownLength = 80;
 
-const practiceShownLength = 80;
+const longestPracticeShown = 300;
+
+const undecidedOnShortScreen = 3;
 
 const storePattern = /^[A-Za-z0-9_.][A-Za-z0-9_./-]*$/;
 
@@ -90,10 +93,25 @@ function whichWords(input: DesignCardInput): string {
   return `This is ${which}${answered}.`;
 }
 
+function notHeldReasons(input: DesignCardInput): readonly string[] {
+  const notHeld = input.practices.filter((practice) => practice.answer === "not-held");
+  if (notHeld.length === 0) {
+    return [];
+  }
+  const which = notHeld.length === 1 ? "this practice" : `these ${String(notHeld.length)} practices`;
+  const named = notHeld.map((practice) => practiceWords(input, practice.id)).join("; ");
+  const reasons = [
+    `The review step answered that the design does not hold ${which}: ${named}.`,
+    "A practice held by design must be held before the design is committed.",
+  ];
+  const once = "The designer has answered the review once, which is the most a design run asks.";
+  return input.second === undefined ? reasons : [...reasons, once];
+}
+
 function withheldReason(input: DesignCardInput): string | undefined {
   const reasons = [
     ...(input.problems.length === 0 ? [] : [`The design check found ${counted(input.problems.length, "problem")}.`]),
-    ...withheldAfterAnswer(input.practices, "design", input.second !== undefined),
+    ...notHeldReasons(input),
   ];
   return reasons.length === 0 ? undefined : reasons.join(" ");
 }
@@ -112,8 +130,8 @@ function challengerStep(input: DesignCardInput): string {
 function practiceWords(input: DesignCardInput, id: string): string {
   const says = input.asked.find((practice) => practice.id === id)?.says ?? "";
   const [first = ""] = says.split(/(?<=\.)\s/);
-  const sentence = shortened(first.replace(/\.$/, ""), practiceShownLength);
-  return sentence === "" ? id : `${sentence} (${id})`;
+  const sentence = first.trim().replace(/\.$/, "");
+  return sentence === "" || Array.from(sentence).length > longestPracticeShown ? id : `${sentence} (${id})`;
 }
 
 function ownsWords(module: Module): string {
@@ -127,15 +145,26 @@ function storeShown(store: string): string {
   return storePattern.test(store) ? shortened(store, storeShownLength) : `"${shortened(store, storeShownLength)}"`;
 }
 
-function valueWords(values: readonly Value[], into: string): string {
-  const named = values.map((value) =>
-    value.store === undefined ? value.name : `${value.name} (${into} ${storeShown(value.store)})`,
-  );
-  return named.length === 0 ? "nothing" : joined(named);
+function placeWords(value: Value, store: string): string {
+  return store === value.name ? "" : ` in ${storeShown(store)}`;
+}
+
+function takenWords(value: Value): string {
+  return value.store === undefined ? `the ${value.name}` : `the stored ${value.name}${placeWords(value, value.store)}`;
+}
+
+function givenWords(value: Value): string {
+  return value.store === undefined
+    ? `the ${value.name}`
+    : `the new ${value.name} to store${placeWords(value, value.store)}`;
+}
+
+function listedWords(values: readonly Value[], wordsOf: (value: Value) => string): string {
+  return values.length === 0 ? "nothing" : joined(values.map(wordsOf));
 }
 
 function ruleFacts(rule: Rule, module: Module, by: string): readonly Fact[] {
-  const flows = `Takes ${valueWords(rule.takes, "from")}; gives ${valueWords(rule.gives, "into")}.`;
+  const flows = `Takes ${listedWords(rule.takes, takenWords)}; gives back ${listedWords(rule.gives, givenWords)}.`;
   return facts(
     "what",
     [computed("draw", flows), judged(by, `Decides: ${rule.decides}`)],
@@ -357,6 +386,27 @@ function checkFacts(input: DesignCardInput): readonly Fact[] {
   ];
 }
 
+function touchWords(touches: string): string {
+  return touches.startsWith("J")
+    ? `It touches a requirement you signed for a person to judge (${touches}).`
+    : `It touches a condition you signed (${touches}).`;
+}
+
+function undecidedWords(item: Undecided): string {
+  return item.touches === undefined ? item.sentence : `${item.sentence} ${touchWords(item.touches)}`;
+}
+
+function openFacts(input: DesignCardInput): readonly Fact[] {
+  if (input.undecided.length === 0) {
+    return shortFacts("open", [computed("draw", "The review step listed nothing the design leaves undecided.")]);
+  }
+  const lines = input.undecided.map((item) => judged(challengerStep(input), undecidedWords(item)));
+  return [
+    ...shortFacts("open", lines.slice(0, undecidedOnShortScreen)),
+    ...facts("open", lines.slice(undecidedOnShortScreen)),
+  ];
+}
+
 function problemFacts(input: DesignCardInput): readonly Fact[] {
   const found = input.problems.map((problem) => computed("draw", `A check found: ${problem}`));
   const notHeld = input.practices.filter((practice) => practice.answer === "not-held");
@@ -365,7 +415,7 @@ function problemFacts(input: DesignCardInput): readonly Fact[] {
 
 export function designCard(input: DesignCardInput): DesignCard {
   const reason = withheldReason(input);
-  const lines = [...problemFacts(input), ...whatFacts(input), ...checkFacts(input)];
+  const lines = [...problemFacts(input), ...whatFacts(input), ...checkFacts(input), ...openFacts(input)];
   const title = `Commit the design of ${input.requirements.job}?`;
   return {
     card: { title, lines, withheld: reason === undefined ? {} : { approve: reason } },

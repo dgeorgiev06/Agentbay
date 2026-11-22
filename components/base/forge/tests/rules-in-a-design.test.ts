@@ -39,7 +39,7 @@ function allHeld(task: Json): Json {
     answer: "held",
     sentence: "Checked each action against the rule it applies.",
   }));
-  return { chosen: "first", because: "It is the only design.", practices: answers };
+  return { chosen: "first", because: "It is the only design.", practices: answers, undecided: [] };
 }
 
 async function startedOnTheLightPath(root: string): Promise<string> {
@@ -57,8 +57,8 @@ const ruleFact = {
   about: "rule add, in module todo",
   mark: "computed",
   words:
-    "Takes request, todos (from todos) and next-id (from todo-ids); gives todos (into todos), next-id (into " +
-    "todo-ids) and answer.",
+    "Takes the request, the stored todos and the stored next-id in todo-ids; gives back the new todos to store, " +
+    "the new next-id to store in todo-ids and the answer.",
   step: "draw",
 };
 

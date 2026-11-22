@@ -14,6 +14,7 @@ export type Requirements = {
   readonly signedBy: string;
   readonly outcomes: readonly Outcome[];
   readonly leftOut: number;
+  readonly judged: number;
 };
 
 function outcomeOf(value: Json): Outcome {
@@ -30,11 +31,16 @@ export function requirementsOf(value: Json): Requirements {
     signedBy: textOf(fieldsOf(fields.signed ?? null).by),
     outcomes: listOf(fields.outcomes).map(outcomeOf),
     leftOut: listOf(fields.leftOut).length,
+    judged: listOf(fields.judged).length,
   };
 }
 
 export function conditionsOf(requirements: Requirements): readonly string[] {
   return requirements.outcomes.flatMap((outcome) => outcome.conditions);
+}
+
+export function judgedIdsOf(requirements: Requirements): readonly string[] {
+  return Array.from({ length: requirements.judged }, (_, at) => `J${String(at + 1)}`);
 }
 
 function problemWords(value: Json): string {

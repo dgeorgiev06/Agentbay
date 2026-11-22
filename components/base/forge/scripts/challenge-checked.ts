@@ -6,7 +6,7 @@ import { designOf } from "./lib/design-form.ts";
 import { designProblems } from "./lib/design-rules.ts";
 import { askedPractices } from "./lib/practice-answers.ts";
 import { listOf, textOf } from "./lib/json-values.ts";
-import { conditionsOf, requirementsOf } from "./lib/requirements-form.ts";
+import { conditionsOf, judgedIdsOf, requirementsOf } from "./lib/requirements-form.ts";
 
 async function mergedProblems(context: ScriptContext, asked: Json, challenge: Challenge): Promise<readonly string[]> {
   if (challenge.chosen !== "merged" || challenge.design === undefined) {
@@ -36,6 +36,8 @@ export const run = defineScript(async (input, context) => {
   const challenge = challengeOf(input);
   const practices = askedPractices(asked);
   const designs = listOf(fieldsOf(asked).designs).length;
+  const requirements = requirementsOf(fieldsOf(asked).requirements ?? null);
+  const touchable = [...conditionsOf(requirements), ...judgedIdsOf(requirements)];
   const merged = await mergedProblems(context, asked, challenge);
-  return checkAnswer(refusedChallenge(challenge, { designs, practices }, merged));
+  return checkAnswer(refusedChallenge(challenge, { designs, practices, touchable }, merged));
 });

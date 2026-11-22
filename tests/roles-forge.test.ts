@@ -156,7 +156,7 @@ test("forge's README names each skill with the role its step names and the tier 
 });
 
 test("the design's first card counts its calls at the tier of the designer, which is the challenger's too", () => {
-  const requirements = { job: "todo", version: 1, signedBy: "owner", outcomes: [], leftOut: 0 };
+  const requirements = { job: "todo", version: 1, signedBy: "owner", outcomes: [], leftOut: 0, judged: 0 };
   const counted = JSON.stringify(pathCard("docs/requirements/todo.yaml", requirements).lines);
   const tiersSaid = [...counted.matchAll(/calls at tier ([a-z]+)/g)].map(([, tier]) => tier);
   assert.equal(

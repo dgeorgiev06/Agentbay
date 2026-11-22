@@ -653,7 +653,20 @@
         }
       ],
       "differences": [],
-      "findings": []
+      "findings": [],
+      "undecided": [
+        {
+          "sentence": "How a text is split into the characters a person sees.",
+          "touches": "O1-C4"
+        },
+        {
+          "sentence": "Which characters count as spaces.",
+          "touches": "O1-C6"
+        },
+        {
+          "sentence": "Whether a refused call writes nothing or the same values."
+        }
+      ]
     },
     "again": {
       "answered": false,
@@ -1570,7 +1583,20 @@
           }
         ],
         "differences": [],
-        "findings": []
+        "findings": [],
+        "undecided": [
+          {
+            "sentence": "How a text is split into the characters a person sees.",
+            "touches": "O1-C4"
+          },
+          {
+            "sentence": "Which characters count as spaces.",
+            "touches": "O1-C6"
+          },
+          {
+            "sentence": "Whether a refused call writes nothing or the same values."
+          }
+        ]
       }
     },
     "practices": [
@@ -1646,7 +1672,7 @@
         },
         {
           "mark": "computed",
-          "words": "Takes request and todos (from todos); gives todos (into todos) and answer.",
+          "words": "Takes the request and the stored todos; gives back the new todos to store and the answer.",
           "source": {
             "step": "draw"
           },
@@ -1664,7 +1690,7 @@
         },
         {
           "mark": "computed",
-          "words": "Takes request and todos (from todos); gives todos (into todos) and answer.",
+          "words": "Takes the request and the stored todos; gives back the new todos to store and the answer.",
           "source": {
             "step": "draw"
           },
@@ -1682,7 +1708,7 @@
         },
         {
           "mark": "computed",
-          "words": "Takes request and todos (from todos); gives todos (into todos) and answer.",
+          "words": "Takes the request and the stored todos; gives back the new todos to store and the answer.",
           "source": {
             "step": "draw"
           },
@@ -1762,7 +1788,7 @@
         },
         {
           "mark": "computed",
-          "words": "A review step by a model reported 0 findings; 2 of the 3 practices it judged are held, and 1 does not apply.",
+          "words": "A review by a model: 0 findings; 2 of the 3 practices it judged are held, and 1 does not apply.",
           "source": {
             "step": "draw"
           },
@@ -1856,6 +1882,33 @@
           },
           "section": "checks",
           "about": "findings of the review step"
+        },
+        {
+          "mark": "judged",
+          "words": "How a text is split into the characters a person sees. It touches a condition you signed (O1-C4).",
+          "source": {
+            "step": "challenge"
+          },
+          "section": "open",
+          "short": true
+        },
+        {
+          "mark": "judged",
+          "words": "Which characters count as spaces. It touches a condition you signed (O1-C6).",
+          "source": {
+            "step": "challenge"
+          },
+          "section": "open",
+          "short": true
+        },
+        {
+          "mark": "judged",
+          "words": "Whether a refused call writes nothing or the same values.",
+          "source": {
+            "step": "challenge"
+          },
+          "section": "open",
+          "short": true
         }
       ],
       "withheld": {}

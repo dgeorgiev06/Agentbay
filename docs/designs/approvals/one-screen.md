@@ -124,9 +124,7 @@ The coordinator's block says to show "every line it prints for the approval, unc
 every screen is converted (not changed here): "Show the owner the approval screen `bay runs <run>` prints, unchanged
 and whole. When he asks for details, show what `bay runs <run> --details` prints, unchanged and whole."
 
-## Open questions for the owner
+## Decided by the owner
 
-1. When you look at a waiting approval, should it print the short screen (about 20 lines) and give the details only
-   when you ask, or print the details every time? This slice prints the short screen.
-2. When an approval offers more than approve and stop, is "What each reply does" with one line per reply clear, or
-   do you want "If you approve" for approve alone?
+1. A waiting approval shows the short screen first; the details come when asked for ("Short screen", 21 November).
+2. The heading for the choices stays "What each reply does" ("Keep it", 21 November).

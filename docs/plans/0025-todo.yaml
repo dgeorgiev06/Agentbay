@@ -1,0 +1,74 @@
+{
+  "title": "The todo mode: add, list, done and remove",
+  "requirements": "docs/requirements/todo.yaml",
+  "design": "docs/designs/todo/design.yaml",
+  "slices": [
+    {
+      "title": "A todo mode in which a person adds todos, lists the open ones or all, marks one done and removes one, with ids never reused",
+      "meets": [
+        "O1-C1",
+        "O1-C2",
+        "O1-C3",
+        "O1-C4",
+        "O1-C5",
+        "O1-C6",
+        "O1-C7",
+        "O1-C8",
+        "O1-C9",
+        "O1-C10",
+        "O1-C11",
+        "O2-C1",
+        "O2-C2",
+        "O2-C3",
+        "O2-C4",
+        "O2-C5",
+        "O2-C6"
+      ],
+      "interface": [
+        "docs/designs/todo/design.yaml",
+        "docs/designs/todo/schemas/todo/add-request.json",
+        "docs/designs/todo/schemas/todo/add-response.json",
+        "docs/designs/todo/schemas/todo/list-request.json",
+        "docs/designs/todo/schemas/todo/list-response.json",
+        "docs/designs/todo/schemas/todo/done-request.json",
+        "docs/designs/todo/schemas/todo/done-response.json",
+        "docs/designs/todo/schemas/todo/remove-request.json",
+        "docs/designs/todo/schemas/todo/remove-response.json"
+      ],
+      "slice": {
+        "name": "TD1",
+        "kind": "mode",
+        "scope": [
+          "components/modes/todo/**"
+        ],
+        "after": [],
+        "done": [
+          {
+            "id": "DOD-TD1-1",
+            "says": "The mode's test, which runs every condition of O1 and O2 and every worked example of the design's actions add, list, done and remove, fails without the mode's code and passes with it.",
+            "level": "must",
+            "proof": {
+              "kind": "fails-first",
+              "tests": [
+                "components/modes/todo/tests/todo.test.ts"
+              ]
+            }
+          },
+          {
+            "id": "DOD-TD1-2",
+            "says": "The project's checks pass with the mode in place.",
+            "level": "must",
+            "proof": {
+              "kind": "checks"
+            }
+          },
+          {
+            "id": "DOD-TD1-3",
+            "says": "Every sentence a person reads from the mode, each refusal included, says what to do next.",
+            "level": "should"
+          }
+        ]
+      }
+    }
+  ]
+}

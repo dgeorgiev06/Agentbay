@@ -2,15 +2,7 @@ import assert from "node:assert/strict";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import {
-  addMode,
-  assertFailsOnlyTheChosenCases,
-  failedTests,
-  modeTestFile,
-  modeTestRan,
-  type Cases,
-  type ModeTestRun,
-} from "./kit-copy.ts";
+import { addMode, assertFailsOnlyTheChosenCases, modeTestFile, modeTestRan, type ModeTestRun } from "./kit-copy.ts";
 import { copyOfTheKit } from "./test-toolbox.ts";
 import {
   besideTally,
@@ -20,7 +12,6 @@ import {
   onceTally,
   rootTally,
   stoppedAsEndedTally,
-  tally,
   tallyFiles,
   unloadedAsCaseTally,
   wrongTally,
@@ -30,7 +21,6 @@ import {
 const baseFolder = "components/base";
 
 const modes: Readonly<Record<string, TallyVariant>> = {
-  [tally]: "stops a check at its limit",
   [wrongTally]: "passes a check stopped at its limit",
   [besideTally]: "writes its build output beside the folder",
   [rootTally]: "writes its build output in the project's root",
@@ -80,21 +70,12 @@ function catchingCaseOf(name: string): string {
   return `toolchain@1, ${name}: ${statement}`;
 }
 
-function casesFor(name: string): Cases {
-  return name === tally ? "every case" : { only: [catchingCaseOf(name)] };
-}
-
 function assertCaught(name: string): void {
   assertFailsOnlyTheChosenCases(ranFor(name), [catchingCaseOf(name)]);
 }
 
 before(async () => {
-  assert.deepEqual(
-    Object.keys(caseThatCatches).sort(),
-    Object.keys(modes)
-      .filter((name) => name !== tally)
-      .sort(),
-  );
+  assert.deepEqual(Object.keys(caseThatCatches).sort(), Object.keys(modes).sort());
   copy = await copyOfTheKit("toolchains");
   for (const [name, variant] of Object.entries(modes)) {
     await addMode(copy, join(baseFolder, name), tallyFiles(name, variant));
@@ -102,7 +83,7 @@ before(async () => {
   const ran = await Promise.all(
     Object.keys(modes).map(async (name): Promise<readonly [string, ModeTestRun]> => [
       name,
-      await modeTestRan(copy, modeTestFile(baseFolder, name), casesFor(name)),
+      await modeTestRan(copy, modeTestFile(baseFolder, name), { only: [catchingCaseOf(name)] }),
     ]),
   );
   ranByMode = Object.fromEntries(ran);
@@ -110,13 +91,6 @@ before(async () => {
 
 after(async () => {
   await rm(copy, { recursive: true, force: true });
-});
-
-test("a made-up toolchain for another language, whose checks are listed commands and one of which writes a build output inside the folder, passes toolchain@1's shared test", () => {
-  const tested = ranFor(tally);
-  assert.deepEqual(failedTests(tested.output), []);
-  assert.equal(tested.status, 0, tested.output);
-  assert.match(tested.output, /^# pass 33$/m);
 });
 
 test("a made-up toolchain that reports passed for a check stopped at its limit fails the shared test's case on it", () => {

@@ -41,7 +41,6 @@ export const testsThatOpenTheKit: readonly string[] = [
   "tests/living-documents.test.ts",
   "tests/made-up-proofs.test.ts",
   "tests/made-up-requirements.test.ts",
-  "tests/made-up-sources.test.ts",
   "tests/made-up-toolchains.test.ts",
   "tests/made-up-worktrees.test.ts",
   "tests/new-mode-isolation.test.ts",

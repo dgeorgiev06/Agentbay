@@ -54,6 +54,7 @@ steps:
           folder: $steps.cut.output.folder
           practices: $settings.practices
           fixed: $steps.slice.output.fixed
+          interface: $steps.slice.output.interface
       - id: round-1
         action: round
         input:

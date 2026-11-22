@@ -10,6 +10,7 @@ import { bugsOf } from "./lib/planting.ts";
 import { roundsOnCard } from "./lib/round-card.ts";
 import { roundsStateOf, type RoundsState } from "./lib/rounds.ts";
 import { stayedOf } from "./lib/branch-endings.ts";
+import { triedBlockOf } from "./lib/tried-block.ts";
 
 function roundsParts(rounds: RoundsState | undefined, pinned: Json | undefined): Partial<MergeCardInput> {
   if (rounds === undefined) {
@@ -21,6 +22,11 @@ function roundsParts(rounds: RoundsState | undefined, pinned: Json | undefined):
     builder: rounds.builder.branch,
     pins: { base: pinsOf(pinned), head: rounds.pinnedAtHead ?? [] },
   };
+}
+
+function triedPart(proof: Json | undefined): Partial<MergeCardInput> {
+  const tried = triedBlockOf(fieldsOf(proof ?? null).tried);
+  return tried === undefined ? {} : { tried };
 }
 
 export const run = defineScript((input, context) => {
@@ -46,6 +52,7 @@ export const run = defineScript((input, context) => {
     stayed: [...(rounds?.stayed ?? []), ...stayedOf(fields.stayed)],
     mustPractices: textsOf(context.settings.mustPractices),
     ...bugs,
+    ...triedPart(fields.proof),
   });
   return Promise.resolve(merge);
 });

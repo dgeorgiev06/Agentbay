@@ -104,6 +104,12 @@
         "path": "tests/one.test.ts",
         "head": 9
       }
-    ]
+    ],
+    "tried": {
+      "setting": "must",
+      "head": "forge/one",
+      "carried": false,
+      "results": []
+    }
   }
 }

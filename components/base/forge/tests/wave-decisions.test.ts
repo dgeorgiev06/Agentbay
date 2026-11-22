@@ -8,7 +8,7 @@ import { planOf } from "../scripts/lib/plan-form.ts";
 import { workOut } from "../scripts/lib/plan-waves.ts";
 import { sideBySideOf } from "../scripts/lib/side-by-side.ts";
 import { proving, waveProofRequest, type ToJoin } from "../scripts/lib/wave-join.ts";
-import { nameClashes, testsToLookFor, waveOf, type PlanFound } from "../scripts/lib/wave-plan.ts";
+import { builtBefore, nameClashes, testsToLookFor, waveOf, type PlanFound } from "../scripts/lib/wave-plan.ts";
 import { modelCallsOfASlice } from "../scripts/lib/wave-start-card.ts";
 import { designFile, requirementsFile, todoDesignFiles, todoPlan } from "./todo-plan.ts";
 import { agreed, plannedSlice, testPath } from "./wave-run.ts";
@@ -61,6 +61,29 @@ describe("which slices a wave holds, and their requests", () => {
     const without = waveOf(asked, { plan, document, workedOut: workOut(plan, []) }, at);
     assert.ok(without.kind === "wave");
     assert.equal(fieldsOf(without.requests[0] ?? null).rules, undefined);
+  });
+
+  test("with the plan's design read, each request carries its actions' worked examples with the mode to call, and a later wave knows what the earlier waves built", () => {
+    const [designed] = todoDesignFiles();
+    const read = readYaml(designed?.text ?? "");
+    assert.ok(read.ok);
+    const design = designSummaryOf(designFile, read.value);
+    const document = planDocument(todoPlan, { requirements: requirementsFile, design: designFile });
+    const plan = planOf(document);
+    const planFound = { plan, document, workedOut: workOut(plan, []), design };
+    const withDesign = waveOf(asked, planFound, at);
+    assert.ok(withDesign.kind === "wave");
+    const examples = listOf(fieldsOf(withDesign.requests[0] ?? null).examples).map(fieldsOf);
+    assert.deepEqual(
+      examples.map((entry) => [entry.action, entry.mode]),
+      [
+        ["todo.add", "todo"],
+        ["todo.list", "todo"],
+      ],
+    );
+    assert.ok(listOf(examples[0]?.examples).length > 0);
+    assert.deepEqual(builtBefore(planFound, 2), ["todo.add", "todo.list"]);
+    assert.deepEqual(builtBefore(planFound, 1), []);
   });
 
   test("a later wave asks for the test files of the slices it comes after, and is refused while one is missing", () => {
@@ -139,10 +162,32 @@ describe("how many builders at once, and what a slice costs", () => {
 function joining(name: string, files: readonly string[]): ToJoin {
   const entry = fieldsOf(plannedSlice(name));
   const declared = { files: [...files], names: { gained: [`${name.toLowerCase()}.count`], lost: [], changed: [] } };
-  return { name, head: `${name}-head`, slice: entry.slice ?? null, declared, included: true };
+  return { name, head: `${name}-head`, slice: entry.slice ?? null, declared, included: true, examples: [] };
 }
 
 describe("what the wave asks proof", () => {
+  test("the examples to try name every slice, whether it is in the head, and the actions built before and in the head", () => {
+    const ca = { ...joining("TD1", ["a.ts"]), examples: [{ action: "counting.add", examples: [] }] };
+    const left = {
+      ...joining("TD2", ["c.ts"]),
+      included: false,
+      examples: [{ action: "counting.done", examples: [] }],
+    };
+    const asking = fieldsOf(
+      proving({ name: "wave-1", base }, [ca], {
+        head: "combined",
+        trying: { builtBefore: ["counting.list"], slices: [ca, left] },
+      }),
+    );
+    assert.deepEqual(asking.trying, {
+      built: ["counting.list", "counting.add"],
+      slices: [
+        { slice: "TD1", inHead: true, examples: ca.examples },
+        { slice: "TD2", inHead: false, examples: left.examples },
+      ],
+    });
+  });
+
   const wave = { name: "wave-1", base };
   const joined = [joining("TD1", ["a.ts"]), joining("TD10", ["b.ts", "a.ts"])];
 
@@ -164,13 +209,21 @@ describe("what the wave asks proof", () => {
   });
 
   test("each merged slice is to be proved alone with its own checks items at its own head, filtered by its own kept tests", () => {
-    const asking = fieldsOf(proving(wave, joined, "combined"));
+    const trying = { builtBefore: [], slices: joined };
+    const asking = fieldsOf(proving(wave, joined, { head: "combined", trying }));
     assert.deepEqual(asking.keptOf, ["TD1", "TD10"]);
     const alone = listOf(asking.whenFailed).map(fieldsOf);
     assert.deepEqual(
       alone.map((each) => each.keptOf),
       [["TD1"], ["TD10"]],
     );
+    assert.deepEqual(asking.trying, {
+      built: [],
+      slices: [
+        { slice: "TD1", inHead: true, examples: [] },
+        { slice: "TD10", inHead: true, examples: [] },
+      ],
+    });
     const first = fieldsOf(alone[0]?.asked ?? null);
     assert.equal(first.head, "TD1-head");
     assert.deepEqual(

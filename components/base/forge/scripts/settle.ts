@@ -1,4 +1,4 @@
-import { defineScript, fail, fieldsOf, type JsonFields } from "../../../../bay/sdk.ts";
+import { defineScript, fail, fieldsOf, type Json, type JsonFields } from "../../../../bay/sdk.ts";
 import { stayedOf, type Stayed } from "./lib/branch-endings.ts";
 import { pinsOf } from "./lib/interface-pins.ts";
 import { textOf, textsOf } from "./lib/json-values.ts";
@@ -28,6 +28,10 @@ function stayedIn(state: RoundsState, bugs: JsonFields): readonly Stayed[] {
   return [...(state.stayed ?? []), ...stayedOf(bugs.stayed)];
 }
 
+function examplesOf(fields: JsonFields): Json {
+  return fieldsOf(fields.request ?? null).examples ?? [];
+}
+
 export const run = defineScript((input, context) => {
   const fields = fieldsOf(input);
   const started = fieldsOf(fields.slice ?? null);
@@ -51,5 +55,6 @@ export const run = defineScript((input, context) => {
     declared: state.declared,
     built: state.built,
     reason: reasonOf(fields, state, textsOf(context.settings.mustPractices)),
+    examples: examplesOf(fields),
   });
 });

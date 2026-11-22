@@ -4,6 +4,7 @@ import { proveFailsFirst } from "./kinds/fails-first.ts";
 import { proveAsDeclared } from "./kinds/as-declared.ts";
 import { proveCount } from "./kinds/count.ts";
 import { proveRealThing } from "./kinds/real-thing.ts";
+import { provePrinted } from "./kinds/printed.ts";
 import { proveSameOutput } from "./kinds/same-output.ts";
 import { proveInScope } from "./kinds/in-scope.ts";
 import type { KindName, ProofOf, Request } from "./lib/request.ts";
@@ -25,6 +26,7 @@ export const kinds: Table = {
 
   "same-output": proveSameOutput,
   "real-thing": proveRealThing,
+  printed: provePrinted,
 
   count: proveCount,
 };

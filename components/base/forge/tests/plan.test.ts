@@ -136,6 +136,12 @@ function actions(asked: readonly Asked[]): readonly string[] {
   return asked.map((each) => `${each.step} ${each.action}`);
 }
 
+function examplesOf(name: string): readonly Json[] {
+  const [todo = null] = listOf(fieldsOf(todoDesign).interfaces);
+  const action = listOf(fieldsOf(todo).actions).find((each) => fieldsOf(each).name === name) ?? null;
+  return listOf(fieldsOf(action).examples);
+}
+
 describe("the workflow plan, from the committed todo design", { concurrency: true }, () => {
   test("with no finding the card is as printed, the planner and the challenger run once, and approve commits the plan with the first wave's slice requests", async () => {
     const root = await designed(await project(template));
@@ -179,11 +185,13 @@ describe("the workflow plan, from the committed todo design", { concurrency: tru
       bugs: [],
       interface: fieldsOf(tdOne).interface,
       rules: [{ ...fieldsOf(addTodo), module: "todo", appliedBy }],
+      examples: ["add", "list"].map((name) => ({ action: `todo.${name}`, mode: "todo", examples: examplesOf(name) })),
     };
     assert.deepEqual(output.wave, [request]);
     const sliced = runOf(await bay(root, ["call", "forge.slice", JSON.stringify({ request, planter: true })]));
     assert.equal(textAt(sliced, "status"), "done", JSON.stringify(sliced));
     assert.deepEqual(fieldsOf(fieldsOf(sliced).output ?? null).rules, request.rules);
+    assert.deepEqual(fieldsOf(fieldsOf(sliced).output ?? null).examples, request.examples);
     assert.deepEqual(fieldsOf(fieldsOf(sliced).output ?? null).offered, {
       build: true,
       "build-without-interface": false,

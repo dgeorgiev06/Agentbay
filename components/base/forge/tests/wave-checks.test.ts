@@ -27,7 +27,7 @@ describe("a checks verdict is passed only when every checks item has a passed ve
     const checked = { slice: checksSlice([]), proof: proofOf([]) };
     assert.equal(checksVerdict(checked), "not known");
     const joined: Joined = { kind: "combined", head, branch: "forge/wave-1", merged: [] };
-    const answer = waveAnswer([], joined, { kind: "asked", ...checked });
+    const answer = waveAnswer([], joined, { checks: { kind: "asked", ...checked } });
     assert.equal(answer.offered, false);
     assert.equal(answer.reason, "the wave's checks are not known.");
   });

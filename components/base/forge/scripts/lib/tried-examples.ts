@@ -1,0 +1,302 @@
+import { canonicalJson, fieldsOf, readYaml, type Json } from "../../../../../bay/sdk.ts";
+import { listOf, textOf } from "./json-values.ts";
+import { spelledOut } from "./long-texts.ts";
+
+export type ToTry = {
+  readonly action: string;
+  readonly mode?: string;
+  readonly examples: readonly Json[];
+};
+
+export type Expected =
+  { readonly kind: "answer"; readonly value: Json } | { readonly kind: "refusal"; readonly sentence: string };
+
+type Named = {
+  readonly slice: string;
+  readonly action: string;
+  readonly number: number;
+};
+
+export type Side = { readonly how: string; readonly text: string; readonly kept?: true };
+
+export type Result = Named &
+  (
+    | { readonly outcome: "as designed" | "refused by its schema" }
+    | { readonly outcome: "otherwise"; readonly designed: Side; readonly built: Side }
+    | { readonly outcome: "not known" | "not tried"; readonly reason: string }
+  );
+
+export type Trial = Named & {
+  readonly outcome: "to try";
+  readonly runs: readonly (readonly string[])[];
+  readonly expected: Expected;
+};
+
+export type Entry = Trial | Result;
+
+export type TrialsAt = {
+  readonly built: readonly string[];
+  readonly room: number;
+  readonly notBuilt: string;
+};
+
+export type Printed = { readonly exitCode: number; readonly stdout: string };
+
+export type Proved = { readonly printed: Printed } | { readonly notKnown: true };
+
+export type Ran =
+  | { readonly kind: "answered"; readonly output: Json }
+  | { readonly kind: "refused"; readonly reason: string }
+  | { readonly kind: "schema refused"; readonly message: string }
+  | { readonly kind: "not started" }
+  | { readonly kind: "waited"; readonly reason: string }
+  | { readonly kind: "unreadable" };
+
+type Call = { readonly action: string; readonly input: Json };
+
+type Spelled = { readonly calls: readonly Call[]; readonly expected: Expected } | { readonly refused: true };
+
+export const triedPrefix = "tried-";
+
+const mostItems = 100;
+
+export function roomBeside(items: number): number {
+  return mostItems - items;
+}
+
+const longestWord = 50_000;
+
+function interfaceOf(action: string): string {
+  return action.slice(0, action.indexOf("."));
+}
+
+function spelledValue(value: Json, refused: string[]): Json {
+  const spelled = spelledOut(value);
+  refused.push(...spelled.refused);
+  return spelled.value;
+}
+
+function expectedOf(fields: Readonly<Record<string, Json>>, refused: string[]): Expected {
+  return fields.answer === undefined
+    ? { kind: "refusal", sentence: textOf(fields.refusal) }
+    : { kind: "answer", value: spelledValue(fields.answer, refused) };
+}
+
+function spelledExample(action: string, example: Json): Spelled {
+  const fields = fieldsOf(example);
+  const refused: string[] = [];
+  const named = interfaceOf(action);
+  const earlier = listOf(fields.earlier).map((call) => ({
+    action: `${named}.${textOf(fieldsOf(call).action)}`,
+    input: spelledValue(fieldsOf(call).input ?? null, refused),
+  }));
+  const last = { action, input: spelledValue(fields.input ?? null, refused) };
+  const expected = expectedOf(fields, refused);
+  return refused.length > 0 ? { refused: true } : { calls: [...earlier, last], expected };
+}
+
+function wordsOf(mode: string, call: Call): readonly string[] {
+  const name = call.action.slice(call.action.indexOf(".") + 1);
+  return ["call", `${mode}.${name}`, JSON.stringify(call.input), "--json"];
+}
+
+function entryOf(named: Named, toTry: ToTry, at: TrialsAt & { readonly example: Json }): Entry {
+  const notTried = (reason: string): Entry => ({ ...named, outcome: "not tried", reason });
+  const { mode } = toTry;
+  if (mode === undefined) {
+    const offered = interfaceOf(toTry.action);
+    return notTried(
+      `no one module of the design offers the interface ${offered}, so forge cannot tell which mode to call`,
+    );
+  }
+  const spelled = spelledExample(toTry.action, at.example);
+  if ("refused" in spelled) {
+    return notTried("a long text in it cannot be spelled out");
+  }
+  const missing = spelled.calls.find((call) => !at.built.includes(call.action));
+  if (missing !== undefined) {
+    return notTried(`it calls ${missing.action} first, ${at.notBuilt}`);
+  }
+  if (spelled.calls.some((call) => JSON.stringify(call.input).length > longestWord)) {
+    return notTried("a request in it is longer than proof takes in one word");
+  }
+  if (at.room < 1) {
+    return notTried(`proof takes at most ${String(mostItems)} items in one call`);
+  }
+  const runs = spelled.calls.map((call) => wordsOf(mode, call));
+  return { ...named, outcome: "to try", runs, expected: spelled.expected };
+}
+
+export function plannedTrials(slice: string, toTry: readonly ToTry[], at: TrialsAt): readonly Entry[] {
+  const entries: Entry[] = [];
+  for (const each of toTry) {
+    each.examples.forEach((example, index) => {
+      const room = at.room - entries.filter((entry) => entry.outcome === "to try").length;
+      entries.push(entryOf({ slice, action: each.action, number: index + 1 }, each, { ...at, room, example }));
+    });
+  }
+  return entries;
+}
+
+export type TrialItem = {
+  readonly id: string;
+  readonly says: string;
+  readonly level: "should";
+  readonly proof: { readonly kind: "printed"; readonly runs: readonly { readonly bay: readonly string[] }[] };
+};
+
+export function trialItems(trials: readonly Trial[]): readonly TrialItem[] {
+  return trials.map((trial, index) => ({
+    id: `${triedPrefix}${String(index + 1)}`,
+    says: `The design's example ${String(trial.number)} of ${trial.action} is run.`,
+    level: "should",
+    proof: { kind: "printed", runs: trial.runs.map((words) => ({ bay: [...words] })) },
+  }));
+}
+
+function firstProblem(problems: Json | undefined): { readonly path: string; readonly message: string } {
+  const first = fieldsOf(listOf(problems)[0] ?? null);
+  return { path: textOf(first.path), message: textOf(first.message) };
+}
+
+function runRan(run: Readonly<Record<string, Json>>): Ran {
+  switch (textOf(run.status)) {
+    case "done":
+      return { kind: "answered", output: run.output ?? null };
+    case "failed":
+      return { kind: "refused", reason: textOf(run.reason) };
+    case "waiting":
+      return { kind: "waited", reason: textOf(run.waitingFor) };
+    default:
+      return { kind: "unreadable" };
+  }
+}
+
+export function ranOf(stdout: string): Ran {
+  const read = readYaml(stdout);
+  const fields = read.ok ? fieldsOf(read.value) : {};
+  if (fields.run !== undefined) {
+    return runRan(fieldsOf(fields.run));
+  }
+  if (fields.problems === undefined) {
+    return { kind: "unreadable" };
+  }
+  const problem = firstProblem(fields.problems);
+  const schema = problem.path === "/input" || problem.path.startsWith("/input/");
+  return schema ? { kind: "schema refused", message: problem.message } : { kind: "not started" };
+}
+
+export function sameJson(one: Json, other: Json): boolean {
+  return canonicalJson(one) === canonicalJson(other);
+}
+
+function designedSide(expected: Expected): Side {
+  return expected.kind === "answer"
+    ? { how: "answers", text: JSON.stringify(expected.value) }
+    : { how: "refuses", text: expected.sentence };
+}
+
+function builtSide(ran: Ran & { readonly kind: "answered" | "refused" | "schema refused" }): Side {
+  switch (ran.kind) {
+    case "answered":
+      return { how: "answered", text: JSON.stringify(ran.output) };
+    case "refused":
+      return { how: "refused", text: ran.reason };
+    case "schema refused":
+      return { how: "refused by the request schema", text: ran.message };
+  }
+}
+
+function asDesigned(expected: Expected, ran: Ran & { readonly kind: "answered" | "refused" }): boolean {
+  if (ran.kind === "answered") {
+    return expected.kind === "answer" && sameJson(expected.value, ran.output);
+  }
+  return expected.kind === "refusal" && expected.sentence === ran.reason;
+}
+
+const awaited: Readonly<Record<string, string>> = {
+  skill: "a skill's answer",
+  approval: "an approval",
+  owner: "the owner's answer",
+  budget: "a larger budget",
+};
+
+function awaitedWords(reason: string): string {
+  return awaited[reason] ?? "an answer";
+}
+
+const notKnownReasons = {
+  unreadable: "what the last call printed is not the run bay call --json prints",
+  notStarted: "the kernel did not start the call, for a reason other than the request schema",
+  notMade: "proof could not make the calls in a copy or read what the last one printed whole",
+} as const;
+
+function namedOf(trial: Trial): Named {
+  return { slice: trial.slice, action: trial.action, number: trial.number };
+}
+
+function notKnown(trial: Trial, reason: string): Result {
+  return { ...namedOf(trial), outcome: "not known", reason };
+}
+
+function comparedResult(trial: Trial, ran: Ran): Result {
+  const named = namedOf(trial);
+  switch (ran.kind) {
+    case "unreadable":
+      return notKnown(trial, notKnownReasons.unreadable);
+    case "not started":
+      return notKnown(trial, notKnownReasons.notStarted);
+    case "waited":
+      return notKnown(trial, `the call waits for ${awaitedWords(ran.reason)}, which nobody gives in a throwaway copy`);
+    case "schema refused":
+      if (trial.expected.kind === "refusal") {
+        return { ...named, outcome: "refused by its schema" };
+      }
+      return { ...named, outcome: "otherwise", designed: designedSide(trial.expected), built: builtSide(ran) };
+    case "answered":
+    case "refused":
+      return asDesigned(trial.expected, ran)
+        ? { ...named, outcome: "as designed" }
+        : { ...named, outcome: "otherwise", designed: designedSide(trial.expected), built: builtSide(ran) };
+  }
+}
+
+export function resultOf(trial: Trial, proved: Proved): Result {
+  return "notKnown" in proved
+    ? notKnown(trial, notKnownReasons.notMade)
+    : comparedResult(trial, ranOf(proved.printed.stdout));
+}
+
+export type SliceToTry = {
+  readonly slice: string;
+  readonly inHead: boolean;
+  readonly toTry: readonly ToTry[];
+};
+
+const notInHead = "the slice is not in the combined head";
+
+const notBuiltInWave = "which no slice of this wave in the combined head, and none of an earlier wave, builds";
+
+function leftOut(each: SliceToTry): readonly Entry[] {
+  return each.toTry.flatMap((toTry) =>
+    toTry.examples.map((_, index) => ({
+      slice: each.slice,
+      action: toTry.action,
+      number: index + 1,
+      outcome: "not tried" as const,
+      reason: notInHead,
+    })),
+  );
+}
+
+export function waveTrials(slices: readonly SliceToTry[], at: Omit<TrialsAt, "notBuilt">): readonly Entry[] {
+  const entries: Entry[] = [];
+  for (const each of slices) {
+    const room = at.room - entries.filter((entry) => entry.outcome === "to try").length;
+    const planned = each.inHead
+      ? plannedTrials(each.slice, each.toTry, { ...at, room, notBuilt: notBuiltInWave })
+      : leftOut(each);
+    entries.push(...planned);
+  }
+  return entries;
+}

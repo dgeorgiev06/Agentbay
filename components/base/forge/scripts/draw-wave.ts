@@ -4,6 +4,7 @@ import { listOf, numberOf, textOf, textsOf } from "./lib/json-values.ts";
 import { provedOf } from "./lib/proof-answer.ts";
 import { sliceOf } from "./lib/slice-form.ts";
 import { joinedOf, type Alone, type WaveChecks } from "./lib/wave-answer.ts";
+import { slicesTriedOf } from "./lib/tried-block.ts";
 import { waveDrawn } from "./lib/wave-card.ts";
 import { settledOf } from "./lib/wave-standing.ts";
 
@@ -35,6 +36,7 @@ export const run = defineScript((input, context) => {
     checks: checksOf(proving.asked ?? null, fields.proved),
     alone: aloneOf(listOf(proving.whenFailed), listOf(fields.alone)),
     must: textsOf(context.settings.mustPractices),
+    tried: slicesTriedOf(fieldsOf(fields.proved ?? null).tried),
   });
   return Promise.resolve(withStayedLines(drawn, stayedOf(combined.stayed)));
 });

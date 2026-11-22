@@ -15,7 +15,8 @@
     "requests",
     "sideBySide",
     "offered",
-    "leftovers"
+    "leftovers",
+    "builtBefore"
   ],
   "properties": {
     "name": {
@@ -163,6 +164,15 @@
           }
         }
       }
+    },
+    "builtBefore": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "string",
+        "maxLength": 81
+      },
+      "description": "The design's actions the slices of the plan's earlier waves build, which are merged, as <interface>.<action>; empty when the plan names no design."
     }
   }
 }

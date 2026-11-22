@@ -46,6 +46,50 @@
               "items": {
                 "type": "object"
               }
+            },
+            "trying": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["built", "slices"],
+              "properties": {
+                "built": {
+                  "type": "array",
+                  "maxItems": 1000,
+                  "items": {
+                    "type": "string",
+                    "maxLength": 81
+                  },
+                  "description": "The design's actions the combined head builds: those of every slice in it and of every slice of an earlier wave, as <interface>.<action>."
+                },
+                "slices": {
+                  "type": "array",
+                  "maxItems": 50,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["slice", "inHead", "examples"],
+                    "properties": {
+                      "slice": {
+                        "$ref": "proof@1/prove-request.json#/$defs/sliceName"
+                      },
+                      "inHead": {
+                        "type": "boolean",
+                        "description": "Whether the slice is in the combined head; the examples of one left out are not tried."
+                      },
+                      "examples": {
+                        "type": "array",
+                        "maxItems": 50,
+                        "items": {
+                          "type": "object"
+                        },
+                        "description": "The design's worked examples of the slice's actions, as its request carries them."
+                      }
+                    }
+                  },
+                  "description": "Each slice of the wave with its examples."
+                }
+              },
+              "description": "The design's worked examples to try on the combined head, slice by slice; left out for a solo proof, which tries none."
             }
           }
         }

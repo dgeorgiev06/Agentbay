@@ -102,8 +102,18 @@ function leftOutClause(slices: readonly Settled[]): string {
   return `; left out: ${joined(left)}, as ${own} did not pass`;
 }
 
-export function waveAnswer(slices: readonly Settled[], joinedHead: Joined, checks: WaveChecks): WaveAnswer {
-  const because = joinReason(slices, joinedHead) ?? checksReason(checks);
+export type HeadProved = {
+  readonly checks: WaveChecks;
+  readonly examples?: readonly string[];
+};
+
+function provedReason(proved: HeadProved): string | undefined {
+  const clauses = [checksReason(proved.checks), ...(proved.examples ?? [])].filter((clause) => clause !== undefined);
+  return clauses.length === 0 ? undefined : clauses.join("; ");
+}
+
+export function waveAnswer(slices: readonly Settled[], joinedHead: Joined, proved: HeadProved): WaveAnswer {
+  const because = joinReason(slices, joinedHead) ?? provedReason(proved);
   const left = leftOutClause(slices);
   if (because !== undefined) {
     const reason = `${because}${left}.`;

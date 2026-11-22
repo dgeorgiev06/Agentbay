@@ -362,6 +362,7 @@
       "outcome": "built"
     },
     "reason": "1 must item failed.",
-    "stayed": []
+    "stayed": [],
+    "examples": []
   }
 }

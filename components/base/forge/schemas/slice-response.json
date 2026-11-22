@@ -140,6 +140,14 @@
         "type": "object"
       },
       "description": "The rules the slice's actions apply, as its request carries them; empty when it carries none."
+    },
+    "examples": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object"
+      },
+      "description": "The design's worked examples of the slice's actions, as its request carries them; empty when it carries none."
     }
   }
 }

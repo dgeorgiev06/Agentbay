@@ -66,7 +66,7 @@ export function phrasesOf(slice: Slice, paths: readonly string[]): readonly stri
   return [...new Set(phrases)].filter((phrase) => phrase.length >= shortestPhrase);
 }
 
-function stringsIn(value: Json): readonly string[] {
+export function stringsIn(value: Json): readonly string[] {
   if (typeof value === "string") {
     return [value];
   }

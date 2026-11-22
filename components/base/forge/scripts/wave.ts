@@ -10,7 +10,7 @@ import { planOfText, readFeatures } from "./lib/reading.ts";
 import { leftOver } from "./lib/drops.ts";
 import { lastRound } from "./lib/rounds.ts";
 import { waveChoices } from "./lib/start-choices.ts";
-import { testsToLookFor, waveOf, type PlanFound, type WaveAsked } from "./lib/wave-plan.ts";
+import { builtBefore, testsToLookFor, waveOf, type PlanFound, type WaveAsked } from "./lib/wave-plan.ts";
 import { sideBySideOf } from "./lib/side-by-side.ts";
 import { waveStartCard } from "./lib/wave-start-card.ts";
 
@@ -111,6 +111,7 @@ export const run = defineScript(async (input, context) => {
     leftovers: leftovers.map((left) => ({ ...left })),
     slices: wave.slices.map((slice) => slice.name),
     requests: [...wave.requests],
+    builtBefore: [...builtBefore(found, asked.wave)],
     sideBySide,
   };
 });

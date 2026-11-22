@@ -25,8 +25,11 @@ export type CommittedRule = {
 };
 
 export type ServingAction = {
+  readonly action: string;
   readonly request: string;
   readonly serves: readonly string[];
+  readonly examples: readonly Json[];
+  readonly offeredBy: readonly string[];
 };
 
 export type DesignSummary = {
@@ -65,7 +68,13 @@ function implementedOf(value: Json): Implemented {
         writes: textsOf(action.writes),
       },
     }));
-  const serving = actions.map((action) => ({ request: textOf(action.request), serves: textsOf(action.serves) }));
+  const serving = actions.map((action) => ({
+    action: `${name}.${textOf(action.name)}`,
+    request: textOf(action.request),
+    serves: textsOf(action.serves),
+    examples: listOf(action.examples),
+    offeredBy: [],
+  }));
   return { name, files: actions.flatMap(filesOf), applied, serving };
 }
 
@@ -97,6 +106,15 @@ function moduleOf(value: Json, interfaces: readonly Implemented[]): DesignModule
   };
 }
 
+function offeredBy(modules: readonly Json[], name: string): readonly string[] {
+  const offering = modules.filter((module) => textsOf(fieldsOf(module).implements).includes(name));
+  return offering.map((module) => textOf(fieldsOf(module).name));
+}
+
+function servingOf(each: Implemented, modules: readonly Json[]): readonly ServingAction[] {
+  return each.serving.map((action) => ({ ...action, offeredBy: offeredBy(modules, each.name) }));
+}
+
 export function designSummaryOf(file: string, document: Json): DesignSummary {
   const fields = fieldsOf(document);
   const interfaces = listOf(fields.interfaces).map(implementedOf);
@@ -107,8 +125,12 @@ export function designSummaryOf(file: string, document: Json): DesignSummary {
     schemaFiles: interfaces.flatMap((each) => each.files),
     modules: listOf(fields.modules).map((module) => moduleOf(module, interfaces)),
     rules: listOf(fields.modules).flatMap((module) => rulesIn(module, interfaces)),
-    actions: interfaces.flatMap((each) => each.serving),
+    actions: interfaces.flatMap((each) => servingOf(each, listOf(fields.modules))),
   };
+}
+
+export function actionsBuiltBy(named: readonly string[], design: DesignSummary): readonly ServingAction[] {
+  return design.actions.filter((action) => named.includes(action.request));
 }
 
 export function committedFiles(design: DesignSummary): readonly string[] {

@@ -28,10 +28,11 @@
         }
       ]
     },
-    "base": "7ede508",
+    "base": "ed9a2d0",
     "bugs": [],
     "interface": ["components/modes/r7/schemas/count-request.json"],
     "rules": [],
+    "examples": [],
     "fixed": ["components/modes/r7/tests/quill.test.ts"],
     "card": {
       "title": "Build slice R7?",
@@ -45,7 +46,7 @@
         },
         {
           "mark": "computed",
-          "words": "kind mode; base 7ede508",
+          "words": "kind mode; base ed9a2d0",
           "source": {
             "step": "slice"
           }
@@ -159,7 +160,7 @@
         },
         {
           "mark": "computed",
-          "words": "kind mode; base 7ede508",
+          "words": "kind mode; base ed9a2d0",
           "source": {
             "step": "slice"
           }
@@ -234,7 +235,7 @@
   "cut": {
     "folder": ".forge/worktrees/R7",
     "branch": "forge/R7",
-    "commit": "7ede508442cbf7cdae9bf995af9a5705c16eec6f"
+    "commit": "ed9a2d0d91ff3418c5fb25cc91584f9be56ef2f0"
   },
   "pin": {
     "pinned": [
@@ -255,16 +256,16 @@
     "round": 1,
     "stage": "proved",
     "done": false,
-    "base": "7ede508442cbf7cdae9bf995af9a5705c16eec6f",
+    "base": "ed9a2d0d91ff3418c5fb25cc91584f9be56ef2f0",
     "built": {
       "outcome": "built"
     },
     "builder": {
       "branch": "forge/R7",
-      "commit": "fd25ff0b017ed1fbd7e90b139b78874f5cd361b2"
+      "commit": "64ad7ae82314e5786bd3cc5557b162beec73ec3f"
     },
     "builtAt": "round-1",
-    "head": "9b79d59b6b07b44ce607e298df097742cbfc1f10",
+    "head": "a5cd5464336e0a169159e2a37b509613db474c2f",
     "branch": "forge/R7-tests-1",
     "folder": ".forge/worktrees/R7-tests-1",
     "declared": {
@@ -319,15 +320,15 @@
     "round": 1,
     "stage": "reviewed",
     "done": false,
-    "base": "7ede508442cbf7cdae9bf995af9a5705c16eec6f",
+    "base": "ed9a2d0d91ff3418c5fb25cc91584f9be56ef2f0",
     "built": {
       "outcome": "built"
     },
     "builder": {
       "branch": "forge/R7",
-      "commit": "fd25ff0b017ed1fbd7e90b139b78874f5cd361b2"
+      "commit": "64ad7ae82314e5786bd3cc5557b162beec73ec3f"
     },
-    "head": "9b79d59b6b07b44ce607e298df097742cbfc1f10",
+    "head": "a5cd5464336e0a169159e2a37b509613db474c2f",
     "branch": "forge/R7-tests-1",
     "declared": {
       "files": ["components/modes/r7/scripts/quill.ts", "components/modes/r7/tests/quill.test.ts"],
@@ -387,16 +388,16 @@
     "round": 2,
     "stage": "proved",
     "done": false,
-    "base": "7ede508442cbf7cdae9bf995af9a5705c16eec6f",
+    "base": "ed9a2d0d91ff3418c5fb25cc91584f9be56ef2f0",
     "built": {
       "outcome": "built"
     },
     "builder": {
       "branch": "forge/R7-2",
-      "commit": "e61f56628bafd75472522a05cc533360316ae9e0"
+      "commit": "9aedf96935450bd2fec5ec16e8ad9d376386e421"
     },
     "builtAt": "round-2",
-    "head": "eb767e97fce99c697b9b033e1369f35a1a78f5c1",
+    "head": "341155db35c33f3465e094bb954aa93377d951e7",
     "branch": "forge/R7-tests-2",
     "folder": ".forge/worktrees/R7-tests-2",
     "declared": {
@@ -451,15 +452,15 @@
     "round": 2,
     "stage": "reviewed",
     "done": false,
-    "base": "7ede508442cbf7cdae9bf995af9a5705c16eec6f",
+    "base": "ed9a2d0d91ff3418c5fb25cc91584f9be56ef2f0",
     "built": {
       "outcome": "built"
     },
     "builder": {
       "branch": "forge/R7-2",
-      "commit": "e61f56628bafd75472522a05cc533360316ae9e0"
+      "commit": "9aedf96935450bd2fec5ec16e8ad9d376386e421"
     },
-    "head": "eb767e97fce99c697b9b033e1369f35a1a78f5c1",
+    "head": "341155db35c33f3465e094bb954aa93377d951e7",
     "branch": "forge/R7-tests-2",
     "declared": {
       "files": ["components/modes/r7/scripts/quill.ts", "components/modes/r7/tests/quill.test.ts"],
@@ -519,16 +520,16 @@
     "round": 3,
     "stage": "proved",
     "done": false,
-    "base": "7ede508442cbf7cdae9bf995af9a5705c16eec6f",
+    "base": "ed9a2d0d91ff3418c5fb25cc91584f9be56ef2f0",
     "built": {
       "outcome": "built"
     },
     "builder": {
       "branch": "forge/R7-3",
-      "commit": "da4823f292d249998dcaeb01f1315cc6583b5a25"
+      "commit": "089752ffdf8869d454f4f22b25c704cee9b838f9"
     },
     "builtAt": "round-3",
-    "head": "ed0edf848e3c7c8a99cf7047bf89f64a7053f80a",
+    "head": "7254803d15217a7b3c4fd72019921dcccec5468f",
     "branch": "forge/R7-tests-3",
     "folder": ".forge/worktrees/R7-tests-3",
     "declared": {
@@ -583,15 +584,15 @@
     "round": 3,
     "stage": "reviewed",
     "done": true,
-    "base": "7ede508442cbf7cdae9bf995af9a5705c16eec6f",
+    "base": "ed9a2d0d91ff3418c5fb25cc91584f9be56ef2f0",
     "built": {
       "outcome": "built"
     },
     "builder": {
       "branch": "forge/R7-3",
-      "commit": "da4823f292d249998dcaeb01f1315cc6583b5a25"
+      "commit": "089752ffdf8869d454f4f22b25c704cee9b838f9"
     },
-    "head": "ed0edf848e3c7c8a99cf7047bf89f64a7053f80a",
+    "head": "7254803d15217a7b3c4fd72019921dcccec5468f",
     "branch": "forge/R7-tests-3",
     "declared": {
       "files": ["components/modes/r7/scripts/quill.ts", "components/modes/r7/tests/quill.test.ts"],
@@ -706,6 +707,12 @@
         "path": "components/modes/r7/scripts/quill.ts",
         "head": 1
       }
-    ]
+    ],
+    "tried": {
+      "setting": "must",
+      "head": "7254803d15217a7b3c4fd72019921dcccec5468f",
+      "carried": false,
+      "results": []
+    }
   }
 }

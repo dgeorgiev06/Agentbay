@@ -58,8 +58,6 @@ export function fakeProcesses(stdout: string, end: ProcessEnd = { how: "exited",
   };
 }
 
-export const noProcesses: Processes = fakeProcesses("", { how: "not-started", reason: "no process in this test" });
-
 export function fakeFileSystem(initial: Readonly<Record<string, string>> = {}): FakeFileSystem {
   const contents = new Map(Object.entries(initial).map(([path, text]) => [normalize(path), text]));
   return {

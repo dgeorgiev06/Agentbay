@@ -1,5 +1,5 @@
-import { dirname, join, normalize, sep } from "node:path";
-import type { GrantedFoldersRequest } from "../../bay/adapter.ts";
+import { basename, dirname, join, normalize, sep } from "node:path";
+import { gitReading, type GrantedFoldersRequest } from "../../bay/adapter.ts";
 import type { DirectoryEntry } from "./adapter-types.ts";
 import { closedName } from "./guard-paths.ts";
 
@@ -8,7 +8,21 @@ export type Tracked = {
   readonly folders: ReadonlySet<string>;
 };
 
-const worktreePointer = /^gitdir: ([^\r\n]+)\n?$/;
+export type Worktree = {
+  readonly realRoot: string;
+  readonly tracked: Tracked | undefined;
+};
+
+export type CopyFacts = {
+  readonly below: string;
+  readonly kind: DirectoryEntry["kind"];
+  readonly throughLink: boolean;
+  readonly realInside: boolean;
+};
+
+const worktreePointer = /^gitdir: ([^\x00-\x1f\x7f]+)\n?$/;
+
+const backLink = /^([^\x00-\x1f\x7f]+)\n?$/;
 
 const indexRecord = /^([0-7]{6}) [0-9a-f]{40}(?:[0-9a-f]{24})? ([0-3])\t(.+)$/s;
 
@@ -16,12 +30,9 @@ const regularFileModes: readonly string[] = ["100644", "100755"];
 
 const sharedTemplate = /\.(example|sample|template)$/i;
 
-const gitSecondsAllowed = 30;
-
-function pointedGitDir(text: string | undefined, worktrees: string): string | undefined {
-  const target = text === undefined ? undefined : worktreePointer.exec(text)?.[1];
-  const accepted = target !== undefined && normalize(target) === target && dirname(target) === worktrees;
-  return accepted ? target : undefined;
+function plainPath(pattern: RegExp, text: string | undefined): string | undefined {
+  const path = text === undefined ? undefined : pattern.exec(text)?.[1];
+  return path !== undefined && normalize(path) === path ? path : undefined;
 }
 
 async function realWorktreesFolder(request: GrantedFoldersRequest): Promise<string> {
@@ -29,16 +40,20 @@ async function realWorktreesFolder(request: GrantedFoldersRequest): Promise<stri
   return join((await request.inspector.realPath(project)) ?? project, ".git", "worktrees");
 }
 
-export async function worktreeGitDir(
-  request: GrantedFoldersRequest,
-  folder: string,
-  entries: readonly DirectoryEntry[],
-): Promise<string | undefined> {
-  const pointer = entries.find((entry) => entry.name === ".git");
-  if (pointer?.kind !== "file") {
+async function ownGitDir(request: GrantedFoldersRequest, folder: string): Promise<string | undefined> {
+  const gitDir = plainPath(worktreePointer, await request.files.readText(join(folder, ".git")));
+  if (gitDir === undefined || dirname(gitDir) !== (await realWorktreesFolder(request))) {
     return undefined;
   }
-  return pointedGitDir(await request.files.readText(join(folder, ".git")), await realWorktreesFolder(request));
+  return (await request.inspector.realPath(gitDir)) === gitDir ? gitDir : undefined;
+}
+
+async function pointsBack(request: GrantedFoldersRequest, gitDir: string, realFolder: string): Promise<boolean> {
+  const recorded = plainPath(backLink, await request.files.readText(join(gitDir, "gitdir")));
+  if (recorded === undefined || basename(recorded) !== ".git") {
+    return false;
+  }
+  return (await request.inspector.realPath(dirname(recorded))) === realFolder;
 }
 
 function foldersAbove(path: string): readonly string[] {
@@ -65,48 +80,60 @@ function trackedOf(output: string): Tracked | undefined {
   return { files, folders: new Set([...files].flatMap(foldersAbove)) };
 }
 
+async function trackedIn(
+  request: GrantedFoldersRequest,
+  gitDir: string,
+  realRoot: string,
+): Promise<Tracked | undefined> {
+  const words = [`--git-dir=${gitDir}`, `--work-tree=${realRoot}`, "ls-files", "--stage", "-z"];
+  const reading = gitReading(words, { directory: realRoot, searchPath: request.searchPath });
+  const result = await request.processes.run(reading).catch(() => undefined);
+  if (result === undefined) {
+    return undefined;
+  }
+  const { end, stdout } = result;
+  const whole = end.how === "exited" && end.exitCode === 0 && stdout.characters === stdout.text.length;
+  return whole ? trackedOf(stdout.text) : undefined;
+}
+
+export async function worktreeOf(
+  request: GrantedFoldersRequest,
+  folder: string,
+  entries: readonly DirectoryEntry[],
+): Promise<Worktree | undefined> {
+  if (entries.find((entry) => entry.name === ".git")?.kind !== "file") {
+    return undefined;
+  }
+  const gitDir = await ownGitDir(request, folder);
+  const realRoot = await request.inspector.realPath(folder);
+  if (gitDir === undefined || realRoot === undefined || !(await pointsBack(request, gitDir, realRoot))) {
+    return undefined;
+  }
+  return { realRoot, tracked: await trackedIn(request, gitDir, realRoot) };
+}
+
+export async function isRealInside(request: GrantedFoldersRequest, path: string, realRoot: string): Promise<boolean> {
+  const real = await request.inspector.realPath(path);
+  return real !== undefined && real.startsWith(`${realRoot}${sep}`);
+}
+
 function isNeverACopy(segment: string): boolean {
   const name = closedName(segment);
   const secret = (name === ".env" || name === ".env.*") && !sharedTemplate.test(segment);
   return name === ".git" || secret;
 }
 
-export function isTrackedCopy(below: string, entry: DirectoryEntry, tracked: Tracked): boolean {
-  if (below.split(sep).some(isNeverACopy)) {
+export function isTrackedCopy(facts: CopyFacts, tracked: Tracked | undefined): boolean {
+  if (tracked === undefined || facts.throughLink || !facts.realInside || facts.below.split(sep).some(isNeverACopy)) {
     return false;
   }
-  switch (entry.kind) {
+  switch (facts.kind) {
     case "file":
-      return tracked.files.has(below);
+      return tracked.files.has(facts.below);
     case "directory":
-      return tracked.folders.has(below);
+      return tracked.folders.has(facts.below);
     case "link":
     case "other":
       return false;
   }
-}
-
-export async function trackedIn(
-  request: GrantedFoldersRequest,
-  worktree: { readonly root: string; readonly gitDir: string },
-): Promise<Tracked | undefined> {
-  const result = await request.processes.run({
-    command: "git",
-    arguments: [
-      `--git-dir=${worktree.gitDir}`,
-      `--work-tree=${worktree.root}`,
-      "-c",
-      "core.fsmonitor=false",
-      "--no-optional-locks",
-      "ls-files",
-      "--stage",
-      "-z",
-    ],
-    directory: worktree.root,
-    environment: { PATH: request.searchPath, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
-    timeoutMilliseconds: gitSecondsAllowed * 1000,
-  });
-  const { end, stdout } = result;
-  const whole = end.how === "exited" && end.exitCode === 0 && stdout.characters === stdout.text.length;
-  return whole ? trackedOf(stdout.text) : undefined;
 }

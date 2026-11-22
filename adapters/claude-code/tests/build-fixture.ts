@@ -1,5 +1,6 @@
 import type { BuildRequest, Layout, SkillAgent } from "../../../bay/adapter.ts";
-import { fakeFileSystem, fakeInspector, noProcesses } from "../../../tests/fakes.ts";
+import { noProcesses } from "../../../tests/broker-fixture.ts";
+import { fakeFileSystem, fakeInspector } from "../../../tests/fakes.ts";
 import { grantsWith } from "../../../tests/grants-fixture.ts";
 import type { Files, Inspector, Removal } from "../adapter-types.ts";
 

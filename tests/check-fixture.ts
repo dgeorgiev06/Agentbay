@@ -3,7 +3,8 @@ import type { Finding } from "../bay/check-context.ts";
 import type { FileListing } from "../bay/ports.ts";
 import { checkSystem, type CheckReport } from "../bay/check.ts";
 import { layoutOf, type Layout } from "../bay/layout.ts";
-import { fakeFileSystem, fakeInspector, noProcesses, type FakeFileSystem } from "./fakes.ts";
+import { noProcesses } from "./broker-fixture.ts";
+import { fakeFileSystem, fakeInspector, type FakeFileSystem } from "./fakes.ts";
 import { layout, paths, rooted, validFiles } from "./system-fixture.ts";
 
 export const notesSkillFile = "components/modes/notes/skills/write-note/SKILL.md";

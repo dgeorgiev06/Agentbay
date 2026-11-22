@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdir, rm, symlink } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import { makeProject, type Project } from "./project-fixture.ts";
@@ -47,13 +47,15 @@ function pointerTo(project: Project, name: string): string {
   return `gitdir: ${join(project.root, ".git", "worktrees", name)}\n`;
 }
 
-test("bay check finds nothing to report and bay build passes while a git worktree's pointer sits in the granted folder", async () => {
+test("a hand-written pointer into the project's worktrees, with no record of git's behind it, is refused by both", async () => {
   const project = await makeProject({ adapter: "claude-code" });
   try {
     await project.write("out/notes/wt/.git", pointerTo(project, "wt"));
     await project.write("out/notes/wt/src/a.ts", "export {};\n");
-    assert.doesNotMatch(ran(project, ["check"]).output, /is granted/);
-    assert.equal(ran(project, ["build"]).status, 0);
+    const granted = join(project.root, "out", "notes");
+    const sentence = `the step agentbay-writer-draft is granted ${granted}, which holds ${join(granted, "wt", ".git")}`;
+    assert.ok(ran(project, ["check"]).output.includes(sentence));
+    assert.ok(ran(project, ["build"]).output.includes(sentence));
   } finally {
     await project.remove();
   }
@@ -137,6 +139,121 @@ test("a real worktree of the project passes with its tracked CLAUDE.md, and refu
     const linked = refusedFor(project, join("docs", "CLAUDE.md"));
     assert.ok(ran(project, ["check"]).output.includes(linked));
     assert.ok(ran(project, ["build"]).output.includes(linked));
+  } finally {
+    await project.remove();
+  }
+});
+
+type Repository = { readonly project: Project; readonly notes: string };
+
+async function repositoryWithWorktrees(names: readonly string[]): Promise<Repository> {
+  const project = await makeProject({ adapter: "claude-code" });
+  const notes = join(project.root, "out", "notes");
+  await project.write("CLAUDE.md", "the project's notes\n");
+  await project.write("fixtures/agentbay.config.yaml", "adapter: claude-code\n");
+  git(project.root, ["init", "--quiet"]);
+  git(project.root, ["add", "CLAUDE.md", "fixtures"]);
+  git(project.root, ["commit", "--quiet", "--no-gpg-sign", "--message", "base"]);
+  for (const name of names) {
+    git(project.root, ["worktree", "add", "--quiet", "--detach", join(notes, name), "HEAD"]);
+  }
+  return { project, notes };
+}
+
+function assertBothRefuse(project: Project, holds: string): void {
+  const sentence = `the step agentbay-writer-draft is granted ${join(project.root, "out", "notes")}, which holds ${holds}`;
+  const checked = ran(project, ["check"]);
+  assert.ok(checked.output.includes(sentence), checked.output);
+  assert.match(checked.output, /bay check: 1 error/);
+  const built = ran(project, ["build"]);
+  assert.notEqual(built.status, 0);
+  assert.ok(built.output.includes(sentence), built.output);
+  assert.doesNotMatch(`${checked.output}${built.output}`, /unexpected error/);
+}
+
+const reproductions: readonly (readonly [string, (repository: Repository) => Promise<string>])[] = [
+  [
+    "a worktree whose .git borrows another worktree's record",
+    async ({ notes }) => {
+      await writeFile(join(notes, "a", ".git"), await readFile(join(notes, "b", ".git"), "utf8"));
+      return join(notes, "a", ".git");
+    },
+  ],
+  [
+    "a made folder with a pointer to a worktree's record",
+    async ({ notes }) => {
+      await mkdir(join(notes, "fake"));
+      await writeFile(join(notes, "fake", ".git"), await readFile(join(notes, "b", ".git"), "utf8"));
+      await writeFile(join(notes, "fake", "CLAUDE.md"), "");
+      return join(notes, "fake", ".git");
+    },
+  ],
+  [
+    "a worktree whose record names another folder",
+    async ({ project, notes }) => {
+      await writeFile(join(project.root, ".git", "worktrees", "a", "gitdir"), `${join(notes, "b")}/.git\n`);
+      return join(notes, "a", ".git");
+    },
+  ],
+  [
+    "a worktree whose record folder is a link",
+    async ({ project, notes }) => {
+      const record = join(project.root, ".git", "worktrees", "a");
+      const away = join(project.root, "away");
+      await rename(record, away);
+      await symlink(away, record);
+      return join(notes, "a", ".git");
+    },
+  ],
+  [
+    "a pointer with a NUL in it",
+    async ({ notes }) => {
+      await writeFile(join(notes, "a", ".git"), `gitdir: ${notes}\0/x\n`);
+      return join(notes, "a", ".git");
+    },
+  ],
+  [
+    "a tracked folder swapped for a link to an outside folder that holds agentbay.config.yaml",
+    async ({ project, notes }) => {
+      const outside = join(project.root, "outside");
+      await mkdir(outside);
+      await writeFile(join(outside, "agentbay.config.yaml"), "adapter: claude-code\n");
+      await rm(join(notes, "a", "fixtures"), { recursive: true });
+      await symlink(outside, join(notes, "a", "fixtures"));
+      return join(notes, "a", "fixtures", "agentbay.config.yaml");
+    },
+  ],
+];
+
+test("two real worktrees of the project, each with its tracked copies, pass both commands", async () => {
+  const { project } = await repositoryWithWorktrees(["a", "b"]);
+  try {
+    assert.doesNotMatch(ran(project, ["check"]).output, /is granted/);
+    assert.equal(ran(project, ["build"]).status, 0);
+  } finally {
+    await project.remove();
+  }
+});
+
+for (const [what, made] of reproductions) {
+  test(`bay check and bay build both refuse ${what}`, async () => {
+    const repository = await repositoryWithWorktrees(["a", "b"]);
+    try {
+      assertBothRefuse(repository.project, await made(repository));
+    } finally {
+      await repository.project.remove();
+    }
+  });
+}
+
+test("a repository's own core.fsmonitor does not run when bay check asks git what a worktree tracks", async () => {
+  const { project } = await repositoryWithWorktrees(["a"]);
+  const marker = join(project.root, "fsmonitor-ran");
+  try {
+    await writeFile(join(project.root, "monitor.sh"), `#!/bin/sh\ntouch ${marker}\n`, { mode: 0o755 });
+    git(project.root, ["config", "core.fsmonitor", join(project.root, "monitor.sh")]);
+    assert.doesNotMatch(ran(project, ["check"]).output, /is granted/);
+    await assert.rejects(readFile(marker));
   } finally {
     await project.remove();
   }

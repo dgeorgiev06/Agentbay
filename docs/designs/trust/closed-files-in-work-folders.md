@@ -62,7 +62,7 @@ a folder it was granted.
 
 - **(a) Tell a worktree's pointer file from a `.git` folder.** The rule treats as not closed a regular file, not a
   link, named `.git`, whose whole text is `gitdir: <path>` with one optional newline, where `<path>` is
-  `<project>/.git/worktrees/<one name>`, the project's path written or real. Anything else named `.git` stays
+  `<project>/.git/worktrees/<one name>` by the project's real path, as git writes it. Anything else named `.git` stays
   closed, in the same sentence as today. The hook keeps denying every `.git` segment. Cost: one rule, an
   inspector for the entry's kind. Keeps every property. Leaves the checked-out config copy, and in other projects
   any tracked closed file, refusing as before.

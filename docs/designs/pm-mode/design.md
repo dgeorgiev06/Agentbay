@@ -501,7 +501,7 @@ A fact is shown on its own card: the title and what was found, judged; then the 
 What the mode may never read, and where that is held:
 
 - The config file, `.agentbay/` and `.git/`, which no mode may name; `bay/`, `schemas/`, `adapters/` and `framework/`, which only forge may name; another mode's folder, which only forge may name. The kernel refuses these when it loads the manifest, and `bay check` reports them.
-- A granted folder that holds a closed file: `.env`, `.env.*`, `agentbay.config.yaml`, `CLAUDE.md`, `.mcp.json`, or a `.agentbay`, `.claude` or `.git` folder. The Claude Code adapter's build refuses such a grant (`adapters/claude-code/root-scan.ts`), and `bay check` now reports the same, from the same rule (`adapters/claude-code/granted-folders.ts`, called by `bay/check-granted-folders.ts`), so check and build agree (ADR 13).
+- A granted folder that holds a closed file: `.env`, `.env.*`, `agentbay.config.yaml`, `CLAUDE.md`, `.mcp.json`, a `.agentbay` or `.claude` folder, or a `.git` entry other than a git worktree's pointer file into the project's own `.git/worktrees/` (`docs/designs/trust/closed-files-in-work-folders.md`). The Claude Code adapter's build refuses such a grant (`adapters/claude-code/root-scan.ts`), and `bay check` now reports the same, from the same rule (`adapters/claude-code/granted-folders.ts`, called by `bay/check-granted-folders.ts`), so check and build agree (ADR 13).
 - A fact whose file is hidden or in a hidden folder: `schemas/turn.json` refuses a source with a part that starts with a dot.
 - With the hook, the interviewer's own reads are confined to the granted folders, which by the rule above hold no closed file; this holds once `bay build` passes.
 

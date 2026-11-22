@@ -110,7 +110,7 @@ function refusedFor(project: Project, holds: string): string {
   return `the step agentbay-writer-draft is granted ${granted}, which holds ${join(granted, "wt", holds)}`;
 }
 
-test("a real worktree of the project passes with its tracked CLAUDE.md, and refuses an untracked secret or a tracked link", async () => {
+test("a real worktree of the project passes with its tracked CLAUDE.md, and refuses an untracked secret, a copy swapped for a link, or a tracked link", async () => {
   const project = await makeProject({ adapter: "claude-code" });
   const worktree = join(project.root, "out", "notes", "wt");
   try {
@@ -126,6 +126,11 @@ test("a real worktree of the project passes with its tracked CLAUDE.md, and refu
     assert.ok(ran(project, ["check"]).output.includes(refusedFor(project, ".env.local")));
     assert.ok(ran(project, ["build"]).output.includes(refusedFor(project, ".env.local")));
     await rm(join(worktree, ".env.local"));
+    await rm(join(worktree, "CLAUDE.md"));
+    await symlink(join(project.root, "CLAUDE.md"), join(worktree, "CLAUDE.md"));
+    assert.ok(ran(project, ["check"]).output.includes(refusedFor(project, "CLAUDE.md")));
+    await rm(join(worktree, "CLAUDE.md"));
+    git(worktree, ["checkout", "--", "CLAUDE.md"]);
     await mkdir(join(worktree, "docs"));
     await symlink("../CLAUDE.md", join(worktree, "docs", "CLAUDE.md"));
     git(worktree, ["add", "docs/CLAUDE.md"]);

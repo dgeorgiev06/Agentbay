@@ -470,8 +470,8 @@ function emptyFiles(folder: string, names: readonly string[]): Contents {
   return names.map((name) => [`${folder}/${name}`, ""]);
 }
 
-function numbered(count: number): readonly string[] {
-  return Array.from({ length: count }, (_, index) => `f${String(index)}`);
+function numbered(prefix: string, count: number): readonly string[] {
+  return Array.from({ length: count }, (_, index) => `${prefix}${String(index)}`);
 }
 
 async function builtWithIndex(paths: readonly string[], git: FakeProcesses): Promise<ListOutcome> {
@@ -588,17 +588,33 @@ test("a folder whose pointer leads elsewhere is no worktree of the project: its 
   assert.deepEqual(git.asked, []);
 });
 
-test("each worktree of the project has its own scan bound, and an ordinary folder keeps the bound", async () => {
-  const spread = Object.fromEntries(
-    ["a", "b"].flatMap((name): Contents => [
-      [`${project}/notes/${name}/.git`, `gitdir: ${project}/.git/worktrees/${name}\n`],
-      ...emptyFiles(`${project}/notes/${name}`, numbered(3000)),
-    ]),
+test("a worktree inside a worktree is no copy: its pointer refuses", async () => {
+  const inner = `${worktree}/inner/.git`;
+  const start = {
+    [pointer]: `gitdir: ${project}/.git/worktrees/wt\n`,
+    [inner]: `gitdir: ${project}/.git/worktrees/inner\n`,
+  };
+  const outcome = await adapter.build(buildRequest(memoryFiles(start), allAgents, fakeProcesses(index)));
+  assert.ok(!outcome.ok);
+  assert.equal(
+    outcome.problems[0]?.message,
+    `the step ${digestAgent.agent} is granted /proj/notes, which holds ${inner}`,
   );
+});
+
+test("each worktree of the project has its own scan bound, and an ordinary folder keeps the bound", async () => {
+  const deep = `${project}/notes/${numbered("d", 10).join("/")}`;
+  const spread = Object.fromEntries([
+    ...emptyFiles(`${project}/notes`, numbered("f", 3000)),
+    ...["a", "b"].flatMap((name): Contents => [
+      [`${deep}/${name}/.git`, `gitdir: ${project}/.git/worktrees/${name}\n`],
+      ...emptyFiles(`${deep}/${name}/${numbered("d", 5).join("/")}`, numbered("f", 3000)),
+    ]),
+  ]);
   assert.ok((await adapter.build(buildRequest(memoryFiles(spread)))).ok);
   const oneTooMany = Object.fromEntries([
     [pointer, `gitdir: ${project}/.git/worktrees/wt\n`],
-    ...emptyFiles(worktree, numbered(5001)),
+    ...emptyFiles(worktree, numbered("f", 5001)),
   ]);
   const wide = await adapter.build(buildRequest(memoryFiles(oneTooMany)));
   assert.ok(!wide.ok);

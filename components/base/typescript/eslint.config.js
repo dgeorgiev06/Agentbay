@@ -1,5 +1,5 @@
 import { existsSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, globalIgnores } from "eslint/config";
 import tseslint from "typescript-eslint";
@@ -142,7 +142,7 @@ const noComments = {
 
 const livingDocuments = /(^|\/)docs\/(requirements|designs|plans)(\/|$)/;
 
-const pathCalls = new Set(["join", "resolve", "URL"]);
+const pathCalls = new Set(["join", "resolve", "URL", "fileURLToPath"]);
 
 const livingDocumentReadByTheOneTest = {
   file: "components/base/requirements/tests/check.test.ts",
@@ -202,9 +202,19 @@ function livingDocumentNamed(text) {
   return at === -1 ? undefined : normalized.slice(at).replace(/^\/|\/$/g, "");
 }
 
+function repositoryPathOf(context) {
+  return context.filename.slice(repositoryRoot.length).replace(/^\/+/, "");
+}
+
 function isTheException(context, document, allowed) {
-  const file = context.filename.slice(repositoryRoot.length).replace(/^\/+/, "");
+  const file = repositoryPathOf(context);
   return allowed.some((entry) => entry.file === file && document === entry.reads);
+}
+
+function rememberConstant(constants, node) {
+  if (node.parent.kind === "const" && node.id.type === "Identifier" && node.init !== null) {
+    constants.set(node.id.name, node.init);
+  }
 }
 
 const noLivingDocuments = {
@@ -239,9 +249,7 @@ const noLivingDocuments = {
     const calls = [];
     return {
       VariableDeclarator(node) {
-        if (node.parent.kind === "const" && node.id.type === "Identifier" && node.init !== null) {
-          constants.set(node.id.name, node.init);
-        }
+        rememberConstant(constants, node);
       },
       "CallExpression, NewExpression"(node) {
         if (pathCalls.has(calleeName(node))) {
@@ -261,7 +269,101 @@ const noLivingDocuments = {
   },
 };
 
-const agentbayPlugin = { rules: { "no-comments": noComments, "no-living-documents": noLivingDocuments } };
+const kitListingWords = new Set(["ls-files", "archive", "worktree", "clone"]);
+
+const kitCopyCalls = new Set(["cp", "cpSync", "copyFile", "copyFileSync"]);
+
+const kitNames = new Set(["kit", "kitFolder", "kitRoot"]);
+
+const theOnePlaceThatCopiesTheKit = "tests/test-toolbox.ts";
+
+const kitListedForItsCodeOnly = "tests/lint-ignores.test.ts";
+
+function isTheKitRoot(node, constants, filename) {
+  const { text, anchored } = pieceOf(node, constants, new Set());
+  const segments = text.split("/").filter((segment) => segment !== "" && segment !== ".");
+  const upward = segments.every((segment) => segment === "..");
+  return anchored && upward && resolve(dirname(filename), ...segments) === resolve(repositoryRoot);
+}
+
+function namesTheKit(node, constants, filename) {
+  if (node.type === "Identifier" && kitNames.has(node.name)) {
+    return true;
+  }
+  if (node.type === "ArrayExpression") {
+    return node.elements.some((element) => element !== null && namesTheKit(element, constants, filename));
+  }
+  if (node.type === "ObjectExpression") {
+    const cwd = node.properties.find((property) => property.type === "Property" && property.key.name === "cwd");
+    return cwd !== undefined && namesTheKit(cwd.value, constants, filename);
+  }
+  return isTheKitRoot(node, constants, filename);
+}
+
+function holdsAListingWord(node) {
+  return (
+    node.type === "ArrayExpression" &&
+    node.elements.some((element) => element?.type === "Literal" && kitListingWords.has(element.value))
+  );
+}
+
+function listsOrCopiesTheKit(node, constants, filename) {
+  const [first] = node.arguments;
+  if (kitCopyCalls.has(calleeName(node)) && first !== undefined) {
+    return namesTheKit(first, constants, filename);
+  }
+  const named = node.arguments.some((argument) => namesTheKit(argument, constants, filename));
+  return named && node.arguments.some(holdsAListingWord);
+}
+
+const kitCopiedInOnePlace = {
+  meta: {
+    type: "problem",
+    schema: [
+      {
+        type: "object",
+        properties: { allowed: { type: "array", items: { type: "string" } } },
+        additionalProperties: false,
+      },
+    ],
+    messages: {
+      copied:
+        "A test lists or copies the kit itself: make the copy with copyKitInto or copyOfTheKit from " +
+        `${theOnePlaceThatCopiesTheKit}, which leaves the owner's living documents out of every copy.`,
+    },
+  },
+  create(context) {
+    const allowed = context.options[0]?.allowed ?? [];
+    const constants = new Map();
+    const calls = [];
+    return {
+      VariableDeclarator(node) {
+        rememberConstant(constants, node);
+      },
+      CallExpression(node) {
+        calls.push(node);
+      },
+      "Program:exit"() {
+        if (allowed.includes(repositoryPathOf(context))) {
+          return;
+        }
+        for (const node of calls) {
+          if (listsOrCopiesTheKit(node, constants, context.filename)) {
+            context.report({ node, messageId: "copied" });
+          }
+        }
+      },
+    };
+  },
+};
+
+const agentbayPlugin = {
+  rules: {
+    "no-comments": noComments,
+    "no-living-documents": noLivingDocuments,
+    "kit-copied-in-one-place": kitCopiedInOnePlace,
+  },
+};
 
 export default defineConfig(
   globalIgnores(["node_modules/", "tests/fixtures/", ".forge/"]),
@@ -310,7 +412,13 @@ export default defineConfig(
   {
     files: ["**/*.test.ts", "**/tests/**/*.ts"],
     plugins: { agentbay: agentbayPlugin },
-    rules: { "agentbay/no-living-documents": ["error", { allowed: [livingDocumentReadByTheOneTest] }] },
+    rules: {
+      "agentbay/no-living-documents": ["error", { allowed: [livingDocumentReadByTheOneTest] }],
+      "agentbay/kit-copied-in-one-place": [
+        "error",
+        { allowed: [theOnePlaceThatCopiesTheKit, kitListedForItsCodeOnly] },
+      ],
+    },
   },
   {
     files: ["components/**/*.ts"],

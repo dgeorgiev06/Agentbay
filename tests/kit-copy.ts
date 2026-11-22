@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
-import { existsSync, lstatSync } from "node:fs";
-import { copyFile, mkdir, mkdtemp, realpath, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { kit } from "./project-fixture.ts";
 
 export type ModeFiles = Readonly<Record<string, string>>;
 
@@ -14,26 +12,6 @@ export type ModeTestRun = {
 };
 
 const environment = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
-
-function kitFiles(): readonly string[] {
-  const listed = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], {
-    cwd: kit,
-    encoding: "utf8",
-  });
-  return listed
-    .split("\0")
-    .filter((file) => file !== "" && existsSync(join(kit, file)) && !lstatSync(join(kit, file)).isSymbolicLink());
-}
-
-export async function copyOfTheKit(label: string): Promise<string> {
-  const root = await realpath(await mkdtemp(join(tmpdir(), `agentbay-${label}-`)));
-  for (const file of kitFiles()) {
-    await mkdir(dirname(join(root, file)), { recursive: true });
-    await copyFile(join(kit, file), join(root, file));
-  }
-  await symlink(join(kit, "node_modules"), join(root, "node_modules"));
-  return root;
-}
 
 export async function addMode(copy: string, folder: string, files: ModeFiles): Promise<void> {
   assert.equal(existsSync(join(copy, folder)), false, `the kit already holds ${folder}`);

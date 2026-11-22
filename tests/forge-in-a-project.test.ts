@@ -7,6 +7,7 @@ import { after, test } from "node:test";
 import { stringify } from "yaml";
 import { fieldOf, numberField, parseJson, textField, toJson } from "../bay/json.ts";
 import { fieldsOf, readYaml, type Json } from "../bay/sdk.ts";
+import { copyOfTheKit } from "./test-toolbox.ts";
 import { kit } from "./project-fixture.ts";
 
 type Finding = {
@@ -21,8 +22,6 @@ type Checked = {
 };
 
 type Files = Readonly<Record<string, string>>;
-
-const cli = join(kit, "bay", "cli.ts");
 
 const projects: string[] = [];
 
@@ -47,7 +46,8 @@ after(async () => {
   await Promise.all(projects.map((folder) => rm(folder, { recursive: true, force: true })));
 });
 
-function bay(folder: string, words: readonly string[]): string {
+function bay(folder: string, words: readonly string[], kitFolder = kit): string {
+  const cli = join(kitFolder, "bay", "cli.ts");
   const ran = spawnSync(process.execPath, [cli, ...words, "--json"], { cwd: folder, encoding: "utf8" });
   return ran.stdout;
 }
@@ -57,8 +57,8 @@ function listField(value: Json | undefined, name: string): readonly Json[] {
   return Array.isArray(field) ? field.map(toJson) : [];
 }
 
-function checked(folder: string): Checked {
-  const report = parseJson(bay(folder, ["check"]));
+function checked(folder: string, kitFolder = kit): Checked {
+  const report = parseJson(bay(folder, ["check"], kitFolder));
   const findings = listField(report, "findings").map((finding) => ({
     severity: textField(finding, "severity") ?? "",
     message: textField(finding, "message") ?? "",
@@ -140,8 +140,10 @@ const onePlan = {
   ],
 };
 
-test("the kit's own bay check gives 0 errors and 52 warnings beside the owner's own setting: none more for forge leaving the kit, two for the typescript mode's run, one for the command that drops a branch, three for forge's long proofs: the final proof, a wave slice's own proof and the wave's checks", () => {
-  const report = checked(kit);
+test("the kit's own bay check gives 0 errors and 52 warnings beside the owner's own setting: none more for forge leaving the kit, two for the typescript mode's run, one for the command that drops a branch, three for forge's long proofs: the final proof, a wave slice's own proof and the wave's checks", async () => {
+  const copy = await copyOfTheKit("forge-kit-check");
+  projects.push(copy);
+  const report = checked(copy, copy);
   const ofTheKit = messages(report).filter((message) => !message.startsWith(withoutTheHook));
   assert.equal(report.errors, 0, errorsOf(report).join("\n"));
   assert.equal(ofTheKit.length, 52, ofTheKit.join("\n"));

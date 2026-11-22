@@ -4,7 +4,7 @@ import { cp, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { copyOfTheKit } from "./kit-copy.ts";
+import { copyOfTheKit } from "./test-toolbox.ts";
 import { kit } from "./project-fixture.ts";
 
 type Checked = {

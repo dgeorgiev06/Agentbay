@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { existsSync, lstatSync } from "node:fs";
+import { copyFile, cp, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -507,4 +507,61 @@ export async function commandLineIn(copy: string): Promise<CommandLineIn> {
   }
   const invocation = { kit: copy, workingDirectory: copy, environment: process.env, terminal: noTerminal };
   return (words) => loaded.bayCommand(words, invocation);
+}
+
+export const livingFolders: readonly string[] = ["docs/requirements/", "docs/designs/", "docs/plans/"];
+
+export const frozenDocuments: Readonly<Record<string, string>> = {
+  "docs/requirements/todo.yaml": "tests/fixtures/todo-v1.yaml",
+  "docs/plans/0022-forge-in-waves.yaml": "tests/fixtures/plans/0022-forge-in-waves.yaml",
+  "docs/plans/0023-todo-mode.yaml": "tests/fixtures/plans/0023-todo-mode.yaml",
+  "docs/plans/0024-forge-whole.yaml": "tests/fixtures/plans/0024-forge-whole.yaml",
+};
+
+export function isLivingDocument(file: string): boolean {
+  return livingFolders.some((folder) => file.startsWith(folder));
+}
+
+function isCopied(file: string): boolean {
+  return (
+    file !== "" &&
+    !isLivingDocument(file) &&
+    existsSync(join(kit, file)) &&
+    !lstatSync(join(kit, file)).isSymbolicLink()
+  );
+}
+
+function kitFiles(): readonly string[] {
+  const listed = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], {
+    cwd: kit,
+    encoding: "utf8",
+  });
+  return listed.split("\0").filter(isCopied);
+}
+
+async function copiedFile(from: string, to: string): Promise<void> {
+  await mkdir(dirname(to), { recursive: true });
+  await copyFile(from, to);
+}
+
+export async function copyKitInto(folder: string): Promise<readonly string[]> {
+  const files = kitFiles();
+  for (const file of files) {
+    await copiedFile(join(kit, file), join(folder, file));
+  }
+  for (const [file, fixture] of Object.entries(frozenDocuments)) {
+    await copiedFile(join(kit, fixture), join(folder, file));
+  }
+  return [...files, ...Object.keys(frozenDocuments)];
+}
+
+export async function linkNodeModules(folder: string): Promise<void> {
+  await symlink(await realpath(join(kit, "node_modules")), join(folder, "node_modules"));
+}
+
+export async function copyOfTheKit(label: string): Promise<string> {
+  const root = await realpath(await mkdtemp(join(tmpdir(), `agentbay-${label}-`)));
+  await copyKitInto(root);
+  await linkNodeModules(root);
+  return root;
 }

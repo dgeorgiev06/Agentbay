@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { readFile, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
-import { commandLineIn, type CommandLineIn } from "../../../../tests/test-toolbox.ts";
+import { commandLineIn, copyOfTheKit, type CommandLineIn } from "../../../../tests/test-toolbox.ts";
 
 type Planned = {
   readonly title: string;
@@ -19,32 +18,8 @@ let copy: string;
 
 let bay: CommandLineIn;
 
-async function copyKitInto(folder: string): Promise<void> {
-  const listing = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: kit });
-  const paths = listing
-    .toString("utf8")
-    .split("\0")
-    .filter((path) => path !== "");
-  for (const path of paths) {
-    await mkdir(dirname(join(folder, path)), { recursive: true });
-    await cp(join(kit, path), join(folder, path));
-  }
-  await symlink(await realpath(join(kit, "node_modules")), join(folder, "node_modules"));
-}
-
-async function copyOfTheKit(): Promise<string> {
-  const folder = await realpath(await mkdtemp(join(tmpdir(), "agentbay-forge-")));
-  try {
-    await copyKitInto(folder);
-    return folder;
-  } catch (error) {
-    await rm(folder, { recursive: true, force: true });
-    throw error;
-  }
-}
-
 before(async () => {
-  copy = await copyOfTheKit();
+  copy = await copyOfTheKit("forge");
   bay = await commandLineIn(copy);
 });
 

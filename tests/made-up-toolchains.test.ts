@@ -5,13 +5,13 @@ import { after, before, test } from "node:test";
 import {
   addMode,
   assertFailsOnlyTheChosenCases,
-  copyOfTheKit,
   failedTests,
   modeTestFile,
   modeTestRan,
   type Cases,
   type ModeTestRun,
 } from "./kit-copy.ts";
+import { copyOfTheKit } from "./test-toolbox.ts";
 import {
   besideTally,
   kernelStateTally,

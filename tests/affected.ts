@@ -34,8 +34,10 @@ export const testsThatOpenTheKit: readonly string[] = [
   "tests/capture-fixtures.test.ts",
   "tests/check-imports.test.ts",
   "tests/feature-map.test.ts",
+  "tests/forge-in-a-project.test.ts",
   "tests/kit-check.test.ts",
   "tests/lint-ignores.test.ts",
+  "tests/living-documents.test.ts",
   "tests/made-up-proofs.test.ts",
   "tests/made-up-requirements.test.ts",
   "tests/made-up-sources.test.ts",
@@ -44,6 +46,7 @@ export const testsThatOpenTheKit: readonly string[] = [
   "tests/new-mode-isolation.test.ts",
   "tests/readme-references.test.ts",
   "tests/shared-tests-in-a-project.test.ts",
+  "tests/test-toolbox.ts",
 ];
 
 const manifestFolders = ["schemas/", "workflows/", "skills/"];

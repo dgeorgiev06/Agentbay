@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ReadOnBranchResponse",
-  "description": "The commit the files were read at, and each file's text, or no text when the commit holds no such file. The kernel records this answer, so a script that called for it reads the same texts when its calls are replayed.",
+  "description": "The commit the files were read at, each file's text, or no text when the commit holds no such file, and the files under the folders asked for. The kernel records this answer, so a script that called for it reads the same texts when its calls are replayed.",
   "type": "object",
   "additionalProperties": false,
   "required": ["commit", "files"],
@@ -30,6 +30,19 @@
           }
         }
       }
+    },
+    "listed": {
+      "type": "array",
+      "maxItems": 2000,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "The files under the folders asked for in list, relative to the project, sorted, at most 2000; left out when no folder was asked for."
+    },
+    "listedCut": {
+      "type": "boolean",
+      "description": "True when the folders hold more files than listed holds; left out when no folder was asked for."
     },
     "stayed": {
       "type": "array",

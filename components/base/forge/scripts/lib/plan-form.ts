@@ -1,8 +1,10 @@
 import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
+import { claimSentence } from "./gate-words.ts";
 import { namedTests } from "./handed-tests.ts";
 import { listOf, textOf, textsOf } from "./json-values.ts";
 import type { Plan, PlannedSlice } from "./plan.ts";
 import { sliceOf } from "./slice-form.ts";
+import { gatedFieldsNamed } from "./tool-checks.ts";
 
 function plannedSliceOf(value: Json): PlannedSlice {
   const planned = fieldsOf(value);
@@ -49,5 +51,22 @@ export function twiceNamed(plan: Plan): readonly NamedTwice[] {
       `Slices ${String(first + 1)} and ${String(at + 1)} are both named ${slice.name}. ` +
       "Give each slice a name of its own, since an after names a slice by it.";
     return [{ at, sentence }];
+  });
+}
+
+export type GateClaimed = {
+  readonly at: string;
+  readonly sentence: string;
+};
+
+export function gatesClaimed(document: Json): readonly GateClaimed[] {
+  return listOf(fieldsOf(document).slices).flatMap((planned, at) => {
+    const slice = fieldsOf(planned).slice ?? null;
+    const claimed = gatedFieldsNamed(slice);
+    if (claimed.length === 0) {
+      return [];
+    }
+    const sentence = claimSentence(sliceOf(slice).name, claimed);
+    return [{ at: `/slices/${String(at)}/slice/done`, sentence }];
   });
 }

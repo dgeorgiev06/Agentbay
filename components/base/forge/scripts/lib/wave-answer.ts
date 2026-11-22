@@ -105,10 +105,13 @@ function leftOutClause(slices: readonly Settled[]): string {
 export type HeadProved = {
   readonly checks: WaveChecks;
   readonly examples?: readonly string[];
+  readonly gate?: readonly string[];
 };
 
 function provedReason(proved: HeadProved): string | undefined {
-  const clauses = [checksReason(proved.checks), ...(proved.examples ?? [])].filter((clause) => clause !== undefined);
+  const clauses = [checksReason(proved.checks), ...(proved.examples ?? []), ...(proved.gate ?? [])].filter(
+    (clause) => clause !== undefined,
+  );
   return clauses.length === 0 ? undefined : clauses.join("; ");
 }
 

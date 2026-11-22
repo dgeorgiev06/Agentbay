@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GateChecksRequest",
+  "description": "A slice about to be proved, and the commit its work ends at.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["slice", "head"],
+  "properties": {
+    "slice": {
+      "$ref": "proof@1/prove-request.json#/$defs/slice"
+    },
+    "head": {
+      "$ref": "proof@1/prove-request.json#/$defs/commit",
+      "description": "The commit the slice's work ends at, where the mode's test files are listed."
+    }
+  }
+}

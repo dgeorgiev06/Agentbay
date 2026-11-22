@@ -46,6 +46,15 @@ const failedSentences: readonly Known[] = [
     says: (found) => `the check ${found[1] ?? ""} found a fault`,
   },
   { matches: /^(\d+) tests? failed\.$/, says: (found) => `${counted(Number(found[1]), "test")} failed` },
+  {
+    matches: /^(\d+) tests? failed in the run of the (\d+) test files? chosen from testsFrom\.$/,
+    says: (found) =>
+      `${counted(Number(found[1]), "test")} failed, in ${counted(Number(found[2]), "test file")} chosen by the gate`,
+  },
+  {
+    matches: /^bay check on the head found (\d+ errors?|errors)\.$/,
+    says: (found) => `bay check on the head found ${found[1] ?? ""}`,
+  },
 ];
 
 const notKnownStarts: readonly Known[] = [
@@ -74,6 +83,8 @@ const notKnownStarts: readonly Known[] = [
   },
   { matches: /^No bugs were given to inject,/, says: () => "no bugs were given to inject" },
   { matches: /^The toolchain ran no checks,/, says: () => "the toolchain ran no checks" },
+  { matches: /^bay check on the head is not known:/, says: () => "bay check on the head is not known" },
+  { matches: /^bay check on the head ended with exit code/, says: () => "bay check on the head ended otherwise" },
   { matches: /^No copy of [0-9a-f]+ could be made:/, says: () => "no copy of the commit could be made" },
 ];
 
@@ -81,7 +92,8 @@ const notKnownSaid = "proof could not tell, so nothing is known";
 
 const noVerdictSaid = "proof gave no verdict";
 
-const checksPassed = /^Every check passed \(([^()]+)\), and so did the test run: (\d+) tests?\.$/;
+const checksPassed =
+  /^Every check passed \(([^()]+)\), and so did (?:the test run|the run of the (\d+) test files? chosen from testsFrom): (\d+) tests?\.( bay check on the head found no error\.)?$/;
 
 const checkName = /^[A-Za-z0-9:._-]+$/;
 
@@ -118,14 +130,23 @@ function failedReason(kind: ProofKind, detail: string): string {
   return known.length === said.length && known.length > 0 ? known.join("; ") : failedSaid[kind];
 }
 
+function testsPassedWords(tests: string, files: string | undefined): string {
+  const among = files === undefined ? "" : `, in ${counted(Number(files), "test file")} chosen by the gate`;
+  return `tests passed: ${grouped(Number(tests))}${among}`;
+}
+
 function checksWords(verdict: Verdict): readonly string[] {
   const found = verdict.verdict === "passed" ? checksPassed.exec(verdict.detail) : null;
-  const names = found?.[1]?.split(", ") ?? [];
-  const tests = found?.[2];
-  if (tests === undefined || !names.every((name) => checkName.test(name))) {
+  if (found === null) {
     return [];
   }
-  return [`checks passed: ${names.join(", ")}`, `tests passed: ${grouped(Number(tests))}`];
+  const [, listed = "", files, tests = "", bay] = found;
+  const names = listed.split(", ");
+  if (!names.every((name) => checkName.test(name))) {
+    return [];
+  }
+  const bayWords = bay === undefined ? [] : ["bay check on the head found no error"];
+  return [`checks passed: ${names.join(", ")}`, ...bayWords, testsPassedWords(tests, files)];
 }
 
 function namedCaseWords(failing: FailingCase, messages: CaseMessages): readonly string[] {

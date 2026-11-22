@@ -1,5 +1,7 @@
 import { defineScript, fail, fieldsOf, type Json } from "../../../../bay/sdk.ts";
 import { listOf, textOf, textsOf } from "./lib/json-values.ts";
+import { gateWorkedOut, withDifferenceFailed } from "./lib/gate-handed.ts";
+import { gatedAsked } from "./lib/gated-checks.ts";
 import { keptTests } from "./lib/kept-tests.ts";
 import { provedOf } from "./lib/proof-answer.ts";
 import { sliceOf } from "./lib/slice-form.ts";
@@ -27,7 +29,8 @@ export const run = defineScript(async (input, context) => {
   if (fields.kind !== "asked") {
     return { kind: "not asked", alone: [] };
   }
-  const asked = fields.asked ?? null;
+  const worked = gateWorkedOut(fields);
+  const asked = await gatedAsked(context, fieldsOf(fields.asked ?? null), worked.gate);
   const setting = settingOf(context.settings.tryExamples);
   const entries = entriesOf(asked, fields.trying, setting);
   const kept = await Promise.all(textsOf(fields.keptOf).map((name) => keptTests(context, name)));
@@ -35,9 +38,10 @@ export const run = defineScript(async (input, context) => {
   if (!proved.ok) {
     return fail(proved.message);
   }
-  const checked = { slice: sliceOf(fieldsOf(asked).slice), proof: provedOf(proved.proof) };
+  const proof = withDifferenceFailed(proved.proof, worked.differs);
+  const checked = { slice: sliceOf(fieldsOf(asked).slice), proof: provedOf(proof) };
   const alone = checksVerdict(checked) === "failed" ? listOf(fields.whenFailed) : [];
   const head = textOf(fieldsOf(asked).head);
   const tried = blocksBySlice(slicesToTry(fields.trying), { setting, head }, proved.results);
-  return { kind: "asked", proof: proved.proof, alone: [...alone], tried };
+  return { kind: "asked", proof, alone: [...alone], tried };
 });

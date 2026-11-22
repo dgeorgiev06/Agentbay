@@ -31,6 +31,7 @@ import {
   type Played,
   type Proved,
   printedCard,
+  scopePassed,
 } from "./kit-copy.ts";
 
 const condition = "A quill is counted once, even when the ink is dry and the moon is full.";
@@ -133,6 +134,7 @@ function allPassed(name: string, files: readonly string[]): Proved {
       { item: `DOD-${name}-1`, kind: "fails-first", verdict: "passed", detail: "It held." },
       { item: `DOD-${name}-2`, kind: "bugs-caught", verdict: "passed", detail: "It held." },
       { item: "checks", kind: "checks", verdict: "passed", detail: "It held." },
+      scopePassed,
     ],
     judgement: [],
     size: files.map((path) => ({ path, head: 3 })),

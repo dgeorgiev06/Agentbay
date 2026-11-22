@@ -4,18 +4,20 @@ import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
 import {
   askedOf,
   decided,
+  git,
   kitTemplate,
   printedCard,
   project,
   provedIn,
   removeAll,
   runOf,
+  scopePassed,
   shown,
   textAt,
   waitingOf,
   type Proved,
 } from "./kit-copy.ts";
-import { givenIn, partStarted } from "./part-run.ts";
+import { givenIn, partStarted, withCommits } from "./part-run.ts";
 
 const name = "P2";
 
@@ -46,6 +48,7 @@ const notKnown: Proved = {
       reason: "No bugs were given to inject, so nothing is known.",
     },
     { item: "checks", kind: "checks", verdict: "passed", detail: "It held." },
+    scopePassed,
   ],
   judgement: [],
   size: [{ path: code, head: 1 }],
@@ -64,7 +67,9 @@ after(async () => {
 test("given rounds whose builder stopped, the final proof is asked with the owner's bugs alone, named apart, and the card names no planter", async () => {
   const root = await project(template);
   await provedIn(root, name, notKnown);
-  const given = await givenIn("given-p2-stopped.json");
+  const captured = await givenIn("given-p2-stopped.json");
+  const head = textAt(fieldsOf(captured)["review-3"] ?? null, "head");
+  const given = withCommits(captured, new Map([[head, git(root, ["rev-parse", "main"]).trim()]]));
   const runId = await partStarted(root, "forge:workflows/rounds.yaml", { trigger: {}, part: { given } });
   const proved = await askedOf(root, name);
   assert.equal(proved.length, 1);

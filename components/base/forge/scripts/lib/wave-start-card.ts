@@ -1,7 +1,7 @@
 import type { Dropped } from "./branch-endings.ts";
 import { computed, counted, joined, shortened, type Card } from "./card-lines.ts";
 import { modulesReached, type DesignSummary } from "./design-summary.ts";
-import { leftoverWords } from "./start-card.ts";
+import { gateWords, leftoverWords, type GateShown } from "./start-card.ts";
 import type { PlannedSlice } from "./plan.ts";
 import { lastRound } from "./rounds.ts";
 
@@ -15,6 +15,7 @@ export type WaveStart = {
   readonly design?: DesignSummary;
   readonly sideBySide: number;
   readonly leftovers: readonly Dropped[];
+  readonly gate?: GateShown;
 };
 
 type SkillSteps = {
@@ -79,7 +80,13 @@ export function waveStartCard(start: WaveStart): Card {
     ...start.slices.flatMap((slice) => sliceWords(slice, start.design)),
     ...sideBySideWords(start),
     costWords(start),
-    "each slice's own proof leaves out the checks; they and the whole test run go once, on the slices combined",
+    "each slice's own proof leaves out the checks; they go once, on the slices combined",
+    ...(start.gate === undefined
+      ? []
+      : gateWords(
+          start.gate,
+          start.slices.map((slice) => slice.name),
+        )),
     ...leftoverWords(start.leftovers),
   ];
   return { title: `Build wave ${String(start.wave)} of ${file}?`, lines: words.map((said) => computed("wave", said)) };

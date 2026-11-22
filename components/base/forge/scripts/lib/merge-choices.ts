@@ -16,6 +16,7 @@ export type Standing = {
   readonly mustNotHeld: readonly string[];
   readonly interfaceChanges: readonly InterfaceChange[];
   readonly examples?: readonly string[];
+  readonly gate?: readonly string[];
 };
 
 type Unmet = {
@@ -66,6 +67,7 @@ export function mergeReason(standing: Standing): string | undefined {
     ...unmetClause(unmet.failed, { one: "failed", many: "failed" }),
     ...unmetClause(unmet.notKnown, { one: "is not known", many: "are not known" }),
     ...(standing.examples ?? []),
+    ...(standing.gate ?? []),
     ...mustClause(standing.mustNotHeld),
     ...interfaceClauses(standing.interfaceChanges),
   ];

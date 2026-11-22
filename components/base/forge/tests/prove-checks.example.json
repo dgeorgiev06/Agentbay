@@ -31,6 +31,21 @@
         },
         "bugs": []
       },
+      "gate": {
+        "gate": "whole",
+        "because": {
+          "why": "outside",
+          "slice": "TB",
+          "path": "components/base/store/**"
+        }
+      },
+      "gatedBy": [
+        {
+          "name": "TB",
+          "kind": "mode",
+          "scope": ["components/base/store/**"]
+        }
+      ],
       "keptOf": ["ONE"],
       "whenFailed": []
     }

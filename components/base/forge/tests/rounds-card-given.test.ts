@@ -52,6 +52,9 @@ test("given three rounds and reviews of a slice still failing, whose builder cha
     "  failing: b1 quill that was added is",
     "    counted twice",
     "  DOD-B1-2, must, passed: The checks pass.",
+    "  gate: the whole test run, since B1 writes",
+    "    outside a mode's folder",
+    "    (components/base/interfaces/proof.yaml)",
     "  the design's examples: none, since the",
     "    slice's request carries none of a",
     "    design's examples; nothing is withheld",
@@ -95,7 +98,7 @@ test("given three rounds and reviews of a slice still failing, whose builder cha
     "  discard    Stop; the worktrees go",
     "             why: Discarding comes with",
     "             slice WD1.",
-    "checked: 0 ran, 15 computed, 5 judged",
+    "checked: 0 ran, 16 computed, 5 judged",
   ]);
 });
 

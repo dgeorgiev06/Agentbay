@@ -1,5 +1,7 @@
-import { fieldsOf, type Json } from "../../../../../bay/sdk.ts";
-import { listOf } from "./json-values.ts";
+import { fieldsOf, type Json, type JsonFields } from "../../../../../bay/sdk.ts";
+import type { Gate } from "./gate.ts";
+import { modeChecksSays } from "./gate-words.ts";
+import { listOf, textOf } from "./json-values.ts";
 
 const says =
   "Added by forge, as the plan lists no checks item: the toolchain's checks, such as types, lint, format and " +
@@ -31,4 +33,38 @@ export function withToolChecks(slice: Json): Json {
   }
   const added = { id: freeId(done), says, level: "must", proof: { kind: "checks" } };
   return { ...fields, done: [...done, added] };
+}
+
+function withChecksItems(slice: Json, changed: (item: JsonFields) => JsonFields): Json {
+  const fields = fieldsOf(slice);
+  const done = listOf(fields.done).map((item) => (isChecks(item) ? changed(fieldsOf(item)) : item));
+  return { ...fields, done };
+}
+
+export function withGateSaid(slice: Json, gate: Gate): Json {
+  if (gate.gate === "whole") {
+    return slice;
+  }
+  return withChecksItems(slice, (item) => ({ ...item, says: modeChecksSays(gate) }));
+}
+
+const gatedFields = ["testsFrom", "bayCheck"];
+
+export function withGatedRuns(slice: Json, testsFrom: readonly string[]): Json {
+  const proof = { kind: "checks", testsFrom: [...testsFrom], bayCheck: true };
+  return withChecksItems(slice, (item) => ({ ...item, proof }));
+}
+
+export function withoutGatedRuns(slice: Json): Json {
+  return withChecksItems(slice, (item) => ({ ...item, proof: { kind: "checks" } }));
+}
+
+function namesAGatedField(item: Json): boolean {
+  const proof = fieldsOf(fieldsOf(item).proof ?? null);
+  return gatedFields.some((field) => field in proof);
+}
+
+export function gatedFieldsNamed(slice: Json): readonly string[] {
+  const done = listOf(fieldsOf(slice).done);
+  return done.filter((item) => isChecks(item) && namesAGatedField(item)).map((item) => textOf(fieldsOf(item).id));
 }

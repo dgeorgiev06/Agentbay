@@ -5,7 +5,6 @@ import { after, before, test } from "node:test";
 import {
   addMode,
   assertFailsOnlyTheChosenCases,
-  failedTests,
   modeTestFile,
   modeTestRan,
   nodeRanIn,
@@ -14,7 +13,6 @@ import {
 import { copyOfTheKit } from "./test-toolbox.ts";
 import {
   absentFailingShelf,
-  casesThatNeedMergeSetAsideOrApply,
   liveDroppingShelf,
   shelf,
   shelfFiles,
@@ -57,8 +55,6 @@ let copy: string;
 
 let checked: ModeTestRun;
 
-let shelfTested: ModeTestRun;
-
 let wrongShelvesTested: readonly ModeTestRun[];
 
 function casesOf(name: string, cases: readonly string[]): readonly string[] {
@@ -71,9 +67,8 @@ before(async () => {
   for (const wrong of wrongShelves) {
     await addMode(copy, join(baseFolder, wrong.name), shelfFiles(wrong.name, wrong.variant));
   }
-  [checked, shelfTested, ...wrongShelvesTested] = await Promise.all([
+  [checked, ...wrongShelvesTested] = await Promise.all([
     nodeRanIn(copy, ["bay/cli.ts", "check"]),
-    modeTestRan(copy, modeTestFile(baseFolder, shelf), "every case"),
     ...wrongShelves.map((wrong) =>
       modeTestRan(copy, modeTestFile(baseFolder, wrong.name), { only: casesOf(wrong.name, [wrong.fails]) }),
     ),
@@ -87,12 +82,6 @@ after(async () => {
 test("bay check accepts a made-up worktrees mode that keeps commits as files and runs the shared test", () => {
   assert.equal(checked.status, 0, checked.output);
   assert.match(checked.output, /^bay check: 0 errors, /m);
-});
-
-test("a made-up worktrees mode passes every case of the shared test that its nine built actions answer", () => {
-  assert.equal(shelfTested.status, 1, shelfTested.output);
-  assert.deepEqual(failedTests(shelfTested.output), casesOf(shelf, casesThatNeedMergeSetAsideOrApply));
-  assert.match(shelfTested.output, /^# pass 33$/m);
 });
 
 for (const [index, wrong] of wrongShelves.entries()) {

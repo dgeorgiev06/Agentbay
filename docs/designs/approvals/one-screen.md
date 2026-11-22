@@ -114,15 +114,28 @@ of the kernel's layout (`tests/printed-card.ts`); after it, none.
 
 1. AS1, this slice: the design card, without "Not decided".
 2. AS2: the challenger's required "Not decided" list (the owner answered "Yes, required"), filling `open`.
-3. AS3: forge's path card. 4. AS4: the plan card. 5. AS5: the start and merge cards, perhaps split.
-6. AS6: the wave cards. 7. AS7: the pm mode's cards. 8. AS8: the trust card.
+3. AS3: forge's path card. 4. AS4: the wave's start and merge screens. 5. AS5: the plan card, and the start and
+   merge cards of a slice built alone.
+6. AS6: the wave cards, done in AS4. 7. AS7: the pm mode's cards. 8. AS8: the trust card.
 9. Last: delete the old layout in `bay/approval-card.ts` and forge's `tests/printed-card.ts`.
 
 Forge's `given` outputs are captured before the draw step, so no recapture is needed for a converted draw script.
+A converted step before the capture, as the wave step whose start screen `given-wave-ca-cb.json` holds, is
+recaptured with `components/base/forge/tests/recapture.ts`.
 
 The coordinator's block says to show "every line it prints for the approval, unchanged and whole". Proposed once
 every screen is converted (not changed here): "Show the owner the approval screen `bay runs <run>` prints, unchanged
 and whole. When he asks for details, show what `bay runs <run> --details` prints, unchanged and whole."
+
+## Open
+
+1. Words from a document the owner approved (found in AS4, the wave's start and merge screens). A slice's title is
+   the planner's words, so it may be neither a script's fact nor a `judged` one: `judged` cites a skill step of this
+   run that the approval quotes, and the planner ran in the plan's run. Until this is decided, both wave screens
+   leave the title and a planned item's words out and point to the plan file and slice. Proposal, not built:
+   - a third kind of fact, "words from a document the owner approved", naming a committed file the run read and a field in it;
+   - the kernel checks the words equal that field of the file at the commit the run started from;
+   - it prints them under a row of its own, such as "From the plan you approved:", never as a script's or a model's.
 
 ## Decided by the owner
 

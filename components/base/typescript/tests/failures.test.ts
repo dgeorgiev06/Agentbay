@@ -242,3 +242,52 @@ test("a failing case in a file that also stopped is kept, a case outside the fol
     JSON.stringify({ stdout, stderr }),
   );
 });
+
+function printedCase(number: number, name: string): string {
+  return [
+    `# Subtest: ${name}`,
+    `not ok ${String(number)} - ${name}`,
+    "  ---",
+    `  location: '{folder}/tests/many.test.ts:${String(number)}:1'`,
+    "  failureType: 'testCodeFailure'",
+    `  error: '${name} fails'`,
+    "  ...",
+  ].join("\n");
+}
+
+const keptCharacters = 64 * 1024;
+
+const cutRun = [
+  "TAP version 13",
+  printedCase(1, "a case the cut takes"),
+  printedCase(2, "another case the cut takes"),
+  printedCase(3, "a third case the cut takes"),
+  "# a line node printed\n".repeat(keptCharacters / 16),
+  printedCase(4, "a case the kept end shows"),
+  printedCase(5, "another case the kept end shows"),
+  "1..5",
+  "# tests 5",
+  "# suites 0",
+  "# pass 0",
+  "# fail 5",
+  "# cancelled 0",
+  "",
+].join("\n");
+
+test("when the kernel cut the output, the failures node's summary counts and the kept end does not show are counted as not listed", async () => {
+  const folder = await writeCheckout(project, "cut", {
+    "package.json": packageWith({ test: "node print.mjs" }),
+    "print.mjs": printer,
+    "run.tap": cutRun,
+  });
+  const output = await project.output("typescript.test", { folder, timeLimitSeconds: 60 });
+  assert.deepEqual(shownCases(output), {
+    verdict: "failed",
+    failures: [
+      failingCase("a case the kept end shows", "tests/many.test.ts", "a case the kept end shows fails"),
+      failingCase("another case the kept end shows", "tests/many.test.ts", "another case the kept end shows fails"),
+    ],
+    failuresNotListed: 3,
+    notLoaded: [],
+  });
+});

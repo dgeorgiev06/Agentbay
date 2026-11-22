@@ -1,10 +1,15 @@
-import { failedEntries, type FailedEntry, type ReportedText } from "./tap.ts";
+import { failedEntries, summaryOf, type FailedEntry, type ReportedText } from "./tap.ts";
 
 type FailingCase = {
   readonly name: string;
   readonly file: string;
   readonly message: string;
   readonly charactersCut: number;
+};
+
+type Printed = {
+  readonly stdout: string;
+  readonly stdoutCut: boolean;
 };
 
 type Cases = {
@@ -48,8 +53,13 @@ function caseOf(entry: FailedEntry, folder: string): FailingCase {
   return { name: entry.name, file: fileOf(entry, folder), ...messageOf(entry.fields.get("error")) };
 }
 
-export function casesOf(output: string, folder: string): Cases {
-  const entries = failedEntries(output);
+function unshownFailures(printed: Printed, entries: readonly FailedEntry[]): number {
+  const counted = printed.stdoutCut ? (summaryOf(printed.stdout)?.fail ?? 0) : 0;
+  return Math.max(0, counted - entries.length);
+}
+
+export function casesOf(printed: Printed, folder: string): Cases {
+  const entries = failedEntries(printed.stdout);
   const notLoaded = entries.filter(isWholeFile).map((entry) => fileOf(entry, folder) || entry.name);
   const cases = entries
     .filter((entry) => !isWholeFile(entry))
@@ -57,7 +67,7 @@ export function casesOf(output: string, folder: string): Cases {
     .map((entry) => caseOf(entry, folder));
   return {
     failures: cases.slice(0, mostFailures),
-    failuresNotListed: Math.max(0, cases.length - mostFailures),
+    failuresNotListed: Math.max(0, cases.length - mostFailures) + unshownFailures(printed, entries),
     notLoaded: [...new Set(notLoaded)],
   };
 }

@@ -24,7 +24,7 @@ export const run = defineScript(async (input, context) => {
       if (result.verdict !== "failed") {
         return result;
       }
-      return { ...result, ...casesOf(finished.stdout, await realFolder(context, request.folder)) };
+      return { ...result, ...casesOf(finished, await realFolder(context, request.folder)) };
     }
   }
 });

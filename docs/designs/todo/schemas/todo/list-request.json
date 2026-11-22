@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "which"
+  ],
+  "properties": {
+    "which": {
+      "enum": [
+        "open",
+        "all"
+      ]
+    }
+  }
+}

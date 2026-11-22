@@ -281,6 +281,23 @@ test("a git worktree's .git pointer inside a step's write root is closed to its 
   assertAllowed(ask(digest, "Read", { file_path: "/p/out/wt/a.ts" }));
 });
 
+test("the copies a worktree tracks stay closed to a step's reads and writes, whatever the build lets through", () => {
+  const copies: readonly (readonly [string, string])[] = [
+    ["/p/out/wt/agentbay.config.yaml", "agentbay.config.yaml"],
+    ["/p/out/wt/CLAUDE.md", "CLAUDE.md"],
+    ["/p/out/wt/.claude/settings.json", ".claude"],
+    ["/p/out/wt/.mcp.json", ".mcp.json"],
+    ["/p/out/wt/.env.example", ".env.*"],
+    ["/p/out/wt/.agentbay/notes.md", ".agentbay"],
+    ["/p/out/wt/.git", ".git"],
+  ];
+  for (const [path, name] of copies) {
+    assertDenied(ask(digest, "Read", { file_path: path }), `${name} is closed`, path);
+    assertDenied(ask(digest, "Write", { file_path: path, content: "" }), `${name} is closed`, path);
+    assertDenied(ask(digest, "Edit", { file_path: path, old_string: "a", new_string: "b" }), `${name} is closed`, path);
+  }
+});
+
 test("a step reads kit folders only inside its read roots, and writes them only through a root inside them", () => {
   const forge = "agentbay-forge-extend";
   const wide = "agentbay-wide-everything";

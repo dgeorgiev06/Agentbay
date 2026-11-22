@@ -1,10 +1,10 @@
 {
   "commits": {
-    "integration": "834ea34bbd10d2b5f8d0ac11326b9327daa3e776",
-    "forge/CA": "6e5f75db5b60cd2a19d73787112a2b407a9b9e50",
-    "forge/CA-tests-1": "5403e3eb79b28b9b82d75033e53a0a8c0f687e41",
-    "forge/CB": "6cb5f4be9fd017761dbd5da48dd07d4726d38a58",
-    "forge/CB-tests-1": "7208d421dea8395604d72a88dd876314f066a593"
+    "integration": "46361b309886c2b0abd34669d82d19cbd986bba8",
+    "forge/CA": "6c54a9a333f5d699fee7f5419e312b70cb91dbd9",
+    "forge/CA-tests-1": "95cee75c3ef92fd865352a002d764d89d7c8bfe6",
+    "forge/CB": "b0df9c312de5c190134676dc4a7533e59ad006b3",
+    "forge/CB-tests-1": "e88f334ca3c04fda49c97907d558a82dd99bd5df"
   },
   "given": {
     "wave": {
@@ -12,7 +12,7 @@
       "plan": "docs/plans/0099-wave.yaml",
       "wave": 1,
       "into": "integration",
-      "base": "834ea34bbd10d2b5f8d0ac11326b9327daa3e776",
+      "base": "46361b309886c2b0abd34669d82d19cbd986bba8",
       "card": {
         "title": "Build wave 1 of 1 of plan 0099-wave.yaml?",
         "lines": [
@@ -63,7 +63,7 @@
           },
           {
             "mark": "computed",
-            "words": "The plan was read at commit 834ea34bbd10d2b5f8d0ac11326b9327daa3e776, the head of integration; each slice is cut from that commit.",
+            "words": "The plan was read at commit 46361b309886c2b0abd34669d82d19cbd986bba8, the head of integration; each slice is cut from that commit.",
             "source": {
               "step": "wave"
             },
@@ -207,7 +207,7 @@
           }
         ],
         "withheld": {
-          "build-over": "No earlier run left a branch of this wave."
+          "build-over": "Nothing is left over from an earlier build, so there is nothing to build over."
         }
       },
       "offered": {
@@ -246,7 +246,7 @@
               ]
             }
           },
-          "base": "834ea34bbd10d2b5f8d0ac11326b9327daa3e776",
+          "base": "46361b309886c2b0abd34669d82d19cbd986bba8",
           "bugs": [],
           "interface": ["components/base/interfaces/proof.yaml"]
         },
@@ -279,7 +279,7 @@
               ]
             }
           },
-          "base": "834ea34bbd10d2b5f8d0ac11326b9327daa3e776",
+          "base": "46361b309886c2b0abd34669d82d19cbd986bba8",
           "bugs": [],
           "interface": ["components/base/interfaces/proof.yaml"]
         }
@@ -346,7 +346,7 @@
           },
           {
             "mark": "computed",
-            "words": "The plan was read at commit 834ea34bbd10d2b5f8d0ac11326b9327daa3e776, the head of integration; each slice is cut from that commit.",
+            "words": "The plan was read at commit 46361b309886c2b0abd34669d82d19cbd986bba8, the head of integration; each slice is cut from that commit.",
             "source": {
               "step": "wave"
             },
@@ -490,7 +490,7 @@
           }
         ],
         "withheld": {
-          "build-over": "No earlier run left a branch of this wave."
+          "build-over": "Nothing is left over from an earlier build, so there is nothing to build over."
         }
       }
     },
@@ -502,8 +502,8 @@
       {
         "name": "CA",
         "title": "The ca mode counts what was added",
-        "base": "834ea34bbd10d2b5f8d0ac11326b9327daa3e776",
-        "head": "5403e3eb79b28b9b82d75033e53a0a8c0f687e41",
+        "base": "46361b309886c2b0abd34669d82d19cbd986bba8",
+        "head": "95cee75c3ef92fd865352a002d764d89d7c8bfe6",
         "work": "forge/CA-tests-1",
         "builder": "forge/CA",
         "slice": {
@@ -564,15 +564,15 @@
           "round": 1,
           "stage": "reviewed",
           "done": true,
-          "base": "834ea34bbd10d2b5f8d0ac11326b9327daa3e776",
+          "base": "46361b309886c2b0abd34669d82d19cbd986bba8",
           "built": {
             "outcome": "built"
           },
           "builder": {
             "branch": "forge/CA",
-            "commit": "6e5f75db5b60cd2a19d73787112a2b407a9b9e50"
+            "commit": "6c54a9a333f5d699fee7f5419e312b70cb91dbd9"
           },
-          "head": "5403e3eb79b28b9b82d75033e53a0a8c0f687e41",
+          "head": "95cee75c3ef92fd865352a002d764d89d7c8bfe6",
           "branch": "forge/CA-tests-1",
           "declared": {
             "files": ["components/modes/ca/scripts/ca.ts", "components/modes/ca/tests/ca.test.ts"],
@@ -670,8 +670,8 @@
       {
         "name": "CB",
         "title": "The cb mode counts what was added",
-        "base": "834ea34bbd10d2b5f8d0ac11326b9327daa3e776",
-        "head": "7208d421dea8395604d72a88dd876314f066a593",
+        "base": "46361b309886c2b0abd34669d82d19cbd986bba8",
+        "head": "e88f334ca3c04fda49c97907d558a82dd99bd5df",
         "work": "forge/CB-tests-1",
         "builder": "forge/CB",
         "slice": {
@@ -732,15 +732,15 @@
           "round": 1,
           "stage": "reviewed",
           "done": true,
-          "base": "834ea34bbd10d2b5f8d0ac11326b9327daa3e776",
+          "base": "46361b309886c2b0abd34669d82d19cbd986bba8",
           "built": {
             "outcome": "built"
           },
           "builder": {
             "branch": "forge/CB",
-            "commit": "6cb5f4be9fd017761dbd5da48dd07d4726d38a58"
+            "commit": "b0df9c312de5c190134676dc4a7533e59ad006b3"
           },
-          "head": "7208d421dea8395604d72a88dd876314f066a593",
+          "head": "e88f334ca3c04fda49c97907d558a82dd99bd5df",
           "branch": "forge/CB-tests-1",
           "declared": {
             "files": ["components/modes/cb/scripts/cb.ts", "components/modes/cb/tests/cb.test.ts"],

@@ -35,6 +35,7 @@ export const testsThatOpenTheKit: readonly string[] = [
   "tests/check-imports.test.ts",
   "tests/feature-map.test.ts",
   "tests/forge-in-a-project.test.ts",
+  "tests/forge-worktree-check.test.ts",
   "tests/kit-check.test.ts",
   "tests/lint-ignores.test.ts",
   "tests/living-documents.test.ts",

@@ -1,32 +1,61 @@
-import { dirname, isAbsolute, join, normalize, relative, sep } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 import type { GrantedFoldersRequest, SkillAgent } from "../../bay/adapter.ts";
 import type { DirectoryEntry, Problem } from "./adapter-types.ts";
 import { searchBound } from "./guard-input.ts";
 import { closedName } from "./guard-paths.ts";
+import { isTrackedCopy, trackedIn, worktreeGitDir, type Tracked } from "./worktree-copies.ts";
 
 type Scan =
   { readonly kind: "clear" } | { readonly kind: "closed"; readonly path: string } | { readonly kind: "too-large" };
 
-const worktreePointer = /^gitdir: ([^\r\n]+)\n?$/;
+type Worktree = {
+  readonly kind: "worktree";
+  readonly root: string;
+  readonly gitDir: string;
+  seen: number;
+  tracked: Tracked | undefined | "unasked";
+};
 
-function isWorktreePointer(text: string | undefined, worktrees: string): boolean {
-  const target = text === undefined ? undefined : worktreePointer.exec(text)?.[1];
-  return target !== undefined && normalize(target) === target && dirname(target) === worktrees;
+type Region = { readonly kind: "ordinary"; seen: number } | Worktree;
+
+type Place = { readonly path: string; readonly depth: number; readonly region: Region };
+
+async function placeOf(
+  request: GrantedFoldersRequest,
+  place: Place,
+  entries: readonly DirectoryEntry[],
+): Promise<Place> {
+  if (place.region.kind === "worktree") {
+    return place;
+  }
+  const gitDir = await worktreeGitDir(request, place.path, entries);
+  if (gitDir === undefined) {
+    return place;
+  }
+  const worktree: Worktree = { kind: "worktree", root: place.path, gitDir, seen: 0, tracked: "unasked" };
+  return { path: place.path, depth: 0, region: worktree };
 }
 
-async function realWorktreesFolder(request: GrantedFoldersRequest): Promise<string> {
-  const { project } = request.layout;
-  return join((await request.inspector.realPath(project)) ?? project, ".git", "worktrees");
+async function trackedOfWorktree(request: GrantedFoldersRequest, worktree: Worktree): Promise<Tracked | undefined> {
+  if (worktree.tracked === "unasked") {
+    worktree.tracked = await trackedIn(request, worktree);
+  }
+  return worktree.tracked;
 }
 
-async function isClosedEntry(request: GrantedFoldersRequest, path: string, entry: DirectoryEntry): Promise<boolean> {
-  if (closedName(entry.name) === undefined) {
+type Found = { readonly path: string; readonly entry: DirectoryEntry };
+
+async function isClosedEntry(request: GrantedFoldersRequest, region: Region, found: Found): Promise<boolean> {
+  const { path, entry } = found;
+  if (region.kind === "ordinary") {
+    return closedName(entry.name) !== undefined;
+  }
+  const below = relative(region.root, path);
+  if (below === ".git" || !below.split(sep).some((segment) => closedName(segment) !== undefined)) {
     return false;
   }
-  if (entry.name !== ".git" || entry.kind !== "file") {
-    return true;
-  }
-  return !isWorktreePointer(await request.files.readText(path), await realWorktreesFolder(request));
+  const tracked = await trackedOfWorktree(request, region);
+  return tracked === undefined || !isTrackedCopy(below, entry, tracked);
 }
 
 function ownClosedSegment(folder: string, bases: readonly string[]): boolean {
@@ -38,20 +67,24 @@ function ownClosedSegment(folder: string, bases: readonly string[]): boolean {
 
 async function scanFolder(request: GrantedFoldersRequest, folder: string): Promise<Scan> {
   const { inspector } = request;
-  const queue = [{ path: folder, depth: 0 }];
-  let seen = 0;
+  const queue: Place[] = [{ path: folder, depth: 0, region: { kind: "ordinary", seen: 0 } }];
   for (const next of queue) {
-    for (const entry of await inspector.entries(next.path)) {
-      seen += 1;
-      const path = join(next.path, entry.name);
-      if (await isClosedEntry(request, path, entry)) {
+    const entries = await inspector.entries(next.path);
+    const { path: parent, depth, region } = await placeOf(request, next, entries);
+    for (const entry of entries) {
+      region.seen += 1;
+      const path = join(parent, entry.name);
+      if (await isClosedEntry(request, region, { path, entry })) {
         return { kind: "closed", path };
       }
-      const depth = next.depth + 1;
-      if (seen > searchBound.entries || (depth > searchBound.depth && (await inspector.entries(path)).length > 0)) {
+      const below = depth + 1;
+      if (
+        region.seen > searchBound.entries ||
+        (below > searchBound.depth && (await inspector.entries(path)).length > 0)
+      ) {
         return { kind: "too-large" };
       }
-      queue.push({ path, depth });
+      queue.push({ path, depth: below, region });
     }
   }
   return { kind: "clear" };

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdir, symlink } from "node:fs/promises";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdir, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import { makeProject, type Project } from "./project-fixture.ts";
@@ -96,3 +96,43 @@ for (const [what, placed] of notPointers) {
     }
   });
 }
+
+function git(folder: string, words: readonly string[]): void {
+  execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t.invalid", ...words], {
+    cwd: folder,
+    env: { PATH: process.env.PATH ?? "/usr/bin:/bin", GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" },
+    stdio: "ignore",
+  });
+}
+
+function refusedFor(project: Project, holds: string): string {
+  const granted = join(project.root, "out", "notes");
+  return `the step agentbay-writer-draft is granted ${granted}, which holds ${join(granted, "wt", holds)}`;
+}
+
+test("a real worktree of the project passes with its tracked CLAUDE.md, and refuses an untracked secret or a tracked link", async () => {
+  const project = await makeProject({ adapter: "claude-code" });
+  const worktree = join(project.root, "out", "notes", "wt");
+  try {
+    await project.write("CLAUDE.md", "the project's notes\n");
+    git(project.root, ["init", "--quiet"]);
+    git(project.root, ["add", "CLAUDE.md"]);
+    git(project.root, ["commit", "--quiet", "--no-gpg-sign", "--message", "base"]);
+    git(project.root, ["worktree", "add", "--quiet", "--detach", worktree, "HEAD"]);
+    assert.doesNotMatch(ran(project, ["check"]).output, /is granted/);
+    assert.equal(ran(project, ["build"]).status, 0);
+    assert.equal(ran(project, ["build", "--clean"]).status, 0);
+    await project.write("out/notes/wt/.env.local", "");
+    assert.ok(ran(project, ["check"]).output.includes(refusedFor(project, ".env.local")));
+    assert.ok(ran(project, ["build"]).output.includes(refusedFor(project, ".env.local")));
+    await rm(join(worktree, ".env.local"));
+    await mkdir(join(worktree, "docs"));
+    await symlink("../CLAUDE.md", join(worktree, "docs", "CLAUDE.md"));
+    git(worktree, ["add", "docs/CLAUDE.md"]);
+    const linked = refusedFor(project, join("docs", "CLAUDE.md"));
+    assert.ok(ran(project, ["check"]).output.includes(linked));
+    assert.ok(ran(project, ["build"]).output.includes(linked));
+  } finally {
+    await project.remove();
+  }
+});

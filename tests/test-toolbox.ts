@@ -21,6 +21,7 @@ import type { DatabasePartition } from "../bay/sdk.ts";
 import { readTrustRecord, recordWithTrust, scriptFilesOf, writeTrustRecord } from "../bay/trust.ts";
 import { testEnvironment } from "./kernel-fixture.ts";
 import { kit } from "./project-fixture.ts";
+import { projectBesideTheKit } from "./project-beside.ts";
 import { activeModeGrants } from "./system-fixture.ts";
 
 export type CallOptions = {
@@ -306,13 +307,20 @@ function calledAs(reference: string, caller: string): string {
   return `${caller}.${reference.slice(prefix.length)}`;
 }
 
-function projectRootAt(folder: string): string {
+function projectRootAbove(folder: string): string | undefined {
   const parent = dirname(folder);
   if (existsSync(join(folder, configFile))) {
     return folder;
   }
-  assert.notEqual(parent, folder, `no folder at or above the one given holds ${configFile}`);
-  return projectRootAt(parent);
+  return parent === folder ? undefined : projectRootAbove(parent);
+}
+
+async function projectToCopy(given: string): Promise<string | undefined> {
+  const root = projectRootAbove(resolve(given));
+  if (root === undefined) {
+    assert.fail(`No folder at or above ${given} holds ${configFile}, so it is in no project and not in the kit.`);
+  }
+  return projectBesideTheKit(await realpath(root), await realpath(kit));
 }
 
 async function configOf(project: string): Promise<Fields> {
@@ -360,7 +368,7 @@ export async function openModeProject(config: Config, options: ProjectOptions = 
 
 async function openedIn(root: string, config: Config, options: ProjectOptions): Promise<ModeProject> {
   execFileSync("git", ["init", "-q"], { cwd: root });
-  const project = options.project === undefined ? undefined : projectRootAt(resolve(options.project));
+  const project = options.project === undefined ? undefined : await projectToCopy(options.project);
   if (project !== undefined) {
     await cp(join(project, "components"), join(root, "components"), { recursive: true });
   }

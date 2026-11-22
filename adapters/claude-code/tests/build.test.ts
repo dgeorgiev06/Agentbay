@@ -349,6 +349,93 @@ test("a build refuses a step granted a folder that holds a closed name, and writ
   assert.match(outcome.problems[0]?.message ?? "", /names a closed location/);
 });
 
+const pointer = `${project}/notes/wt/.git`;
+
+function withPointer(text: string): MemoryFiles {
+  return memoryFiles({ [pointer]: text, [`${project}/notes/wt/a.ts`]: "a" });
+}
+
+test("a build passes a granted folder that holds a git worktree's pointer into the project's own worktrees", async () => {
+  for (const text of [`gitdir: ${project}/.git/worktrees/wt\n`, `gitdir: ${project}/.git/worktrees/other-name`]) {
+    const outcome = await adapter.build(buildRequest(withPointer(text)));
+    assert.ok(outcome.ok, `${text}: ${JSON.stringify(outcome)}`);
+  }
+});
+
+test("a pointer names the project's worktrees by its real path, as git writes it when the project is reached by a link", async () => {
+  const files = withPointer("gitdir: /real/proj/.git/worktrees/wt\n");
+  const realPath = (path: string) => Promise.resolve(path === project ? "/real/proj" : path);
+  const linked = { ...files, inspector: { ...files.inspector, realPath } };
+  const outcome = await adapter.build(buildRequest(linked));
+  assert.ok(outcome.ok, JSON.stringify(outcome));
+  assert.ok(!(await adapter.build(buildRequest(files))).ok);
+  const written = withPointer(`gitdir: ${project}/.git/worktrees/wt\n`);
+  assert.ok(!(await adapter.build(buildRequest({ ...written, inspector: { ...written.inspector, realPath } }))).ok);
+});
+
+test("a build refuses a .git entry that is not exactly a pointer into the project's own worktrees", async () => {
+  const refused = [
+    `gitdir: ${project}/.git/worktrees/wt\nextra\n`,
+    `gitdir: ${project}/.git/worktrees/wt\n\n`,
+    `gitdir: ${project}/.git/worktrees/wt\r\n`,
+    ` gitdir: ${project}/.git/worktrees/wt\n`,
+    `gitdir:${project}/.git/worktrees/wt\n`,
+    `GITDIR: ${project}/.git/worktrees/wt\n`,
+    `x gitdir: ${project}/.git/worktrees/wt\n`,
+    "gitdir: /elsewhere/.git/worktrees/wt\n",
+    `gitdir: ${project}/.git\n`,
+    `gitdir: ${project}/.git/modules/wt\n`,
+    `gitdir: ${project}/.git/worktrees/\n`,
+    `gitdir: ${project}/.git/worktrees/wt/deeper\n`,
+    `gitdir: ${project}/.git/worktrees/../wt\n`,
+    `gitdir: ${project}/.git/worktrees//wt\n`,
+    `gitdir: ${project}/.git/worktrees/./wt\n`,
+    `gitdir: ${project}/.git/worktrees/..\n`,
+    `gitdir: ${project}/.git/worktrees/.\n`,
+    "gitdir: proj/.git/worktrees/wt\n",
+    "gitdir: \n",
+    "ref: refs/heads/main\n",
+    "",
+  ];
+  for (const text of refused) {
+    const files = withPointer(text);
+    const outcome = await adapter.build(buildRequest(files));
+    assert.ok(!outcome.ok, JSON.stringify(text));
+    assert.deepEqual(
+      outcome.problems.map(({ file, message }) => ({ file, message })),
+      [
+        {
+          file: digestAgent.skillFile,
+          message: `the step ${digestAgent.agent} is granted /proj/notes, which holds ${pointer}`,
+        },
+      ],
+    );
+    assert.equal(files.snapshot()[`${project}/.agentbay/build.json`], undefined);
+  }
+});
+
+test("a worktree's pointer lets nothing else through: a .git folder, another case, and other closed names refuse", async () => {
+  const valid = `gitdir: ${project}/.git/worktrees/wt\n`;
+  const cases: readonly (readonly [Readonly<Record<string, string>>, string])[] = [
+    [{ [`${pointer}/HEAD`]: valid }, pointer],
+    [{ [`${project}/notes/wt/.GIT`]: valid }, `${project}/notes/wt/.GIT`],
+    [{ [pointer]: valid, [`${project}/notes/wt/.env`]: "" }, `${project}/notes/wt/.env`],
+    [
+      { [pointer]: valid, [`${project}/notes/wt/agentbay.config.yaml`]: "" },
+      `${project}/notes/wt/agentbay.config.yaml`,
+    ],
+    [{ [pointer]: valid, [`${project}/notes/wt/sub/CLAUDE.md`]: "" }, `${project}/notes/wt/sub/CLAUDE.md`],
+  ];
+  for (const [start, holds] of cases) {
+    const outcome = await adapter.build(buildRequest(memoryFiles(start)));
+    assert.ok(!outcome.ok, holds);
+    assert.equal(
+      outcome.problems[0]?.message,
+      `the step ${digestAgent.agent} is granted /proj/notes, which holds ${holds}`,
+    );
+  }
+});
+
 test("a build refuses a granted folder larger than the bound it checks", async () => {
   const many = Object.fromEntries(
     Array.from({ length: 5001 }, (_, index) => [`${project}/notes/f${String(index)}`, ""]),

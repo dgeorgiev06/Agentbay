@@ -1,11 +1,33 @@
-import { isAbsolute, join, relative, sep } from "node:path";
+import { dirname, isAbsolute, join, normalize, relative, sep } from "node:path";
 import type { GrantedFoldersRequest, SkillAgent } from "../../bay/adapter.ts";
-import type { Files, Problem } from "./adapter-types.ts";
+import type { DirectoryEntry, Problem } from "./adapter-types.ts";
 import { searchBound } from "./guard-input.ts";
 import { closedName } from "./guard-paths.ts";
 
 type Scan =
   { readonly kind: "clear" } | { readonly kind: "closed"; readonly path: string } | { readonly kind: "too-large" };
+
+const worktreePointer = /^gitdir: ([^\r\n]+)\n?$/;
+
+function isWorktreePointer(text: string | undefined, worktrees: string): boolean {
+  const target = text === undefined ? undefined : worktreePointer.exec(text)?.[1];
+  return target !== undefined && normalize(target) === target && dirname(target) === worktrees;
+}
+
+async function realWorktreesFolder(request: GrantedFoldersRequest): Promise<string> {
+  const { project } = request.layout;
+  return join((await request.inspector.realPath(project)) ?? project, ".git", "worktrees");
+}
+
+async function isClosedEntry(request: GrantedFoldersRequest, path: string, entry: DirectoryEntry): Promise<boolean> {
+  if (closedName(entry.name) === undefined) {
+    return false;
+  }
+  if (entry.name !== ".git" || entry.kind !== "file") {
+    return true;
+  }
+  return !isWorktreePointer(await request.files.readText(path), await realWorktreesFolder(request));
+}
 
 function ownClosedSegment(folder: string, bases: readonly string[]): boolean {
   return bases.some((base) => {
@@ -14,18 +36,19 @@ function ownClosedSegment(folder: string, bases: readonly string[]): boolean {
   });
 }
 
-async function scanFolder(files: Files, folder: string): Promise<Scan> {
+async function scanFolder(request: GrantedFoldersRequest, folder: string): Promise<Scan> {
+  const { inspector } = request;
   const queue = [{ path: folder, depth: 0 }];
   let seen = 0;
   for (const next of queue) {
-    for (const name of await files.list(next.path)) {
+    for (const entry of await inspector.entries(next.path)) {
       seen += 1;
-      const path = join(next.path, name);
-      if (closedName(name) !== undefined) {
+      const path = join(next.path, entry.name);
+      if (await isClosedEntry(request, path, entry)) {
         return { kind: "closed", path };
       }
       const depth = next.depth + 1;
-      if (seen > searchBound.entries || (depth > searchBound.depth && (await files.list(path)).length > 0)) {
+      if (seen > searchBound.entries || (depth > searchBound.depth && (await inspector.entries(path)).length > 0)) {
         return { kind: "too-large" };
       }
       queue.push({ path, depth });
@@ -43,7 +66,7 @@ async function rootProblem(
   if (ownClosedSegment(folder, [request.layout.project, request.layout.kit])) {
     return { ...where, message: `the step ${agent.agent} is granted ${folder}, whose path names a closed location` };
   }
-  const scan = await scanFolder(request.files, folder);
+  const scan = await scanFolder(request, folder);
   switch (scan.kind) {
     case "clear":
       return undefined;

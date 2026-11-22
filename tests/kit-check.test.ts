@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { test } from "node:test";
+import { after, before, test } from "node:test";
 import type { Json } from "../bay/contracts.ts";
 import { fieldOf, numberField, parseJson, textField } from "../bay/json.ts";
 import { listOf } from "./cli-fixture.ts";
 import { testEnvironment } from "./kernel-fixture.ts";
+import { copyOfTheKit } from "./test-toolbox.ts";
 import { kit } from "./project-fixture.ts";
 
 type Finding = {
@@ -36,6 +38,16 @@ const listedCommand = /^Mode ([a-z0-9-]+) lists the command .+; a listed command
 const longStep = /^Action [a-z0-9-]+ of mode ([a-z0-9-]+) declares scriptTimeLimitSeconds: \d+, .+$/;
 
 const listedCommandsTest = "tests/listed-commands.test.ts";
+
+let copy: string;
+
+before(async () => {
+  copy = await copyOfTheKit("kit-check");
+});
+
+after(async () => {
+  await rm(copy, { recursive: true, force: true });
+});
 
 function findingOf(finding: Json): Finding {
   return {
@@ -67,8 +79,8 @@ function isOwnersSetting(finding: Finding): boolean {
 }
 
 function kitCheck(): { readonly status: number | null; readonly stderr: string; readonly report: Json } {
-  const result = spawnSync(process.execPath, [join(kit, "bay", "cli.ts"), "check", "--json"], {
-    cwd: kit,
+  const result = spawnSync(process.execPath, [join(copy, "bay", "cli.ts"), "check", "--json"], {
+    cwd: copy,
     env: testEnvironment,
     input: "",
     encoding: "utf8",

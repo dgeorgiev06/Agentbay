@@ -6,9 +6,12 @@ import { textsOf } from "./lib/json-values.ts";
 
 export const run = defineScript((input, context) => {
   const asked = fieldsOf(context.skillInput ?? null);
+  const slice = sliceOf(asked.slice);
   const refused = refusedDeclaration({
-    scope: sliceOf(asked.slice).scope,
+    kind: slice.kind,
+    scope: slice.scope,
     fixed: textsOf(asked.fixed),
+    interface: textsOf(asked.interface),
     files: textsOf(fieldsOf(input).files),
   });
   return checkAnswer(refused);

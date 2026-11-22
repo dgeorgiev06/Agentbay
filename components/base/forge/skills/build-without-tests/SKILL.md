@@ -70,6 +70,8 @@ You have the harness's tools to read, search and write files, and no shell. Subm
 ## Resources
 
 - `schemas/built.json`: the shape of the output.
+- `skills/kit-for-a-mode.md`: what the kit offers a mode, with its files, its database and the two meanings of interface; 
+  read it before you write a mode's `mode.yaml`, schema files, migrations or scripts.
 
 The practices files are named in the input.
 

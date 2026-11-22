@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "DeclareRequest",
-  "description": "What a builder reads to declare what it will change: the slice, its worktree, the practices and the files it may not change.",
+  "description": "What a builder reads to declare what it will change: the slice, its worktree, the practices, the files it may not change and the files it builds against.",
   "type": "object",
   "additionalProperties": false,
   "required": ["slice", "folder", "practices"],
@@ -32,6 +32,15 @@
         "$ref": "proof@1/prove-request.json#/$defs/path"
       },
       "description": "The files the builder may not change: every test file the slice's fails-first items name. Empty when the builder writes its own tests."
+    },
+    "interface": {
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "proof@1/prove-request.json#/$defs/path"
+      },
+      "description": "The files the slice builds against, as the plan names them: a design's design.yaml and its request and response schema files. Empty when the plan names none."
     }
   }
 }

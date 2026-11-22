@@ -16,6 +16,7 @@ metadata:
   the commit the slice starts from.
 - `practices`: the practices files to read, relative to the project.
 - `fixed`, when given: the files the builder may not change, such as test files another agent writes.
+- `interface`, when given: the files the slice builds against, among them the design's schema files.
 
 ## Output
 
@@ -45,6 +46,9 @@ an interface's `.yaml` gains, loses or changes.
    `components/`, not at the top itself: a search there is refused.
 3. Decide which files must change for each item, and which action names change in a `mode.yaml` or an
    interface's `.yaml`.
+   A slice of kind `mode` declares its `mode.yaml`; a schema file under the mode's `schemas/` for each request
+   and response the design gives, copied from the design's schema files in `interface`; its migration files
+   when the design's module owns tables; and its scripts.
 4. Submit the declaration. If it comes back with feedback, correct what it names; you have three rounds.
 
 ## Tools
@@ -54,6 +58,8 @@ You have the harness's tools to read and search files, and none to write them. S
 ## Resources
 
 - `schemas/declaration.json`: the shape of the output, which is `proof@1`'s declaration.
+- `skills/kit-for-a-mode.md`: what the kit offers a mode, with its files, its database and the two meanings of interface; 
+  read it before you decide the files of a slice of kind `mode`.
 
 ## Rules and constraints
 

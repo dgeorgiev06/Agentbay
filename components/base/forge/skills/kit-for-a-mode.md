@@ -115,7 +115,7 @@ rule, the sheet says "by convention".
     schema does not admit, and gives the messages.
   - `close()`: removes the project.
 - When the project's modes do not load, such as when mode.yaml names a path with `..`, `openModeProject` fails
-  with a JSON list of the kernel's problems, each with a `message`, such as
+  with the sentences of the kernel's problems, one after another, such as
   "actions.add.input is not in the expected form".
 
 ## What a mode may not do

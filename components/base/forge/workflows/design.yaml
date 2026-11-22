@@ -52,6 +52,7 @@ steps:
       first: $steps.challenge.output
       again: $steps.design-again.output
       challenged: $steps.challenge-again.output
+      practices: $steps.designs.output.practices
   - id: card
     approval: Commit this design?
     show: $steps.draw.output.card

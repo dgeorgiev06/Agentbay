@@ -1,19 +1,15 @@
-import { itemNameWords, itemPlaceWords } from "./item-words.ts";
-import type { Run } from "./runs/runs.ts";
+import { screenLines, screenOf } from "./approval-screen.ts";
+import {
+  itemWords,
+  skillWords,
+  wordsOf,
+  type Approval,
+  type Card,
+  type CardLine,
+  type Choice,
+} from "./approval-words.ts";
 import { shown } from "./trust.ts";
 import { hanging, hashLine, namedRows } from "./trust-card.ts";
-
-type Waiting = Extract<Run["state"], { readonly status: "waiting" }>["waiting"];
-
-type Approval = Extract<Waiting, { readonly reason: "approval" }>;
-
-type Card = NonNullable<Approval["card"]>;
-
-type CardLine = Card["lines"][number];
-
-type SkillUsed = Extract<CardLine, { readonly mark: "judged" }>["skills"][number];
-
-type Choice = NonNullable<Approval["choices"]>[number];
 
 type Withheld = Extract<Choice, { readonly status: "withheld" }>;
 
@@ -25,10 +21,6 @@ const continued = "  ";
 
 const unmarked = "  ";
 
-function wordsOf(text: string): readonly string[] {
-  return shown(text).split(" ");
-}
-
 function marked(mark: CardLine["mark"], words: string, indent: string): readonly string[] {
   const lead = `${mark.padEnd(markColumn)}${indent}`;
   return hanging(wordsOf(words), { first: lead, rest: `${lead}${continued}` });
@@ -36,21 +28,6 @@ function marked(mark: CardLine["mark"], words: string, indent: string): readonly
 
 function unmarkedRows(words: string): readonly string[] {
   return hanging(wordsOf(words), { first: unmarked, rest: `${unmarked}${continued}` });
-}
-
-function skillWords(skill: SkillUsed): string {
-  return `${skill.mode} ${skill.skill}, tier ${skill.tier}`;
-}
-
-function itemWords(line: CardLine): string {
-  const { item } = line.source;
-  const { foreach, itemName, itemCount } = line;
-  if (item === undefined || foreach === undefined) {
-    return "";
-  }
-  const named =
-    itemName === undefined ? `${itemPlaceWords(item, itemCount)} of step ${foreach}` : itemNameWords(itemName);
-  return `, for ${named}`;
 }
 
 function sourceWords(line: CardLine): string | undefined {
@@ -143,8 +120,12 @@ function cardRows(approval: Approval, card: Card): readonly string[] {
   ];
 }
 
-export function approvalLines(approval: Approval): readonly string[] {
+export function approvalLines(approval: Approval, runId: string): readonly string[] {
   const { card } = approval;
+  const screen = screenOf(approval);
+  if (screen !== undefined) {
+    return screenLines(screen, runId);
+  }
   if (card !== undefined) {
     return cardRows(approval, card);
   }

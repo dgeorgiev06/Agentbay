@@ -9,7 +9,7 @@ import { designerAnswersOf, designOf } from "../scripts/lib/design-form.ts";
 import { problemsByCheck } from "../scripts/lib/design-rules.ts";
 import { listOf } from "../scripts/lib/json-values.ts";
 import { pathCard } from "../scripts/lib/path-card.ts";
-import { designPractices } from "../scripts/lib/practices.ts";
+import { designPractices, practicesOf } from "../scripts/lib/practices.ts";
 import { requirementsOf, type Requirements } from "../scripts/lib/requirements-form.ts";
 import {
   answered,
@@ -17,10 +17,13 @@ import {
   bay,
   branches,
   decided,
+  factOf,
+  factsOf,
   git,
   into,
   jsonOf,
   kitTemplate,
+  offeredOf,
   playedTo,
   printedCard,
   processProject,
@@ -31,8 +34,10 @@ import {
   task as taskOf,
   textAt,
   waitingOf,
+  withheldOf,
   worktrees,
   type Asked,
+  type Fact,
   type Waiting,
 } from "./kit-copy.ts";
 import { printed } from "./printed-card.ts";
@@ -40,16 +45,12 @@ import { todoDesign, todoHides } from "./todo-design.ts";
 
 const file = "docs/requirements/todo.yaml";
 
-const checksRun = problemsByCheck({ job: "todo", file, conditions: [], design: designOf(todoDesign) }).length;
+const examplesCheck = 1;
+
+const checksRun =
+  problemsByCheck({ job: "todo", file, conditions: [], design: designOf(todoDesign) }).length + examplesCheck;
 
 const because = "It serves every condition with four actions on one table.";
-
-const skills = {
-  designs: "forge skills/design, tier deep",
-  challenge: "forge skills/challenge, tier deep",
-  "design-again": "forge skills/design, tier deep",
-  "challenge-again": "forge skills/challenge, tier deep",
-};
 
 const finding = {
   wrong: "No example shows the open list after a refusal, though add claims O1-C5 to O1-C7.",
@@ -64,10 +65,6 @@ const notHeldP52 = {
 };
 
 const answeredHides = "How todos are kept and numbered; the rules of a todo are pure functions apart from the store.";
-
-const approveChoice = { name: "approve", does: "Commit the design and its schema files" };
-
-const stopChoice = { name: "stop", does: "Stop; nothing is committed" };
 
 const practicesFiles = ["framework/practices.md", "components/base/typescript/practices.md"];
 
@@ -151,14 +148,28 @@ function actionsAsked(asked: readonly Asked[]): readonly string[] {
   return asked.map((each) => `${each.step.split("/")[0] ?? ""} ${each.action}`);
 }
 
-async function cardExpected(
+type ScreenFacts = {
+  readonly facts: readonly Fact[];
+  readonly offered: readonly string[];
+  readonly withheld: Readonly<Record<string, string>>;
+};
+
+async function screenExpected(
   root: string,
-  input: Omit<DesignCardInput, "file" | "requirements">,
-): Promise<readonly string[]> {
-  const drawn = designCard({ file, requirements: await requirementsIn(root), ...input });
+  input: Omit<DesignCardInput, "file" | "requirements" | "asked">,
+): Promise<ScreenFacts> {
+  const asked = practicesOf(await heldByDesign(root));
+  const drawn = designCard({ file, requirements: await requirementsIn(root), asked, ...input });
   const reason = drawn.card.withheld.approve;
-  const approve = reason === undefined ? approveChoice : { ...approveChoice, withheld: reason };
-  return printed(drawn.card, [approve, stopChoice], { skills }).split("\n");
+  return {
+    facts: drawn.card.lines.map((line) => factOf({ ...line })),
+    offered: reason === undefined ? ["approve", "stop"] : ["stop"],
+    withheld: reason === undefined ? {} : { approve: reason },
+  };
+}
+
+function screenFacts(waiting: Waiting): ScreenFacts {
+  return { facts: factsOf(waiting), offered: offeredOf(waiting), withheld: withheldOf(waiting) };
 }
 
 function choiceRows(names: readonly (readonly [string, string])[]): readonly { name: string; does: string }[] {
@@ -203,7 +214,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     assert.deepEqual(inputOf(challengerTasks[0] ?? null).practices, practices);
     const firstAnswer = allHeld(challengerTasks[0] ?? null);
     const card: Waiting = waitingOf(await shown(root, start.id), "card");
-    const expected = await cardExpected(root, {
+    const expected = await screenExpected(root, {
       path: "light",
       chosen: "first",
       because,
@@ -216,7 +227,14 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
       said: designerAnswersOf(todoDesign),
       differences: [],
     });
-    assert.deepEqual(await printedCard(root, start.id, "Commit the design"), expected);
+    assert.deepEqual(screenFacts(card), expected);
+    assert.deepEqual(
+      listOf(card.choices).map((choice) => [textAt(choice, "name"), textAt(choice, "does")]),
+      [
+        ["approve", "Commit the design and its schema files"],
+        ["stop", "Stop; nothing is committed"],
+      ],
+    );
     const done = runOf(await decided(root, card, { step: "card", choice: "approve" }));
     assert.equal(textAt(done, "status"), "done", JSON.stringify(done));
     const output = fieldsOf(fieldsOf(done).output ?? null);
@@ -273,7 +291,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     ]);
     assertSecondPassAsked(asked.map((each) => inputOf(each.task)));
     const changes = answeredChanges;
-    const expected = await cardExpected(root, {
+    const expected = await screenExpected(root, {
       path: "light",
       chosen: "first",
       because,
@@ -288,7 +306,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
       second: { notHeld: ["P-52"], findings: 1, changes },
     });
     const card = waitingOf(await shown(root, start.id), "card");
-    assert.deepEqual(await printedCard(root, start.id, "Commit the design"), expected);
+    assert.deepEqual(screenFacts(card), expected);
     const judged = listOf(fieldsOf(card.card).lines).filter((line) => textAt(line, "mark") === "judged");
     assert.deepEqual(
       [...new Set(judged.map((line) => textAt(fieldsOf(line).source ?? null, "step")))],
@@ -319,31 +337,32 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     ]);
     const card = waitingOf(await shown(root, start.id), "card");
     const words = listOf(fieldsOf(card.card).lines).map((line) => textAt(line, "words"));
-    assert.ok(words.includes(`P-52, not held: ${notHeldP52.sentence}`), words.join("\n"));
-    assert.ok(words.includes("the first challenge answered P-52 not held; the designer answered once"));
-    assert.ok(words.includes("findings left after the answer: 1"));
-    const left = listOf(fieldsOf(card.card).lines).find((line) => textAt(line, "words").startsWith("finding, in"));
+    assert.ok(words.includes(`Its reason: ${notHeldP52.sentence}`), words.join("\n"));
+    assert.ok(words.includes("The first review answered P-52 not held; the designer answered once."));
+    assert.ok(words.includes("1 finding."));
+    const left = listOf(fieldsOf(card.card).lines).find((line) => textAt(line, "words").startsWith("In todo.add:"));
     assert.deepEqual(left, {
       mark: "judged",
-      words: `finding, in ${finding.where}: ${finding.wrong} Fix: ${finding.fix}`,
+      words: `In ${finding.where}: ${finding.wrong} Fix: ${finding.fix}`,
       source: { step: "challenge-again" },
       skills: [{ mode: "forge", skill: "skills/challenge", tier: "deep" }],
+      section: "checks",
+      about: "findings left after the answer",
     });
-    const printedRows = await printedCard(root, start.id, "Commit the design");
-    assert.deepEqual(printedRows.slice(-12), [
-      "You can:",
-      "  stop  Stop; nothing is committed",
-      "Not available:",
-      "  approve  Commit the design and its schema",
-      "           files",
-      "           why: The challenger answered P-52",
-      "           not held, and a practice held by",
-      "           design must be held. The designer",
-      "           has answered the challenge once,",
-      "           which is the most a design run",
-      "           asks.",
-      "checked: 0 ran, 25 computed, 7 judged",
-    ]);
+    assert.deepEqual(offeredOf(card), ["stop"]);
+    assert.deepEqual(withheldOf(card), {
+      approve:
+        "The challenger answered P-52 not held, and a practice held by design must be held. The designer has " +
+        "answered the challenge once, which is the most a design run asks.",
+    });
+    assert.deepEqual(
+      factsOf(card, "problems").map((fact) => [fact.about, fact.mark, fact.step]),
+      [
+        ["practice P-52", "computed", "draw"],
+        ["practice P-52", "judged", "challenge-again"],
+        ["practice P-52", "judged", "design-again"],
+      ],
+    );
     const stopped = runOf(await decided(root, card, { step: "card", choice: "stop" }));
     assert.equal(textAt(stopped, "reason"), "The owner chose stop on the design card, so nothing is committed.");
     assert.deepEqual(worktrees(root), []);
@@ -365,10 +384,9 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     });
     const card = waitingOf(await shown(root, start.id), "card");
     const words = listOf(fieldsOf(card.card).lines).map((line) => textAt(line, "words"));
-    assert.ok(words.includes(`P-52, not held: ${notHeldP52.sentence}`), words.join("\n"));
-    assert.ok(words.includes("the first challenge gave 1 finding; the designer answered once"));
-    const rows = await printedCard(root, start.id, "Commit the design");
-    assert.ok(rows.includes("Not available:"), rows.join("\n"));
+    assert.ok(words.includes(`Its reason: ${notHeldP52.sentence}`), words.join("\n"));
+    assert.ok(words.includes("The first review gave 1 finding; the designer answered once."));
+    assert.deepEqual(offeredOf(card), ["stop"]);
   });
 
   test("a finding past the tenth, a finding's words past their bound, and a designer's sentence past its bound are sent back by their schemas", async () => {
@@ -459,6 +477,19 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     assert.deepEqual(branches(root), []);
   });
 
+  test("a branch the first review's step left behind is said on the design card, with its reason", async () => {
+    const root = await project(template);
+    const example = fieldsOf(jsonOf(await readFile(join(import.meta.dirname, "draw-design.example.json"), "utf8")));
+    const input = fieldsOf(example.input ?? null);
+    const stayed = [{ branch: "forge/todo-first", reason: "a worktree still holds it" }];
+    const asked = { ...input, first: { ...fieldsOf(input.first ?? null), stayed } };
+    const output = fieldsOf(
+      fieldsOf(runOf(await bay(root, ["call", "forge.draw-design", JSON.stringify(asked)]))).output ?? null,
+    );
+    const words = listOf(fieldsOf(output.card ?? null).lines).map((line) => textAt(line, "words"));
+    assert.ok(words.includes("forge/todo-first stayed: a worktree still holds it"), words.join("\n"));
+  });
+
   test("the design card shows each problem of a worked example, beside the rules' problems, and withholds approve", async () => {
     const root = await project(template);
     const example = fieldsOf(jsonOf(await readFile(join(import.meta.dirname, "draw-design.example.json"), "utf8")));
@@ -477,7 +508,7 @@ describe("the workflow design, from docs/requirements/todo.yaml", { concurrency:
     );
     const words = listOf(fieldsOf(output.card ?? null).lines).map((line) => textAt(line, "words"));
     const sentence =
-      'problem: The answer of example 1 of "todo.add" does not fit the response schema of "todo.add". At /id: id ' +
+      'A check found: The answer of example 1 of "todo.add" does not fit the response schema of "todo.add". At /id: id ' +
       "must be at least 1, but it is 0.";
     assert.ok(words.includes(sentence), words.join("\n"));
     assert.deepEqual(fieldsOf(output.offered ?? null), { approve: false });

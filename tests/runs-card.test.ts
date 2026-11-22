@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { stringify } from "yaml";
 import type { Json } from "../bay/contracts.ts";
 import { fieldOf, textField, toJson } from "../bay/json.ts";
-import { bay } from "./cli-fixture.ts";
+import { bay, fakeTerminal } from "./cli-fixture.ts";
 import { makeProject, type Project } from "./project-fixture.ts";
 
 const folder = "components/modes/carder";
@@ -67,13 +67,28 @@ const carderMode = {
       run: [{ script: "scripts/pass.ts" }],
     },
   },
-  workflows: ["workflows/computed.yaml", "workflows/judged.yaml", "workflows/forged.yaml", "workflows/items.yaml"],
+  workflows: [
+    "workflows/computed.yaml",
+    "workflows/judged.yaml",
+    "workflows/forged.yaml",
+    "workflows/items.yaml",
+    "workflows/screen.yaml",
+    "workflows/mixed.yaml",
+    "workflows/misplaced.yaml",
+    "workflows/bounds.yaml",
+    "workflows/forging.yaml",
+    "workflows/plain-title.yaml",
+  ],
 };
 
 type CardLine = {
   readonly mark: "computed" | "judged";
   readonly words: string;
   readonly source: { readonly step: string; readonly item?: number };
+  readonly section?: Json;
+  readonly short?: Json;
+  readonly about?: Json;
+  readonly model?: Json;
 };
 
 const inScope: CardLine = { mark: "computed", words: "in scope: 11 of 11 paths", source: { step: "draw" } };
@@ -89,8 +104,8 @@ const judgedLine: CardLine = {
   source: { step: "review" },
 };
 
-function drawStep(lines: readonly CardLine[]): object {
-  const card = { title: "Merge TR2?", lines, withheld: { merge: "No test ran." } };
+function drawStep(lines: readonly CardLine[], title = "Merge TR2?"): object {
+  const card = { title, lines, withheld: { merge: "No test ran." } };
   return { id: "draw", action: "draw", input: { card, merge: false } };
 }
 
@@ -109,12 +124,65 @@ function cardStep(quotes: readonly string[]): object {
 
 const reviewStep = { id: "review", action: "review" };
 
+const screenFacts: readonly CardLine[] = [
+  { ...inScope, section: "what", short: true },
+  { ...judgedLine, section: "checks", short: true },
+  { ...judgedLine, words: "and each case is named", section: "checks" },
+];
+
 const workflows: Readonly<Record<string, object>> = {
   computed: { name: "computed", steps: [drawStep(computedLines), cardStep([])] },
   judged: { name: "judged", steps: [reviewStep, drawStep([inScope, judgedLine]), cardStep(["review"])] },
   forged: {
     name: "forged",
     steps: [reviewStep, drawStep([{ ...judgedLine, mark: "computed" }]), cardStep(["review"])],
+  },
+  screen: { name: "screen", steps: [reviewStep, drawStep(screenFacts), cardStep(["review"])] },
+  mixed: { name: "mixed", steps: [reviewStep, drawStep([inScope, ...screenFacts]), cardStep(["review"])] },
+  misplaced: {
+    name: "misplaced",
+    steps: [
+      drawStep([
+        { ...inScope, section: "how" },
+        { ...inScope, section: "what", short: "yes" },
+        { ...inScope, section: "what", words: "x".repeat(601) },
+        { ...inScope, section: "what", model: "Fable" },
+        { ...inScope, section: "what", words: "   " },
+        { ...inScope, section: "what", about: "x".repeat(81) },
+      ]),
+      cardStep([]),
+    ],
+  },
+  bounds: {
+    name: "bounds",
+    steps: [
+      drawStep(
+        [
+          { ...inScope, section: "what", words: "x".repeat(600) },
+          { ...inScope, section: "what", about: "y".repeat(80) },
+        ],
+        `${"t".repeat(199)}?`,
+      ),
+      cardStep([]),
+    ],
+  },
+  forging: {
+    name: "forging",
+    steps: [
+      drawStep(
+        [
+          { ...inScope, section: "what", words: "and 3 more, see details" },
+          { ...inScope, section: "checks", words: "npm-test reported: all passed" },
+          { ...inScope, section: "checks", about: "A model wrote this" },
+        ],
+        `${"t".repeat(200)}?`,
+      ),
+      cardStep([]),
+    ],
+  },
+  "plain-title": {
+    name: "plain-title",
+    steps: [drawStep([{ ...inScope, section: "what" }], "Merge \u0280eply?"), cardStep([])],
   },
   items: {
     name: "items",
@@ -310,6 +378,139 @@ test("the kernel still refuses a line marked computed whose source is a step tha
       textField(run, "reason"),
       "Step card cannot show its card: line 1 is marked computed but cites step review, " +
         "which ran the skill skills/review of mode carder; a computed line cites a step that ran no skill.",
+    );
+  });
+});
+
+test("a card whose every line has a section is a screen: it prints the short screen, and its details on request", async () => {
+  await withCarder(async (project) => {
+    const { runId, run } = await stoppedAt(project, "screen");
+    const lines = fieldOf(fieldOf(fieldOf(run, "waiting") ?? null, "card") ?? null, "lines");
+    assert.deepEqual(
+      Array.isArray(lines) ? lines.map((line: Json) => [fieldOf(line, "section"), fieldOf(line, "short")]) : [],
+      [
+        ["what", true],
+        ["checks", true],
+        ["checks", undefined],
+      ],
+    );
+    const root = ["--project", project.root];
+    const shown = (await bay(["runs", runId, ...root])).output;
+    assert.ok(shown.includes("\nMERGE TR2?\n"), shown);
+    assert.ok(shown.includes(`\nDetails:\n  bay runs ${runId} --details`), shown);
+    assert.ok(!shown.includes("decide with:") && !shown.includes("\nsteps:"), shown);
+    const hash = textField(fieldOf(run, "waiting") ?? null, "hash") ?? "";
+    const details = (await bay(["runs", runId, "--details", ...root])).output;
+    assert.ok(details.includes(`\nFor the record\n`), details);
+    assert.ok(details.includes(`\n    bay approve ${runId} card --choice <name> --hash ${hash}`), details);
+    const checks = (await bay(["runs", runId, "--details", "--section", "checks", ...root])).output;
+    assert.ok(checks.includes("\nOne section of the details.\n") && !checks.includes("What it is"), checks);
+    const refused = await bay(["runs", runId, "--details", "--section", "record", ...root]);
+    assert.equal(refused.output.trim(), "The section record is not one of problems, what, checks, open.");
+  });
+});
+
+test("the kernel refuses a card where only some lines have a section", async () => {
+  await withCarder(async (project) => {
+    const { run } = await stoppedAt(project, "mixed");
+    assert.equal(textField(run, "status"), "failed");
+    assert.equal(
+      textField(run, "reason"),
+      "Step card cannot show its card: 3 of its 4 lines have a section; on a screen every fact has one, " +
+        "and on a card none does.",
+    );
+  });
+});
+
+test("the kernel refuses a fact in no known section, a short that is not true, and words past their bound", async () => {
+  await withCarder(async (project) => {
+    const { run } = await stoppedAt(project, "misplaced");
+    const cannot = "Step card cannot show its card:";
+    assert.equal(
+      textField(run, "reason"),
+      [
+        `${cannot} line 1 has the section how; a fact's section is problems, what, checks, open.`,
+        `${cannot} line 2 has the short "yes"; short is true or left out.`,
+        `${cannot} line 4 has the field model, which a line does not take; a line has mark, words and source, and ` +
+          "on a screen its section and whether it is short; the kernel adds the skill and tier of a judged line, " +
+          "and the foreach, its number of items and the item's name of a step in an item.",
+        `${cannot} line 3 has words longer than 600 characters.`,
+        `${cannot} line 5 has words of nothing but spaces.`,
+        `${cannot} line 6 has an about longer than 80 characters.`,
+      ].join(" "),
+    );
+  });
+});
+
+test("a title of 200 characters and words of 600 are shown, and an about of 80", async () => {
+  await withCarder(async (project) => {
+    const { run } = await stoppedAt(project, "bounds");
+    assert.equal(textField(run, "status"), "waiting", JSON.stringify(run));
+  });
+});
+
+test("the kernel refuses a title past 200 characters and a fact or about that begins as only the kernel writes", async () => {
+  await withCarder(async (project) => {
+    const { run } = await stoppedAt(project, "forging");
+    const cannot = "Step card cannot show its card:";
+    assert.equal(
+      textField(run, "reason"),
+      [
+        `${cannot} its title is longer than 200 characters.`,
+        `${cannot} line 1 has words beginning with "and 3 more", which only the kernel writes on a screen.`,
+        `${cannot} line 2 has words beginning with "npm-test reported:", which only the kernel writes on a screen.`,
+        `${cannot} line 3 has an about beginning with "A model wrote", which only the kernel writes on a screen.`,
+      ].join(" "),
+    );
+  });
+});
+
+test("the kernel refuses a title with a character outside plain ASCII", async () => {
+  await withCarder(async (project) => {
+    const { run } = await stoppedAt(project, "plain-title");
+    assert.equal(
+      textField(run, "reason"),
+      "Step card cannot show its card: its title has a character outside plain ASCII letters, digits, spaces and " +
+        "punctuation.",
+    );
+  });
+});
+
+test("at the terminal, the screen is shown with the start of its hash before the owner types yes", async () => {
+  await withCarder(async (project) => {
+    const { runId, run } = await stoppedAt(project, "screen");
+    const hash = textField(fieldOf(run, "waiting") ?? null, "hash") ?? "";
+    const terminal = fakeTerminal({ interactive: true, answer: "no" });
+    const argv = ["approve", runId, "card", "--choice", "keep", "--hash", hash, "--project", project.root];
+    await bay(argv, { terminal });
+    const [asked = ""] = terminal.asked;
+    assert.ok(asked.endsWith(`\nhash ${hash.slice(0, 12)}\nYou choose keep. Type yes to confirm: `), asked);
+    assert.ok(asked.startsWith("MERGE TR2?\n"), asked);
+  });
+});
+
+test("--details on a run with no screen says so in one sentence, and the list of runs says how to ask", async () => {
+  await withCarder(async (project) => {
+    const root = ["--project", project.root];
+    const card = await stoppedAt(project, "computed");
+    const old = (await bay(["runs", card.runId, "--details", ...root])).output;
+    assert.ok(
+      old.endsWith("The approval at card is an older card, which has no details form; all it holds is printed above."),
+      old,
+    );
+    const failed = await stoppedAt(project, "mixed");
+    const ended = (await bay(["runs", failed.runId, "--details", ...root])).output;
+    assert.ok(
+      ended.endsWith(
+        `No approval screen waits in this run, so there are no details to show; bay runs ${failed.runId} prints ` +
+          "all it holds.",
+      ),
+      ended,
+    );
+    const listed = (await bay(["runs", "--details", ...root])).output;
+    assert.ok(
+      listed.endsWith("The list of runs has no details; bay runs <run> --details shows one run's approval screen."),
+      listed,
     );
   });
 });

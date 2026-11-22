@@ -221,10 +221,15 @@ export function listChanges(before: ModeList, now: ModeList): ListChanges {
   return { commands, folders };
 }
 
+const redrawingMarks: readonly number[] = [
+  0x061c, 0x200b, 0x200c, 0x200d, 0x200e, 0x200f, 0x2028, 0x2029, 0x2060, 0xfeff,
+];
+
 function isRedrawing(code: number): boolean {
   return (
     code < 0x20 ||
     (code >= 0x7f && code <= 0x9f) ||
+    redrawingMarks.includes(code) ||
     (code >= 0x202a && code <= 0x202e) ||
     (code >= 0x2066 && code <= 0x2069)
   );

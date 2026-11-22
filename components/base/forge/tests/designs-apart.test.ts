@@ -5,12 +5,12 @@ import { listOf } from "../scripts/lib/json-values.ts";
 import {
   bay,
   decided,
+  factsOf,
   filesHolding,
   git,
   into,
   kitTemplate,
   playedTo,
-  printedCard,
   project,
   removeAll,
   runOf,
@@ -126,12 +126,31 @@ test("on the full path the second designer's task holds nothing of the first des
   );
   assert.ok(whileChallenged[0]?.holding.includes(".agentbay/kernel.db"), JSON.stringify(whileChallenged));
   const card = waitingOf(await shown(root, start.id), "card");
-  const printed = (await printedCard(root, start.id, "Commit the design")).join(" ").replace(/ {2,}/g, " ");
-  assert.match(printed, /the second design of two written apart, answered once after the first challenge;/);
-  assert.match(printed, /where the two designs differed: 7 module todo: only in the first design/);
-  assert.match(printed, /module todo-list: only in the second design rule add-todo: kept in another module/);
-  assert.match(printed, /rule remove-todo: kept in another module todo.done: 2 examples changed todo.remove: 1/);
-  assert.match(printed, /judged chosen because: It names the/);
+  const what = factsOf(card, "what");
+  const words = what.map((fact) => fact.words);
+  assert.ok(
+    words.includes(
+      "This is the second of two designs written apart, answered once by its designer after the first review.",
+    ),
+    words.join("\n"),
+  );
+  const differed = what.filter((fact) => fact.about === "where the two designs differed");
+  assert.deepEqual(
+    differed.map((fact) => fact.words),
+    [
+      "7 differences, found by a script.",
+      "module todo: only in the first design",
+      "module todo-list: only in the second design",
+      "rule add-todo: kept in another module",
+      "rule mark-done: kept in another module",
+      "rule remove-todo: kept in another module",
+      "todo.done: 2 examples changed",
+      "todo.remove: 1 example changed",
+      differed.at(-1)?.words ?? "",
+    ],
+  );
+  assert.ok(differed.at(-1)?.words.startsWith("Why this design was chosen: It names the"));
+  assert.deepEqual([differed.at(-1)?.mark, differed.at(-1)?.step], ["judged", "challenge"]);
   const done = runOf(await decided(root, card, { step: "card", choice: "approve" }));
   assert.equal(textAt(done, "status"), "done", JSON.stringify(done));
   const committed = git(root, ["show", `${into}:docs/designs/todo/design.yaml`]);

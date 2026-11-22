@@ -59,10 +59,13 @@ const forRuns = [
   ...readers,
   "bay/agent-name.ts",
   "bay/approval-card.ts",
+  "bay/approval-screen.ts",
+  "bay/approval-words.ts",
   "bay/database-lock.ts",
   "bay/item-words.ts",
   "bay/kernel.ts",
   "bay/run-report.ts",
+  "bay/screen-words.ts",
   "bay/secrets.ts",
   "bay/skill-tools.ts",
   "bay/trust-card.ts",
@@ -83,6 +86,7 @@ const forCheck = [
   "bay/check-trust.ts",
   "bay/check.ts",
   "bay/import-scanner.ts",
+  "bay/item-words.ts",
   "bay/skill-tools.ts",
 ];
 

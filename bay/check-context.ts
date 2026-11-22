@@ -42,10 +42,6 @@ export type CheckSources = {
   readonly inspection: Inspection;
 };
 
-export function counted(count: number, word: string): string {
-  return `${String(count)} ${word}${count === 1 ? "" : "s"}`;
-}
-
 export function errors(problems: readonly Problem[]): readonly Finding[] {
   return problems.map((problem) => ({ ...problem, severity: "error" }));
 }

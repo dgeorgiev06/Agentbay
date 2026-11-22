@@ -543,3 +543,34 @@ test("a run started with until offers only the stop at its until step, and at an
     `or stop with: bay resume r1 --stop ${source}`,
   ]);
 });
+
+function screenWaiting(stepKey: string, title: string): Approval {
+  const line = { mark: "computed", words: `${title} holds`, source: { step: "draw" }, section: "what" } as const;
+  return {
+    reason: "approval",
+    stepKey,
+    question: title,
+    hash: stepKey.repeat(64).slice(0, 64),
+    content: null,
+    card: { title, lines: [line], counted: { ran: 0, computed: 1, judged: 0 } },
+    choices: [{ name: "keep", status: "offered", does: "Keep it" }],
+  };
+}
+
+function twoScreens(): Run {
+  const state = {
+    status: "waiting",
+    waiting: screenWaiting("a", "Merge TD1?"),
+    alsoWaiting: [screenWaiting("b", "Merge TD2?")],
+  } as const;
+  return { ...waitingRun(screenWaiting("a", "Merge TD1?")), state };
+}
+
+test("an approval screen waiting beside another wait is printed as a screen, and its details on request", () => {
+  const short = runResult(layout, { ok: true, value: twoScreens() }).text;
+  assert.ok(short.includes("\nMERGE TD1?\n") && short.includes("\nMERGE TD2?\n"), short);
+  assert.ok(!short.includes("also MERGE"), short);
+  const details = runResult(layout, { ok: true, value: twoScreens() }, { details: {} }).text;
+  assert.equal(details.split("\nEvery fact this approval rests on.\n").length, 3, details);
+  assert.ok(details.includes(`--hash ${"b".repeat(64)}`), details);
+});

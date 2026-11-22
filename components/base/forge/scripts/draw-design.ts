@@ -1,5 +1,5 @@
 import { defineScript, fieldsOf, type Json } from "../../../../bay/sdk.ts";
-import { stayedOf, withStayedLines } from "./lib/branch-endings.ts";
+import { stayedOf } from "./lib/branch-endings.ts";
 import { challengeOf, type Challenge } from "./lib/challenge-answer.ts";
 import { designCard, type SecondPass } from "./lib/design-card.ts";
 import { answerChanges } from "./lib/design-compare.ts";
@@ -8,6 +8,7 @@ import { designerAnswersOf, designOf } from "./lib/design-form.ts";
 import { problemsByCheck } from "./lib/design-rules.ts";
 import { textOf, textsOf } from "./lib/json-values.ts";
 import { notHeldIds } from "./lib/practice-answers.ts";
+import { practicesOf } from "./lib/practices.ts";
 import { conditionsOf, requirementsOf } from "./lib/requirements-form.ts";
 
 function secondPass(first: Challenge, changes: readonly string[]): SecondPass {
@@ -29,18 +30,19 @@ export const run = defineScript(async (input, context) => {
   const final = fieldsOf(again).design ?? null;
   const deciding = challengeOf(fieldsOf(fields.challenged ?? null).challenge ?? null);
   const design = designOf(final);
-  const byCheck = problemsByCheck({ job: requirements.job, file, conditions, design });
   const examples = await checkedExamples(context, design);
-  const drawn = designCard({
+  const byCheck = [...problemsByCheck({ job: requirements.job, file, conditions, design }), examples.problems];
+  return designCard({
     file,
     requirements,
     path: firstFields.path === "full" ? "full" : "light",
     chosen: first.chosen,
     because: first.because,
     design,
-    problems: [...byCheck.flat(), ...examples.problems],
+    problems: byCheck.flat(),
     checks: byCheck.length,
     refusedSchemas: examples.refusedSchemas,
+    asked: practicesOf(fields.practices),
     practices: deciding.practices,
     findings: deciding.findings,
     said: designerAnswersOf(final),
@@ -48,6 +50,6 @@ export const run = defineScript(async (input, context) => {
     ...(answeredOf(again)
       ? { second: secondPass(first, answerChanges(firstFields.design ?? null, final, conditions)) }
       : {}),
+    stayed: stayedOf(firstFields.stayed),
   });
-  return withStayedLines(drawn, stayedOf(firstFields.stayed));
 });

@@ -166,8 +166,8 @@ const draftSkill = { mode: "notes", skill: "skills/draft", tier: "balanced" as c
 const cannot = "Step card cannot show its card: line 1";
 
 const kernelAdds =
-  "a line has mark, words and source, and the kernel adds the skill and tier of a judged line, " +
-  "and the foreach, its number of items and the item's name of a step in an item.";
+  "a line has mark, words and source, and on a screen its section and whether it is short; the kernel adds " +
+  "the skill and tier of a judged line, and the foreach, its number of items and the item's name of a step in an item.";
 
 describe("a card on an approval after a foreach", () => {
   test("a judged line from an item's skill step is shown with its skill and its item, after a restart too", async () => {

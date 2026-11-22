@@ -96,13 +96,16 @@ const runsCommand = lazyCommand(
     name: "runs",
     summary:
       "List the runs, newest first; or show one run with its steps and task; --events adds events, " +
-      "--new-token replaces the token of every task, or with --step only of that step's task.",
-    usage: "runs [<run> [--full] [--events] [--new-token [--step <step key>]]]",
+      "--new-token replaces the token of every task, or with --step only of that step's task; --details shows " +
+      "every fact of an approval screen, or with --section only those of one section.",
+    usage: "runs [<run> [--full] [--events] [--details [--section <section>]] [--new-token [--step <step key>]]]",
     options: [
       { name: "new-token", takesValue: false },
       { name: "step", takesValue: true },
       { name: "full", takesValue: false },
       { name: "events", takesValue: false },
+      { name: "details", takesValue: false },
+      { name: "section", takesValue: true },
     ],
     positionals: { least: 0, most: 1 },
   },

@@ -227,8 +227,8 @@ describe("a card on an approval", () => {
     assert.equal(
       await refusedCard(line),
       "Step card cannot show its card: line 1 has the field model, which a line does not take; a line has " +
-        "mark, words and source, and the kernel adds the skill and tier of a judged line, and the foreach, its " +
-        "number of items and the item's name of a step in an item.",
+        "mark, words and source, and on a screen its section and whether it is short; the kernel adds the skill " +
+        "and tier of a judged line, and the foreach, its number of items and the item's name of a step in an item.",
     );
   });
 

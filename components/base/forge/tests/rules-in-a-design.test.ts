@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
+import { isDeepStrictEqual } from "node:util";
 import { fieldsOf, readYaml, type Json } from "../../../../bay/sdk.ts";
 import { listOf } from "../scripts/lib/json-values.ts";
 import {
@@ -8,8 +9,8 @@ import {
   git,
   into,
   kitTemplate,
+  factsOf,
   playedTo,
-  printedCard,
   project,
   removeAll,
   runOf,
@@ -50,25 +51,36 @@ async function startedOnTheLightPath(root: string): Promise<string> {
   return start.id;
 }
 
-const ruleRows = [
-  "  rule add, in todo: takes request, todos",
-  "    from todos, next-id from todo-ids; gives",
-  "    todos into todos, next-id into todo-ids,",
-  "    answer",
-];
+const ruleFact = {
+  section: "what",
+  short: false,
+  about: "rule add, in module todo",
+  mark: "computed",
+  words:
+    "Takes request, todos (from todos) and next-id (from todo-ids); gives todos (into todos), next-id (into " +
+    "todo-ids) and answer.",
+  step: "draw",
+};
 
-const addRows = [
-  "  add: serves O1-C1, O1-C4, O1-C5, O1-C6,",
-  "    O1-C7, O2-C4; applies the rule add,",
-  "    reads todos and todo-ids, writes todos",
-  "    and todo-ids; 7 examples",
-];
+const addFact = {
+  section: "what",
+  short: false,
+  about: "action add",
+  mark: "computed",
+  words:
+    "Meets 6 of your conditions (O1-C1, O1-C4, O1-C5, O1-C6, O1-C7 and O2-C4). Applies the rule add; reads todos " +
+    "and todo-ids; writes todos and todo-ids. 7 worked examples.",
+  step: "draw",
+};
 
-const spelledRows = ["  examples that say a long text by rule: 5,", "    spelled out by forge before any check"];
-
-function rowsAt(printed: readonly string[], rows: readonly string[]): number {
-  return printed.findIndex((_, at) => rows.every((row, index) => printed[at + index] === row));
-}
+const spelledFact = {
+  section: "checks",
+  short: false,
+  about: "",
+  mark: "computed",
+  words: "5 worked examples say a long text by rule; forge spelled them out before any check.",
+  step: "draw",
+};
 
 describe("a design that states its rules, through the workflow design", { concurrency: true }, () => {
   test("the answered todo design shows each rule and what each action reads and writes, and its commit keeps the rules and the short texts", async () => {
@@ -78,13 +90,17 @@ describe("a design that states its rules, through the workflow design", { concur
       designer: () => Promise.resolve(answeredTodo),
       challenger: (task) => Promise.resolve(allHeld(task)),
     });
-    const printed = await printedCard(root, runId, "Commit the design");
-    for (const rows of [ruleRows, addRows, spelledRows]) {
-      assert.ok(rowsAt(printed, rows) >= 0, printed.join("\n"));
-    }
-    assert.ok(printed.includes("judged   add decides: Whether a text may be"), printed.join("\n"));
-    assert.ok(printed.includes("  checked by script: 34 checks of the"), printed.join("\n"));
     const card = waitingOf(await shown(root, runId), "card");
+    const facts = factsOf(card);
+    for (const fact of [ruleFact, addFact, spelledFact]) {
+      assert.ok(
+        facts.some((each) => isDeepStrictEqual(each, fact)),
+        JSON.stringify(facts, null, 2),
+      );
+    }
+    const decides = facts.find((fact) => fact.words.startsWith("Decides: Whether a text may be"));
+    assert.deepEqual([decides?.mark, decides?.step, decides?.about], ["judged", "designs", "rule add, in module todo"]);
+    assert.ok(facts.some((fact) => fact.short && fact.words === "35 automatic checks: no problem found."));
     assert.equal(textAt(runOf(await decided(root, card, { step: "card", choice: "approve" })), "status"), "done");
     const committed = readYaml(git(root, ["show", `${into}:docs/designs/todo/design.yaml`]));
     assert.ok(committed.ok);

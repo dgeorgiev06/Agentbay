@@ -6,7 +6,9 @@ import { skillNameOf } from "./skill-tools.ts";
 import type { Outcome } from "./outcome.ts";
 import { problemsResult, type CommandResult, type JsonObject } from "./command-context.ts";
 import { shownProblems, type Layout } from "./layout.ts";
+import { detailsLines, screenOf } from "./approval-screen.ts";
 import {
+  decideCommand,
   noticeOf,
   pretty,
   stateLine,
@@ -104,6 +106,38 @@ function stepsText(steps: readonly Step[]): string {
   return ["steps:", ...lines].join("\n");
 }
 
+function recordStepRow(step: Step): string {
+  const kept = step.kept === "kept-packed" ? ", output kept but never printed" : "";
+  return `${step.key}  ${step.kind}  ${step.status}${kept}`;
+}
+
+function waitingShown(run: Run, waiting: Waiting, options: ReportOptions): string {
+  if (waiting.reason !== "approval" || options.details === undefined) {
+    return waitingText(run, waiting);
+  }
+  const screen = screenOf(waiting);
+  if (screen === undefined) {
+    return waitingText(run, waiting);
+  }
+  const record = { runId: run.id, steps: run.steps.map(recordStepRow), decide: decideCommand(run, waiting) };
+  return detailsLines(screen, record, options.details.section).join("\n");
+}
+
+function onScreen(waiting: Waiting | undefined): boolean {
+  return waiting?.reason === "approval" && screenOf(waiting) !== undefined;
+}
+
+function noDetailsText(run: Run, options: ReportOptions): string {
+  const waits = [waitingIn(run), ...alsoWaitingIn(run)];
+  if (options.details === undefined || waits.some(onScreen)) {
+    return "";
+  }
+  const card = waits.find((waiting) => waiting?.reason === "approval");
+  return card === undefined
+    ? `No approval screen waits in this run, so there are no details to show; bay runs ${run.id} prints all it holds.`
+    : `The approval at ${card.stepKey} is an older card, which has no details form; all it holds is printed above.`;
+}
+
 function eventsText(events: readonly RunEvent[]): string {
   const lines = events.map((event) => `  ${event.at}  ${event.kind}  ${JSON.stringify(event.detail)}`);
   return ["events:", ...lines].join("\n");
@@ -134,6 +168,9 @@ function alsoJson(run: Run, waiting: Waiting, options: ReportOptions): JsonObjec
 }
 
 function alsoText(run: Run, waiting: Waiting, options: ReportOptions): string {
+  if (onScreen(waiting)) {
+    return `\n${waitingShown(run, waiting, options)}`;
+  }
   if (waiting.reason !== "skill") {
     return `also ${waitingText(run, waiting)}`;
   }
@@ -178,13 +215,14 @@ function reportText(run: Run, options: ReportOptions): string {
   const lines = [
     `run ${run.id} (${targetText(run.target)}): ${stateLine(run.state)}`,
     outcomeText(run),
-    waiting === undefined ? "" : waitingText(run, waiting),
+    waiting === undefined ? "" : waitingShown(run, waiting, options),
     askedBy === undefined ? "" : `asked for by step ${askedBy.stepKey} of run ${askedBy.runId} (call_action)`,
     recordedText(run),
     taskText(run, options),
     ...alsoWaitingIn(run).map((waiting) => alsoText(run, waiting, options)),
-    options.steps === true ? stepsText(run.steps) : "",
+    options.steps === true && !onScreen(waiting) ? stepsText(run.steps) : "",
     options.events === true ? eventsText(run.events) : "",
+    noDetailsText(run, options),
   ];
   return lines.filter((line) => line !== "").join("\n");
 }

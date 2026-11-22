@@ -1,0 +1,36 @@
+name: todo
+version: 1.0.0
+description: Keeps a person's todos, each with a number that is never used again, so they can add one, list the open or all of them, mark one done and remove one.
+
+resources:
+  db: { migrations: migrations }
+
+actions:
+  add:
+    description: When a person writes a todo, its text is trimmed and kept as an open todo with the next number, unless it is empty or longer than 500 characters.
+    input: schemas/add-request.json
+    output: schemas/add-response.json
+    effects: [read, write]
+    run:
+      - script: scripts/add.ts
+  list:
+    description: When a person wants to see their todos, the open ones or all of them are shown in the order they were added.
+    input: schemas/list-request.json
+    output: schemas/list-response.json
+    effects: [read]
+    run:
+      - script: scripts/list.ts
+  done:
+    description: When a person has finished a todo, the todo with that number is marked done, unless it does not exist or is already done.
+    input: schemas/done-request.json
+    output: schemas/done-response.json
+    effects: [read, write]
+    run:
+      - script: scripts/done.ts
+  remove:
+    description: When a person no longer wants a todo, the todo with that number is removed and its number is never used again.
+    input: schemas/remove-request.json
+    output: schemas/remove-response.json
+    effects: [read, write, delete]
+    run:
+      - script: scripts/remove.ts

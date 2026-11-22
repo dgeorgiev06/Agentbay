@@ -6,7 +6,8 @@ import { fieldsOf, type Json } from "../../../../bay/sdk.ts";
 import { gateFrom, gateOf, modeNamePattern, type Gate, type Gated } from "../scripts/lib/gate.ts";
 import { gateRanOf } from "../scripts/lib/gate-card.ts";
 import { claimSentence, gateLine } from "../scripts/lib/gate-words.ts";
-import { modeTestsOf, testsFromOf } from "../scripts/lib/gated-checks.ts";
+import { askedUnderWhole, modeTestsOf, testsFromOf } from "../scripts/lib/gated-checks.ts";
+import { gateWorkedOut, withDifferenceFailed } from "../scripts/lib/gate-handed.ts";
 import { listOf } from "../scripts/lib/json-values.ts";
 import { drawn, type MergeCardInput } from "../scripts/lib/merge-card.ts";
 import { gatesClaimed } from "../scripts/lib/plan-form.ts";
@@ -438,5 +439,41 @@ describe("the cards say which gate", () => {
       assert.match(drawn(input).card.withheld.merge ?? "", /the mode gate stands only on scope passed/i);
       assert.ok(wordsOf(input).includes("the mode gate stands only on scope passed, and scope did not pass"));
     }
+  });
+});
+
+describe("the gate handed to the wave's checks", () => {
+  const todoSlices = [mode("TD1", ["components/modes/todo/**"])];
+
+  test("under the whole gate no testsFrom or bayCheck reaches proof", () => {
+    const claiming = withGatedRuns(checksSlice("TB", ["components/base/store/**"]), ["a.test.ts"]);
+    const asked = askedUnderWhole({ slice: claiming, head: "h" });
+    assert.deepEqual(proofOfItem(asked.slice ?? null), { kind: "checks" });
+    assert.equal(asked.head, "h");
+  });
+
+  test("the gate is worked out again from the slices; one handed in that agrees is taken", () => {
+    const worked = gateWorkedOut({
+      gate: { ...todo },
+      gatedBy: todoSlices.map((each) => ({ ...each, scope: [...each.scope] })),
+    });
+    assert.deepEqual(worked, { gate: todo });
+  });
+
+  test("a handed gate that differs loses to the slices' gate, and every checks item fails for the difference", () => {
+    const gatedBy = [{ name: "TB", kind: "mode", scope: ["components/base/store/**"] }];
+    const worked = gateWorkedOut({ gate: { ...todo }, gatedBy });
+    assert.equal(worked.gate.gate, "whole");
+    const sentence =
+      "forge was handed the gate mode, components/modes/todo, but the slices give whole; the checks ran by the " +
+      "slices' gate, and this item fails for the difference.";
+    assert.equal(worked.differs, sentence);
+    const passed = { item: "checks", kind: "checks", verdict: "passed", detail: "Every check passed." };
+    const proof = { verdicts: [passed, scopePassed], judgement: [], size: [] };
+    assert.deepEqual(withDifferenceFailed(proof, worked.differs), {
+      ...proof,
+      verdicts: [{ item: "checks", kind: "checks", verdict: "failed", detail: sentence }, scopePassed],
+    });
+    assert.deepEqual(withDifferenceFailed(proof, undefined), proof);
   });
 });

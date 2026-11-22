@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { fieldsOf } from "../../../../bay/sdk.ts";
-import { gateOf } from "../scripts/lib/gate.ts";
+import { gateOf, type Gate } from "../scripts/lib/gate.ts";
 import { planOf } from "../scripts/lib/plan-form.ts";
 import { provedOf } from "../scripts/lib/proof-answer.ts";
 import { sliceOf, type Slice } from "../scripts/lib/slice-form.ts";
@@ -432,5 +432,45 @@ describe("which slices go into the combined head", () => {
     assert.match(ownProofReason({ ...parts, state: { ...state, practices } }) ?? "", /answered P-12 not held/);
     const changed = { ...pins, head: [{ path: "a.json", hash: "fedcba9876543210" }] };
     assert.match(ownProofReason({ ...parts, pins: changed }) ?? "", /a\.json changed during the rounds/);
+  });
+});
+
+describe("the wave's merge card under the mode gate", () => {
+  const td1: Gate = { gate: "mode", mode: "td1", folder: "components/modes/td1" };
+  const scope = (verdict: string): Proved["verdicts"][number] =>
+    verdict === "passed"
+      ? { item: "scope", kind: "in-scope", verdict, detail: "It held." }
+      : { item: "scope", kind: "in-scope", verdict, reason: "x", detail: "x" };
+  const checksWith = (verdicts: Proved["verdicts"]): WaveChecks => ({
+    ...passedChecks,
+    proof: provedOf({ ...checksPassed("checks"), verdicts: [...checksPassed("checks").verdicts, ...verdicts] }),
+  });
+  const ownWithoutScope = {
+    ...ownPassed("TD1"),
+    verdicts: ownPassed("TD1").verdicts.filter((each) => fieldsOf(each).item !== "scope"),
+  };
+  const input = (checks: WaveChecks, slice: Settled): WaveCardInput => ({
+    ...oneFailing,
+    slices: [slice],
+    checks,
+    gate: { gate: td1, alsoRun: [] },
+  });
+
+  test("with every scope passed, merge is offered", () => {
+    assert.equal(waveDrawn(input(checksWith([scope("passed")]), settled("TD1", ownPassed("TD1")))).merge, true);
+  });
+
+  test("the combined head's scope failed, not known or missing, or a slice in it with no scope verdict, withholds merge", () => {
+    const cases = [
+      input(checksWith([scope("failed")]), settled("TD1", ownPassed("TD1"))),
+      input(checksWith([scope("inconclusive")]), settled("TD1", ownPassed("TD1"))),
+      input(checksWith([]), settled("TD1", ownPassed("TD1"))),
+      input(checksWith([scope("passed")]), settled("TD1", ownWithoutScope)),
+    ];
+    for (const each of cases) {
+      const drawn = waveDrawn(each);
+      assert.equal(drawn.merge, false);
+      assert.match(drawn.card.withheld.merge ?? "", /mode gate stands only on scope passed/);
+    }
   });
 });

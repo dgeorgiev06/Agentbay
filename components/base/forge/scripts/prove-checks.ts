@@ -1,7 +1,6 @@
-import { defineScript, fail, fieldsOf, type Json, type JsonFields } from "../../../../bay/sdk.ts";
+import { defineScript, fail, fieldsOf, type Json } from "../../../../bay/sdk.ts";
 import { listOf, textOf, textsOf } from "./lib/json-values.ts";
-import { gateFrom, gateOf, gatedOf, type Gate } from "./lib/gate.ts";
-import { gateDiffers } from "./lib/gate-words.ts";
+import { gateWorkedOut, withDifferenceFailed } from "./lib/gate-handed.ts";
 import { gatedAsked } from "./lib/gated-checks.ts";
 import { keptTests } from "./lib/kept-tests.ts";
 import { provedOf } from "./lib/proof-answer.ts";
@@ -23,32 +22,6 @@ function entriesOf(asked: Json, trying: Json | undefined, setting: Setting): rea
   }
   const room = roomBeside(sliceOf(fieldsOf(asked).slice).done.length);
   return waveTrials(slicesToTry(trying), { built: textsOf(fieldsOf(trying).built), room });
-}
-
-type WorkedOut = {
-  readonly gate: Gate;
-  readonly differs?: string;
-};
-
-function gateWorkedOut(fields: JsonFields): WorkedOut {
-  const handed = gateFrom(fields.gate);
-  const gate = gateOf(gatedOf(fields.gatedBy));
-  return JSON.stringify(handed) === JSON.stringify(gate) ? { gate } : { gate, differs: gateDiffers(handed, gate) };
-}
-
-function withDifferenceFailed(proof: Json, differs: string | undefined): Json {
-  if (differs === undefined) {
-    return proof;
-  }
-  const fields = fieldsOf(proof);
-  const failed = (verdict: Json): Json => {
-    const { item = null, kind = null } = fieldsOf(verdict);
-    return { item, kind, verdict: "failed", detail: differs };
-  };
-  const verdicts = listOf(fields.verdicts).map((verdict) =>
-    fieldsOf(verdict).kind === "checks" ? failed(verdict) : verdict,
-  );
-  return { ...fields, verdicts };
 }
 
 export const run = defineScript(async (input, context) => {

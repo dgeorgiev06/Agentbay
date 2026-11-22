@@ -50,11 +50,15 @@ async function testFilesOf(context: ScriptContext): Promise<readonly string[]> {
   return listOf(described.testFiles).map(textOf);
 }
 
+export function askedUnderWhole(asked: JsonFields): JsonFields {
+  return { ...asked, slice: withoutGatedRuns(asked.slice ?? null) };
+}
+
 export async function gatedAsked(context: ScriptContext, asked: JsonFields, gate: Gate): Promise<JsonFields> {
-  const slice = asked.slice ?? null;
   if (gate.gate === "whole") {
-    return { ...asked, slice: withoutGatedRuns(slice) };
+    return askedUnderWhole(asked);
   }
+  const slice = asked.slice ?? null;
   const at = { cutAs: `${textOf(fieldsOf(slice).name)}-gate`, head: textOf(asked.head) };
   const modeTests = modeTestsOf(await listedAt(context, gate, at), await testFilesOf(context));
   const testsFrom = testsFromOf(gate, modeTests, textsOf(context.settings.modeGateTests));

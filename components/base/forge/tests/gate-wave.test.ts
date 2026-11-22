@@ -5,10 +5,12 @@ import {
   askedOf,
   decided,
   kitTemplate,
+  listOf,
   modeGateTestsOfTheKit,
   printedCard,
   project,
   removeAll,
+  scopePassed,
   shown,
   testsFromAsked,
   waitingOf,
@@ -41,9 +43,11 @@ function flowing(rows: readonly string[]): string {
 }
 
 function combinedPassed(): Proved {
-  const scope = { item: "scope", kind: "in-scope", verdict: "passed", detail: "It held." };
-  const checks = checksPassed("checks");
-  return { ...checks, verdicts: [...checks.verdicts, scope] };
+  const detail =
+    "Every check passed (typecheck, lint), and so did the run of the 5 test files chosen from testsFrom: 9 tests. " +
+    "bay check on the head found no error.";
+  const checks = { item: "checks", kind: "checks", verdict: "passed", detail };
+  return { ...checksPassed("checks"), verdicts: [checks, scopePassed] };
 }
 
 function inBase(name: string): Json {
@@ -71,6 +75,10 @@ describe("the gate a wave runs by", { concurrency: true }, () => {
     assert.deepEqual(testsFromAsked(await askedOf(root, "wave-1")), [[testPath("TD1"), ...modeGateTestsOfTheKit]]);
     const said = flowing(await printedCard(root, card.id));
     assert.ok(said.includes("gate: the mode's own tests and the fast checks of the whole project ran"), said);
+    assert.ok(said.includes("bay check on the head found no error"), said);
+    const asked = (await askedOf(root, "wave-1"))[0] ?? null;
+    const proof = fieldsOf(listOf(fieldsOf(fieldsOf(asked).slice ?? null).done)[0] ?? null).proof ?? null;
+    assert.equal(fieldsOf(proof).bayCheck, true);
     assert.ok(said.includes("Merge is offered for 1 of 1 slice"), said);
   });
 

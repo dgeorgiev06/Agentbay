@@ -199,11 +199,15 @@ describe(
       const gatedChecks = {
         id: "DOD-R1-2",
         says:
-          "The toolchain's checks of the whole project and the mode gate's tests, those under " +
-          "components/modes/r1/tests and those the setting modeGateTests names, pass; the project's other tests " +
+          "The toolchain's checks of the whole project, bay check on the head and the mode gate's tests, those " +
+          "under components/modes/r1 and those the setting modeGateTests adds, pass; the project's other tests " +
           "are not run.",
         level: "must",
-        proof: { kind: "checks", testsFrom: [testPath("R1", "quill.test.ts"), ...modeGateTestsOfTheKit] },
+        proof: {
+          kind: "checks",
+          testsFrom: [testPath("R1", "quill.test.ts"), ...modeGateTestsOfTheKit],
+          bayCheck: true,
+        },
       };
       assert.deepEqual(await askedOf(root, "R1"), [
         { slice: lessChecks, ...proved },

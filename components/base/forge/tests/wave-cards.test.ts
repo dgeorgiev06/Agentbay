@@ -431,6 +431,33 @@ describe("the wave's merge card under the mode gate", () => {
     assert.ok(whole.card.lines.some((line) => line.short === true && line.words === "Ran: every test of the project."));
   });
 
+  test("a combined head on which bay check finds errors, such as a missing example file, withholds merge and says so", () => {
+    const bayCheckFailed: WaveChecks = {
+      ...passedChecks,
+      proof: provedOf({
+        verdicts: [
+          { item: "checks", kind: "checks", verdict: "failed", detail: "bay check on the head found 4 errors." },
+          scope("passed"),
+        ],
+        judgement: [],
+        size: [],
+      }),
+    };
+    const drawn = waveDrawn(input(bayCheckFailed, settled("TD1", ownPassed("TD1"))));
+    const said = drawn.card.lines.map((line) => factOf({ ...line }));
+    assert.equal(drawn.merge, false);
+    assert.equal(drawn.card.withheld.merge, "The wave's checks failed on the slices combined.");
+    assert.ok(
+      said.some(
+        (fact) =>
+          fact.section === "problems" &&
+          fact.words ===
+            "The checks on the slices combined: the must item checks failed, as bay check on the head found 4 errors.",
+      ),
+    );
+    assert.ok(said.some((fact) => fact.section === "checks" && fact.short && fact.words === "The checks failed."));
+  });
+
   test("with every scope passed, merge is offered", () => {
     assert.equal(waveDrawn(input(checksWith([scope("passed")]), settled("TD1", ownPassed("TD1")))).merge, true);
   });

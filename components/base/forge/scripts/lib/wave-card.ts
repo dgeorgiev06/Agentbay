@@ -1,9 +1,8 @@
-import { computed, shortCommit, type Card, type CardLine, type ComputedBy } from "./card-lines.ts";
+import { capitalized, computed, shortCommit, type Card, type CardLine, type ComputedBy } from "./card-lines.ts";
 import { examplesClauses } from "./examples-card.ts";
 import { gateClauses, gateRanLines } from "./gate-card.ts";
 import { verdictLines } from "./item-lines.ts";
 import type { Verdict } from "./proof-answer.ts";
-import { sentenceOf } from "./merge-choices.ts";
 import { aloneWords, waveAnswer, type Alone, type Checked, type Joined, type WaveChecks } from "./wave-answer.ts";
 import type { SliceTried } from "./tried-block.ts";
 import { sliceLines } from "./wave-slice-lines.ts";
@@ -113,7 +112,7 @@ export function waveDrawn(input: WaveCardInput): WaveDrawn {
     ...input.slices.flatMap((settled, item) => sliceLines(settled, { ...at, item, ...triedOf(tried, settled.name) })),
     ...waveLines(input),
   ];
-  const withheld = answer.reason === undefined ? {} : { merge: sentenceOf(answer.reason) };
+  const withheld = answer.reason === undefined ? {} : { merge: capitalized(answer.reason) };
   return {
     card: { title: `Merge wave ${String(input.wave)} into ${input.into}?`, lines, withheld },
     merge: answer.offered,

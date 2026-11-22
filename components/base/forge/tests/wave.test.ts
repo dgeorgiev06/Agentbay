@@ -5,12 +5,14 @@ import {
   askedOf,
   branches,
   decided,
+  factsOf,
   git,
   into,
   keptRows,
   kitTemplate,
   listOf,
   onlyWhenRecapturing,
+  offeredOf,
   ownerAnswered,
   printedCard,
   processProject,
@@ -22,10 +24,12 @@ import {
   testsFromAsked,
   textAt,
   waitingOf,
+  withheldOf,
   worktrees,
 } from "./kit-copy.ts";
 import { playedSideBySide } from "./side-by-side-play.ts";
 import {
+  agreed,
   checksFailed,
   checksPassed,
   codeOf,
@@ -36,6 +40,21 @@ import {
   waveStarted,
   wavePlayers,
 } from "./wave-run.ts";
+
+const startChoices = [
+  {
+    name: "build",
+    status: "offered",
+    does: "Build the slices side by side; nothing is merged until you answer the merge screen",
+  },
+  {
+    name: "build-over",
+    status: "withheld",
+    does: "Drop the branches an earlier run left, then build the slices side by side",
+    reason: "No earlier run left a branch of this wave.",
+  },
+  { name: "stop", status: "offered", does: "Stop now; nothing is built" },
+];
 
 let template: string;
 
@@ -170,8 +189,14 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     await planOnInto(root, ["NA"]);
     await provedAs(root, "NA", ownFailed("NA"));
     const start = await waveStarted(root);
+    assert.deepEqual(start.choices, startChoices);
     await decided(root, start, { step: "start", choice: "build" });
-    await playedSideBySide(root, start.id, wavePlayers(root));
+    const played = await playedSideBySide(root, start.id, wavePlayers(root));
+    const declaring = played.asked.filter((each) => each.action === "declare");
+    assert.deepEqual(
+      declaring.map((each) => fieldsOf(fieldsOf(each.task).input ?? null).interface),
+      [[agreed]],
+    );
     const card = cardOf(await shown(root, start.id));
     const printed = flowing(await printedCard(root, card.id));
     assert.ok(
@@ -200,11 +225,16 @@ describe("a wave of a plan, its slices side by side", { concurrency: true }, () 
     assert.deepEqual(branches(root), ["forge/SA", "forge/SA-tests-1"]);
     const left = branches(root).map((branch) => ({ branch, commit: git(root, ["rev-parse", branch]).trim() }));
     const again = await waveStarted(root);
-    const said = flowing(await printedCard(root, again.id, "Build wave"));
-    const short = left.map((each) => each.commit.slice(0, 7));
-    assert.ok(said.includes(`an earlier run left forge/SA at ${short[0] ?? ""}`), said);
-    assert.ok(said.includes(`an earlier run left forge/SA-tests-1 at ${short[1] ?? ""}`), said);
-    assert.ok(said.includes("why: An earlier run left branches of this wave; build over them or stop."), said);
+    const leftover = factsOf(again).filter((fact) => fact.about === "branches an earlier run left");
+    assert.deepEqual(
+      leftover.slice(0, -1).map((fact) => fact.words),
+      left.map((each) => `The branch ${each.branch}, at commit ${each.commit}.`),
+    );
+    assert.match(factsOf(again, "problems")[0]?.words ?? "", /^2 branches are left from an earlier build/);
+    assert.deepEqual(offeredOf(again), ["build-over", "stop"]);
+    assert.deepEqual(withheldOf(again), {
+      build: "An earlier run left branches of this wave; build over them or stop.",
+    });
     await decided(root, again, { step: "start", choice: "build-over" });
     assert.deepEqual(await actionOutputs(root, again.id, "wave-begin"), [{ choice: "build-over", slices: ["SA"] }]);
     assert.deepEqual(await actionOutputs(root, again.id, "attempt"), [{ dropped: left }]);

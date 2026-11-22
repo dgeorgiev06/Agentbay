@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { fieldsOf } from "../../../../bay/sdk.ts";
-import { gateOf, type Gate } from "../scripts/lib/gate.ts";
-import { planOf } from "../scripts/lib/plan-form.ts";
+import type { Gate } from "../scripts/lib/gate.ts";
 import { provedOf } from "../scripts/lib/proof-answer.ts";
 import { sliceOf, type Slice } from "../scripts/lib/slice-form.ts";
 import { aloneWords, waveAnswer, type Alone, type Joined, type WaveChecks } from "../scripts/lib/wave-answer.ts";
 import { waveDrawn, type WaveCardInput } from "../scripts/lib/wave-card.ts";
 import { ownProofReason, type Settled } from "../scripts/lib/wave-standing.ts";
-import { waveStartCard } from "../scripts/lib/wave-start-card.ts";
 import { printed, widest } from "./printed-card.ts";
 import type { Proved } from "./kit-copy.ts";
 import { checksFailed, checksPassed, ownFailed, ownPassed, plannedSlice } from "./wave-run.ts";
@@ -94,79 +92,6 @@ const oneFailing: WaveCardInput = {
   alone: [],
   must: [],
 };
-
-describe("the wave's start card", () => {
-  test("two slices of wave 1, built side by side, read line by line as pinned", () => {
-    const plan = planOf({ title: "A wave", slices: [plannedSlice("TD1"), plannedSlice("TD10")] });
-    const card = waveStartCard({
-      plan: "docs/plans/0099-wave.yaml",
-      wave: 1,
-      waves: 2,
-      base: "875d936",
-      into: "integration",
-      slices: plan.slices,
-      sideBySide: 2,
-      leftovers: [],
-      gate: { gate: gateOf(plan.slices), alsoRun: [] },
-    });
-    assert.equal(
-      printed(card, [
-        { name: "build", does: "Build the wave's slices side by side" },
-        { name: "stop", does: "Stop; nothing is cut" },
-      ]),
-      [
-        "Build wave 1 of 0099-wave.yaml?",
-        "  2 slices of wave 1 of 2 in",
-        "    docs/plans/0099-wave.yaml",
-        "  base 875d936, the head of integration",
-        "  TD1: The td1 mode counts what was added",
-        "  TD1, scope components/modes/td1/**; meets",
-        "    no condition; 1 interface file",
-        "  TD10: The td10 mode counts what was added",
-        "  TD10, scope components/modes/td10/**;",
-        "    meets no condition; 1 interface file",
-        "  side by side: at most 2 builders, the",
-        "    setting sideBySide",
-        "  cost: at most 27 model calls a slice, 54",
-        "    for the wave",
-        "  each slice's own proof leaves out the",
-        "    checks; they go once, on the slices",
-        "    combined",
-        "  gate: the whole test run, since the slices",
-        "    write inside more than one mode's folder",
-        "    (components/modes/td1 and",
-        "    components/modes/td10)",
-        "All lines worked out by script.",
-        "You can:",
-        "  build  Build the wave's slices side by",
-        "         side",
-        "  stop   Stop; nothing is cut",
-        "checked: 0 ran, 10 computed, 0 judged",
-      ].join("\n"),
-    );
-  });
-
-  test("a wave with more slices than the setting says which start first and that the rest start as slices end", () => {
-    const plan = planOf({ title: "A wave", slices: ["A1", "A2", "A3", "A4"].map(plannedSlice) });
-    const start = {
-      plan: "p.yaml",
-      wave: 1,
-      waves: 1,
-      base: "875d936",
-      into: "integration",
-      sideBySide: 2,
-      leftovers: [],
-    };
-    const words = waveStartCard({ ...start, slices: plan.slices }).lines.map((line) => line.words);
-    assert.ok(
-      words.includes("first A1 and A2; then A3 and A4, each starting as soon as a slice ends"),
-      words.join("\n"),
-    );
-    const three = waveStartCard({ ...start, slices: plan.slices.slice(0, 3) }).lines.map((line) => line.words);
-    assert.ok(three.includes("first A1 and A2; then A3, which starts as soon as a slice ends"), three.join("\n"));
-    assert.ok(waveStartCard({ ...start, slices: plan.slices }).lines.every((line) => line.source.step === "wave"));
-  });
-});
 
 describe("the wave's merge card", () => {
   test("two slices, one failing its own proof, read line by line as pinned", () => {

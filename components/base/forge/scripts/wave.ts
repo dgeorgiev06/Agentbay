@@ -1,7 +1,6 @@
 import { defineScript, fail, fieldsOf, type JsonFields, type ScriptContext } from "../../../../bay/sdk.ts";
 import { branchOf, roundsBranches, type Dropped } from "./lib/branch-endings.ts";
 import { answerOf } from "./lib/called.ts";
-import { shortCommit } from "./lib/card-lines.ts";
 import type { DesignSummary } from "./lib/design-summary.ts";
 import { listOf, numberOf, textOf } from "./lib/json-values.ts";
 import { workOut } from "./lib/plan-waves.ts";
@@ -99,7 +98,7 @@ export const run = defineScript(async (input, context) => {
     name,
     wave.slices.map((slice) => slice.name),
   );
-  const shown = { ...asked, waves: wave.waves, base: shortCommit(base), slices: wave.slices, sideBySide, ...design };
+  const shown = { ...asked, waves: wave.waves, base, slices: wave.slices, sideBySide, ...design };
   const choices = waveChoices(leftovers);
   const gate = gateOf(wave.slices);
   const card = waveStartCard({ ...shown, leftovers, gate: gateShownOf(gate, context.settings.modeGateTests) });

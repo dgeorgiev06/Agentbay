@@ -46,7 +46,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["title", "lines"],
-      "description": "The wave's start card: the plan and wave, each slice in two lines, how many builders work side by side, and what it costs in model calls at most.",
+      "description": "The wave's start screen: facts about the plan and wave, each slice, the gate, the model calls and any branches an earlier run left; the kernel lays them out.",
       "properties": {
         "title": {
           "type": "string",
@@ -56,37 +56,10 @@
         "lines": {
           "type": "array",
           "maxItems": 4000,
-          "description": "One line for each thing the card says, wrapped by the kernel to 44 columns.",
           "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["mark", "words", "source"],
-            "properties": {
-              "mark": {
-                "const": "computed",
-                "description": "Every line of this card comes from a step that ran no skill."
-              },
-              "words": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 2000,
-                "description": "What the owner reads, worked out by script."
-              },
-              "source": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": ["step"],
-                "properties": {
-                  "step": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 64,
-                    "description": "The step of the wave that the line cites."
-                  }
-                }
-              }
-            }
-          }
+            "type": "object"
+          },
+          "description": "One fact for each thing the approval screen says, each with its section and, when it belongs on the short screen, short; the kernel lays them out."
         },
         "withheld": {
           "type": "object",

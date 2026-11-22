@@ -141,6 +141,7 @@ test("the card counts the rounds and gives the reviewer's verdicts and what rema
         "for the test writer, Q2, a quill is counted: Assert all.",
       ],
       practices: allHeld,
+      reviewed: { held: 1, notHeld: 1, remaining: 2 },
     },
   });
 });

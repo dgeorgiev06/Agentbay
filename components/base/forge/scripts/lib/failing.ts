@@ -1,7 +1,7 @@
 import { fieldsOf, type Json, type JsonFields } from "../../../../../bay/sdk.ts";
 import type { Slice } from "./slice-form.ts";
 import type { HandedTest } from "./handed-tests.ts";
-import { mayQuoteAny } from "./quoting.ts";
+import { mayQuoteAny, quotedPlaces } from "./quoting.ts";
 import { listOf, textOf } from "./json-values.ts";
 
 export type FailingCase = {
@@ -35,6 +35,15 @@ const keptReason = "Proof's reason is kept from the card: it quotes a test.";
 
 const unsafe = /[\p{Cc}\p{Cf}]/gu;
 
+const withheldMark = "…";
+
+const withheldStretch = /…+/g;
+
+const holdsWords = /[\p{L}\p{N}]/u;
+
+const wordlessSaid =
+  "The first line of the test runner's message for this case holds no letter or digit, and forge hands on no other line of it.";
+
 function plain(text: string): string {
   return Array.from(text.replace(unsafe, " ")).slice(0, longestName).join("").trim();
 }
@@ -63,6 +72,29 @@ function messageQuotes(message: string, texts: readonly string[]): boolean {
   return mayQuoteAny(message, texts) || mayQuoteAny(plain(message), texts);
 }
 
+type Shown = {
+  readonly message?: string;
+  readonly withheld: boolean;
+};
+
+function shownMessage(reported: string, texts: readonly string[]): Shown {
+  if (plain(reported) === "") {
+    return { withheld: false };
+  }
+  if (texts.length === 0) {
+    return { withheld: true };
+  }
+  const cleaned = reported.replace(unsafe, " ");
+  const quoted = quotedPlaces([reported, cleaned], texts);
+  const marked = Array.from(cleaned).map((character, at) => (quoted.has(at) ? withheldMark : character));
+  const kept = plain(marked.join("").replace(withheldStretch, withheldMark));
+  const withheld = quoted.size > 0;
+  if (holdsWords.test(kept)) {
+    return { message: kept, withheld };
+  }
+  return withheld ? { withheld } : { message: wordlessSaid, withheld };
+}
+
 function toldOf(reported: Reported, tests: readonly HandedTest[]): Told {
   const name = plain(reported.name);
   const file = namedFile(
@@ -70,15 +102,11 @@ function toldOf(reported: Reported, tests: readonly HandedTest[]): Told {
     tests.map((test) => test.path),
   );
   const named = file === undefined ? { name } : { name, file };
-  const message = plain(reported.message);
-  if (message === "") {
-    return { told: named, withheld: false };
-  }
-  const quoting = messageQuotes(
+  const { message, withheld } = shownMessage(
     reported.message,
     tests.map((test) => test.text),
   );
-  return quoting ? { told: named, withheld: true } : { told: { ...named, message }, withheld: false };
+  return { told: message === undefined ? named : { ...named, message }, withheld };
 }
 
 function notLoadedOf(cases: readonly Json[], tests: readonly HandedTest[]): readonly string[] {

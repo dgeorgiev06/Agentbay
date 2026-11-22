@@ -90,7 +90,7 @@
         "failuresNotListed": {
           "type": "integer",
           "minimum": 0,
-          "description": "How many more failing cases the output shows past the 50 in failures; 0 when every case is listed."
+          "description": "How many more failing cases there are than failures lists: those the output shows past the 50, and, when the output was cut, those the test runner's own count holds that the kept end does not show; 0 when every case is listed."
         },
         "notLoaded": {
           "type": "array",

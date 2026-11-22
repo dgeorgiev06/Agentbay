@@ -39,7 +39,7 @@ A failed test run names what failed, read from node's TAP output:
 - A case is its `name`, its `file` and its `message`. The file is where node locates the case, relative to the folder given: the file that declares the test, which for a shared test is the shared file. It is empty when node gives no location.
 - The message is the first line of node's error for the case that is not blank, with the spaces around it removed. For node's own assertions that line holds no value, such as "Expected values to be strictly equal:". The later lines hold the expected and actual values, or the source of an `assert.ok`; they, the stack, and the line and column are never given.
 - A message longer than 200 characters keeps its first 200, and `charactersCut` says how many were cut, counting those node itself left out of a very long line.
-- `failuresNotListed` counts the cases past the first 50.
+- `failuresNotListed` counts the cases past the first 50. When the kernel cut the output, it also counts the failures node's summary counts beyond the `not ok` entries the kept end shows: a group that failed only because a case under it did is among them when the cut took it.
 - `notLoaded`: each test file node reports as failed as a whole, with an exit code: it did not parse, an import was missing, or it threw outside its cases. Such a file is never a case. Node reports a file this way only when no case of it failed.
 
 To make the paths relative, the mode runs `pwd -P` in the folder after a failed run. If that gives no answer, a path is given in full, as node gives it.

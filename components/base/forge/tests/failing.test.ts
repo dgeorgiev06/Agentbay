@@ -65,19 +65,54 @@ test("a message that shares 19 characters with a test reaches the builder whole,
   });
 });
 
-test("a message that shares 20 characters with a test is withheld: the name alone, and the count", () => {
+test("a message that shares 20 characters with a test keeps what it does not share, the shared run shown as one mark, and is counted", () => {
   const failing = failingOf(slice, [failed("DOD-F1-1", [failure("a quill is counted", twenty)])], tests);
+  assert.deepEqual(failing.cases, [{ name: "a quill is counted", file: named, message: "got …!" }]);
+  assert.equal(failing.withheld, 1);
+});
+
+test("a message all of whose words a test holds is withheld: the name alone, and the count", () => {
+  const failing = failingOf(slice, [failed("DOD-F1-1", [failure("a quill is counted", ` ${alphabet}. `)])], tests);
   assert.deepEqual(failing.cases, [{ name: "a quill is counted", file: named }]);
   assert.equal(failing.withheld, 1);
 });
 
-test("of two failing cases, only the one whose message quotes a test is withheld", () => {
+test("of two failing cases, only the one whose message quotes a test is counted", () => {
   const verdict = failed("DOD-F1-1", [failure("a quill is counted", nineteen), failure("a quill is listed", twenty)]);
   const failing = failingOf(slice, [verdict], tests);
   assert.deepEqual(failing.cases, [
     { name: "a quill is counted", file: named, message: nineteen },
-    { name: "a quill is listed", file: named },
+    { name: "a quill is listed", file: named, message: "got …!" },
   ]);
+  assert.equal(failing.withheld, 1);
+});
+
+test("a message with no letter or digit, such as the bracket that opens a list, is told as one fixed sentence and not counted", () => {
+  const failing = failingOf(slice, [failed("DOD-F1-1", [failure("a quill is counted", " [ ")])], tests);
+  assert.deepEqual(failing.cases, [
+    {
+      name: "a quill is counted",
+      file: named,
+      message:
+        "The first line of the test runner's message for this case holds no letter or digit, and forge hands on no other line of it.",
+    },
+  ]);
+  assert.equal(failing.withheld, 0);
+});
+
+test("the kernel's sentence on a mode that does not load reaches the builder whole", () => {
+  const sentence =
+    "actions.add.input is not in the expected form. Expected: A path relative to the mode's folder that neither starts with / nor contains a .. segment.";
+  const failing = failingOf(slice, [failed("DOD-F1-1", [failure("a quill is counted", sentence)])], tests);
+  assert.deepEqual(failing.cases, [{ name: "a quill is counted", file: named, message: sentence }]);
+  assert.equal(failing.withheld, 0);
+});
+
+test("a run a test holds across a line break is withheld, and a control character is shown as a space", () => {
+  const broken = [{ path: named, text: "const text = 'ABCDEFGHIJ\nKLMNOPQRSTUVWXYZ';\n" }];
+  const reported = "saw ABCDEFGHIJ\nKLMNOPQRS and\u0007more";
+  const failing = failingOf(slice, [failed("DOD-F1-1", [failure("a quill is counted", reported)])], broken);
+  assert.deepEqual(failing.cases, [{ name: "a quill is counted", file: named, message: "saw … and more" }]);
   assert.equal(failing.withheld, 1);
 });
 

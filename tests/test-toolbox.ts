@@ -14,7 +14,7 @@ import { fieldOf, isRecord, numberField, toJson } from "../bay/json.ts";
 import { layoutOf } from "../bay/layout.ts";
 import { loadKernel, type Kernel } from "../bay/kernel.ts";
 import { nodeKernelPorts } from "../bay/kernel-ports.ts";
-import type { Outcome } from "../bay/outcome.ts";
+import { problemText, type Outcome } from "../bay/outcome.ts";
 import { listOf } from "../bay/policy.ts";
 import type { Clock } from "../bay/ports.ts";
 import type { DatabasePartition } from "../bay/sdk.ts";
@@ -211,7 +211,7 @@ function settableClock(startAt: string | undefined): SettableClock {
 }
 
 function accepted<Value>(result: Outcome<Value>): Value {
-  assert.ok(result.ok, result.ok ? "" : JSON.stringify(result.problems, null, 2));
+  assert.ok(result.ok, result.ok ? "" : problemText(result.problems));
   return result.value;
 }
 
@@ -386,7 +386,7 @@ async function kernelIn(root: string, opening: Opening): Promise<Kernel> {
     environment: testEnvironment,
     platform: "linux",
   });
-  assert.ok(loaded.ok, loaded.ok ? "" : JSON.stringify(loaded.problems, null, 2));
+  assert.ok(loaded.ok, loaded.ok ? "" : problemText(loaded.problems));
   return loaded.value;
 }
 

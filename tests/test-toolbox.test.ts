@@ -152,6 +152,41 @@ test("a project's mode with the name of a kit mode is refused, and the kit's mod
   }
 });
 
+function firstLineOf(error: unknown): string {
+  return (error instanceof Error ? error.message : "").split("\n")[0] ?? "";
+}
+
+test("a project whose mode does not load is refused with the kernel's sentence on the first line of the error", async () => {
+  const beside = await makeProject();
+  const action = {
+    description: "Says hello.",
+    input: "../outside.json",
+    effects: ["read"],
+    run: [{ script: "scripts/say.ts" }],
+  };
+  const manifest = {
+    name: "sayer",
+    version: "1.0.0",
+    description: "Points outside its folder.",
+    actions: { say: action },
+  };
+  await beside.write("components/modes/sayer/mode.yaml", stringify(manifest));
+  try {
+    await assert.rejects(
+      openModeProject({ ...config, modes: ["sayer"] }, { project: beside.root }),
+      (error: unknown) => {
+        assert.equal(
+          firstLineOf(error),
+          "actions.say.input is not in the expected form. Expected: A path relative to the mode's folder that neither starts with / nor contains a .. segment.",
+        );
+        return true;
+      },
+    );
+  } finally {
+    await beside.remove();
+  }
+});
+
 test("a folder that is in no project is refused with a reason", async () => {
   await assert.rejects(
     openModeProject(config, { project: tmpdir() }),
@@ -227,7 +262,10 @@ test("no type the test toolbox declares names the kernel, the runs entry, the br
 test("a refused call is a refusal, never an output or a failure, and an accepted call is no refusal", async () => {
   await withProject(async (project) => {
     assert.equal(await project.refusal("greeter.fetch", {}), "input is missing the required field name.");
-    await assert.rejects(project.output("greeter.fetch", {}), /missing the required field name/);
+    await assert.rejects(project.output("greeter.fetch", {}), (error: unknown) => {
+      assert.equal(firstLineOf(error), "input is missing the required field name.");
+      return true;
+    });
     await assert.rejects(project.failure("greeter.fetch", {}), /missing the required field name/);
     await assert.rejects(project.refusal("greeter.fetch", { name: "Ada" }), /expected greeter.fetch to be refused/);
     await assert.rejects(project.failure("greeter.fetch", { name: "Ada" }), /expected the run to fail/);

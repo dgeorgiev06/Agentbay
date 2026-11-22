@@ -101,7 +101,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["items", "cases", "withheld", "notListed", "notLoaded"],
-      "description": "What of a failed test run the builder may be told: the failed must items, each failing case's name, its file when the slice names it, and its message only when it quotes no test; the count of messages withheld; the test files that did not load, by path only.",
+      "description": "What of a failed test run the builder may be told: the failed must items, each failing case's name, its file when the slice names it, and its message less every run it shares with a test; the count of messages withheld in part or whole; the test files that did not load, by path only.",
       "properties": {
         "items": {
           "type": "array",
@@ -133,7 +133,7 @@
               "message": {
                 "type": "string",
                 "maxLength": 200,
-                "description": "The first line of the runner's message, only when it shares no run of 20 characters with any test of the slice."
+                "description": "The first line of the runner's message, control characters as spaces, cut at 200 characters, each stretch that shares a run of 20 characters with a test of the slice shown as one …; left out when no letter or digit is left of it, and a fixed sentence saying so when the line held none to begin with."
               }
             }
           },
@@ -142,7 +142,7 @@
         "withheld": {
           "type": "integer",
           "minimum": 0,
-          "description": "How many messages were left out because they share a run of 20 characters with a test."
+          "description": "How many messages were withheld in part or whole because they share a run of 20 characters with a test."
         },
         "notListed": {
           "type": "integer",

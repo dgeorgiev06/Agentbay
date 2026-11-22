@@ -11,6 +11,8 @@ rule, the sheet says "by convention".
 - `mode.yaml` must give `name` (the folder's name), `version` (major.minor.patch), `description` and `actions`.
 - The top of the folder holds only `mode.yaml`, `README.md`, the files named in `extraFiles`, and the folders
   `skills/`, `scripts/`, `workflows/`, `schemas/`, `migrations/` and `tests/`. `bay check` reports anything else.
+- Every mode has a name of its own: `bay check` reports two modes of one name, and a project mode cannot take
+  the name of a kit mode.
 
 ## Actions and their schema files
 
@@ -31,6 +33,12 @@ rule, the sheet says "by convention".
 - `run` lists the action's steps in order, each `script: scripts/<file>.ts`, `skill: skills/<folder>` or
   `call: <interface>.<action>`. A step's output is the next step's input, and the last step's output is the
   action's.
+- Every file mode.yaml names must exist, and a schema file it names must be valid JSON; `bay check` reports one
+  that is missing or that does not parse.
+- A `call:` step names an action of an interface in `requires.interfaces`, and the action must be one that
+  interface has.
+- `undo`, when given, names another action of the same mode that reverses this one. It may not name the action
+  itself, and two actions may not name each other.
 
 ## Scripts
 
@@ -38,7 +46,9 @@ rule, the sheet says "by convention".
   `defineScript` from the SDK, `bay/sdk.ts`. What it returns is its step's output. `fail(reason)`, also from
   the SDK, ends the run as failed, with the reason in it.
 - Mode code imports only the SDK (`agentbay/sdk`, or, in a mode of the kit, a relative import of `bay/sdk.ts`),
-  `node:` built-ins and files of its own mode; no package. `bay check` reports any other import.
+  `node:` built-ins and files of its own mode; no package. `bay check` reports any other import, and an
+  `import()` whose specifier is not a plain string.
+- `scripts/` holds only `.ts` files: `bay check` reports any other file there.
 - `context` gives, as `ScriptContext` in `bay/sdk.ts` says:
   - `context.db`: `query(sql, parameters)` for one select, with or values statement; `execute(sql, parameters)`
     for one statement of any other kind; `partition(name)`, a second database of the mode's own.
@@ -62,7 +72,8 @@ rule, the sheet says "by convention".
   `resources: { db: { migrations: migrations } }`: `resources.db.migrations` names the mode's folder of SQL
   files, which is `migrations` when it is left out.
 - Each SQL file there is named `NNNN-name.sql`, such as `migrations/0001-todos.sql`, and they run in the order of
-  their names. Before the first statement a step runs on the mode's database, the kernel runs the files not run
+  their names. The numbers start at `0001` and rise by one, with no gap and no repeat; `bay check` reports a name
+  not in that form and a number out of that order. Before the first statement a step runs on the mode's database, the kernel runs the files not run
   before. A partition runs them when the script calls its `migrate()`.
 - The kernel keeps the database in the project at `.agentbay/data/<mode>.db`, and a partition at
   `.agentbay/data/<mode>--<partition>.db`.
@@ -87,12 +98,27 @@ rule, the sheet says "by convention".
 - `settings` in mode.yaml names a JSON Schema file of the mode, such as `schemas/settings.json`. The project's
   config gives the values under its own `settings`, keyed by the mode's name; the kernel checks them against the
   schema when it loads, and a script reads them in `context.settings`.
+- The settings schema must be a JSON Schema the kernel can use, and the config may give settings only for a mode
+  that names a settings schema; `bay check` reports either.
 
 ## Skill steps and approvals
 
 - A skill step is `skill: skills/<folder>` in an action's `run`, with a `role` or a `tier`, and `checks`,
   scripts that send the output back, three rounds at most. The folder holds `SKILL.md`; forge's own skills, in
-  `components/base/forge/skills/`, show its sections.
+  `components/base/forge/skills/`, show its sections. `bay check` reports a folder under `skills/` with no
+  `SKILL.md`.
+- `SKILL.md` starts with front matter between two `---` lines, with `name`, which is the folder's name, and
+  `description`. Then come the sections `## Input`, `## Output`, `## Definition of done`, `## Instructions`,
+  `## Tools`, `## Resources` and `## Rules and constraints`, each once and in that order, and no other `##`
+  section. `bay check` reports a skill that does not hold all of these:
+  - `## Rules and constraints` has at least one line.
+  - `## Definition of done` lists at least one item, each `- [DOD-<n>] (must|should|must_not) <text>`, with a
+    number of its own.
+  - `## Instructions` has at most 150 lines.
+  - The first word of each list item under `## Tools` is an action of the mode, `<interface>.<action>` of an
+    interface it requires, or a broker resource it declares: `db`, `files`, `secrets`, `http` or `events`.
+  - The first word of each list item under `## Resources` is a file of the mode's folder, relative to it, or a
+    path inside `resources.files`.
 - An approval is a step of a workflow file that mode.yaml lists in `workflows`: `approval: <question>`, with
   `show` and, when the owner picks one of several, `choices`. The form is `schemas/workflow.schema.json`;
   `components/modes/pm/workflows/ask.yaml` is an example.
@@ -117,6 +143,22 @@ rule, the sheet says "by convention".
 - When the project's modes do not load, such as when mode.yaml names a path with `..`, `openModeProject` fails
   with the sentences of the kernel's problems, one after another, such as
   "actions.add.input is not in the expected form".
+
+## An example of each action
+
+- Each action of mode.yaml has an example file, `tests/<action>.example.json` inside the mode's folder, such
+  as `tests/add.example.json`. It is a JSON object with two fields, `input` and `output`: one input of the
+  action and the output it gives. `bay check` checks `input` against the action's input schema and `output`
+  against its output schema, and runs nothing: it does not call the action, so the pair need not hold of any
+  state. For an action without its example file, `bay check` reports "Action <action> of mode <mode> has no
+  example: <file> does not exist."
+- A mode built from a design takes each action's example from one of the design's worked examples of that
+  action that answers, not one that refuses: its `input` is the example's input, and its `output` the example's
+  answer, with any `{"$text": [...]}` spelled out as the text it says, since the schemas check the text itself.
+  By convention, the example chosen is one with no `earlier` calls, so the pair holds from an empty start too.
+- The example files are the builder's: the declaration lists each one the mode does not have yet, and the
+  builder writes it. They are not test files: `forge.waves` refuses a plan cut from a design that names one
+  among a slice's tests, so no test writer hands one in.
 
 ## What a mode may not do
 
@@ -144,3 +186,6 @@ rule, the sheet says "by convention".
   interface gives.
 - A mode built from a design needs no kit interface, unless the design says another mode must implement the same
   contract.
+- When a kit interface the mode implements has a shared test, `<interface>/tests/shared.ts` in its folder under
+  `components/base/interfaces/`, a test of the mode runs it: a file in the mode's `tests/` imports the function
+  it exports and calls it with `{ mode: "<mode>" }`. `bay check` reports a mode whose tests do not.

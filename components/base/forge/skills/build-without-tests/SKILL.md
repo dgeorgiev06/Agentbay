@@ -57,6 +57,8 @@ missing and each decision as your judgement, never as a check. Nothing else you 
 4. A design's worked example may say a long text by rule, as `{"$text": [...]}`, in the committed
    `design.yaml`: each part is a text or `{"repeat": "<text>", "times": <count>}`, in order, and the example
    means the text it spells. Your code handles that spelled-out text; it never sees the form.
+   Write each action's example file, `tests/<action>.example.json`, from the design's worked example the sheet
+   `skills/kit-for-a-mode.md` names under "An example of each action".
 5. When an item needs a function, operation or action that the toolbox, the test toolbox, an interface or the
    kernel lacks, stop. Do not build around it. Submit `stopped` with what is missing.
 6. From round 2 on, your folder holds your last round's work. Correct what each finding and each failing

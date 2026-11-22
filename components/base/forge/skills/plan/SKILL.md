@@ -49,7 +49,8 @@ As `schemas/plan.json`, sent with `submit`:
 - [DOD-1] (must) Every condition is met by a slice, and a slice of kind mode meets at least one.
 - [DOD-2] (must) Each slice names its interface files from the design's commit and keeps to one module, or
   says why in `crossesModulesBecause`. `scripts/plan-checked.ts` checks the plan as `forge.waves` does.
-- [DOD-3] (must) Each `fails-first` item names the test files its test writer writes.
+- [DOD-3] (must) Each `fails-first` item names the test files its test writer writes: `.test.ts` files, never
+  an action's example file, `tests/<action>.example.json`, which the builder writes; the plan check names such a test.
 
 ## Instructions
 

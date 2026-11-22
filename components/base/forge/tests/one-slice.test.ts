@@ -30,6 +30,11 @@ type Proved = {
   readonly size: readonly Json[];
 };
 
+type Given = {
+  readonly bugs?: readonly Json[];
+  readonly interface?: readonly string[];
+};
+
 type Build = {
   readonly files: readonly string[];
   readonly built: Json;
@@ -299,8 +304,8 @@ function waitingOf(run: Json, step: string): Waiting {
   return { id: textAt(run, "id"), hash: textAt(waiting, "hash"), card, choices };
 }
 
-async function started(root: string, planned: Planned, bugs: readonly Json[] = []): Promise<Waiting> {
-  const trigger = JSON.stringify({ planned, base: shortHead(root), bugs });
+async function started(root: string, planned: Planned, given: Given = {}): Promise<Waiting> {
+  const trigger = JSON.stringify({ planned, base: shortHead(root), bugs: [], ...given });
   const answer = await bay(root, ["call", "--workflow", "forge:workflows/one-slice.yaml", trigger]);
   return waitingOf(runOf(answer), "start");
 }
@@ -553,6 +558,30 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
     assert.deepEqual(changedOn(root, into), []);
   });
 
+  test("12. a mode declaration from a design that leaves out an action's example file is sent back with the files to add", async () => {
+    const root = await project();
+    const mode = "components/modes/notes";
+    const design = [
+      "docs/designs/notes/schemas/notes/add-request.json",
+      "docs/designs/notes/schemas/notes/add-response.json",
+    ];
+    const notes = planned("A12", [`${mode}/**`], [item("DOD-A12-1", "must", "checks")]);
+    const start = await started(root, notes, { interface: design });
+    await decided(root, start, { step: "start", verdict: "approve" });
+    const copies = [`${mode}/mode.yaml`, `${mode}/schemas/add-request.json`, `${mode}/schemas/add-response.json`];
+    const without = await submitted(root, start.id, { files: copies, names: noNames });
+    assert.equal(textAt(without, "stepKey"), "declare/0#2");
+    assert.deepEqual(fieldsOf(fieldsOf(without).task ?? null).feedback, [
+      "The declaration lists no example file for an action of the design, and bay check needs " +
+        "tests/<action>.example.json in the mode's folder for every action: add " +
+        "components/modes/notes/tests/add.example.json, each the input and the answer of one of the design's " +
+        "worked examples of that action that answers.",
+    ]);
+    const withExample = [...copies, `${mode}/tests/add.example.json`];
+    const declared = await submitted(root, start.id, { files: withExample, names: noNames });
+    assert.equal(textAt(declared, "stepKey"), "build/0#1");
+  });
+
   test("9. the rules a slice request carries reach the builder as they are", async () => {
     const root = await project();
     const rule = {
@@ -651,7 +680,7 @@ describe("one slice, from a plan's slice to the merge card", { concurrency: true
   test("6. the cards for TR2's verdicts, as the kernel prints them: every line computed, none citing build, the answer first", async () => {
     const root = await project();
     await provedIn(root, "TR2", tr2Proved);
-    const start = await started(root, tr2Planned, [tr2Bug]);
+    const start = await started(root, tr2Planned, { bugs: [tr2Bug] });
     const startPrinted = await shownCard(root, start.id);
     assert.deepEqual(startPrinted, [
       "Build slice TR2?",

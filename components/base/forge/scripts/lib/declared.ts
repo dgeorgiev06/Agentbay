@@ -1,5 +1,7 @@
 import { basename, dirname, join } from "node:path/posix";
 import { pathMatch } from "../../../../../bay/sdk.ts";
+import { requestedActionOf } from "./design-files.ts";
+import { exampleFile, exampleFilePattern } from "./example-files.ts";
 import type { Slice } from "./slice-form.ts";
 
 export type Declaring = {
@@ -8,12 +10,17 @@ export type Declaring = {
   readonly fixed: readonly string[];
   readonly interface: readonly string[];
   readonly files: readonly string[];
+  readonly existing: readonly string[];
 };
 
 const manifestName = "mode.yaml";
 
 function files(count: number): string {
   return count === 1 ? "a file" : `${String(count)} files`;
+}
+
+function actionsWord(count: number): string {
+  return count === 1 ? "an action" : `${String(count)} actions`;
 }
 
 function outsideScope(declaring: Declaring): readonly string[] {
@@ -41,7 +48,7 @@ function fixedNamed(declaring: Declaring): readonly string[] {
   ];
 }
 
-function modeFolders(files: readonly string[]): readonly string[] {
+export function modeFoldersOf(files: readonly string[]): readonly string[] {
   return files.filter((file) => basename(file) === manifestName).map(dirname);
 }
 
@@ -53,22 +60,42 @@ function hasOwnSchema(folder: string, files: readonly string[]): boolean {
   return files.some((file) => dirname(file) === join(folder, "schemas") && isSchemaFile(file));
 }
 
-function schemasLeftOut(declaring: Declaring): readonly string[] {
+function schemasLeftOut(folder: string, designed: readonly string[], files: readonly string[]): readonly string[] {
+  if (hasOwnSchema(folder, files)) {
+    return [];
+  }
+  const copies = [...new Set(designed.map((file) => join(folder, "schemas", basename(file))))];
+  return [
+    `The declaration lists no schema file in the mode's folder ${folder}, and its ${manifestName} may name ` +
+      `only files inside that folder: add ${copies.join(", ")}, each a copy of the design's file of that name.`,
+  ];
+}
+
+function examplesLeftOut(folder: string, designed: readonly string[], declaring: Declaring): readonly string[] {
+  const actions = [...new Set(designed.flatMap((file) => requestedActionOf(file) ?? []))];
+  const known = [...declaring.files, ...declaring.existing];
+  const missing = actions.map((action) => exampleFile(folder, action)).filter((file) => !known.includes(file));
+  if (missing.length === 0) {
+    return [];
+  }
+  return [
+    `The declaration lists no example file for ${actionsWord(missing.length)} of the design, and bay check ` +
+      `needs ${exampleFilePattern} in the mode's folder for every action: add ${missing.join(", ")}, each the ` +
+      "input and the answer of one of the design's worked examples of that action that answers.",
+  ];
+}
+
+function designFilesLeftOut(declaring: Declaring): readonly string[] {
   const designed = declaring.interface.filter(isSchemaFile);
   if (declaring.kind !== "mode" || designed.length === 0) {
     return [];
   }
-  return modeFolders(declaring.files)
-    .filter((folder) => !hasOwnSchema(folder, declaring.files))
-    .map((folder) => {
-      const copies = [...new Set(designed.map((file) => join(folder, "schemas", basename(file))))];
-      return (
-        `The declaration lists no schema file in the mode's folder ${folder}, and its ${manifestName} may name ` +
-        `only files inside that folder: add ${copies.join(", ")}, each a copy of the design's file of that name.`
-      );
-    });
+  return modeFoldersOf(declaring.files).flatMap((folder) => [
+    ...schemasLeftOut(folder, designed, declaring.files),
+    ...examplesLeftOut(folder, designed, declaring),
+  ]);
 }
 
 export function refusedDeclaration(declaring: Declaring): readonly string[] {
-  return [...outsideScope(declaring), ...fixedNamed(declaring), ...schemasLeftOut(declaring)];
+  return [...outsideScope(declaring), ...fixedNamed(declaring), ...designFilesLeftOut(declaring)];
 }

@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
-import type { Json, ScriptContext } from "../../../../bay/sdk.ts";
+import { fieldsOf, type Json, type ScriptContext } from "../../../../bay/sdk.ts";
+import { commandLineIn } from "../../../../tests/test-toolbox.ts";
+import { exampleFile, exampleFilePattern } from "../scripts/lib/example-files.ts";
+import { jsonOf, listOf } from "./kit-copy.ts";
 
 type Fields = { readonly [key: string]: Json };
 
@@ -33,6 +37,42 @@ const contextMembers: Record<keyof ScriptContext, true> = {
 
 const anyName = /^<[a-z-]+>$/;
 
+const madeUpMode = "components/modes/notes";
+
+const textSchema = JSON.stringify({
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  type: "object",
+  additionalProperties: false,
+  required: ["text"],
+  properties: { text: { type: "string" } },
+});
+
+const projectWithoutExample: Readonly<Record<string, string>> = {
+  "agentbay.config.yaml": "modes: [notes]\nbindings: {}\nadapter: claude-code\n",
+  [`${madeUpMode}/mode.yaml`]: [
+    "name: notes",
+    "version: 1.0.0",
+    "description: Keeps notes; a made-up mode with one action and no example file.",
+    "actions:",
+    "  add:",
+    "    description: When a note is to be kept.",
+    "    input: schemas/add-request.json",
+    "    output: schemas/add-response.json",
+    "    effects: [read]",
+    "    run:",
+    "      - script: scripts/add.ts",
+    "",
+  ].join("\n"),
+  [`${madeUpMode}/schemas/add-request.json`]: textSchema,
+  [`${madeUpMode}/schemas/add-response.json`]: textSchema,
+  [`${madeUpMode}/scripts/add.ts`]: [
+    'import { defineScript } from "agentbay/sdk";',
+    "",
+    "export const run = defineScript((input) => Promise.resolve(input));",
+    "",
+  ].join("\n"),
+};
+
 function isFields(value: unknown): value is Fields {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -43,6 +83,21 @@ function quotedIn(text: string): readonly string[] {
 
 async function sheetText(): Promise<string> {
   return readFile(join(modeFolder, sheetPath), "utf8");
+}
+
+async function madeUpProject(files: Readonly<Record<string, string>>): Promise<string> {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "agentbay-kit-sheet-")));
+  for (const [path, text] of Object.entries(files)) {
+    await mkdir(dirname(join(root, path)), { recursive: true });
+    await writeFile(join(root, path), text, "utf8");
+  }
+  return root;
+}
+
+function quotedSentenceOn(text: string, start: string): string {
+  const inOneLine = text.replace(/\s+/g, " ");
+  const found = new RegExp(`"(${start}[^"]*)"`).exec(inOneLine);
+  return found?.[1] ?? "";
 }
 
 async function manifestForm(): Promise<Fields> {
@@ -125,5 +180,35 @@ test("the skills that design, declare, test and build a mode name the sheet in t
     const text = await readFile(join(modeFolder, "skills", skill, "SKILL.md"), "utf8");
     const resources = text.split("\n## ").find((section) => section.startsWith("Resources")) ?? "";
     assert.ok(resources.includes(`- \`${sheetPath}\`: `), `the skill ${skill} names the sheet in its Resources`);
+  }
+});
+
+test("the sheet quotes the example file's name as forge's declare check builds it", async () => {
+  assert.equal(exampleFilePattern, "tests/<action>.example.json");
+  assert.ok(quotedIn(await sheetText()).includes(exampleFilePattern), "the sheet quotes the example file's name");
+  assert.equal(exampleFile(madeUpMode, "add"), `${madeUpMode}/tests/add.example.json`);
+});
+
+test("a made-up mode with an action and no example file fails bay check with the sentence the sheet quotes", async () => {
+  const root = await madeUpProject(projectWithoutExample);
+  try {
+    const checked = await (await commandLineIn(kitFolder))(["check", "--project", root, "--json"]);
+    const file = exampleFile(madeUpMode, "add");
+    const quoted = quotedSentenceOn(await sheetText(), "Action <action>");
+    const expected = quoted.replace("<action>", "add").replace("<mode>", "notes").replace("<file>", file);
+    const findings = fieldsOf(jsonOf(checked.output)).findings;
+    assert.equal(
+      expected,
+      "Action add of mode notes has no example: components/modes/notes/tests/add.example.json does not exist.",
+      "the sheet quotes the sentence with the action, the mode and the file in their places",
+    );
+    assert.equal(checked.exitCode, 1, "bay check fails");
+    assert.deepEqual(
+      listOf(findings).map((finding) => fieldsOf(finding).message),
+      [expected],
+      "the one error is the sentence the sheet quotes, for the file the sheet names",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });

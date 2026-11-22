@@ -35,7 +35,7 @@ an interface's `.yaml` gains, loses or changes.
 
 ## Definition of done
 
-- [DOD-1] (must) Every file in `files` is admitted by the slice's scope and is not in `fixed`; scripts/declared-in-scope.ts checks it.
+- [DOD-1] (must) Every file in `files` is admitted by the slice's scope and is not in `fixed`, and a slice of kind `mode` lists its schema copies and example files; scripts/declared-in-scope.ts checks it.
 - [DOD-2] (must) `files` names every file the slice's definition of done needs changed, and no other.
 - [DOD-3] (must) `names` lists each action name the change adds, removes or alters, read from the manifests.
 
@@ -48,7 +48,10 @@ an interface's `.yaml` gains, loses or changes.
    interface's `.yaml`.
    A slice of kind `mode` declares its `mode.yaml`; a schema file under the mode's `schemas/` for each request
    and response the design gives, copied from the design's schema files in `interface`; its migration files
-   when the design's module owns tables; and its scripts.
+   when the design's module owns tables; its scripts; and, for each action whose request file is in
+   `interface`, the action's example file `tests/<action>.example.json` in the mode's folder, unless it is
+   already there and stays as it is. The check sends back a declaration that lists a `mode.yaml` and leaves
+   out such a file.
 4. Submit the declaration. If it comes back with feedback, correct what it names; you have three rounds.
 
 ## Tools

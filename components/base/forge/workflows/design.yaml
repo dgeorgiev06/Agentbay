@@ -9,10 +9,10 @@ steps:
     input:
       checked: $steps.read.output
   - id: path
-    approval: Which path for the design?
+    approval: How should the design be written?
     show: $steps.start.output.card
     choices:
-      light: { does: "One designer, then a challenger" }
+      light: { does: "One designer, then a review step" }
       full: { does: "Two designers apart, then a comparison" }
       stop: { does: Stop; nothing is designed }
   - id: designs

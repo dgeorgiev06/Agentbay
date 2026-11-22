@@ -150,7 +150,7 @@ async function repositoryWithWorktrees(names: readonly string[]): Promise<Reposi
   const project = await makeProject({ adapter: "claude-code" });
   const notes = join(project.root, "out", "notes");
   await project.write("CLAUDE.md", "the project's notes\n");
-  await project.write("fixtures/agentbay.config.yaml", "adapter: claude-code\n");
+  await project.write("fixtures/sub/agentbay.config.yaml", "adapter: claude-code\n");
   git(project.root, ["init", "--quiet"]);
   git(project.root, ["add", "CLAUDE.md", "fixtures"]);
   git(project.root, ["commit", "--quiet", "--no-gpg-sign", "--message", "base"]);
@@ -162,12 +162,13 @@ async function repositoryWithWorktrees(names: readonly string[]): Promise<Reposi
 
 function assertBothRefuse(project: Project, holds: string): void {
   const sentence = `the step agentbay-writer-draft is granted ${join(project.root, "out", "notes")}, which holds ${holds}`;
+  const saysIt = (output: string) => output.split("\n").some((line) => line.endsWith(sentence));
   const checked = ran(project, ["check"]);
-  assert.ok(checked.output.includes(sentence), checked.output);
+  assert.ok(saysIt(checked.output), checked.output);
   assert.match(checked.output, /bay check: 1 error/);
   const built = ran(project, ["build"]);
   assert.notEqual(built.status, 0);
-  assert.ok(built.output.includes(sentence), built.output);
+  assert.ok(saysIt(built.output), built.output);
   assert.doesNotMatch(`${checked.output}${built.output}`, /unexpected error/);
 }
 
@@ -213,14 +214,31 @@ const reproductions: readonly (readonly [string, (repository: Repository) => Pro
     },
   ],
   [
+    "a worktree whose record has a NUL in it",
+    async ({ project, notes }) => {
+      await writeFile(join(project.root, ".git", "worktrees", "a", "gitdir"), `${join(notes, "a")}\0/.git\n`);
+      return join(notes, "a", ".git");
+    },
+  ],
+  [
+    "a tracked file reached through a link to another folder of the same worktree",
+    async ({ notes }) => {
+      await mkdir(join(notes, "a", "fixtures-real", "sub"), { recursive: true });
+      await writeFile(join(notes, "a", "fixtures-real", "sub", "agentbay.config.yaml"), "");
+      await rm(join(notes, "a", "fixtures"), { recursive: true });
+      await symlink(join(notes, "a", "fixtures-real"), join(notes, "a", "fixtures"));
+      return join(notes, "a", "fixtures", "sub", "agentbay.config.yaml");
+    },
+  ],
+  [
     "a tracked folder swapped for a link to an outside folder that holds agentbay.config.yaml",
     async ({ project, notes }) => {
       const outside = join(project.root, "outside");
-      await mkdir(outside);
-      await writeFile(join(outside, "agentbay.config.yaml"), "adapter: claude-code\n");
+      await mkdir(join(outside, "sub"), { recursive: true });
+      await writeFile(join(outside, "sub", "agentbay.config.yaml"), "adapter: claude-code\n");
       await rm(join(notes, "a", "fixtures"), { recursive: true });
       await symlink(outside, join(notes, "a", "fixtures"));
-      return join(notes, "a", "fixtures", "agentbay.config.yaml");
+      return join(notes, "a", "fixtures", "sub", "agentbay.config.yaml");
     },
   ],
 ];

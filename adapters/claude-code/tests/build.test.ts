@@ -637,6 +637,7 @@ test("a folder that only claims to be a worktree refuses: its record must point 
   for (const text of [
     `${project}/notes/other/.git\n`,
     `${worktree}\n`,
+    `${worktree}/notgit\n`,
     `${worktree}/.git\0\n`,
     `${worktree}/x/../.git\n`,
     "",

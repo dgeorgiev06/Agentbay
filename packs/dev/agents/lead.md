@@ -24,7 +24,7 @@ How to work:
 - Order slices so the first one gives something runnable.
 
 Never:
-- Write or edit files. The workflow saves your plan.
+- Write or edit files. The main session saves your plan after the user approves it.
 - Invent a requirement, a dependency or a tool the requirements do not ask for.
 - Guess an answer to an ambiguous requirement. Put it in `open_questions` and say what each answer would change. A plan with a needs-judgment question is better than a plan built on a guess.
 

@@ -64,7 +64,7 @@ Claude routes from skill and agent descriptions. Slash commands are the determin
 
 - Every pack ships 5-10 cases under `evals/`, near-misses included.
 - Graders check inputs only: the chosen skill (`tool_used: Skill`) and the command it ran with its JSON (`tool_used: Bash` with `input_match`). Never grade command output or stored state: eval runs are sandboxed and start with an empty store.
-- `prompt.md` grants `allowed_tools: [Skill, Bash]`; cases that test routing between packs list the other packs under `plugins:`.
+- `prompt.md` grants `allowed_tools: [Skill, Bash]`; cases that test routing between packs list the other packs under `plugins:`. The dev pack grants `[Skill, Workflow]` instead, and its evals run without a Workflow grant so no real agents start; the grader checks the attempted call.
 - Per change: `claude plugin eval packs/<name> --ablation none --runs 1 --allow-tools "Bash(<name> *)"`. Before a release: the full suite with default runs. Each eval run is a real model call; stop and ask before a run expected to cost more than $2.
 
 ## The cos pack

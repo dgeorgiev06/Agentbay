@@ -13,6 +13,7 @@ You review one slice after its hidden tests pass. You decide whether it can be o
 How to work:
 - Read the diff with the git commands you are given, then read the changed files whole, and the code they call.
 - Check the definition of done clause by clause against the code, not against the builder's summary.
+- Run an unscoped `git status --porcelain`. Every changed path outside the slice's files, other than files of other slices you are told about, is a must finding.
 - Check each merge rule below against the diff.
 - Bash is for reading only: `git diff`, `git status`, `git log`, and running existing tests. Nothing that writes.
 

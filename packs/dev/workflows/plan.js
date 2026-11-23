@@ -1,11 +1,8 @@
 export const meta = {
   name: 'plan',
-  description: 'Turn a requirements file into reviewed build slices and save the plan for /dev:build',
+  description: 'Turn a requirements file into reviewed build slices and return the plan for approval',
   whenToUse: 'Before /dev:build, with args {requirements: path, repo?: path}',
-  phases: [
-    { title: 'Plan', detail: 'lead agent splits the requirements into slices' },
-    { title: 'Save', detail: 'write the plan to .agentbay/dev/plan.json' },
-  ],
+  phases: [{ title: 'Plan', detail: 'lead agent splits the requirements into slices' }],
 }
 
 const STRINGS = { type: 'array', items: { type: 'string' } }
@@ -38,19 +35,10 @@ function leadPrompt(requirements, repo) {
   return [
     `Read the requirements in ${requirements} and the code in ${repo}.`,
     'Split the work into slices a builder can finish and a reviewer can judge on their own.',
-    'Give each slice an id S1, S2, ..., a title of a few words, a definition of done that a test can check,',
-    'the files it may touch, and the ids it depends on.',
+    'Give each slice an id S1, S2, ..., a title of a few words,',
+    'a definition of done that a test can check, the files it may touch, and the ids it depends on.',
     'Slices that do not depend on each other must not share files.',
     'List the interfaces slices share, and every question the requirements leave open instead of guessing.',
-  ].join('\n')
-}
-
-function savePrompt(path, plan) {
-  return [
-    `Write the JSON below to ${path}, pretty-printed with two spaces, creating parent folders.`,
-    'Change nothing in it and write no other file. Reply with the path.',
-    '',
-    JSON.stringify(plan),
   ].join('\n')
 }
 
@@ -59,24 +47,16 @@ if (!args?.requirements) {
 }
 
 const repo = args.repo ?? '.'
-const path = `${repo}/.agentbay/dev/plan.json`
 
 phase('Plan')
-const plan = await agent(leadPrompt(args.requirements, repo), {
+const lead = await agent(leadPrompt(args.requirements, repo), {
   agentType: 'dev:lead',
   label: 'lead',
   schema: PLAN_SCHEMA,
 })
-if (!plan) {
+if (!lead) {
   return { error: 'The lead agent stopped before returning a plan.' }
 }
 
-phase('Save')
-const saved = await agent(savePrompt(path, { repo, ...plan }), { label: 'save plan', effort: 'low' })
-
-return {
-  plan: saved ? path : null,
-  slices: plan.slices.map(slice => `${slice.id}: ${slice.title}`),
-  interfaces: plan.interfaces,
-  open_questions: plan.open_questions,
-}
+const { open_questions, ...slicesAndInterfaces } = lead
+return { plan: { repo, ...slicesAndInterfaces }, open_questions }

@@ -1,43 +1,29 @@
 export const meta = {
   name: 'build',
   description: 'Build an approved /dev:plan slice by slice: hidden tests, builder, test run and review, at most two rounds each',
-  whenToUse: 'After the user approves a plan from /dev:plan, with args {plan: path, parallel?: 2}',
-  phases: [
-    { title: 'Load', detail: 'read the approved plan' },
-    { title: 'Build', detail: 'tests, build, run and review per slice in dependency waves' },
-  ],
+  whenToUse: 'After the user approves a plan from /dev:plan, with args {plan: the plan object, parallel?: 2}',
+  phases: [{ title: 'Build', detail: 'tests, build, run and review per slice in dependency waves' }],
 }
 
 const MAX_ROUNDS = 2
 const STRINGS = { type: 'array', items: { type: 'string' } }
-
-const PLAN_SCHEMA = {
-  type: 'object',
-  required: ['repo', 'slices', 'interfaces'],
-  properties: {
-    repo: { type: 'string' },
-    slices: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['id', 'title', 'done', 'files', 'depends_on'],
-        properties: {
-          id: { type: 'string' },
-          title: { type: 'string' },
-          done: { type: 'string' },
-          files: STRINGS,
-          depends_on: STRINGS,
-        },
-      },
-    },
-    interfaces: STRINGS,
-  },
-}
+const SLICE_TEXT_FIELDS = ['id', 'title', 'done']
+const SLICE_LIST_FIELDS = ['files', 'depends_on']
 
 const TESTS_SCHEMA = {
   type: 'object',
-  required: ['test_command', 'files'],
-  properties: { test_command: { type: 'string' }, files: STRINGS },
+  required: ['files', 'test_command'],
+  properties: {
+    files: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['path', 'content'],
+        properties: { path: { type: 'string' }, content: { type: 'string' } },
+      },
+    },
+    test_command: { type: 'string' },
+  },
 }
 
 const RUN_SCHEMA = {
@@ -76,16 +62,24 @@ const REVIEW_SCHEMA = {
   properties: { verdict: { enum: ['pass', 'fix'] }, must: FINDINGS, should: FINDINGS },
 }
 
-function chunks(items, size) {
-  const groups = []
-  for (let start = 0; start < items.length; start += size) {
-    groups.push(items.slice(start, start + size))
+function planError(plan) {
+  if (!Array.isArray(plan?.slices) || plan.slices.length === 0) {
+    return 'Pass args.plan: the plan object from /dev:plan, with a slices array.'
   }
-  return groups
+  const broken = plan.slices.find(slice =>
+    SLICE_TEXT_FIELDS.some(field => typeof slice?.[field] !== 'string') ||
+    SLICE_LIST_FIELDS.some(field => !Array.isArray(slice[field])))
+  if (broken) {
+    return `Every plan slice needs ${[...SLICE_TEXT_FIELDS, ...SLICE_LIST_FIELDS].join(', ')}.`
+  }
+  return null
 }
 
-function hiddenDir(repo, slice) {
-  return `${repo}/.agentbay/dev/hidden-tests/${slice.id}`
+function parallelError(parallel) {
+  if (parallel === undefined || (Number.isInteger(parallel) && parallel >= 1)) {
+    return null
+  }
+  return 'args.parallel must be a positive whole number.'
 }
 
 function sliceText(slice) {
@@ -96,12 +90,18 @@ function sliceText(slice) {
   ].join('\n')
 }
 
+function interfacesText(plan) {
+  return `Repository: ${plan.repo}. Shared interfaces: ${plan.interfaces.join('; ') || 'none'}.`
+}
+
 function testWriterPrompt(plan, slice) {
   return [
     sliceText(slice),
-    `Repository: ${plan.repo}. Shared interfaces: ${plan.interfaces.join('; ') || 'none'}.`,
-    `Write tests that check the definition of done, only under ${hiddenDir(plan.repo, slice)}.`,
-    'Return the command that runs exactly these tests from the repository root, and the files you wrote.',
+    interfacesText(plan),
+    'Write tests that check the definition of done. Do not write any file yourself.',
+    'Return each test file as {path, content}, with the path relative to a test root, and import',
+    'the repository code by absolute path.',
+    'Return the command that runs exactly these tests from the test root.',
   ].join('\n')
 }
 
@@ -116,28 +116,33 @@ function feedbackText(feedback) {
 
 function builderPrompt(plan, slice, feedback) {
   const others = plan.slices.filter(other => other.id !== slice.id)
+  const names = others.map(other => `${other.id} ${other.title}`)
   return [
     sliceText(slice),
-    `Repository: ${plan.repo}. Shared interfaces: ${plan.interfaces.join('; ') || 'none'}.`,
-    `Other slices, built by others: ${others.map(other => `${other.id} ${other.title}`).join('; ') || 'none'}.`,
-    `Never open, list or search ${plan.repo}/.agentbay/dev/hidden-tests.`,
+    interfacesText(plan),
+    `Other slices, built by others: ${names.join('; ') || 'none'}.`,
     feedback ? feedbackText(feedback) : 'Implement the slice and its own tests.',
   ].join('\n')
 }
 
-function runPrompt(plan, tests) {
+function runPrompt(slice, tests) {
   return [
-    `From ${plan.repo}, run exactly: ${tests.test_command}`,
-    'Do not edit any file. Report whether every test passed, and each failing test by name with its message.',
+    `Test root: $TMPDIR/agentbay-dev/${slice.id}/`,
+    `Command: ${tests.test_command}`,
+    `Files: ${JSON.stringify(tests.files)}`,
   ].join('\n')
 }
 
 function reviewerPrompt(plan, slice) {
+  const others = plan.slices.filter(other => other.id !== slice.id)
+  const otherFiles = others.flatMap(other => other.files)
   return [
     sliceText(slice),
     `Repository: ${plan.repo}. Review the working-tree changes to the slice's files:`,
-    `git diff -- ${slice.files.join(' ')} and git status --porcelain -- ${slice.files.join(' ')}.`,
-    'Judge them against the definition of done and the merge rules.',
+    `git diff -- ${slice.files.join(' ')}.`,
+    'Run an unscoped git status --porcelain. Raise a must finding for every changed path',
+    `outside the slice's files, except these files of other slices: ${otherFiles.join(', ') || 'none'}.`,
+    'Judge the changes against the definition of done and the merge rules.',
   ].join('\n')
 }
 
@@ -155,11 +160,23 @@ function outcome(slice, status, details) {
 }
 
 function runFailed(run) {
-  return run ?? { passed: false, failures: [{ name: 'test run', message: 'The test runner stopped.' }] }
+  const failure = { name: 'test run', message: 'The test runner stopped.' }
+  return run ?? { passed: false, failures: [failure] }
 }
 
-function reviewFailed(review) {
-  return review ?? { verdict: 'fix', must: [], should: [] }
+async function runPool(items, size, work) {
+  const results = new Array(items.length)
+  let next = 0
+  async function worker() {
+    while (next < items.length) {
+      const index = next
+      next += 1
+      results[index] = await work(items[index])
+    }
+  }
+  const workers = Array.from({ length: Math.min(size, items.length) }, () => worker)
+  await parallel(workers)
+  return results
 }
 
 async function buildSlice(plan, slice) {
@@ -183,10 +200,9 @@ async function buildSlice(plan, slice) {
       const reason = 'The builder stopped.'
       return outcome(slice, 'needs-decision', { ...last, rounds: round, reason })
     }
-    const run = runFailed(await agent(runPrompt(plan, tests), {
+    const run = runFailed(await agent(runPrompt(slice, tests), {
       ...opts(`run ${round}`),
-      agentType: 'dev:test-writer',
-      effort: 'low',
+      agentType: 'dev:runner',
       schema: RUN_SCHEMA,
     }))
     if (!run.passed) {
@@ -194,51 +210,47 @@ async function buildSlice(plan, slice) {
       last = { rounds: round, failures: run.failures, reason: 'Hidden tests still fail.' }
       continue
     }
-    const review = reviewFailed(await agent(reviewerPrompt(plan, slice), {
+    const review = await agent(reviewerPrompt(plan, slice), {
       ...opts(`review ${round}`),
       agentType: 'dev:reviewer',
       schema: REVIEW_SCHEMA,
-    }))
+    })
+    if (review === null) {
+      return outcome(slice, 'needs-decision', { rounds: round, reason: 'The reviewer stopped.' })
+    }
     if (review.verdict === 'pass') {
       return outcome(slice, 'pass', { rounds: round, should: review.should })
     }
     feedback = { failures: [], must: review.must }
-    last = { rounds: round, must: review.must, should: review.should, reason: 'The reviewer asks for fixes.' }
+    const reason = 'The reviewer asks for fixes.'
+    last = { rounds: round, must: review.must, should: review.should, reason }
   }
   return outcome(slice, 'needs-decision', last)
 }
 
-if (!args?.plan) {
-  return { error: 'Pass args.plan: the path to a plan written by /dev:plan.' }
+const argsError = planError(args?.plan) ?? parallelError(args?.parallel)
+if (argsError) {
+  return { error: argsError }
 }
 
 const cap = args.parallel ?? 2
-
-phase('Load')
-const plan = await agent(`Read ${args.plan} and return its JSON exactly as written. Edit nothing.`, {
-  label: 'load plan',
-  effort: 'low',
-  schema: PLAN_SCHEMA,
-})
-if (!plan) {
-  return { error: `Could not read the plan at ${args.plan}.` }
-}
+const plan = { repo: '.', interfaces: [], ...args.plan }
 
 phase('Build')
 const results = []
 let waiting = plan.slices
 while (waiting.length > 0) {
-  const passed = new Set(results.filter(result => result.status === 'pass').map(result => result.id))
+  const passedResults = results.filter(result => result.status === 'pass')
+  const passed = new Set(passedResults.map(result => result.id))
   const ready = waiting.filter(slice => slice.depends_on.every(id => passed.has(id)))
   if (ready.length === 0) {
     break
   }
-  for (const group of chunks(ready, cap)) {
-    const built = await parallel(group.map(slice => () => buildSlice(plan, slice)))
-    group.forEach((slice, index) => {
-      results.push(built[index] ?? outcome(slice, 'needs-decision', { reason: 'The slice run stopped.' }))
-    })
-  }
+  const built = await runPool(ready, cap, slice => buildSlice(plan, slice))
+  ready.forEach((slice, index) => {
+    const stopped = outcome(slice, 'needs-decision', { reason: 'The slice run stopped.' })
+    results.push(built[index] ?? stopped)
+  })
   waiting = waiting.filter(slice => !ready.includes(slice))
 }
 for (const slice of waiting) {

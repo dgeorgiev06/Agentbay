@@ -1,77 +1,115 @@
-import { join } from "node:path";
+export const recallLimit = 50;
 
-export const RECALL_LIMIT = 50;
+export type Result<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: string };
 
-export class UserError extends Error {}
+export type NewFact = { readonly fact: string; readonly topic: string | null };
 
-export interface NewFact {
-  fact: string;
-  topic: string | null;
-}
+export type FactFilter = { readonly topic: string | null; readonly query: string | null };
 
-export interface FactFilter {
-  topic: string | null;
-  query: string | null;
-}
+export type Fact = {
+  readonly id: string;
+  readonly fact: string;
+  readonly topic: string | null;
+  readonly created: string;
+};
 
-export const SCHEMA = {
+export const schema = {
   remember: {
-    input: { fact: "string", topic: "string?" },
-    output: { id: "string", fact: "string", topic: "string|null" },
+    input: { fact: "string, required", topic: "string, optional, lowercased" },
+    output: { id: "string", fact: "string", topic: "string or null" },
   },
   recall: {
-    input: { topic: "string?", query: "string?" },
-    output: { facts: "{id, fact, topic, created}[] newest first, at most 50" },
+    input: { topic: "string, optional", query: "string, optional, matched inside the fact" },
+    output: { facts: `[{ id, fact, topic, created }] newest first, at most ${recallLimit}` },
   },
   forget: {
-    input: { id: "string" },
-    output: { id: "string", forgotten: "true" },
+    input: { id: "string, required, as returned by remember or recall" },
+    output: { id: "string", forgotten: true },
+  },
+  export: {
+    input: {},
+    output: { facts: "[{ id, fact, topic, created }] every fact, newest first" },
+  },
+  setup: {
+    input: {},
+    output: { allow: "permission rules to add to the user's settings" },
+  },
+  schema: {
+    input: {},
+    output: { actions: "this description" },
   },
 };
 
-export function resolveDataDir(
-  env: Record<string, string | undefined>,
-  home: string,
-): string {
-  return (
-    env.CLAUDE_PLUGIN_DATA || env.AGENTBAY_DATA_DIR || join(home, ".agentbay", "cos")
-  );
+export const permissions = { allow: ["Bash(cos *)"] };
+
+function fail<T>(error: string): Result<T> {
+  return { ok: false, error };
 }
 
-export function parseInput(text: string): Record<string, unknown> {
-  let value: unknown;
-  try {
-    value = JSON.parse(text);
-  } catch {
-    throw new UserError("Input is not valid JSON.");
-  }
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new UserError("Input must be a JSON object.");
-  }
-  return value as Record<string, unknown>;
+function succeed<T>(value: T): Result<T> {
+  return { ok: true, value };
 }
 
-function optionalText(input: Record<string, unknown>, name: string): string | null {
+function optionalText(input: Record<string, unknown>, name: string): Result<string | null> {
   const value = input[name];
-  if (value === undefined || value === null) return null;
-  if (typeof value !== "string") throw new UserError(`${name} must be a string.`);
-  return value.trim() || null;
+  if (value === undefined || value === null) {
+    return succeed(null);
+  }
+  if (typeof value !== "string") {
+    return fail(`The ${name} must be a string.`);
+  }
+  return succeed(value.trim() || null);
 }
 
-export function parseRemember(input: Record<string, unknown>): NewFact {
+function lowercased(text: string | null): string | null {
+  return text === null ? null : text.toLowerCase();
+}
+
+export function parseInput(raw: string): Result<Record<string, unknown>> {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      return succeed(parsed as Record<string, unknown>);
+    }
+  } catch {
+    return fail("The input is not valid JSON: pass one JSON object.");
+  }
+  return fail("The input must be a JSON object.");
+}
+
+export function normalizeRemember(input: Record<string, unknown>): Result<NewFact> {
   const fact = optionalText(input, "fact");
-  if (fact === null) throw new UserError("fact must not be blank.");
   const topic = optionalText(input, "topic");
-  return { fact, topic: topic && topic.toLowerCase() };
+  if (!fact.ok) {
+    return fact;
+  }
+  if (!topic.ok) {
+    return topic;
+  }
+  if (fact.value === null) {
+    return fail("The fact is blank: say what to remember.");
+  }
+  return succeed({ fact: fact.value, topic: lowercased(topic.value) });
 }
 
-export function parseRecall(input: Record<string, unknown>): FactFilter {
+export function normalizeRecall(input: Record<string, unknown>): Result<FactFilter> {
   const topic = optionalText(input, "topic");
-  return { topic: topic && topic.toLowerCase(), query: optionalText(input, "query") };
+  const query = optionalText(input, "query");
+  if (!topic.ok) {
+    return topic;
+  }
+  if (!query.ok) {
+    return query;
+  }
+  return succeed({ topic: lowercased(topic.value), query: query.value });
 }
 
-export function parseForget(input: Record<string, unknown>): string {
+export function parseId(input: Record<string, unknown>): Result<string> {
   const id = optionalText(input, "id");
-  if (id === null) throw new UserError("id must not be blank.");
-  return id;
+  if (!id.ok) {
+    return id;
+  }
+  return id.value === null ? fail("The id is blank: recall the facts to see the ids.") : succeed(id.value);
 }

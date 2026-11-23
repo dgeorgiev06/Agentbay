@@ -8,6 +8,7 @@ rules:
   - Text is trimmed; blank text is refused.
   - Due dates are YYYY-MM-DD; resolve words like "tomorrow" from today's date first.
   - Ids look like t1 and are returned by add and list.
+allowed-tools: Bash(todo *)
 ---
 
 Run these through Bash. Each prints one JSON object.

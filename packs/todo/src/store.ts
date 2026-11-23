@@ -27,15 +27,27 @@ function toTodo(row: Row): Todo {
   };
 }
 
-export function openStore(dbPath: string): Store {
-  const db = new DatabaseSync(dbPath);
-  db.exec(`CREATE TABLE IF NOT EXISTS todos (
+const migrations = [
+  `CREATE TABLE IF NOT EXISTS todos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     text TEXT NOT NULL,
     due TEXT,
     done INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
-  )`);
+  )`,
+];
+
+function migrate(db: DatabaseSync): void {
+  const row = db.prepare("PRAGMA user_version").get() as { user_version: number };
+  for (let version = row.user_version; version < migrations.length; version++) {
+    db.exec(migrations[version]);
+    db.exec(`PRAGMA user_version = ${version + 1}`);
+  }
+}
+
+export function openStore(dbPath: string): Store {
+  const db = new DatabaseSync(dbPath);
+  migrate(db);
 
   const insert = db.prepare("INSERT INTO todos (text, due, created_at) VALUES (?, ?, ?)");
   const selectAll = db.prepare("SELECT * FROM todos ORDER BY id");

@@ -14,7 +14,7 @@ export type Result<T> =
 
 export type NewTodo = { readonly text: string; readonly due: string | null };
 
-export const longestText = 500;
+const longestText = 500;
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 const datePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -22,7 +22,10 @@ const idPattern = /^t([1-9]\d*)$/;
 
 export const schema = {
   add: {
-    input: { text: "string, required, at most 500 characters", due: "YYYY-MM-DD, optional" },
+    input: {
+      text: `string, required, at most ${longestText} characters`,
+      due: "YYYY-MM-DD, optional",
+    },
     output: { id: "string", text: "string", due: "YYYY-MM-DD, only when set" },
   },
   list: {
@@ -33,11 +36,21 @@ export const schema = {
     input: { id: "string, required, as returned by add" },
     output: { id: "string", done: true },
   },
+  export: {
+    input: {},
+    output: { todos: "[{ id, text, due, done, createdAt }] every todo, in creation order" },
+  },
+  setup: {
+    input: {},
+    output: { allow: "permission rules to add to the user's settings" },
+  },
   schema: {
     input: {},
     output: { actions: "this description" },
   },
 };
+
+export const permissions = { allow: ["Bash(todo *)"] };
 
 function fail<T>(error: string): Result<T> {
   return { ok: false, error };
@@ -58,7 +71,11 @@ function isRealDate(value: string): boolean {
   }
   const [year, month, day] = match.slice(1).map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
 }
 
 export function parseInput(raw: string): Result<Record<string, unknown>> {

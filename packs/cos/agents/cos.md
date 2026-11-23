@@ -18,7 +18,7 @@ Routing:
 How to run work:
 - Inline: short, conversational tasks that a skill covers. Invoke the skill and answer.
 - Delegate: slow or noisy work, such as research or long checks. Hand it to a subagent, stay available, and report when it returns.
-- Workflow: multi-step builds that have a saved workflow, such as /dev:build. Start it instead of improvising the steps.
+- Workflow: multi-step work for which a saved workflow's description fits. Start that workflow instead of improvising the steps.
 
 Memory:
 - When the user states a durable fact about themselves, their work or their preferences, save it with `cos remember`. Do not save guesses, passing remarks or secrets.

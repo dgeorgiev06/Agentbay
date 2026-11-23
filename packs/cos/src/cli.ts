@@ -1,61 +1,105 @@
+import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
-  RECALL_LIMIT,
-  SCHEMA,
-  UserError,
-  parseForget,
+  normalizeRecall,
+  normalizeRemember,
+  parseId,
   parseInput,
-  parseRecall,
-  parseRemember,
-  resolveDataDir,
+  permissions,
+  recallLimit,
+  schema,
+  type Result,
 } from "./rules.ts";
 import { openStore, type Store } from "./store.ts";
 
-type Handler = (store: Store, input: Record<string, unknown>, now: Date) => object;
+type Deps = { readonly store: Store; readonly clock: () => Date };
+type Action = (input: Record<string, unknown>, deps: Deps) => Result<object>;
 
-const handlers: Record<string, Handler> = {
-  remember(store, input, now) {
-    const { id, fact, topic } = store.add(parseRemember(input), now.toISOString());
-    return { id, fact, topic };
-  },
-  recall(store, input) {
-    return { facts: store.list(parseRecall(input), RECALL_LIMIT) };
-  },
-  forget(store, input) {
-    const id = parseForget(input);
-    if (!store.remove(id)) throw new UserError("No fact has that id.");
-    return { id, forgotten: true };
-  },
+function map<A, B>(result: Result<A>, next: (value: A) => Result<B>): Result<B> {
+  return result.ok ? next(result.value) : result;
+}
+
+const plain: Record<string, () => object> = {
+  schema: () => ({ actions: schema }),
+  setup: () => permissions,
 };
 
-function execute(
-  args: string[],
-  env: Record<string, string | undefined>,
-  now: Date,
-): object {
-  const [action, rawInput = "{}"] = args;
-  if (action === "schema") return SCHEMA;
-  const handler = action === undefined ? undefined : handlers[action];
-  if (!handler) throw new UserError(`Unknown action: ${action ?? "(none)"}.`);
-  const input = parseInput(rawInput);
-  const store = openStore(join(resolveDataDir(env, homedir()), "cos.db"));
+const actions: Record<string, Action> = {
+  remember: (input, { store, clock }) =>
+    map(normalizeRemember(input), (newFact) => {
+      const { id, fact, topic } = store.add(newFact, clock().toISOString());
+      return { ok: true, value: { id, fact, topic } };
+    }),
+
+  recall: (input, { store }) =>
+    map(normalizeRecall(input), (filter) => ({
+      ok: true,
+      value: { facts: store.list(filter, recallLimit) },
+    })),
+
+  forget: (input, { store }) =>
+    map(parseId(input), (id) =>
+      store.remove(id)
+        ? { ok: true, value: { id, forgotten: true } }
+        : { ok: false, error: "No fact has that id: recall the facts to see the ids." },
+    ),
+
+  export: (_input, { store }) => ({
+    ok: true,
+    value: { facts: store.list({ topic: null, query: null }, -1) },
+  }),
+};
+
+function dataDir(env: NodeJS.ProcessEnv): string {
+  return join(env.AGENTBAY_HOME || join(homedir(), ".agentbay"), "cos");
+}
+
+function openAt(directory: string): Result<Store> {
   try {
-    return handler(store, input, now);
+    mkdirSync(directory, { recursive: true });
+    return { ok: true, value: openStore(join(directory, "cos.db")) };
+  } catch {
+    return { ok: false, error: `Cannot open the cos store at ${directory}.` };
+  }
+}
+
+function print(output: object, exitCode: number): void {
+  process.stdout.write(`${JSON.stringify(output)}\n`);
+  process.exitCode = exitCode;
+}
+
+function printResult(result: Result<object>): void {
+  print(result.ok ? result.value : { error: result.error }, result.ok ? 0 : 1);
+}
+
+function main(args: readonly string[], env: NodeJS.ProcessEnv, clock: () => Date): void {
+  const [name = "", raw = "{}"] = args;
+  if (Object.hasOwn(plain, name)) {
+    return print(plain[name](), 0);
+  }
+  if (!Object.hasOwn(actions, name)) {
+    const known = [...Object.keys(actions), ...Object.keys(plain)].join(", ");
+    return print({ error: `Unknown action: use ${known}.` }, 1);
+  }
+  const input = parseInput(raw);
+  if (!input.ok) {
+    return printResult(input);
+  }
+  const store = openAt(dataDir(env));
+  if (!store.ok) {
+    return printResult(store);
+  }
+  try {
+    printResult(actions[name](input.value, { store: store.value, clock }));
   } finally {
-    store.close();
+    store.value.close();
   }
 }
 
-function main(): void {
-  try {
-    const output = execute(process.argv.slice(2), process.env, new Date());
-    console.log(JSON.stringify(output));
-  } catch (error) {
-    if (!(error instanceof UserError)) throw error;
-    console.log(JSON.stringify({ error: error.message }));
-    process.exitCode = 1;
-  }
+try {
+  main(process.argv.slice(2), process.env, () => new Date());
+} catch (error) {
+  const reason = error instanceof Error ? error.message : String(error);
+  print({ error: `Unexpected failure: ${reason}` }, 1);
 }
-
-main();

@@ -1,33 +1,24 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { FactFilter, NewFact } from "./rules.ts";
+import type { Fact, FactFilter, NewFact } from "./rules.ts";
 
-export interface StoredFact {
-  id: string;
-  fact: string;
-  topic: string | null;
-  created: string;
-}
-
-export interface Store {
-  add(fact: NewFact, created: string): StoredFact;
-  list(filter: FactFilter, limit: number): StoredFact[];
+export type Store = {
+  add(fact: NewFact, created: string): Fact;
+  list(filter: FactFilter, limit: number): Fact[];
   remove(id: string): boolean;
   close(): void;
-}
+};
 
-const CREATE_TABLE = `
-  CREATE TABLE IF NOT EXISTS facts (
+const migrations = [
+  `CREATE TABLE IF NOT EXISTS facts (
     id TEXT PRIMARY KEY,
     fact TEXT NOT NULL,
     topic TEXT,
     created TEXT NOT NULL
-  )
-`;
+  )`,
+];
 
-const LIST_FACTS = `
+const listFacts = `
   SELECT id, fact, topic, created FROM facts
   WHERE (:topic IS NULL OR topic = :topic)
     AND (:query IS NULL OR instr(lower(fact), lower(:query)) > 0)
@@ -35,14 +26,20 @@ const LIST_FACTS = `
   LIMIT :limit
 `;
 
+function migrate(db: DatabaseSync): void {
+  const row = db.prepare("PRAGMA user_version").get() as { user_version: number };
+  for (let version = row.user_version; version < migrations.length; version++) {
+    db.exec(migrations[version]);
+    db.exec(`PRAGMA user_version = ${version + 1}`);
+  }
+}
+
 export function openStore(dbPath: string): Store {
-  mkdirSync(dirname(dbPath), { recursive: true });
   const db = new DatabaseSync(dbPath);
-  db.exec(CREATE_TABLE);
-  const insert = db.prepare(
-    "INSERT INTO facts (id, fact, topic, created) VALUES (?, ?, ?, ?)",
-  );
-  const select = db.prepare(LIST_FACTS);
+  migrate(db);
+
+  const insert = db.prepare("INSERT INTO facts (id, fact, topic, created) VALUES (?, ?, ?, ?)");
+  const select = db.prepare(listFacts);
   const erase = db.prepare("DELETE FROM facts WHERE id = ?");
 
   return {
@@ -52,7 +49,7 @@ export function openStore(dbPath: string): Store {
       return { id, fact, topic, created };
     },
     list({ topic, query }, limit) {
-      return select.all({ topic, query, limit }) as unknown as StoredFact[];
+      return select.all({ topic, query, limit }) as unknown as Fact[];
     },
     remove(id) {
       return Number(erase.run(id).changes) > 0;

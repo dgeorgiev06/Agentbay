@@ -1,0 +1,10 @@
+{
+  "name": "agentbay",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "test": "node --test \"packs/*/tests/*.test.ts\"",
+    "validate": "claude plugin validate ."
+  }
+}

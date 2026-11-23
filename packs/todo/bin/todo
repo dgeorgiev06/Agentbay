@@ -1,0 +1,3 @@
+#!/bin/sh
+pack_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+exec node --no-warnings "$pack_dir/src/cli.ts" "$@"

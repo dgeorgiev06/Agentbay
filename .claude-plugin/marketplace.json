@@ -1,0 +1,22 @@
+{
+  "name": "agentbay",
+  "owner": { "name": "Dima Georgiev" },
+  "description": "Packs for a personal Chief of Staff: skills, agents, JSON commands and workflows",
+  "plugins": [
+    {
+      "name": "cos",
+      "source": "./packs/cos",
+      "description": "Chief of Staff: the main agent that routes work to packs and keeps memory"
+    },
+    {
+      "name": "todo",
+      "source": "./packs/todo",
+      "description": "Personal todo list: add, list and finish tasks"
+    },
+    {
+      "name": "dev",
+      "source": "./packs/dev",
+      "description": "Plan and build software in reviewed slices with lead, test-writer, builder and reviewer agents"
+    }
+  ]
+}

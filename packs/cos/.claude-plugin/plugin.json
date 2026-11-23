@@ -1,0 +1,9 @@
+{
+  "name": "cos",
+  "version": "0.1.0",
+  "description": "Chief of Staff: the main agent that routes work to packs and keeps memory",
+  "author": {
+    "name": "Dima Georgiev"
+  },
+  "license": "MIT"
+}

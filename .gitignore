@@ -1,6 +1,4 @@
-__pycache__/
-*.pyc
+node_modules/
 .agentbay/
-agentbay.config.yaml
 /.claude/
 /CLAUDE.md

@@ -2,5 +2,8 @@
   "name": "todo",
   "version": "0.1.0",
   "description": "Personal todo list: add, list and finish tasks from the shell",
-  "author": { "name": "Dima Georgiev" }
+  "author": {
+    "name": "Dima Georgiev"
+  },
+  "license": "MIT"
 }

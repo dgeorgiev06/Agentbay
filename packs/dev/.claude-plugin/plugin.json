@@ -1,0 +1,6 @@
+{
+  "name": "dev",
+  "version": "0.1.0",
+  "description": "Plan and build software in reviewed slices: /dev:plan turns requirements into slices, /dev:build builds each against hidden tests and a review",
+  "author": { "name": "Dima Georgiev" }
+}
